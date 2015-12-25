@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Model\Entity;
+
 class ScalrEnvironment20081216 extends ScalrEnvironment20081125
 {
     protected function GetLatestVersion()
@@ -38,7 +40,7 @@ class ScalrEnvironment20081216 extends ScalrEnvironment20081125
 
         $DBFarmRole = $this->DBServer->GetFarmRoleObject();
 
-        if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_USE_EBS) == 0)
+        if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_USE_EBS) == 0)
             $volumes = array();
 
 

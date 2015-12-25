@@ -10,7 +10,6 @@ namespace Scalr\Service\CloudStack\DataType;
  */
 class ObjectProperties
 {
-
     /**
      * Gets public properties of an object
      *

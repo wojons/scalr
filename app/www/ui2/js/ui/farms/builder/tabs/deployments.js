@@ -13,10 +13,6 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Deployments', {
 
     tabData: null,
 
-    isEnabled: function (record) {
-        return this.callParent(arguments) && record.get('platform') != 'rds';
-    },
-
     addApp: function (target, app, type) {
         if (type == 'create') {
             this.down('#appList').store.add(app);

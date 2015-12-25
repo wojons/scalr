@@ -2,6 +2,7 @@
 use Scalr\Acl\Acl;
 use Scalr\Model\Entity\Script;
 use Scalr\Model\Entity\EventDefinition;
+use Scalr\UI\Request\JsonData;
 
 class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
 {
@@ -35,14 +36,14 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
                 ];
             },
             EventDefinition::result(EventDefinition::RESULT_ENTITY_COLLECTION)->find([
-                ['$or' => [['accountId' => NULL], ['accountId' => $this->user->getAccountId()]]],
-                ['$or' => [['envId' => NULL], ['envId' => $this->getEnvironmentId()]]]
-            ], ['name' => 'asc'])->getArrayCopy()
+                ['$or' => [['accountId' => null], ['accountId' => $this->user->getAccountId()]]],
+                ['$or' => [['envId' => null], ['envId' => $this->getEnvironmentId()]]]
+            ], null, ['name' => true])->getArrayCopy()
         );
 
         $this->response->page('ui/schedulertasks/view.js', [
             'farmWidget' => self::loadController('Farms')->getFarmWidget(array(), 'addAll'),
-            'timezones' => Scalr_Util_DateTime::getTimezones(),
+            'timezones' => Scalr_Util_DateTime::getTimezones(true),
             'scripts' => Script::getList($this->user->getAccountId(), $this->getEnvironmentId()),
             'events' => $events,
             'defaultTimezone' => $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE)
@@ -71,9 +72,9 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
                 ];
             },
             EventDefinition::find([
-                ['$or' => [['accountId' => NULL], ['accountId' => $this->user->getAccountId()]]],
-                ['$or' => [['envId' => NULL], ['envId' => $this->getEnvironmentId()]]]
-            ], ['name' => 'asc'])->getArrayCopy()
+                ['$or' => [['accountId' => null], ['accountId' => $this->user->getAccountId()]]],
+                ['$or' => [['envId' => null], ['envId' => $this->getEnvironmentId()]]]
+            ], null, ['name' => true])->getArrayCopy()
         );
 
         //$DBFarmRole->FarmID;
@@ -140,11 +141,12 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
 
     public function xListAction()
     {
-        $data = $this->db->GetAll('SELECT id, name, type, comments, target_id as targetId, target_server_index as targetServerIndex, target_type as targetType, start_time as startTime,
-            end_time as endTime, last_start_time as lastStartTime, restart_every as restartEvery, config,
-            status, timezone FROM `scheduler` WHERE `env_id` = ?', [$this->getEnvironmentId()]);
+        $sql = "SELECT `id`, `name`, `type`, `comments`, `target_id` as `targetId`, `target_server_index` as `targetServerIndex`, `target_type` as `targetType`, `start_time` as `startTime`,
+            `end_time` as `endTime`, `last_start_time` as `lastStartTime`, `restart_every` as `restartEvery`, `config`, `status`, `timezone` FROM `scheduler` WHERE `env_id` = ? AND :FILTER:";
 
-        foreach ($data as &$row) {
+        $response = $this->buildResponseFromSql2($sql, ['id', 'name', 'type', 'startTime', 'lastStartTime', 'timezone', 'status'], ['name'], [$this->getEnvironmentId()]);
+
+        foreach ($response['data'] as &$row) {
             switch($row['targetType']) {
                 case Scalr_SchedulerTask::TARGET_FARM:
                     try {
@@ -184,15 +186,19 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
 
             $row['config'] = unserialize($row['config']);
             $script = Script::findPk($row['config']['scriptId']);
-            if ($script)
+
+            if (!empty($script)) {
                 $row['config']['scriptName'] = $script->name;
+            }
         }
 
-        $this->response->data(['data' => $data]);
+        $this->response->data($response);
     }
 
     public function xSaveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_SCHEDULERTASKS, Acl::PERM_GENERAL_SCHEDULERTASKS_MANAGE);
+
         $this->request->defineParams(array(
             'id' => array('type' => 'integer'),
             'name' => array('type' => 'string', 'validator' => array(
@@ -294,10 +300,10 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
                         $this->request->addValidationErrors('scriptId', array('Script ID is required'));
                     }
                 } elseif ($this->getParam('type') == Scalr_SchedulerTask::FIRE_EVENT) {
-                    if (! EventDefinition::findOne([
+                    if (!EventDefinition::findOne([
                         ['name' => $this->getParam('eventName')],
-                        ['$or' => [['accountId' => NULL], ['accountId' => $this->user->getAccountId()]]],
-                        ['$or' => [['envId' => NULL], ['envId' => $this->getEnvironmentId()]]]
+                        ['$or'  => [['accountId' => null], ['accountId' => $this->user->getAccountId()]]],
+                        ['$or'  => [['envId' => null], ['envId' => $this->getEnvironmentId()]]]
                     ])) {
                         throw new Exception("Event definition not found");
                     }
@@ -351,73 +357,93 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
         $this->response->success();
     }
 
-    public function xActivateAction()
+    /**
+     * @param JsonData $tasksIds
+     */
+    public function xActivateAction(JsonData $tasksIds)
     {
-        $this->request->defineParams(array(
-            'tasks' => array('type' => 'json')
-        ));
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_SCHEDULERTASKS, Acl::PERM_GENERAL_SCHEDULERTASKS_MANAGE);
 
-        foreach ($this->getParam('tasks') as $taskId) {
+        $processed = [];
+
+        foreach ($tasksIds as $taskId) {
             $task = Scalr_SchedulerTask::init()->loadById($taskId);
             $this->user->getPermissions()->validate($task);
 
-            if ($task->status == Scalr_SchedulerTask::STATUS_FINISHED)
-                continue;
+            if ($task->status === Scalr_SchedulerTask::STATUS_SUSPENDED) {
+                $task->status = Scalr_SchedulerTask::STATUS_ACTIVE;
+                $task->save();
 
-            $task->status = Scalr_SchedulerTask::STATUS_ACTIVE;
-            $task->save();
+                $processed[] = $taskId;
+            }
         }
 
-        $this->response->success("Selected task(s) successfully activated");
+        $this->response->data(['processed' => $processed]);
+        $this->response->success(sprintf("%d of %d selected task(s) successfully activated.", count($processed), count($tasksIds)));
     }
 
-    public function xSuspendAction()
+    /**
+     * @param JsonData $tasksIds
+     */
+    public function xSuspendAction(JsonData $tasksIds)
     {
-        $this->request->defineParams(array(
-            'tasks' => array('type' => 'json')
-        ));
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_SCHEDULERTASKS, Acl::PERM_GENERAL_SCHEDULERTASKS_MANAGE);
 
-        foreach ($this->getParam('tasks') as $taskId) {
+        $processed = [];
+
+        foreach ($tasksIds as $taskId) {
             $task = Scalr_SchedulerTask::init()->loadById($taskId);
             $this->user->getPermissions()->validate($task);
 
-            if ($task->status == Scalr_SchedulerTask::STATUS_FINISHED)
-                continue;
+            if ($task->status === Scalr_SchedulerTask::STATUS_ACTIVE) {
+                $task->status = Scalr_SchedulerTask::STATUS_SUSPENDED;
+                $task->save();
 
-            $task->status = Scalr_SchedulerTask::STATUS_SUSPENDED;
-            $task->save();
+                $processed[] = $taskId;
+            }
         }
 
-        $this->response->success("Selected task(s) successfully suspended");
+        $this->response->data(['processed' => $processed]);
+        $this->response->success(sprintf("%d of %d selected task(s) successfully suspended.", count($processed), count($tasksIds)));
     }
 
-    public function xExecuteAction()
+    /**
+     * @param JsonData $tasksIds
+     */
+    public function xExecuteAction(JsonData $tasksIds)
     {
-        $this->request->defineParams(array(
-            'tasks' => array('type' => 'json')
-        ));
-        $executed = array();
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_SCHEDULERTASKS, Acl::PERM_GENERAL_SCHEDULERTASKS_MANAGE);
 
-        foreach ($this->getParam('tasks') as $taskId) {
+        $executed = [];
+        $processed = [];
+
+        foreach ($tasksIds as $taskId) {
             $task = new Scalr_SchedulerTask();
             $task->loadById($taskId);
             $this->user->getPermissions()->validate($task);
 
-            if ($task->status == Scalr_SchedulerTask::STATUS_FINISHED)
+            if ($task->status == Scalr_SchedulerTask::STATUS_FINISHED) {
                 continue;
+            }
 
-            if ($task->execute(true))
+            if ($task->execute(true)) {
                 $executed[] = $task->name;
+                $processed[] = $taskId;
+            }
         }
 
-        if (count($executed))
-            $this->response->success("Task(s): " . implode($executed, ', ') . " successfully executed");
-        else
-            $this->response->warning('Target of task could not be found');
+        if (count($executed)) {
+            $this->response->data(['processed' => $processed]);
+            $this->response->success("Task(s): " . implode($executed, ', ') . " successfully executed.");
+        } else {
+            $this->response->warning('Target of task(s) could not be found.');
+        }
     }
 
     public function xDeleteAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_SCHEDULERTASKS, Acl::PERM_GENERAL_SCHEDULERTASKS_MANAGE);
+
         $this->request->defineParams(array(
             'tasks' => array('type' => 'json')
         ));

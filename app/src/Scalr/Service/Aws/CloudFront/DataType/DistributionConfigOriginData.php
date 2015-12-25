@@ -72,6 +72,13 @@ class DistributionConfigOriginData extends AbstractCloudFrontDataType
     public $domainName;
 
     /**
+     * Optional origin path
+     *
+     * @var string
+     */
+    public $originPath;
+
+    /**
      * Constructor
      *
      * @param   string     $originId   optional
@@ -117,6 +124,7 @@ class DistributionConfigOriginData extends AbstractCloudFrontDataType
         $xml->appendChild($origin);
         $origin->appendChild($xml->createElement('Id', $this->originId));
         $origin->appendChild($xml->createElement('DomainName', $this->domainName));
+        $origin->appendChild($xml->createElement('OriginPath', $this->originPath));
         if ($this->s3OriginConfig instanceof DistributionS3OriginConfigData) {
             $this->s3OriginConfig->appendContentToElement($origin);
         }

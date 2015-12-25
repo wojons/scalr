@@ -3,6 +3,7 @@
 namespace Scalr\Modules\Platforms\Ec2\Helpers;
 
 use Scalr\Service\Aws\Ec2\DataType\AssociateAddressRequestData;
+use Scalr\Model\Entity;
 use \DBServer;
 use \DBFarm;
 use \DBFarmRole;
@@ -50,7 +51,7 @@ class EipHelper
                     throw new \Exception($e->getMessage());
                 } else {
                     // Waiting...
-                    \Logger::getLogger(__CLASS__)->debug(_("Waiting 2 seconds..."));
+                    \Scalr::getContainer()->logger(__CLASS__)->debug(_("Waiting 2 seconds..."));
                     sleep(2);
                     $assign_retries++;
                     continue;
@@ -90,25 +91,24 @@ class EipHelper
         try {
             $dbFarm = DBFarm::LoadByID($dbServer->farmId);
             $dbFarmRole = $dbServer->GetFarmRoleObject();
-            if (!$dbFarmRole->GetSetting(DBFarmRole::SETTING_AWS_USE_ELASIC_IPS))
+            if (!$dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_USE_ELASIC_IPS))
                 return false;
 
             $aws = $dbFarm->GetEnvironmentObject()->aws($dbFarmRole->CloudLocation);
 
-            $isVPC = $dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID);
+            $isVPC = $dbFarm->GetSetting(Entity\FarmSetting::EC2_VPC_ID);
         } catch (\Exception $e) {
-            \Logger::getLogger(\LOG_CATEGORY::FARM)->fatal(
+            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(
                 new \FarmLogMessage($dbServer->farmId, sprintf(
                     _("Cannot allocate elastic ip address for instance %s on farm %s (0)"),
                     $dbServer->serverId, $dbFarm->Name
             )));
+            
+            return false;
         }
 
         $ip = $db->GetRow("
-            SELECT * FROM elastic_ips
-            WHERE farmid=?
-            AND ((farm_roleid=? AND instance_index=?) OR server_id = ?)
-            LIMIT 1
+            SELECT * FROM elastic_ips WHERE farmid=? AND ((farm_roleid=? AND instance_index=?) OR server_id = ?) LIMIT 1
         ", array(
             $dbServer->farmId,
             $dbFarmRole->ID,
@@ -118,7 +118,7 @@ class EipHelper
 
         if ($ip['ipaddress']) {
             if (!self::checkElasticIp($ip['ipaddress'], $aws)) {
-                \Logger::getLogger(\LOG_CATEGORY::FARM)->warn(new \FarmLogMessage($dbServer->farmId, sprintf(
+                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->warn(new \FarmLogMessage($dbServer->farmId, sprintf(
                     _("Elastic IP '%s' does not belong to you. Allocating new one."), $ip['ipaddress']
                 )));
                 $db->Execute("DELETE FROM elastic_ips WHERE ipaddress=?", array($ip['ipaddress']));
@@ -137,7 +137,7 @@ class EipHelper
             ));
 
             // Check elastic IPs limit. We cannot allocate more than 'Max instances' option for role
-            if ($alocatedIps < $dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES)) {
+            if (!$dbFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_ENABLED) || $alocatedIps < $dbFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MAX_INSTANCES)) {
                 try {
                     $domain = null;
                     if ($isVPC)
@@ -145,7 +145,7 @@ class EipHelper
 
                     $address = $aws->ec2->address->allocate($domain);
                 } catch (\Exception $e) {
-                    \Logger::getLogger(\LOG_CATEGORY::FARM)->error(new \FarmLogMessage($dbServer->farmId, sprintf(
+                    \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(new \FarmLogMessage($dbServer->farmId, sprintf(
                         _("Cannot allocate new elastic ip for instance '%s': %s"),
                         $dbServer->serverId,
                         $e->getMessage()
@@ -179,13 +179,13 @@ class EipHelper
                     'allocation_id' => $address->allocationId
                 );
 
-                \Logger::getLogger(\LOG_CATEGORY::FARM)->info(
+                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(
                     new \FarmLogMessage($dbServer->farmId, sprintf(_("Allocated new IP: %s"), $ip['ipaddress']))
                 );
                 // Waiting...
                 sleep(5);
             } else
-                \Logger::getLogger(__CLASS__)->fatal(_("Limit for elastic IPs reached. Check zomby records in database."));
+                \Scalr::getContainer()->logger(__CLASS__)->fatal(_("Limit for elastic IPs reached. Check zomby records in database."));
         }
 
         if ($ip['ipaddress']) {
@@ -202,7 +202,7 @@ class EipHelper
                 $dbServer->serverId,
                 $ip['ipaddress']
             ));
-            
+
             /*
              * DO NOT FIRE THIS EVENT AND LET POLLER TO FIND OUT THAT IP WAS CHANGED AND
              * FIRE EVENT. BY THIS TIME MOST LIKELY IP WILL BE ROUTABLE
@@ -211,7 +211,7 @@ class EipHelper
             ));
             */
         } else {
-            \Logger::getLogger(\LOG_CATEGORY::FARM)->fatal(
+            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(
                 new \FarmLogMessage($dbServer->farmId, sprintf(
                     _("Cannot allocate elastic ip address for instance %s on farm %s (2)"),
                     $dbServer->serverId, $dbFarm->Name
@@ -226,15 +226,13 @@ class EipHelper
     {
         $db = \Scalr::getDb();
         $DBFarm = $DBFarmRole->GetFarmObject();
-        $DBFarmRole->SetSetting(DBFarmRole::SETTING_AWS_ELASIC_IPS_MAP, null, DBFarmRole::TYPE_LCL);
-
-        $isVPC = $DBFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID);
-
+        $DBFarmRole->SetSetting(Entity\FarmRoleSetting::AWS_ELASIC_IPS_MAP, null, Entity\FarmRoleSetting::TYPE_LCL);
         $aws = $DBFarm->GetEnvironmentObject()->aws($DBFarmRole->CloudLocation);
+        $isVPC = $DBFarm->GetSetting(Entity\FarmSetting::EC2_VPC_ID);
 
         // Disassociate IP addresses if checkbox was unchecked
-        if (!$newSettings[DBFarmRole::SETTING_AWS_USE_ELASIC_IPS] &&
-            $oldSettings[DBFarmRole::SETTING_AWS_USE_ELASIC_IPS]) {
+        if (empty($newSettings[Entity\FarmRoleSetting::AWS_USE_ELASIC_IPS]) &&
+            !empty($oldSettings[Entity\FarmRoleSetting::AWS_USE_ELASIC_IPS])) {
 
             $eips = $db->Execute("
                 SELECT * FROM elastic_ips WHERE farm_roleid = ?
@@ -244,13 +242,11 @@ class EipHelper
             while ($eip = $eips->FetchRow()) {
                 try {
                     $aws->ec2->address->disassociate($eip['ipaddress']);
-                } catch (\Exception $e) {
-                }
+                } catch (\Exception $e) { }
             }
 
             $db->Execute("
-                DELETE FROM elastic_ips
-                WHERE farm_roleid = ?
+                DELETE FROM elastic_ips WHERE farm_roleid = ?
             ", array(
                 $DBFarmRole->ID
             ));
@@ -258,14 +254,22 @@ class EipHelper
         }
 
         //TODO: Handle situation when tab was not opened, but max instances setting was changed.
-        if ($newSettings[DBFarmRole::SETTING_AWS_ELASIC_IPS_MAP] &&
-            $newSettings[DBFarmRole::SETTING_AWS_USE_ELASIC_IPS]) {
-            $map = explode(";", $newSettings[DBFarmRole::SETTING_AWS_ELASIC_IPS_MAP]);
+        if (!empty($newSettings[Entity\FarmRoleSetting::AWS_ELASIC_IPS_MAP]) &&
+            !empty($newSettings[Entity\FarmRoleSetting::AWS_USE_ELASIC_IPS])) {
+            $map = explode(";", $newSettings[Entity\FarmRoleSetting::AWS_ELASIC_IPS_MAP]);
+
+            $maxIndex = 0;
 
             foreach ($map as $ipconfig) {
                 list ($serverIndex, $ipAddress) = explode("=", $ipconfig);
 
-                if (!$serverIndex) continue;
+                if (!$serverIndex) {
+                    continue;
+                }
+
+                if ($serverIndex > $maxIndex) {
+                    $maxIndex = $serverIndex;
+                }
 
                 $allocationId = null;
 
@@ -274,16 +278,12 @@ class EipHelper
                 } catch (\Exception $e) {}
 
                 // Allocate new IP if needed
-                if (!$ipAddress || $ipAddress == '0.0.0.0') {
-                    if ($dbServer) {
-                        $domain = ($isVPC) ? 'vpc' : null;
+                if ((!$ipAddress || $ipAddress == '0.0.0.0') && $dbServer) {
+                    $domain = ($isVPC) ? 'vpc' : null;
 
-                        $address = $aws->ec2->address->allocate($domain);
-                        $ipAddress = $address->publicIp;
-                        $allocationId = $address->allocationId;
-                    } else {
-                        continue;
-                    }
+                    $address = $aws->ec2->address->allocate($domain);
+                    $ipAddress = $address->publicIp;
+                    $allocationId = $address->allocationId;
                 }
 
                 // Remove old association
@@ -294,6 +294,10 @@ class EipHelper
                     $DBFarmRole->ID,
                     $serverIndex
                 ));
+
+                if ((!$ipAddress || $ipAddress == '0.0.0.0') && !$dbServer) {
+                    continue;
+                }
 
                 if ($ipAddress) {
                     //Remove old IP association
@@ -358,12 +362,18 @@ class EipHelper
                         }
                     } catch (\Exception $e) {}
                 } else {
-                    \Logger::getLogger(\LOG_CATEGORY::FARM)->fatal(sprintf(
+                    \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(sprintf(
                         _("Cannot allocate elastic ip address for instance %s on farm %s (2)"),
                         $dbServer->serverId, $DBFarm->Name
                     ));
                 }
             }
+
+            // Remove extra definitions
+            $db->Execute("DELETE FROM elastic_ips WHERE instance_index > ? AND farm_roleid = ?", array(
+                $maxIndex,
+                $DBFarmRole->ID
+            ));
         }
     }
 }

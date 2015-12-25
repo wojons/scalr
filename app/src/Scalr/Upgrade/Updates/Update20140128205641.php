@@ -1,8 +1,10 @@
 <?php
+
 namespace Scalr\Upgrade\Updates;
 
 use Scalr\Upgrade\SequenceInterface;
 use Scalr\Upgrade\AbstractUpdate;
+use Scalr\Model\Entity;
 
 class Update20140128205641 extends AbstractUpdate implements SequenceInterface
 {
@@ -72,12 +74,12 @@ class Update20140128205641 extends AbstractUpdate implements SequenceInterface
         $settings = $this->db->Execute("SELECT farm_roleid FROM farm_role_settings WHERE name='lb.use_elb' AND value='1'");
         while ($farmRoleInfo = $settings->FetchRow()) {
             $dbFarmRole = \DBFarmRole::LoadByID($farmRoleInfo['farm_roleid']);
-            $name = $dbFarmRole->GetSetting(\DBFarmRole::SETTING_BALANCING_NAME);
+            $name = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::BALANCING_NAME);
             if ($name) {
                 $service = FarmRoleService::findFarmRoleService($dbFarmRole->GetFarmObject()->EnvID, $name);
                 if (!$service) {
-                    $dbFarmRole->SetSetting(\DBFarmRole::SETTING_AWS_ELB_ENABLED, 1);
-                    $dbFarmRole->SetSetting(\DBFarmRole::SETTING_AWS_ELB_ID, $name);
+                    $dbFarmRole->SetSetting(Entity\FarmRoleSetting::AWS_ELB_ENABLED, 1);
+                    $dbFarmRole->SetSetting(Entity\FarmRoleSetting::AWS_ELB_ID, $name);
 
                     // Setup new service
                     // ADD ELB to role_cloud_services
@@ -85,10 +87,10 @@ class Update20140128205641 extends AbstractUpdate implements SequenceInterface
                     $service->setType(FarmRoleService::SERVICE_AWS_ELB);
                     $service->save();
 
-                    $dbFarmRole->SetSetting(\DBFarmRole::SETTING_BALANCING_NAME, null, \DBFarmRole::TYPE_LCL);
-                    $dbFarmRole->SetSetting(\DBFarmRole::SETTING_BALANCING_HOSTNAME, null, \DBFarmRole::TYPE_LCL);
-                    $dbFarmRole->SetSetting(\DBFarmRole::SETTING_BALANCING_USE_ELB, null, \DBFarmRole::TYPE_LCL);
-                    $dbFarmRole->SetSetting(\DBFarmRole::SETTING_BALANCING_HC_HASH, null, \DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Entity\FarmRoleSetting::BALANCING_NAME, null, Entity\FarmRoleSetting::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Entity\FarmRoleSetting::BALANCING_HOSTNAME, null, Entity\FarmRoleSetting::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Entity\FarmRoleSetting::BALANCING_USE_ELB, null, Entity\FarmRoleSetting::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Entity\FarmRoleSetting::BALANCING_HC_HASH, null, Entity\FarmRoleSetting::TYPE_LCL);
                     $dbFarmRole->ClearSettings("lb.avail_zone");
                     $dbFarmRole->ClearSettings("lb.healthcheck");
                     $dbFarmRole->ClearSettings("lb.role.listener");
@@ -104,8 +106,8 @@ class Update20140128205641 extends AbstractUpdate implements SequenceInterface
         $services = $this->db->Execute("SELECT * FROM farm_role_cloud_services");
         while ($service = $services->FetchRow()) {
             $dbFarmRole = \DBFarmRole::LoadByID($service['farm_role_id']);
-            $dbFarmRole->SetSetting(\DBFarmRole::SETTING_AWS_ELB_ENABLED, 1);
-            $dbFarmRole->SetSetting(\DBFarmRole::SETTING_AWS_ELB_ID, $service['id']);
+            $dbFarmRole->SetSetting(Entity\FarmRoleSetting::AWS_ELB_ENABLED, 1);
+            $dbFarmRole->SetSetting(Entity\FarmRoleSetting::AWS_ELB_ID, $service['id']);
         }
     }
 }

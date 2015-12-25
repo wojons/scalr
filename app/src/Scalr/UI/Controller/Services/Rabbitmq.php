@@ -1,5 +1,8 @@
 <?php
+
 use Scalr\Acl\Acl;
+use Scalr\Model\Entity;
+use Scalr\System\Http\Client\Request;
 
 class Scalr_UI_Controller_Services_Rabbitmq extends Scalr_UI_Controller
 {
@@ -49,8 +52,8 @@ class Scalr_UI_Controller_Services_Rabbitmq extends Scalr_UI_Controller
 
                     $url = str_replace('/mgmt/', '/api/overview', $moduleParams['rabbitmq']['url']);
 
-                    $httpRequest = new HttpRequest();
-                    $httpRequest->setUrl($url);
+                    $httpRequest = new Request();
+                    $httpRequest->setRequestUrl($url);
                     $httpRequest->setOptions(array(
                         'redirect' => 5,
                         'timeout'	=> 30,
@@ -63,9 +66,9 @@ class Scalr_UI_Controller_Services_Rabbitmq extends Scalr_UI_Controller
                             $moduleParams['rabbitmq']['password']
                         )
                     ));
-                    $httpRequest->send();
-                    $data = $httpRequest->getResponseData();
-                    $result = json_decode($data['body'], true);
+                    $response = \Scalr::getContainer()->http->sendRequest($httpRequest);
+                    $data = $response->getBody()->toString();
+                    $result = json_decode($data, true);
                     if ($result)
                         $moduleParams['rabbitmq']['overview'] = $result;
                 } else {
@@ -132,9 +135,9 @@ class Scalr_UI_Controller_Services_Rabbitmq extends Scalr_UI_Controller
                     $msg = new Scalr_Messaging_Msg_RabbitMq_SetupControlPanel();
                     $dbServers[0]->SendMessage($msg);
 
-                    $dbFarmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_REQUESTED, 1, DBFarmRole::TYPE_LCL);
-                    $dbFarmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_REQUEST_TIME, time(), DBFarmRole::TYPE_LCL);
-                    $dbFarmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_ERROR_MSG, "", DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_REQUESTED, 1, Entity\FarmRoleSetting::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_REQUEST_TIME, time(), Entity\FarmRoleSetting::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Scalr_Role_Behavior_RabbitMQ::ROLE_CP_ERROR_MSG, "", Entity\FarmRoleSetting::TYPE_LCL);
 
                     $this->response->success("CP installing");
                     $this->response->data(array("status" => "Request was sent at " . Scalr_Util_DateTime::convertTz((int) time()) . ". Please wait..."));

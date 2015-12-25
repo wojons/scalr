@@ -52,6 +52,12 @@ class OpenStackConfig
      * @var string
      */
     private $apiKey;
+    
+    /**
+     * Keystone domain name
+     * @var string
+     */
+    private $domainName;
 
     /**
      * @var \Closure
@@ -107,20 +113,23 @@ class OpenStackConfig
     /**
      * Convenient constructor
      *
-     * @param   string                    $username            An user name
-     * @param   string                    $identityEndpoint    OpenStack Identity Endpoint
-     * @param   string                    $region              OpenStack Region
-     * @param   string                    $apiKey              optional An User's API Key
-     * @param   \Closure                  $updateTokenCallback optional Update Token Callback
-     *                                                         This function must accept one parameter AuthToken object.
-     * @param   AuthToken                 $authToken           optional Authentication token for the OpenStack service.
-     * @param   string                    $password            optional An User's password
-     * @param   string                    $tenantName          optional Either tenant name for V2 or project for V3
-     * @param   string                    $identityVersion     optional The version of the identity
-     * @param   array                     $proxySettings       optional Proxy settings
+     * @param   string    $username                      An user name
+     * @param   string    $identityEndpoint              OpenStack Identity Endpoint
+     * @param   string    $region                        OpenStack Region
+     * @param   string    $apiKey               optional An User's API Key
+     * @param   \Closure  $updateTokenCallback  optional Update Token Callback
+     *                                                   This function must accept one parameter AuthToken object.
+     * @param   AuthToken $authToken            optional Authentication token for the OpenStack service.
+     * @param   string    $password             optional An User's password
+     * @param   string    $tenantName           optional Either tenant name for V2 or project for V3
+     * @param   string    $domainName           optional The domain name
+     * @param   string    $identityVersion      optional The version of the identity
+     * @param   array     $proxySettings        optional Proxy settings
+     *
+     * @throws NotSupportedException
      */
     public function __construct($username, $identityEndpoint, $region, $apiKey = null, \Closure $updateTokenCallback = null,
-                                AuthToken $authToken = null, $password = null, $tenantName = null, $identityVersion = null, array $proxySettings = null)
+                                AuthToken $authToken = null, $password = null, $tenantName = null, $domainName = null, $identityVersion = null, array $proxySettings = null)
     {
         if ($identityVersion === null) {
             $identityVersion = static::parseIdentityVersion($identityEndpoint);
@@ -135,6 +144,7 @@ class OpenStackConfig
             ->setUpdateTokenCallback($updateTokenCallback)
             ->setAuthToken($authToken)
             ->setTenantName($tenantName)
+            ->setDomainName($domainName)
             ->setIdentityVersion($identityVersion)
             ->setProxySettings($proxySettings)
         ;
@@ -159,6 +169,28 @@ class OpenStackConfig
     public function setTenantName($tenantName)
     {
         $this->tenantName = $tenantName;
+        return $this;
+    }
+    
+    /**
+     * Gets OpenStack identity domain name
+     *
+     * @return  string Returns OpenStack identity domain name.
+     */
+    public function getDomainName()
+    {
+        return $this->domainName;
+    }
+    
+    /**
+     * Sets OpenStack identity domain name
+     *
+     * @param   string $domainName OpenStack identity domain name
+     * @return  OpenStackConfig
+     */
+    public function setDomainName($domainName)
+    {
+        $this->domainName = $domainName;
         return $this;
     }
 

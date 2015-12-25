@@ -150,7 +150,7 @@ class Scalr_System_Cronjob_Distributed extends Scalr_System_Cronjob_MultiProcess
     }
 
     protected function init ($options=null) {
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
 
         // Merge configurations. this config, ini config
 

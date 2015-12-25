@@ -52,7 +52,7 @@
     background-image: url(/ui2/images/ui/account/key.png);
     background-repeat: no-repeat;
     background-position: 50% 74%;
-    border-radius: 2px;
+    border-radius: 0;
     text-transform: uppercase;
     font-family: OpenSansSemiBold;
     color: #fff;
@@ -74,6 +74,15 @@
     border:0;
 }
 
+.scalr-ui-environment-cloud-suspended {
+    background: #FFDDBB url(/ui2/images/ui/account/warning-small.png) 5px 5px no-repeat;
+}
+
+.scalr-ui-environment-cloud-suspended.x-btn-over,
+.scalr-ui-environment-cloud-suspended.x-btn-pressed{
+    background: #F9CC9E url(/ui2/images/ui/account/warning-small.png) 5px 5px no-repeat;
+}
+
 @media only screen and (-webkit-min-device-pixel-ratio: 1.5),
     only screen and (-o-min-device-pixel-ratio: 3/2),
     only screen and (min--moz-device-pixel-ratio: 1.5),
@@ -82,5 +91,12 @@
     .scalr-ui-panel-account-env .scalr-add-credentials-button {
         background-size: 24px 24px;
         background-image: url(/ui2/images/ui/account/key-retina.png);
+    }
+
+    .scalr-ui-environment-cloud-suspended,
+    .scalr-ui-environment-cloud-suspended.x-btn-over,
+    .scalr-ui-environment-cloud-suspended.x-btn-pressed{
+        background-size: 16px 16px;
+        background-image: url(/ui2/images/ui/account/warning-small-retina.png);
     }
 }

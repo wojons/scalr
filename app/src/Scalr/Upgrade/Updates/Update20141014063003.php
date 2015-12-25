@@ -30,20 +30,20 @@ class Update20141014063003 extends AbstractUpdate implements SequenceInterface
 
     protected function isApplied1($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_ADMINISTRATION_WEBHOOKS') && $this->db->GetOne("
+        return defined('Scalr\\Acl\\Acl::RESOURCE_WEBHOOKS_ACCOUNT') && $this->db->GetOne("
             SELECT `granted` FROM `acl_role_resources`
             WHERE `resource_id` = ? AND `role_id` = ?
             LIMIT 1
         ", array(
-            Acl::RESOURCE_ADMINISTRATION_WEBHOOKS,
+            Acl::RESOURCE_WEBHOOKS_ACCOUNT,
             Acl::ROLE_ID_FULL_ACCESS,
         )) == 1;
     }
 
     protected function validateBefore1($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_ADMINISTRATION_WEBHOOKS') &&
-               Definition::has(Acl::RESOURCE_ADMINISTRATION_WEBHOOKS);
+        return defined('Scalr\\Acl\\Acl::RESOURCE_WEBHOOKS_ACCOUNT') &&
+               Definition::has(Acl::RESOURCE_WEBHOOKS_ACCOUNT);
     }
 
     protected function run1($stage)
@@ -54,7 +54,7 @@ class Update20141014063003 extends AbstractUpdate implements SequenceInterface
             VALUES (?, ?, 1)
         ", array(
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::RESOURCE_ADMINISTRATION_WEBHOOKS
+            Acl::RESOURCE_WEBHOOKS_ACCOUNT
         ));
     }
 }

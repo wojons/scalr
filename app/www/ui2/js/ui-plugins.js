@@ -1,4 +1,4 @@
-/*
+ /*
  * Form plugins
  */
 Ext.define('Scalr.ui.ScalrTagFieldPlugin', {
@@ -8,9 +8,203 @@ Ext.define('Scalr.ui.ScalrTagFieldPlugin', {
     init: function (component) {
         var me = this;
 
+        component.on('render', function (component) {
+            var picker = component.getPicker();
+            picker.addCls('x-boundlist-hideemptygrid');
+
+            picker.on({
+                render: function (pickerItSelf) {
+                    if (!me.disabled) {
+                        picker.el.addCls('x-boundlist-with-addnew');
+                    }
+
+                    me.el = picker.el.createChild({
+                        tag: 'div',
+                        cls: 'x-boundlist-addnewtag'
+                    }).on('click', function(e) {
+                        e.stopEvent(); // we don't want to reset current combobox value
+                    }).setVisible(!me.disabled);
+                },
+
+                focuschange: function (pickerItSelf, oldFocused, newFocused) {
+                    picker.focusedNode = newFocused;
+
+                    if (!Ext.isEmpty(picker.el)) {
+                        me.setText();
+                    }
+                },
+
+                itemmouseenter: function (pickerItSelf, record, item) {
+                    //picker.getNavigationModel().record = record;
+                    picker.fireEvent('focuschange', picker, picker.focusedNode, record);
+                    me.setFocusedNode(item);
+                },
+
+                itemmouseleave: function (pickerItSelf, record, item) {
+                    picker.getNavigationModel().record = null;
+                    picker.fireEvent('focuschange', picker, picker.focusedNode, null);
+                },
+
+                select: function () {
+                    me.fieldNewValue = '';
+                },
+
+                deselect: function (pickerItSelf, record) {
+                    me.fieldNewValue = '';
+
+                    me.setFocusedNode(
+                        picker.getNode(record)
+                    );
+                },
+
+                itemmousedown: function (pickerItSelf, record) {
+                    me.setFocusedNode(
+                        picker.getNode(record)
+                    );
+                },
+
+                selectionchange: function () {
+                    me.setText();
+                },
+
+                scope: picker
+            });
+
+            component.on('beforequery', function (queryPlan) {
+                var pickerEl = picker.el;
+
+                component.expand(); // when store is empty picker doesn't appear
+
+                if (pickerEl) {
+                    var enteredValue = Ext.String.htmlEncode(queryPlan.query);
+                    var record = picker.getStore().findRecord('tag', enteredValue, 0, false, false, true);
+                    var isRecordExists = !Ext.isEmpty(record);
+
+                    me.fieldNewValue = !isRecordExists ? enteredValue : '';
+                    component.suspendCollapse = enteredValue ? true : false;
+                    me.setDisabled(!enteredValue);
+
+                    me.setText();
+
+                    return;
+                }
+
+                me.setDisabled(true);
+            });
+        });
+    },
+
+    // fixed bug with a loss of focus (selected record)
+    setFocusedNode: function (node) {
+        var me = this;
+
+        var picker = me.getCmp().getPicker();
+
+        if (!Ext.isEmpty(picker.el)) {
+            Ext.Array.each(
+                picker.el.query('.x-boundlist-item-over'),
+                function (focusedNode) {
+                    Ext.get(focusedNode).removeCls('x-boundlist-item-over');
+                }
+            );
+
+            if (!Ext.isEmpty(node)) {
+                Ext.get(node).addCls('x-boundlist-item-over');
+                //picker.focusedNode = node;
+            }
+        }
+
+        return me;
+    },
+
+    getOnTabText: function (tagName, isSelected) {
+        var me = this;
+
+        if (Ext.isEmpty(tagName)) {
+            return '';
+        }
+
+        return '<span class="x-boundlist-addnewtag-focused-text">' +
+            (!Ext.isEmpty(me.fieldNewValue) ? ' or ' : 'Press ') +
+            '<b>Tab</b> to ' + (isSelected ? 'de' : '') +
+            'select<span class="x-boundlist-addnewtag-text-tagname">"' +
+            tagName +
+            '"</span>';
+    },
+
+    getOnEnterText: function (tagName) {
+        if (Ext.isEmpty(tagName)) {
+            return '';
+        }
+        return '<span>Press <b>Enter</b> to add</span>' +
+            '<span class="x-boundlist-addnewtag-text-tagname">' +
+            '"' + tagName + '"' +
+            '</span>';
+    },
+
+    setText: function () {
+        var me = this;
+
+        var picker = me.getCmp().getPicker();
+        var pickerEl = picker.el;
+        var text = '';
+
+        if (!Ext.isEmpty(pickerEl)) {
+            var focusedNode = picker.focusedNode;
+            var showTabText = !Ext.isEmpty(focusedNode) && picker.getStore().getCount() > 0;
+
+            text = me.getOnEnterText(me.fieldNewValue) +
+                me.getOnTabText(
+                    showTabText ? focusedNode.get('tag') : '',
+                    showTabText ? picker.getSelectionModel().isSelected(focusedNode) : false
+                );
+
+            pickerEl.down('.x-boundlist-addnewtag').update(
+                '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-info style="padding-left:6px" />&nbsp;&nbsp;' +
+                text
+            );
+        }
+
+        me.setDisabled(
+            Ext.isEmpty(text)
+        );
+
+        return me;
+    },
+
+    setDisabled: function (disabled) {
+        var me = this;
+
+        var element = me.el;
+
+        if (Ext.isDefined(element)) {
+            var parent = element.parent();
+
+            if (!Ext.isEmpty(parent)) {
+                parent[disabled ? 'removeCls' : 'addCls']('x-boundlist-with-addnew');
+            }
+
+            element.setVisible(!disabled);
+        }
+
+        me.disabled = disabled;
+    }
+});
+
+Ext.define('Scalr.ui.ComboAddNewPlugin', {
+    extend: 'Ext.AbstractPlugin',
+    alias: 'plugin.comboaddnew',
+    url: '',
+    postUrl: '',
+    disabled: false,
+    applyNewValue: true,
+
+    init: function(comp) {
+        var me = this;
+
         // to preserve offset for add button
-        Ext.override(component, {
-            alignPicker: function () {
+        Ext.override(comp, {
+            alignPicker: function() {
                 this.callParent();
 
                 var me = this,
@@ -25,127 +219,35 @@ Ext.define('Scalr.ui.ScalrTagFieldPlugin', {
             }
         });
 
-        component.on('render', function (component) {
-            var picker = component.getPicker();
+        comp.on('render', function() {
+            var picker = this.getPicker();
             picker.addCls('x-boundlist-hideemptygrid');
-
-            picker.on('render', function (picker) {
+            picker.on('render', function() {
                 if (!me.disabled) {
-                    picker.el.addCls('x-boundlist-with-addnew');
+                    this.el.addCls('x-boundlist-with-addnew');
                 }
-
-                me.el = picker.el.createChild({
+                me.el = this.el.createChild({
                     tag: 'div',
-                    cls: 'x-boundlist-addnewtag'
+                    cls: 'x-boundlist-addnew',
+                    title: 'Add new'
                 }).on('click', function(e) {
-                    //component.collapse();
+                    comp.collapse();
                     me.handler();
                     e.stopEvent();//we don't want to reset current combobox value
                 }).setVisible(!me.disabled);
             });
-
-            component.on('beforequery', function (queryPlan) {
-                var pickerEl = picker.el;
-                component.expand();//when store is empty picker doesn't appear
-                if (pickerEl) {
-                    var enteredValue = queryPlan.query;
-
-                    component.suspendCollapse = enteredValue ? true : false;
-
-                    me.setDisabled(!enteredValue);
-
-                    pickerEl.down('.x-boundlist-addnewtag').
-                        update(
-                            '<div class="x-boundlist-addnewtag-text">'
-                                + '<span>Press <b>Enter</b> to add</span>'
-                                + '<span class="x-boundlist-addnewtag-text-tagname">'
-                                    + '"' + enteredValue + '"'
-                                + '</span>'
-                            + '</div>'
-                    );
-                } else {
-                    me.setDisabled(true);
-                }
-            });
         });
-    },
 
-    setDisabled: function(disabled) {
-        if (this.el !== undefined) {
-            var parent = this.el.parent();
-            if (parent) {
-                parent[disabled ? 'removeCls' : 'addCls']('x-boundlist-with-addnew');
-            }
-            this.el.setVisible(!disabled);
-        }
-        this.disabled = disabled;
-    },
-
-    handler: function () {
-        var me = this;
-
-        me.cmp.applyRawValue();
-        me.setDisabled(true);
-    }
-});
-
-Ext.define('Scalr.ui.ComboAddNewPlugin', {
-	extend: 'Ext.AbstractPlugin',
-	alias: 'plugin.comboaddnew',
-	url: '',
-	postUrl: '',
-    disabled: false,
-    applyNewValue: true,
-
-	init: function(comp) {
-		var me = this;
-
-		// to preserve offset for add button
-		Ext.override(comp, {
-			alignPicker: function() {
-                this.callParent();
-
-                var me = this,
-                    picker = me.getPicker(),
-                    heightAbove = me.getPosition()[1] - Ext.getBody().getScroll().top,
-                    heightBelow = Ext.dom.Element.getDocumentHeight() - heightAbove - me.getHeight(),
-                    space = Math.max(heightAbove, heightBelow);
-
-				if (picker.getHeight() > space - (5 + 24)) {
-					picker.setHeight(space - (5 + 24)); // have some leeway so we aren't flush against
-				}
-			}
-		});
-
-		comp.on('render', function() {
-			var picker = this.getPicker();
-			picker.addCls('x-boundlist-hideemptygrid');
-			picker.on('render', function() {
-                if (!me.disabled) {
-                    this.el.addCls('x-boundlist-with-addnew');
-                }
-				me.el = this.el.createChild({
-					tag: 'div',
-					cls: 'x-boundlist-addnew',
-                    title: 'Add new'
-				}).on('click', function(e) {
-					comp.collapse();
-					me.handler();
-                    e.stopEvent();//we don't want to reset current combobox value
-				}).setVisible(!me.disabled);
-			});
-		});
-
-		Scalr.event.on('update', function(type, element) {
-			if (type == me.url) {
+        Scalr.event.on('update', function(type, element) {
+            if (type == me.url) {
                 if (me.applyNewValue) {
                     this.store.add(element);
                     this.setValue(element[this.valueField]);
                 }
                 this.fireEvent('addnew', element);
-			}
-		}, comp);
-	},
+            }
+        }, comp);
+    },
 
     setDisabled: function(disabled) {
         if (this.el !== undefined) {
@@ -158,9 +260,9 @@ Ext.define('Scalr.ui.ComboAddNewPlugin', {
         this.disabled = disabled;
     },
 
-	handler: function() {
-		Scalr.event.fireEvent('modal', '#' + this.url + this.postUrl);
-	}
+    handler: function() {
+        Scalr.event.fireEvent('modal', '#' + this.url + this.postUrl);
+    }
 });
 
 /*
@@ -616,15 +718,15 @@ Ext.define('Scalr.ui.ApplyParamsPlugin', {
 });
 
 Ext.define('Scalr.ui.GridStorePlugin', {
-	extend: 'Ext.AbstractPlugin',
-	alias: 'plugin.gridstore',
-	loadMask: false,
+    extend: 'Ext.AbstractPlugin',
+    alias: 'plugin.gridstore',
+    loadMask: false,
     highlightNew: false,
 
-	init: function (client) {
+    init: function (client) {
         var me = this;
-		client.getView().loadMask = this.loadMask;
-		client.store.proxy.view = client.getView(); // :(
+        client.getView().loadMask = this.loadMask;
+        client.store.proxy.view = client.getView(); // :(
 
         if (me.highlightNew) {
             var view = client.getView(), prevFn = view.getRowClass;
@@ -638,15 +740,15 @@ Ext.define('Scalr.ui.GridStorePlugin', {
             };
         }
 
-		client.store.on({
-			scope: client,
-			beforeload: function (store) {
+        client.store.on({
+            scope: client,
+            beforeload: function (store) {
                 if (me.highlightNew && store.gridHightlightNew) {
                     store.gridHightlight = store.data.clone();
                     delete store.gridHightlightNew;
                 }
 
-				if (this.getView().rendered) {
+                if (this.getView().rendered) {
                     this.getView().clearViewEl();
                     // TODO: make it better, ExtJS leaves div, so remove it by ourselves
                     var ge = this.getView().el.child('.x-grid-error')
@@ -654,13 +756,13 @@ Ext.define('Scalr.ui.GridStorePlugin', {
                         ge.remove();
                 }
 
-				if (! this.getView().loadMask && !this.processBox)
-					this.processBox = Scalr.utils.CreateProcessBox({
-						type: 'action',
-						msg: client.getView().loadingText
-					});
-			},
-			load: function (store) {
+                if (! this.getView().loadMask && !this.processBox)
+                    this.processBox = Scalr.utils.CreateProcessBox({
+                        type: 'action',
+                        msg: client.getView().loadingText
+                    });
+            },
+            load: function (store) {
                 if (store.gridHightlight) {
                     store.each(function(record) {
                         if (! store.gridHightlight.getByKey(record.getId()))
@@ -670,17 +772,17 @@ Ext.define('Scalr.ui.GridStorePlugin', {
                     delete store.gridHightlight;
                 }
 
-				if (this.isDestroyed || !this.getView().loadMask) {
+                if (this.isDestroyed || !this.getView().loadMask) {
                     if (this.processBox) {
                         this.processBox.destroy();
                         delete this.processBox;
                     }
                 }
-			}
-		});
+            }
+        });
 
-		client.store.proxy.on({
-			exception: function (proxy, response, operation, options) {
+        client.store.proxy.on({
+            exception: function (proxy, response, operation, options) {
                 if (client.store.gridHightlight)
                     delete client.store.gridHightlight;
 
@@ -688,43 +790,83 @@ Ext.define('Scalr.ui.GridStorePlugin', {
                     Scalr.state.userNeedRefreshStoreAfter = true;
                 }
 
-				var message = 'Unable to load data';
-				try {
-					var result = Ext.decode(response.responseText, true);
-					if (result && result.success === false && result.errorMessage)
-						message += ' (' + result.errorMessage + ')';
-					else
-						throw 'Report';
-				} catch (e) {
-					if (response.status == 200 && Ext.isFunction(response.getAllResponseHeaders) && response.getAllResponseHeaders() && response.responseText) {
-						var report = [ "Ext.JSON.decode(): You're trying to decode an invalid JSON String" ];
-						report.push(Scalr.utils.VarDump(response.request.headers));
-						report.push(Scalr.utils.VarDump(response.request.options));
-						report.push(Scalr.utils.VarDump(response.request.options.params));
-						report.push(Scalr.utils.VarDump(response.getAllResponseHeaders()));
-						report.push(response.status);
-						report.push(response.responseText);
+                var message = 'Unable to load data';
+                try {
+                    var result = Ext.decode(response.responseText, true);
+                    if (result && result.success === false && result.errorMessage)
+                        message += ' (' + result.errorMessage + ')';
+                    else
+                        throw 'Report';
+                } catch (e) {
+                    if (response.status == 200 && Ext.isFunction(response.getAllResponseHeaders) && response.getAllResponseHeaders() && response.responseText) {
+                        var report = [ "Ext.JSON.decode(): You're trying to decode an invalid JSON String" ];
+                        report.push(Scalr.utils.VarDump(response.request.headers));
+                        report.push(Scalr.utils.VarDump(response.request.options));
+                        report.push(Scalr.utils.VarDump(response.request.options.params));
+                        report.push(Scalr.utils.VarDump(response.getAllResponseHeaders()));
+                        report.push(response.status);
+                        report.push(response.responseText);
 
-						report = report.join("\n\n");
+                        report = report.join("\n\n");
 
-						Scalr.utils.PostError({
-							message: 't2 ' + report,
-							url: document.location.href
-						});
-					}
-				}
+                        Scalr.utils.PostError({
+                            message: 't2 ' + report,
+                            url: document.location.href
+                        });
+                    }
+                }
 
-				message += '. <a href="#">Refresh</a>';
+                message += '. <a href="#">Refresh</a>';
 
-				proxy.view.update('<div class="x-grid-error">' + message + '</div>');
-				proxy.view.el.down('a').on('click', function (e) {
-					e.preventDefault();
-					client.store.load();
-				});
+                proxy.view.update('<div class="x-grid-error">' + message + '</div>');
+                proxy.view.el.down('a').on('click', function (e) {
+                    e.preventDefault();
+                    client.store.load();
+                });
                 proxy.view.refreshSize();
-			}
-		});
-	}
+            }
+        });
+    }
+});
+
+Ext.define('Scalr.ui.GridRowTooltip', {
+    extend: 'Ext.AbstractPlugin',
+    alias: 'plugin.rowtooltip',
+
+    cls: '',
+
+    anchor: '',
+
+    minWidth: 300,
+    maxWidth: 500,
+
+    beforeShow: Ext.emptyFn,
+
+    init: function (client) {
+        var me = this;
+
+        client.on('afterrender', function () {
+            var view = client.getView();
+
+            client.rowtooltip = Ext.create('Ext.tip.ToolTip', {
+                cls: me.cls,
+                anchor: me.anchor,
+                target: client.getId(),
+                delegate: view.itemSelector,
+                //trackMouse: true,
+                owner: client,
+                minWidth: me.minWidth,
+                maxWidth: me.maxWidth,
+                listeners: {
+                    beforeshow: me.beforeShow
+                }
+            });
+        });
+        client.on('destroy', function(){
+            Ext.destroy(client.rowtooltip);
+            delete client.rowtooltip;
+        });
+    }
 });
 
 // (5.0)
@@ -1108,129 +1250,129 @@ Ext.define('Ext.ux.BoxReorderer', {
 });
 
 Ext.define('Scalr.ui.CustomButton', {
-	alias: 'widget.custombutton',
-	extend: 'Ext.Component',
+    alias: 'widget.custombutton',
+    extend: 'Ext.Component',
 
-	hidden: false,
-	disabled: false,
-	pressed: false,
-	enableToggle: false,
-	maskOnDisable: false,
+    hidden: false,
+    disabled: false,
+    pressed: false,
+    enableToggle: false,
+    maskOnDisable: false,
 
-	childEls: [ 'btnEl' ],
+    childEls: [ 'btnEl' ],
 
-	overCls: 'x-btn-custom-over',
-	pressedCls: 'x-btn-custom-pressed',
-	disabledCls: 'x-btn-custom-disabled',
-	tooltipType: 'qtip',
+    overCls: 'x-btn-custom-over',
+    pressedCls: 'x-btn-custom-pressed',
+    disabledCls: 'x-btn-custom-disabled',
+    tooltipType: 'qtip',
 
-	initComponent: function() {
-		var me = this;
-		me.callParent(arguments);
+    initComponent: function() {
+        var me = this;
+        me.callParent(arguments);
 
-		if (Ext.isString(me.toggleGroup)) {
-			me.enableToggle = true;
-		}
+        if (Ext.isString(me.toggleGroup)) {
+            me.enableToggle = true;
+        }
 
-		me.renderData['disabled'] = me.disabled;
-	},
+        me.renderData['disabled'] = me.disabled;
+    },
 
-	onRender: function () {
-		var me = this;
+    onRender: function () {
+        var me = this;
 
-		me.callParent(arguments);
+        me.callParent(arguments);
 
-		me.mon(me.el, {
-			click: me.onClick,
-			scope: me
-		});
+        me.mon(me.el, {
+            click: me.onClick,
+            scope: me
+        });
 
-		if (me.pressed)
-			me.addCls(me.pressedCls);
+        if (me.pressed)
+            me.addCls(me.pressedCls);
 
-		Ext.ButtonToggleManager.register(me);
+        Ext.ButtonToggleManager.register(me);
 
         if (me.tooltip) {
             me.setTooltip(me.tooltip, true);
         }
 
-	},
+    },
 
-	onDestroy: function() {
-		var me = this;
-		if (me.rendered) {
-			Ext.ButtonToggleManager.unregister(me);
-			me.clearTip();
-		}
-		me.callParent();
-	},
+    onDestroy: function() {
+        var me = this;
+        if (me.rendered) {
+            Ext.ButtonToggleManager.unregister(me);
+            me.clearTip();
+        }
+        me.callParent();
+    },
 
-	toggle: function(state, suppressEvent) {
-		var me = this;
-		state = state === undefined ? !me.pressed : !!state;
-		if (state !== me.pressed) {
-			if (me.rendered) {
-				me[state ? 'addCls': 'removeCls'](me.pressedCls);
-			}
-			me.pressed = state;
-			if (!suppressEvent) {
-				me.fireEvent('toggle', me, state);
-				Ext.callback(me.toggleHandler, me.scope || me, [me, state]);
-			}
-		}
-		return me;
-	},
+    toggle: function(state, suppressEvent) {
+        var me = this;
+        state = state === undefined ? !me.pressed : !!state;
+        if (state !== me.pressed) {
+            if (me.rendered) {
+                me[state ? 'addCls': 'removeCls'](me.pressedCls);
+            }
+            me.pressed = state;
+            if (!suppressEvent) {
+                me.fireEvent('toggle', me, state);
+                Ext.callback(me.toggleHandler, me.scope || me, [me, state]);
+            }
+        }
+        return me;
+    },
 
-	onClick: function(e) {
-		var me = this;
-		if (! me.disabled) {
-			me.doToggle();
-			me.fireHandler(e);
-		}
-	},
+    onClick: function(e) {
+        var me = this;
+        if (! me.disabled) {
+            me.doToggle();
+            me.fireHandler(e);
+        }
+    },
 
-	fireHandler: function(e){
-		var me = this,
-		handler = me.handler;
+    fireHandler: function(e){
+        var me = this,
+        handler = me.handler;
 
-		me.fireEvent('click', me, e);
-		if (handler) {
-			handler.call(me.scope || me, me, e);
-		}
-	},
+        me.fireEvent('click', me, e);
+        if (handler) {
+            handler.call(me.scope || me, me, e);
+        }
+    },
 
-	doToggle: function(){
-		var me = this;
-		if (me.enableToggle && (me.allowDepress !== false || !me.pressed)) {
-			me.toggle();
-		}
-	},
+    doToggle: function(){
+        var me = this;
+        if (me.enableToggle && (me.allowDepress !== false || !me.pressed)) {
+            me.toggle();
+        }
+    },
 
-	setTooltip: function(tooltip, initial) {
-		var me = this;
+    setTooltip: function(tooltip, initial) {
+        var me = this;
 
-		if (me.rendered) {
-			if (!initial) {
-				me.clearTip();
-			}
-			if (Ext.isObject(tooltip)) {
-				Ext.tip.QuickTipManager.register(Ext.apply({
-					target: me.btnEl.id
-				},
-				tooltip));
-				me.tooltip = tooltip;
-			} else {
-				me.btnEl.dom.setAttribute(me.getTipAttr(), tooltip);
-			}
-		} else {
-			me.tooltip = tooltip;
-		}
-		return me;
-	},
+        if (me.rendered) {
+            if (!initial) {
+                me.clearTip();
+            }
+            if (Ext.isObject(tooltip)) {
+                Ext.tip.QuickTipManager.register(Ext.apply({
+                    target: me.btnEl.id
+                },
+                tooltip));
+                me.tooltip = tooltip;
+            } else {
+                me.btnEl.dom.setAttribute(me.getTipAttr(), tooltip);
+            }
+        } else {
+            me.tooltip = tooltip;
+        }
+        return me;
+    },
 
-	getTipAttr: function(){
-		return this.tooltipType == 'qtip' ? 'data-qtip' : 'title';
-	},
+    getTipAttr: function(){
+        return this.tooltipType == 'qtip' ? 'data-qtip' : 'title';
+    },
 
     clearTip: function() {
         if (Ext.isObject(this.tooltip)) {
@@ -1244,75 +1386,75 @@ Ext.define('Scalr.ui.CustomButton', {
 
 Ext.define('Scalr.ui.PanelTool', {
 
-	extend: 'Ext.panel.Tool',
-	alias: 'widget.favoritetool',
+    extend: 'Ext.panel.Tool',
+    alias: 'widget.favoritetool',
 
-	 * Example:
-	 *
-	 favorite: {
-	    text: 'Farms',
-	    href: '#/farms/view'
-	 }
+     * Example:
+     *
+     favorite: {
+        text: 'Farms',
+        href: '#/farms/view'
+     }
 
-	favorite: {},
+    favorite: {},
 
-	initComponent: function () {
-		this.type = 'favorite';
-		this.favorite.hrefTarget = '_self';
-		var favorites = Scalr.storage.get('system-favorites');
+    initComponent: function () {
+        this.type = 'favorite';
+        this.favorite.hrefTarget = '_self';
+        var favorites = Scalr.storage.get('system-favorites');
 
-		Ext.each(favorites, function (item) {
-			if (item.href == this.favorite['href']) {
-				this.type = 'favorite-checked';
-				return false;
-			}
-		}, this);
+        Ext.each(favorites, function (item) {
+            if (item.href == this.favorite['href']) {
+                this.type = 'favorite-checked';
+                return false;
+            }
+        }, this);
 
-		this.callParent();
-	},
+        this.callParent();
+    },
 
-	handler: function () {
-		var favorites = Scalr.storage.get('system-favorites') || [], enabled = this.type == 'favorite-checked', href = this.favorite.href, menu = Scalr.application.getDockedComponent('top');
+    handler: function () {
+        var favorites = Scalr.storage.get('system-favorites') || [], enabled = this.type == 'favorite-checked', href = this.favorite.href, menu = Scalr.application.getDockedComponent('top');
 
-		if (enabled) {
-			var index = menu.items.findIndex('href', this.favorite.href);
-			menu.remove(menu.items.getAt(index));
+        if (enabled) {
+            var index = menu.items.findIndex('href', this.favorite.href);
+            menu.remove(menu.items.getAt(index));
 
-			Ext.Array.each(favorites, function(item) {
-				if (item.href == href) {
-					Ext.Array.remove(favorites, item);
-					return false;
-				}
-			});
-			this.setType('favorite');
-		} else {
-			var index = menu.items.findIndex('xtype', 'tbfill'), fav = Scalr.utils.CloneObject(this.favorite);
-			Ext.apply(fav, {
-				hrefTarget: '_self',
-				reorderable: true,
-				cls: 'x-btn-favorite',
-				overCls: 'btn-favorite-over',
-				pressedCls: 'btn-favorite-pressed'
-			});
-			menu.insert(index, fav);
-			favorites.push(this.favorite);
-			this.setType('favorite-checked');
-		}
+            Ext.Array.each(favorites, function(item) {
+                if (item.href == href) {
+                    Ext.Array.remove(favorites, item);
+                    return false;
+                }
+            });
+            this.setType('favorite');
+        } else {
+            var index = menu.items.findIndex('xtype', 'tbfill'), fav = Scalr.utils.CloneObject(this.favorite);
+            Ext.apply(fav, {
+                hrefTarget: '_self',
+                reorderable: true,
+                cls: 'x-btn-favorite',
+                overCls: 'btn-favorite-over',
+                pressedCls: 'btn-favorite-pressed'
+            });
+            menu.insert(index, fav);
+            favorites.push(this.favorite);
+            this.setType('favorite-checked');
+        }
 
-		Scalr.storage.set('system-favorites', favorites);
-	}
+        Scalr.storage.set('system-favorites', favorites);
+    }
 });*/
 
 // 5.0
 Ext.define('Scalr.ui.MenuItemTop', {
-	extend: 'Ext.menu.Item',
-	alias: 'widget.menuitemtop',
+    extend: 'Ext.menu.Item',
+    alias: 'widget.menuitemtop',
     cls: 'x-menu-item-addlink',
     addLinkHrefDisabled: false,
 
-	onRender: function () {
-		var me = this;
-		me.callParent();
+    onRender: function () {
+        var me = this;
+        me.callParent();
 
         if (me.addLinkHrefDisabled)
             return;
@@ -1323,71 +1465,71 @@ Ext.define('Scalr.ui.MenuItemTop', {
             href: me.addLinkHref,
             html: 'ADD NEW'
         }, me.arrowEl);
-	}
+    }
 });
 
 // DEPRECATED, remove with old farm builder
 Ext.define('Scalr.ui.FormComboButton', {
-	extend: 'Ext.container.Container',
-	alias: 'widget.combobutton',
+    extend: 'Ext.container.Container',
+    alias: 'widget.combobutton',
 
-	cls: 'x-form-combobutton',
-	handler: Ext.emptyFn,
-	privateHandler: function (btn) {
-		this.handler(btn.value, btn);
-	},
+    cls: 'x-form-combobutton',
+    handler: Ext.emptyFn,
+    privateHandler: function (btn) {
+        this.handler(btn.value, btn);
+    },
 
-	initComponent: function () {
-		var me = this, groupName = this.getId() + '-button-group';
+    initComponent: function () {
+        var me = this, groupName = this.getId() + '-button-group';
 
-		for (var i = 0; i < me.items.length; i++) {
-			Ext.apply(me.items[i], {
-				enableToggle: true,
-				toggleGroup: groupName,
-				allowDepress: false,
-				handler: me.privateHandler,
-				scope: me
-			});
-		}
+        for (var i = 0; i < me.items.length; i++) {
+            Ext.apply(me.items[i], {
+                enableToggle: true,
+                toggleGroup: groupName,
+                allowDepress: false,
+                handler: me.privateHandler,
+                scope: me
+            });
+        }
 
-		me.callParent();
-	},
+        me.callParent();
+    },
 
-	afterRender: function () {
-		this.callParent(arguments);
+    afterRender: function () {
+        this.callParent(arguments);
 
-		this.items.first().addCls('x-btn-default-small-combo-first');
-		this.items.last().addCls('x-btn-default-small-combo-last');
-	},
+        this.items.first().addCls('x-btn-default-small-combo-first');
+        this.items.last().addCls('x-btn-default-small-combo-last');
+    },
 
-	getValue: function () {
-		var b = Ext.ButtonToggleManager.getPressed(this.getId() + '-button-group');
-		if (b)
-			return b.value;
-	}
+    getValue: function () {
+        var b = Ext.ButtonToggleManager.getPressed(this.getId() + '-button-group');
+        if (b)
+            return b.value;
+    }
 });
 
 Ext.define('Scalr.ui.AddFieldPlugin', {
-	extend: 'Ext.AbstractPlugin',
-	alias: 'plugin.addfield',
-	pluginId: 'addfield',
+    extend: 'Ext.AbstractPlugin',
+    alias: 'plugin.addfield',
+    pluginId: 'addfield',
     width: '100%',
     targetEl: 'tbody',
     cls: '',
 
-	init: function (client) {
-		var me = this;
+    init: function (client) {
+        var me = this;
         me.client = client;
-		client.on('afterrender', function() {
-			me.panelContainer = Ext.DomHelper.insertAfter(client.el.down(me.targetEl), {style: {height: '30px'}}, true);
-			var addmask = Ext.DomHelper.append(me.panelContainer,
-				'<div style="position: absolute; width: ' + me.width + '; height: 30px;'+(me.padding ? 'padding:' + me.padding + ';' : '')+'">' +
-					'<div class="scalr-ui-addfield ' + me.cls + '"></div>' +
-					'</div>'
-				, true);
-			addmask.down('div.scalr-ui-addfield').on('click', me.handler, client);
-		}, client);
-	},
+        client.on('afterrender', function() {
+            me.panelContainer = Ext.DomHelper.insertAfter(client.el.down(me.targetEl), {style: {height: '30px'}}, true);
+            var addmask = Ext.DomHelper.append(me.panelContainer,
+                '<div style="position: absolute; width: ' + me.width + '; height: 30px;'+(me.padding ? 'padding:' + me.padding + ';' : '')+'">' +
+                    '<div class="scalr-ui-addfield ' + me.cls + '"></div>' +
+                    '</div>'
+                , true);
+            addmask.down('div.scalr-ui-addfield').on('click', me.handler, client);
+        }, client);
+    },
     run: function() {
         this.handler.call(this.client);
     },
@@ -1399,52 +1541,12 @@ Ext.define('Scalr.ui.AddFieldPlugin', {
         if (this.panelContainer)
             this.panelContainer.down('div').setWidth(width);
     },
-	hide: function() {
-		if (this.panelContainer) {
+    hide: function() {
+        if (this.panelContainer) {
             this.panelContainer.remove();
             this.panelContainer = null;
         }
-	}
-});
-
-Ext.define('Scalr.ui.FormFieldPassword', {
-    extend: 'Ext.form.field.Text',
-	alias: 'widget.passwordfield',
-
-	inputType:'password',
-	allowBlank: false,
-	placeholder: '******',
-	initialValue: null,
-
-	isPasswordEmpty: function(password) {
-		return Ext.isEmpty(password) || password === false;
-	},
-
-    getSubmitData: function() {
-		if (!this.isPasswordEmpty(this.initialValue) && this.getValue() == this.placeholder ||
-			this.isPasswordEmpty(this.initialValue) && this.getValue() == '') {
-			return null;
-		} else {
-			return this.callParent(arguments);
-		}
-    },
-
-    getModelData: function() {
-		var data = {};
-        data[this.getName()] = this.getValue() != '' ? true : false;
-		return data;
-    },
-
-    setValue: function(value) {
-		this.initialValue = value;
-		if (!this.isPasswordEmpty(value)) {
-			value = this.placeholder;
-		} else {
-			value = '';
-		}
-		this.callParent(arguments);
-	}
-
+    }
 });
 
 Ext.define('Scalr.ui.LeftMenu', {
@@ -1452,25 +1554,25 @@ Ext.define('Scalr.ui.LeftMenu', {
     alias: 'plugin.leftmenu',
 
     disabled: false,
-	client:null,
-	menu: null,
-	menuVisible: false,
+    client:null,
+    menu: null,
+    menuVisible: false,
 
-	currentMenuId: null,
-	currentItemId: null,
+    currentMenuId: null,
+    currentItemId: null,
     currentOptions: null,
-	itemIdPrefix: 'leftmenu-',
+    itemIdPrefix: 'leftmenu-',
     defaultMenuWidth: 110 + Ext.getScrollbarSize().width,
 
-	itemIconClsPrefix: 'x-icon-leftmenu',
+    itemIconClsPrefix: 'x-icon-leftmenu',
 
-	getMenuConfig: function(menuId){
-		var config = {
+    getMenuConfig: function(menuId){
+        var config = {
             items: [],
             cls: menuId
         };
-		switch (menuId) {
-			case 'account':
+        switch (menuId) {
+            case 'account':
                 config.items.push({
                     itemId:'teams',
                     href: '#/account/teams',
@@ -1486,12 +1588,12 @@ Ext.define('Scalr.ui.LeftMenu', {
 
                     config.items.push({
                         itemId:'roles',
-                        href: '#/account/roles',
+                        href: '#/account/acl',
                         text: 'ACL'
                     });
                 }
-			    break;
-			case 'webhooks':
+                break;
+            case 'webhooks':
                 config.items.push({
                     itemId:'endpoints',
                     href: '#' + Scalr.utils.getUrlPrefix() + '/webhooks/endpoints',
@@ -1567,32 +1669,35 @@ Ext.define('Scalr.ui.LeftMenu', {
                     itemId: 'projects',
                     href: '#/account/analytics/projects',
                     text: 'Projects'
-                },{
-                    itemId: 'budgets',
-                    href: '#/account/analytics/budgets',
-                    text: 'Budgets'
                 });
+                if (Scalr.isAllowed('ANALYTICS_ACCOUNT', 'allocate-budget')) {
+                    config.items.push({
+                        itemId: 'budgets',
+                        href: '#/account/analytics/budgets',
+                        text: 'Budgets'
+                    });
+                }
                 break;
 
-		}
-		return config;
-	},
+        }
+        return config;
+    },
 
 
-	init: function(client) {
-		var me = this;
-		me.client = client;
-	},
+    init: function(client) {
+        var me = this;
+        me.client = client;
+    },
 
-	create: function() {
+    create: function() {
         var me = this;
         me.menu = Ext.create('Ext.container.Container', {
-			hidden: true,
-			dock: 'left',
+            hidden: true,
+            dock: 'left',
             cls: 'x-docked-tabs',
             width: me.defaultMenuWidth,
             scrollable: 'y',
-			defaults: {
+            defaults: {
                 xtype: 'button',
                 ui: 'tab',
                 allowDepress: false,
@@ -1603,42 +1708,42 @@ Ext.define('Scalr.ui.LeftMenu', {
                 listeners: {
                     click: Ext.bind(me.onButtonClick, me)
                 }
-			}
-		});
-		me.client.addDocked(this.menu);
-	},
+            }
+        });
+        me.client.addDocked(this.menu);
+    },
 
-	set: function(options) {
-		var me = this, prevBtn, newBtn, menuConfig;
+    set: function(options) {
+        var me = this, prevBtn, newBtn, menuConfig;
         me.currentOptions = options;
-		if (options.menuId !== this.currentMenuId || this.currentScope != Scalr.scope) {
+        if (options.menuId !== this.currentMenuId || this.currentScope != Scalr.scope) {
             this.currentScope = Scalr.scope;
             menuConfig = this.getMenuConfig(options.menuId);
-			this.menu.removeAll();
+            this.menu.removeAll();
             var iconClsPrefix = me.itemIconClsPrefix;
             this.menu.setWidth(options.width || me.defaultMenuWidth);
-			this.menu.add(Ext.Array.map(menuConfig.items, function(item){
+            this.menu.add(Ext.Array.map(menuConfig.items, function(item){
                 var iconClsPrefixLocal = item.menuCls ? me.itemIconClsPrefix + item.menuCls : iconClsPrefix;
                 if (options.icons === false) {
                     item.textAlign = 'left';
                 } else {
                     item.iconCls = iconClsPrefixLocal + ' ' + iconClsPrefixLocal + '-' + (item.itemCls || item.itemId);
                 }
-				item.itemId = me.itemIdPrefix + item.itemId;
-				return item;
-			}));
-			this.currentMenuId = options.menuId;
-			this.currentItemId = null;
-		}
+                item.itemId = me.itemIdPrefix + item.itemId;
+                return item;
+            }));
+            this.currentMenuId = options.menuId;
+            this.currentItemId = null;
+        }
         newBtn = this.menu.getComponent(me.itemIdPrefix + options.itemId);
-		if (options.itemId !== this.currentItemId) {
+        if (options.itemId !== this.currentItemId) {
             if (this.currentItemId) {
                 prevBtn = this.menu.getComponent(me.itemIdPrefix + this.currentItemId);
                 if (prevBtn) prevBtn.toggle(false, true);
             }
-			if (newBtn) newBtn.toggle(true);
-			this.currentItemId = options.itemId;
-		}
+            if (newBtn) newBtn.toggle(true);
+            this.currentItemId = options.itemId;
+        }
         if (newBtn && options.subpage) {
             var newHref = newBtn.href.replace(/[^/]+\/{0,1}$/, options.subpage);
             if (newBtn.rendered) {
@@ -1647,23 +1752,23 @@ Ext.define('Scalr.ui.LeftMenu', {
                 newBtn.href = newHref;
             }
         }
-	},
+    },
 
-	show: function(options) {
-		if (this.menu === null) {
-			this.create();
-		}
-		this.set(options);
-		this.menuVisible = true;
-		this.menu.show();
-	},
+    show: function(options) {
+        if (this.menu === null) {
+            this.create();
+        }
+        this.set(options);
+        this.menuVisible = true;
+        this.menu.show();
+    },
 
-	hide: function() {
-		this.menuVisible = false;
+    hide: function() {
+        this.menuVisible = false;
         if (this.menu) {
             this.menu.hide();
         }
-	},
+    },
 
     onButtonClick: function(btn, e) {
         continueCallback = function() {
@@ -1684,72 +1789,72 @@ Ext.define('Scalr.ui.GridField', {
     },
     alias: 'widget.gridfield',
 
-	selModel: {
-		selType: 'selectedmodel',
-		injectCheckbox: 'first'
-	},
-	fieldReady: false,
+    selModel: {
+        selType: 'selectedmodel',
+        injectCheckbox: 'first'
+    },
+    fieldReady: false,
 
-	allowBlank: true,
+    allowBlank: true,
 
-	initComponent : function() {
+    initComponent : function() {
         var me = this;
- 		me.callParent();
-		this.initField();
+        me.callParent();
+        this.initField();
         if (!me.name) {
             me.name = me.getInputId();
         }
 
-		this.on('viewready', function(){
-			this.fieldReady = true;
-			this.setRawValue(this.value);
-		});
-		this.on('selectionchange', function(selModel, selected){
-			this.checkChange();
-		});
-		this.getStore().on('refresh', me.onStoreRefresh, me);
-	},
+        this.on('viewready', function(){
+            this.fieldReady = true;
+            this.setRawValue(this.value);
+        });
+        this.on('selectionchange', function(selModel, selected){
+            this.checkChange();
+        });
+        this.getStore().on('refresh', me.onStoreRefresh, me);
+    },
 
-	setValue: function(value) {
-		this.setRawValue(value);
-		return this.mixins.field.setValue.call(this, value);
-	},
+    setValue: function(value) {
+        this.setRawValue(value);
+        return this.mixins.field.setValue.call(this, value);
+    },
 
-	setRawValue: function(value) {
-		if (this.fieldReady) {
-			var store = this.getStore(),
-				records = [];
+    setRawValue: function(value) {
+        if (this.fieldReady) {
+            var store = this.getStore(),
+                records = [];
 
-			value = value || [];
-			for (var i=0, len=value.length; i<len; i++) {
-				var record = store.getById(value[i]);
-				if (record) {
-					records.push(record);
-				}
-			}
+            value = value || [];
+            for (var i=0, len=value.length; i<len; i++) {
+                var record = store.getById(value[i]);
+                if (record) {
+                    records.push(record);
+                }
+            }
             if (records.length) {
                 this.getSelectionModel().select(records, false, true);
             } else {
                 this.getSelectionModel().deselectAll();
             }
-		}
-	},
+        }
+    },
 
     getInputId: function() {
         return this.inputId || (this.inputId = this.id + '-inputEl');
     },
 
     getRawValue: function() {
-		var ids = [];
-		this.getSelectionModel().selected.each(function(record){
-			ids.push(record.get('id'));
-		});
-		return ids;
+        var ids = [];
+        this.getSelectionModel().selected.each(function(record){
+            ids.push(record.get('id'));
+        });
+        return ids;
     },
 
-	getValue: function() {
-		return this.getRawValue();
-	},
+    getValue: function() {
+        return this.getRawValue();
+    },
 
     getActiveError : function() {
         return this.activeError || '';
@@ -1770,87 +1875,87 @@ Ext.define('Scalr.ui.GridField', {
     },
 
     beforeDestroy: function() {
-    	this.getStore().un('refresh', this.onStoreRefresh, this);
-    	this.callParent(arguments);
+        this.getStore().un('refresh', this.onStoreRefresh, this);
+        this.callParent(arguments);
     }
 
 
 });
 
 Ext.define('Scalr.ui.FormPicker', {
-	extend:'Ext.form.field.Picker',
-	alias: 'widget.formpicker',
+    extend:'Ext.form.field.Picker',
+    alias: 'widget.formpicker',
 
-	onBoxReady: function() {
-		this.callParent(arguments);
-		this.on({
-			expand: function() {
-				//this.parseSearchString();
-			}
-		});
-	},
+    onBoxReady: function() {
+        this.callParent(arguments);
+        this.on({
+            expand: function() {
+                //this.parseSearchString();
+            }
+        });
+    },
 
-	createPicker: function() {
-		var me = this,
-			formDefaults = {
-				style: 'background:#F0F1F4;border-radius:4px;box-shadow: 0 1px 3px #7B8BA1;margin-top:1px',
-				fieldDefaults: {
-					anchor: '100%'
-				},
-				focusOnToFront: false,
-				padding: 12,
-				pickerField: me,
-				floating: true,
-				hidden: true,
-				ownerCt: this.ownerCt
-			};
+    createPicker: function() {
+        var me = this,
+            formDefaults = {
+                style: 'background:#F0F1F4;border-radius:4px;box-shadow: 0 1px 3px #7B8BA1;margin-top:1px',
+                fieldDefaults: {
+                    anchor: '100%'
+                },
+                focusOnToFront: false,
+                padding: 12,
+                pickerField: me,
+                floating: true,
+                hidden: true,
+                ownerCt: this.ownerCt
+            };
 
-		if (!this.form.dockedItems) {
-			this.form.dockedItems = {
-				xtype: 'container',
-				layout: {
-					type: 'hbox',
-					pack: 'center'
-				},
-				dock: 'bottom',
-				items: [{
-					xtype: 'button',
-					text: 'Search',
-					handler: function() {me.focus();
-						me.collapse();
-						//me.fireEvent('search');
-					}
-				}]
-			}
-		}
-		if (this.form.items) {
-			this.form.items.unshift({
-				xtype: 'textfield',
-				name: 'keywords',
-				fieldLabel: 'Has words',
-				labelAlign: 'top'
-			});
-		}
-		var form = Ext.create('Ext.form.Panel', Ext.apply(formDefaults, this.form));
-		form.getForm().getFields().each(function(){
-			if (this.xtype == 'combo') {
-				this.on('expand', function(){
-					this.picker.el.on('mousedown', function(e){
-						me.keepVisible = true;
-					});
-				}, this, {single: true})
-			}
-		})
-		return form;
-	},
+        if (!this.form.dockedItems) {
+            this.form.dockedItems = {
+                xtype: 'container',
+                layout: {
+                    type: 'hbox',
+                    pack: 'center'
+                },
+                dock: 'bottom',
+                items: [{
+                    xtype: 'button',
+                    text: 'Search',
+                    handler: function() {me.focus();
+                        me.collapse();
+                        //me.fireEvent('search');
+                    }
+                }]
+            }
+        }
+        if (this.form.items) {
+            this.form.items.unshift({
+                xtype: 'textfield',
+                name: 'keywords',
+                fieldLabel: 'Has words',
+                labelAlign: 'top'
+            });
+        }
+        var form = Ext.create('Ext.form.Panel', Ext.apply(formDefaults, this.form));
+        form.getForm().getFields().each(function(){
+            if (this.xtype == 'combo') {
+                this.on('expand', function(){
+                    this.picker.el.on('mousedown', function(e){
+                        me.keepVisible = true;
+                    });
+                }, this, {single: true})
+            }
+        })
+        return form;
+    },
 
-	collapseIf: function(e) {
-		var me = this;
-		if (!me.keepVisible && !me.isDestroyed && !e.within(me.bodyEl, false, true) && !e.within(me.picker.el, false, true) && !me.isEventWithinPickerLoadMask(e)) {
-			me.collapse();
-		}
-		me.keepVisible = false;
-	}
+    collapseIf: function(e) {
+        var me = this;
+        if (!me.keepVisible && !me.isDestroyed && !e.within(me.bodyEl, false, true) && !e.within(me.picker.el, false, true) && !me.isEventWithinPickerLoadMask(e)) {
+            me.collapse();
+        }
+        me.keepVisible = false;
+    }
 
 });
 
@@ -1859,83 +1964,94 @@ Ext.define('Scalr.ui.data.View.DynEmptyText', {
     alias: 'plugin.dynemptytext',
 
     disabled: false,
-	client: null,
+    client: null,
 
-	onAddItemClick: Ext.emptyFn,
-	itemsTotal: null,
-	emptyText: 'Nothing were found to match your search.<br/>Try modifying your search criteria.',
-	emptyTextNoItems: null,
+    onAddItemClick: Ext.emptyFn,
+    itemsTotal: null,
+    emptyText: 'Nothing were found to match your search.<br/>Try modifying your search criteria.',
+    emptyTextNoItems: null,
     forceRefresh: false,
 
-	init: function(client) {
-		var me = this;
-		me.client = client;
+    init: function(client) {
+        var me = this;
+        me.client = client;
         client.emptyText = '<div class="' + Ext.baseCSSPrefix + 'grid-empty">' + me.emptyText + '</div>';
         client.deferEmptyText = false;
-		client.on({
-			containerclick: {
-				fn: me.onContainerClick,
-				scope: me
-			},
-			afterrender: function() {
-				client.store.on({
-					refresh: {
-						fn: me.updateEmptyText,
-						scope: me
-					},
-					add: {
-						fn: me.updateEmptyText,
-						scope: me
-					},
-					remove: {
-						fn: me.updateEmptyText,
-						scope: me
-					}
-				});
-				me.updateEmptyText();
-			},
-			beforedestroy: function() {
-				this.un('containerclick', me.onContainerClick, me);
-				this.store.un('refresh', me.updateEmptyText, me);
-				this.store.un('add', me.updateEmptyText, me);
-				this.store.un('remove', me.updateEmptyText, me);
-			}
-		});
-	},
+        client.on({
+            containerclick: {
+                fn: me.onContainerClick,
+                scope: me
+            },
+            afterrender: function() {
+                client.store.on({
+                    refresh: {
+                        fn: me.updateEmptyText,
+                        scope: me
+                    },
+                    add: {
+                        fn: me.updateEmptyText,
+                        scope: me
+                    },
+                    remove: {
+                        fn: me.updateEmptyText,
+                        scope: me
+                    }
+                });
+                me.updateEmptyText();
+            },
+            beforedestroy: function() {
+                this.un('containerclick', me.onContainerClick, me);
+                this.store.un('refresh', me.updateEmptyText, me);
+                this.store.un('add', me.updateEmptyText, me);
+                this.store.un('remove', me.updateEmptyText, me);
+            }
+        });
+    },
 
-	onContainerClick: function(comp, e){
-		var el = comp.el.query('a.add-link');
-		if (el.length) {
+    onContainerClick: function(comp, e){
+        var el = comp.el.query('a.add-link');
+        if (el.length) {
             for (var i=0, len=el.length; i<len; i++) {
                 if (e.within(el[i])) {
                     this.onAddItemClick(el[i]);
                     break;
                 }
             }
-			e.preventDefault();
-		}
-	},
+            e.preventDefault();
+        }
+    },
 
-	updateEmptyText: function() {
-		var client = this.client,
-            visibleCount = client.store.getCount(),
-			itemsTotal = (client.store.getUnfiltered ? client.store.getUnfiltered().length : client.store.getSource().length) || 0;
+    updateEmptyText: function() {
+        var client = this.client,
+            store = client.store,
+            visibleCount = store.getCount(),
+            itemsTotal = 0;
+        if (store.getUnfiltered) {//store
+            itemsTotal = store.getUnfiltered().length;
+        } else {
+            store = store.getSource();
+            if (store.getUnfiltered) {//chained store
+                itemsTotal = store.getUnfiltered().length;
+            } else if (store.length) {//collection
+                itemsTotal = store.length;
+            }
+        }
 
-		if (!visibleCount && (this.forceRefresh || itemsTotal !== this.itemsTotal)) {
-			var text = itemsTotal < 1 ? this.emptyTextNoItems || this.emptyText : this.emptyText;
-			client.emptyText = '<div class="' + Ext.baseCSSPrefix + 'grid-empty">' + text + '</div>';
-			var emptyDiv = client.el.query('.' + Ext.baseCSSPrefix + 'grid-empty');
-			if (emptyDiv.length) {
-				Ext.fly(emptyDiv[0]).setHtml(text);
-			}
+        if (!visibleCount && (this.forceRefresh || itemsTotal !== this.itemsTotal)) {
+            var text = itemsTotal < 1 ? this.emptyTextNoItems || this.emptyText : this.emptyText;
+            client.emptyText = '<div class="' + Ext.baseCSSPrefix + 'grid-empty">' + text + '</div>';
+            var emptyDiv = client.el.query('.' + Ext.baseCSSPrefix + 'grid-empty');
+            if (emptyDiv.length) {
+                Ext.fly(emptyDiv[0]).setHtml(text);
+            }
             client.refreshSize();
-			this.itemsTotal = itemsTotal;
+            this.itemsTotal = itemsTotal;
             this.forceRefresh = false;
-		} else if (visibleCount) {
+        } else if (visibleCount) {
             //extjs table view bug? empty text is visible after adding new record
             client.clearEmptyEl();
         }
-	},
+    },
 
     setEmptyText: function(text, alt) {
         this['emptyText' + (alt ? 'NoItems' : '')] = text;
@@ -1949,23 +2065,23 @@ Ext.define('Ext.ux.form.ToolFieldSet', {
     tools: [],
 
     createLegendCt: function () {
-		var me = this,
-			legend = me.callParent(arguments);
+        var me = this,
+            legend = me.callParent(arguments);
 
-		if (Ext.isArray(me.tools)) {
+        if (Ext.isArray(me.tools)) {
             for(var i = 0; i < me.tools.length; i++) {
                 legend.items.push(me.createToolCmp(me.tools[i]));
             }
         }
 
-		return legend;
+        return legend;
     },
 
     createToolCmp: function(toolCfg) {
         var me = this;
         Ext.apply(toolCfg, {
             xtype:  'tool',
-			cls: 'x-tool-extra',
+            cls: 'x-tool-extra',
             width:  15,
             height: 15,
             id:     me.id + '-tool-' + toolCfg.type,
@@ -2092,6 +2208,16 @@ Ext.define('Scalr.CachedRequest', {
         }
     },
 
+    setExpiredByMask: function (mask) {
+        var me = this;
+
+        Ext.Object.each(me.cache, function (id, cache) {
+            if (Ext.String.startsWith(id, mask)) {
+                cache.expired = true;
+            }
+        });
+    },
+
     isLoaded: function(params) {
         var cacheId = Ext.isString(params) ? params : this.getCacheId(params);
         return this.cache[cacheId] !== undefined;
@@ -2153,9 +2279,9 @@ Ext.define('Scalr.ui.LocalCachedRequest', {
 
     crscope: null,
 
-	init: function(client) {
+    init: function(client) {
         Scalr.CachedRequestManager.create(this.crscope);
-	},
+    },
 
     destroy: function(){
         Scalr.CachedRequestManager.remove(this.crscope);
@@ -2221,6 +2347,10 @@ Ext.define('Scalr.ui.StoreProxyCachedRequest', {
         if (data) {
             resultSet = me.getReader().read(me.getData());
             if (operation.process(resultSet, null, null, false) !== false) {
+                if (me.getFilterFn()) {
+                    resultSet.setRecords(records = Ext.Array.filter(resultSet.getRecords(), me.getFilterFn(), me.getFilterFnScope() || me));
+                    resultSet.setTotal(records.length);
+                }
                 operation.setCompleted();
             }
         } else {
@@ -2280,27 +2410,27 @@ Ext.define('Scalr.ui.PanelScrollFixPlugin', {
     alias: 'plugin.panelscrollfix',
 
     disabled: false,
-	client:null,
+    client:null,
 
     scrollTop: 0,
 
-	init: function(client) {
-		var me = this;
-		me.client = client;
-		client.on({
-			afterrender: function() {
+    init: function(client) {
+        var me = this;
+        me.client = client;
+        client.on({
+            afterrender: function() {
                this.body.el.on('scroll', me.saveScrollPosition, me);
-			},
-			beforedestroy: function() {
-				this.body.el.un('scroll', me.saveScrollPosition, me);
+            },
+            beforedestroy: function() {
+                this.body.el.un('scroll', me.saveScrollPosition, me);
                 this.un('afterlayout', me.restoreScrollPosition);
-			},
+            },
             afterlayout: {
                 fn: me.restoreScrollPosition,
                 scope: me
             }
-		});
-	},
+        });
+    },
 
     saveScrollPosition: function() {
         if (!this.suspendEvents) {
@@ -2354,6 +2484,9 @@ Ext.define('Scalr.ui.ColoredStatus', {
             'Suspended': {
                 cls: 'blue',
                 text: 'Scalr has suspended this server to disk. It may be resumed. You are no longer accumulating instance hours for this server.'
+            },
+            'Resuming': {
+                iconCls: 'running'
             },
             'Importing': {
                 cls: 'green',
@@ -2661,6 +2794,113 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 title: 'Deleting',
                 text: 'The instance is being deleted.'
             },
+            'deleted': {
+                title: 'Deleted',
+                text: 'The instance is completely deleted.'
+            },
+            'failed': {
+                cls: 'red',
+                iconCls: 'failed',
+                title: 'Failed',
+                text: 'The instance has failed and Amazon RDS was unable to recover it. ' +
+                    'Perform a point-in-time restore to the latest restorable time of the instance to recover the data.'
+            },
+            'incompatible-network': {
+                cls: 'red',
+                iconCls: 'failed',
+                title: 'Incompatible network',
+                text: 'Amazon RDS is attempting to perform a recovery action on an instance but is unable to do ' +
+                    'so because the VPC is in a state that is preventing the action from being completed. ' +
+                    'This status can occur if, for example, all available IP addresses in a subnet were in use and ' +
+                    'Amazon RDS was unable to get an IP address for the DB instance.'
+            },
+            'incompatible-option-group': {
+                cls: 'red',
+                iconCls: 'failed',
+                title: 'Incompatible option group',
+                text: 'Amazon RDS attempted to apply an option group change but was unable to do so, ' +
+                    'and Amazon RDS was unable to roll back to the previous option group state. ' +
+                    'Consult the Recent Events list for the DB instance for more information. ' +
+                    'This status can occur if, for example, the option group contains an option such as TDE ' +
+                    'and the DB instance does not contain encrypted information.'
+            },
+            'incompatible-parameters': {
+                cls: 'red',
+                iconCls: 'failed',
+                title: 'Incompatible parameters',
+                text: 'Amazon RDS was unable to start up the DB instance because the parameters specified ' +
+                    'in the instance\'s DB parameter group were not compatible. ' +
+                    'Revert the parameter changes or make them compatible with the instance to regain access ' +
+                    'to your instance. Consult the Recent Events list for the DB instance for more information ' +
+                    'about the incompatible parameters.'
+            },
+            'incompatible-restore': {
+                cls: 'red',
+                iconCls: 'failed',
+                title: 'Incompatible restore',
+                text: 'Amazon RDS is unable to do a point-in-time restore. ' +
+                    'Common causes for this status include using temp tables or using MyISAM tables.'
+            },
+            'storage-full': {
+                cls: 'red',
+                iconCls: 'failed',
+                title: 'Storage full',
+                text: 'The instance has reached its storage capacity allocation. ' +
+                    'This is a critical status and should be remedied immediately; ' +
+                    'you should scale up your storage by modifying the DB instance. Set CloudWatch alarms to ' +
+                    'warn you when storage space is getting low so you don\'t run into this situation.'
+            },
+        },
+        rdsdbcluster: {
+            'creating': {
+                cls: 'yellow',
+                title: 'Creating',
+                text: 'The instance is being created. The instance is inaccessible while it is being created.'
+            },
+            'backing-up': {
+                cls: 'yellow',
+                title: 'Backing up',
+                text: 'The instance is currently being backed up.'
+            },
+            'available': {
+                cls: 'green',
+                title: 'Available',
+                text: 'The instance is healthy and available.'
+            },
+            'pending': {
+                cls: 'yellow',
+                title: 'Pending'
+            },
+            'rebooting': {
+                cls: 'yellow',
+                title: 'Rebooting',
+                text: 'The instance is being rebooted because of a customer request or an Amazon RDS ' +
+                    'process that requires the rebooting of the instance.'
+            },
+            'modifying': {
+                cls: 'yellow',
+                title: 'Modifying',
+                text: 'The instance is being modified because of a customer request to modify the instance.'
+            },
+            'renaming': {
+                cls: 'yellow',
+                title: 'Renaming',
+                text: 'The instance is being renamed because of a customer request to rename it.'
+            },
+            'resetting-master-credentials': {
+                cls: 'yellow',
+                title: 'Resetting master credentials',
+                text: 'The master credentials for the instance are being reset ' +
+                    'because of a customer request to reset them.'
+            },
+            'deleting': {
+                title: 'Deleting',
+                text: 'The instance is being deleted.'
+            },
+            'deleted': {
+                title: 'Deleted',
+                text: 'The instance is completely deleted.'
+            },
             'failed': {
                 cls: 'red',
                 iconCls: 'failed',
@@ -2716,12 +2956,12 @@ Ext.define('Scalr.ui.ColoredStatus', {
         },
         os: {
             'active': {
-                title: 'Active',
+                title: 'Enabled',
                 cls: 'green',
                 text: 'This operating system is available.'
             },
             'inactive': {
-                title: 'Inactive',
+                title: 'Disabled',
                 text: 'This operating system is not available'
             }
         },
@@ -2793,42 +3033,40 @@ Ext.define('Scalr.ui.ColoredStatus', {
                     'Initializing': 'https://scalr-wiki.atlassian.net/wiki/x/E4G0'
                 };
 
-            if (data['initDetailsSupported']) {
-                if (data['isInitFailed']) {
-                    result['link'] = linkOperationStatus;
-                    result['linkText'] = 'Get error details';
-                    result['status'] = 'Failed';
-                } else {
-                    if (result['status'] === 'Pending' || result['status'] === 'Initializing') {
-                        result['link'] = linkOperationStatus;
-                        result['linkText'] = 'View progress';
-                    }
-                    if (data['launch_error'] == 1) {
-                        result['iconCls'] = 'failed';
-                        result['link'] = linkOperationStatus;
-                        result['linkText'] = 'Get error details';
-                    }
-                }
-            }
-            if (data['launch_error'] != 1 && troubleshootingLinks[result['status']]) {
-                result['appendText'] = '<div style="border-top:1px solid #fff;padding-top:10px;margin-top:12px;">Does this Server seem stuck in ' + result['status'] + ' State? If it does, consider reviewing the <a href="' + troubleshootingLinks[result['status']] + '" target="blank">troubleshooting documentation</a>.</div>'
-                result['inlineLink'] = true;
-            }
-
-            if (data['status'] === 'Importing') {
-                result['link'] = '#/roles/import?serverId=' + data['server_id'];
-                result['linkText'] = 'View progress';
-            }
-
             if (Ext.Array.contains(['Pending terminate', 'Terminated', 'Pending suspend', 'Suspended'], data['status'])) {
                 if (data['termination_error']) {
-                    result['tooltipTitle'] = 'Error:';
+                    result['tooltipTitle'] = 'Info:';
                     result['text'] = Ext.String.htmlEncode(Ext.String.htmlEncode(data['termination_error']));
-                    if (data['status'] !== 'Pending terminate') {
-                        result['iconCls'] = 'failed';
+                }
+            } else {
+                if (data['initDetailsSupported']) {
+                    if (data['isInitFailed']) {
+                        result['link'] = linkOperationStatus;
+                        result['linkText'] = 'Get error details';
+                        result['status'] = 'Failed';
+                    } else {
+                        if (result['status'] === 'Pending' || result['status'] === 'Initializing') {
+                            result['link'] = linkOperationStatus;
+                            result['linkText'] = 'View progress';
+                        }
+                        if (data['launch_error'] == 1) {
+                            result['iconCls'] = 'failed';
+                            result['link'] = linkOperationStatus;
+                            result['linkText'] = 'Get error details';
+                        }
                     }
                 }
+                if (data['launch_error'] != 1 && troubleshootingLinks[result['status']]) {
+                    result['appendText'] = '<div style="border-top:1px solid #fff;padding-top:10px;margin-top:12px;">Does this Server seem stuck in ' + result['status'] + ' State? If it does, consider reviewing the <a href="' + troubleshootingLinks[result['status']] + '" target="blank">troubleshooting documentation</a>.</div>'
+                    result['inlineLink'] = true;
+                }
+
+                if (data['status'] === 'Importing') {
+                    result['link'] = '#/roles/import?serverId=' + data['server_id'];
+                    result['linkText'] = 'View progress';
+                }
             }
+
             return result;
         },
         farm: function(data) {
@@ -2874,15 +3112,6 @@ Ext.define('Scalr.ui.ColoredStatus', {
         },
         schedulertaskscript: function(data) {
             return {status: data['config']['scriptIsSync'] == 1 ? 'Blocking' : 'Non-blocking'};
-        },
-        bundletask: function(data) {
-            var result = {status: data['status']};
-
-            if (data['status'] === 'failed') {
-                result['link'] = '#/bundletasks/' + data['id'] + '/failureDetails';
-                result['linkText'] = 'Get error details';
-            }
-            return result;
         },
         servermessage: function(data) {
             var result = {};
@@ -2941,7 +3170,7 @@ Ext.define('Scalr.ui.ColoredStatus', {
         sshkey: function(data, params) {
             var text;
             if (data['status'] === 'In use') {
-                text = 'Farm <a href="#/farms/view?farmId='+data['farm_id']+'">'+data['farmName']+'</a> is using this key';
+                text = 'Farm <a href="#/farms/view?farmId='+data['farmId']+'">'+data['farmName']+'</a> is using this key';
             } else {
                 text = 'This key is no longer used by Scalr, and can safely be deleted';
             }
@@ -3029,7 +3258,7 @@ Ext.define('Ext.chart.theme.Scalr', {
 Ext.define('Ext.form.field.plugin.Icons', {
     extend: 'Ext.AbstractPlugin',
     alias: 'plugin.fieldicons',
-	pluginId: 'fieldicons',
+    pluginId: 'fieldicons',
 
     position: 'inner',
     align: 'left',
@@ -3098,7 +3327,7 @@ Ext.define('Ext.form.field.plugin.Icons', {
                 icons[iconId].tooltip = new Ext.XTemplate(icons[iconId].tooltip).apply(icons[iconId]['tooltipData']);
             }
             me.icons = icons;
-            html.push('<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-' + (icons[iconId]['iconCls'] || iconId) + '" data-qclickable="1" data-qtip="' + Ext.String.htmlEncode(icons[iconId]['tooltip'] || '') + '" ' + (icons[iconId]['hidden'] ? 'style="display:none"' : '') + ' />');
+            html.push('<img src="' + Ext.BLANK_IMAGE_URL + '" data-iconid="' + iconId + '" class="x-icon-' + (icons[iconId]['iconCls'] || iconId) + '" data-qclickable="1" data-qtip="' + Ext.String.htmlEncode(icons[iconId]['tooltip'] || '') + '" ' + (icons[iconId]['hidden'] ? 'style="display:none"' : '') + ' />');
             me.visibleIconsCount += icons[iconId]['hidden'] ? 0 : 1;
         });
         html.push('</span>');
@@ -3170,9 +3399,9 @@ Ext.define('Ext.form.field.plugin.Icons', {
     toggleIcon: function(icon, show) {
         var me = this,
             field = me.getCmp();
-        if (!me.icons || !me.icons[icon]) return;
+        if (!me.icons || !me.icons[icon]) return me;
         fn = function() {
-            var iconEl = field.iconsEl.query('.x-icon-' + (me.icons[icon]['iconCls'] || icon));
+            var iconEl = field.iconsEl.query('[data-iconid="'+icon+'"]');
             if (iconEl.length) {
                 iconEl = Ext.fly(iconEl[0]);
                 var isVisible = iconEl.isVisible();
@@ -3194,14 +3423,15 @@ Ext.define('Ext.form.field.plugin.Icons', {
             field.on('afterrender', fn, field, {single: true});
         }
 
+        return me;
     },
 
     updateIconTooltip: function(icon, tooltip) {
         var me = this,
             field = me.getCmp();
-        if (!me.icons || !me.icons[icon]) return;
+        if (!me.icons || !me.icons[icon]) return me;
         fn = function() {
-            var iconEl = field.iconsEl.query('.x-icon-' + (me.icons[icon]['iconCls'] || icon));
+            var iconEl = field.iconsEl.query('[data-iconid="'+icon+'"]');
             if (iconEl.length) {
                 iconEl = Ext.fly(iconEl[0]);
                 iconEl.set({'data-qtip': tooltip});
@@ -3212,6 +3442,8 @@ Ext.define('Ext.form.field.plugin.Icons', {
         } else {
             field.on('afterrender', fn, field, {single: true});
         }
+
+        return me;
     },
 
     setValueWithGovernance: function(value, limit) {
@@ -3333,7 +3565,7 @@ Ext.define('Ext.form.field.plugin.InnerIcon', {
 Ext.define('Ext.form.field.plugin.InnerIconScope', {
     extend: 'Ext.form.field.plugin.InnerIcon',
     alias: 'plugin.fieldinnericonscope',
-	pluginId: 'fieldinnericonscope',
+    pluginId: 'fieldinnericonscope',
 
     iconClsPrefix: 'scalr-scope-',
     field: 'scope',
@@ -3406,10 +3638,10 @@ Ext.define('Ext.form.field.plugin.InnerIconCloud', {
 
 
 Ext.define('Scalr.ui.PanelBgiFrame', {
-	extend: 'Ext.AbstractPlugin',
-	alias: 'plugin.bgiframe',
+    extend: 'Ext.AbstractPlugin',
+    alias: 'plugin.bgiframe',
 
-	init: function(client) {
+    init: function(client) {
         this.client = client;
         this.showBgiFrameDelayed = Ext.Function.createDelayed(this.showBgiFrame, 200);
         client.on({
@@ -3455,5 +3687,386 @@ Ext.define('Scalr.ui.PanelBgiFrame', {
         if (this.iframeEl) {
             this.iframeEl.hide();
         }
+    }
+});
+
+Ext.define('Scalr.RepeatingRequest', {
+    extend: 'Ext.Evented',
+
+    requestCount: 0,
+
+    requestLimit: 3,
+
+    timeout: 0,
+
+    step: 5000,
+
+    doNotHideErrorMessages: false,
+
+    setTimeout: function (timeout) {
+        var me = this;
+
+        me.timeout = timeout;
+
+        return me;
+    },
+
+    getTimeout: function () {
+        return this.timeout;
+    },
+
+    getRequestConfig: function () {
+        return Ext.clone(this.requestConfig);
+    },
+
+    doStep: function () {
+        var me = this;
+
+        me.setTimeout(me.getTimeout() + me.step);
+
+        me.requestConfig.hideErrorMessage = !me.doNotHideErrorMessages
+            ? me.requestLimit - me.requestCount !== 1
+            : false;
+
+        return me;
+    },
+
+    onSuccess: function (responseData) {
+        var me = this;
+
+        me.fireEvent('success', responseData);
+        me.destroy();
+
+        return me;
+    },
+
+    onFailure: function (responseData) {
+        var me = this;
+
+        me.requestCount++;
+
+        if (me.requestCount >= me.requestLimit) {
+            me.fireEvent('failure', responseData);
+            me.destroy();
+            return me;
+        }
+
+        me.doStep();
+
+        Ext.Function.defer(
+            me.doRequest,
+            me.getTimeout(),
+            me
+        );
+
+        return me;
+    },
+
+    doRequest: function () {
+        var me = this;
+
+        if (!me.isDestroyed) {
+            var request = Scalr.Request(me.getRequestConfig());
+            me.fireEvent('request', request);
+        }
+
+        return me;
+    },
+
+    request: function (config) {
+        var me = this;
+
+        me.requestConfig = Ext.apply(config, {
+            hideErrorMessage: !me.doNotHideErrorMessages,
+            success: me.onSuccess,
+            failure: me.onFailure,
+            scope: me
+        });
+
+        if (me.timeout > 0) {
+            Ext.Function.defer(
+                me.doRequest,
+                me.getTimeout(),
+                me
+            );
+            return me;
+        }
+
+        me.doRequest();
+
+        return me;
+    }
+});
+
+Ext.define('Scalr.ui.RepeatableTask', {
+
+    interval: 5000,
+
+    getArgs: Ext.emptyFn,
+
+    stopIf: Ext.emptyFn,
+
+    handleRequest: false,
+
+    maybeAbortRequest: function () {
+        var me = this;
+
+        var currentRequest = me.request;
+
+        if (!Ext.isEmpty(currentRequest) && Ext.Ajax.isLoading(currentRequest)) {
+            Ext.Ajax.abort(currentRequest);
+        }
+
+        return true;
+    },
+
+    createRequestHandler: function (taskRunFn) {
+        var me = this;
+
+        return function () {
+            me.maybeAbortRequest();
+
+            me.request = taskRunFn.apply(me.scope, arguments);
+
+            return true;
+        };
+    },
+
+    initTask: function (config) {
+        var me = this;
+
+        Ext.apply(me, config);
+
+        me.runner = new Ext.util.TaskRunner();
+
+        me.task = me.runner.newTask({
+            run: !me.handleRequest ? me.run : me.createRequestHandler(me.run),
+            interval: me.interval,
+            scope: me.scope
+        });
+
+        if (!Ext.isEmpty(me.subscribers)) {
+            me.initSubscribers();
+        }
+    },
+
+    constructor: function (config) {
+        var me = this;
+
+        me.initTask(config);
+    },
+
+    initSubscribers: function () {
+        var me = this;
+
+        var subscribers = me.subscribers;
+
+        Ext.Object.each(subscribers, function (action, config) {
+            subscribers[action] = me.formatSubscriberConfig(action, config);
+
+            if (action !== 'restart') {
+                me.subscribeOn(action);
+            }
+        });
+
+        return subscribers;
+    },
+
+    formatSubscriberConfig: function (action, config) {
+        var me = this;
+
+        config = Ext.isArray(config) ? config : [ config ];
+
+        return Ext.Array.map(config, function (configItem) {
+            if (Ext.isString(configItem)) {
+                configItem = {
+                    event: configItem,
+                    scope: me.scope
+                };
+            }
+
+            return configItem;
+        });
+    },
+
+    subscribeOn: function (action) {
+        var me = this;
+
+        Ext.Array.each(me.subscribers[action], function (config) {
+            var component = config.scope;
+            var options = action === 'start' ? { single: true } : null;
+
+            component.on(config.event, me[action], me, options);
+        });
+
+        return me;
+    },
+
+    unsubscribeFrom: function (action) {
+        var me = this;
+
+        Ext.Array.each(me.subscribers[action], function (config) {
+            var component = config.scope;
+
+            component.un(config.event, me[action], me);
+        });
+
+        return me;
+    },
+
+    applyArgs: function () {
+        var me = this;
+
+        me.task.args = arguments;
+
+        return me;
+    },
+
+    start: function (forceStart) {
+        var me = this;
+
+        var task = me.task;
+
+        if (!me.stopIf.apply(me, arguments) || !!forceStart) {
+            me.applyArgs.apply(
+                me,
+                me.getArgs !== Ext.emptyFn
+                    ? me.getArgs.apply(me, arguments)
+                    : arguments
+            );
+            me.task.start();
+            me.subscribeOn('restart');
+        } else {
+            me.stop();
+        }
+
+        return me;
+    },
+
+    stop: function () {
+        var me = this;
+
+        me.maybeAbortRequest();
+        me.task.stop();
+        me.subscribeOn('start');
+
+        return me;
+    },
+
+    isStopped: function () {
+        return this.task.stopped;
+    },
+
+    restart: function () {
+        var me = this;
+
+        if (!me.stopIf.apply(me, arguments)) {
+            me.applyArgs.apply(
+                me,
+                me.getArgs !== Ext.emptyFn
+                    ? me.getArgs.apply(me, arguments)
+                    : arguments
+            );
+            me.task.restart();
+        } else {
+            me.unsubscribeFrom('restart');
+            me.stop();
+        }
+
+        return me;
+    },
+
+    destroy: function () {
+        var me = this;
+
+        me.task.destroy();
+
+        me.callParent();
+    }
+});
+
+Ext.define('Scalr.ui.RepeatableFormTask', {
+    extend: 'Scalr.ui.RepeatableTask',
+
+    interval: 15000,
+
+    handleRequest: true,
+
+    initTask: function (config) {
+        var me = this;
+
+        var form = config.form;
+        var panel = form.up('panel');
+        var store = panel.down('grid').getStore();
+
+        Ext.apply(config, {
+            scope: form,
+            subscribers: {
+                start: 'afterloadrecord',
+                restart: 'afterloadrecord',
+                stop: [{
+                    event: 'refresh',
+                    scope: store
+                }, {
+                    event: 'deactivate',
+                    scope: panel
+                }],
+                destroy: {
+                    event: 'beforedestroy',
+                    scope: panel
+                },
+                maybeAbortRequest: 'beforeloadrecord'
+            }
+        });
+
+        me.callParent(arguments);
+    }
+});
+
+Ext.define('Scalr.ui.FormRepeatableTaskPlugin', {
+    extend: 'Ext.AbstractPlugin',
+    alias: 'plugin.formrepeatabletask',
+
+    start: Ext.emptyFn,
+
+    restart: Ext.emptyFn,
+
+    stop: Ext.emptyFn,
+
+    stopIf: Ext.emptyFn,
+
+    getArgs: Ext.emptyFn,
+
+    init: function (client) {
+        var me = this;
+
+        client.on('boxready', function () {
+            var task = Ext.create('Scalr.ui.RepeatableFormTask', {
+                run: client[me.pluginId],
+                handleRequest: Ext.isBoolean(me.handleRequest) ? me.handleRequest : true,
+                interval: !Ext.isEmpty(me.interval) ? me.interval : 15000,
+                form: client,
+                stopIf: me.stopIf,
+                getArgs: !Ext.isEmpty(me.args)
+                    ? function (record) {
+                        return Ext.Array.map(me.args, function (arg) {
+                            return record.get(arg);
+                        });
+                    }
+                    : me.getArgs
+            });
+
+            Ext.apply(me, {
+                start: function () {
+                    task.start.apply(task, arguments);
+                },
+                restart: function () {
+                    task.restart.apply(task, arguments);
+                },
+                stop: function () {
+                    task.stop.call(task, arguments);
+                }
+            });
+        });
     }
 });

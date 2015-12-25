@@ -25,7 +25,7 @@ class SignalHandler
      */
     function __construct()
     {
-        $this->Logger = \Logger::getLogger('SignalHandler');
+        $this->Logger = \Scalr::getContainer()->logger('SignalHandler');
 
         if (!function_exists("pcntl_signal")) {
             throw new \Exception("Function pcntl_signal() is not found. PCNTL must be enabled in PHP.", E_ERROR);

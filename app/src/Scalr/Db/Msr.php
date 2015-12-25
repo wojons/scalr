@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\Modules\PlatformFactory;
+use Scalr\Model\Entity;
 
 class Scalr_Db_Msr
 {
@@ -91,8 +92,8 @@ class Scalr_Db_Msr
     {
         $dbFarmRole = $dbServer->GetFarmRoleObject();
 
-        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_LAST_TS, time(), DBFarmRole::TYPE_LCL);
-        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING, 0, DBFarmRole::TYPE_LCL);
+        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_LAST_TS, time(), Entity\FarmRoleSetting::TYPE_LCL);
+        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING, 0, Entity\FarmRoleSetting::TYPE_LCL);
         //$dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_SERVER_ID, "");
 
         if (PlatformFactory::isOpenstack($dbServer->platform)) {
@@ -138,15 +139,15 @@ class Scalr_Db_Msr
         $dbFarm = $dbServer->GetFarmObject();
         $dbFarmRole = $dbServer->GetFarmRoleObject();
 
-        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_LAST_TS, time(), DBFarmRole::TYPE_LCL);
-        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0, DBFarmRole::TYPE_LCL);
+        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_LAST_TS, time(), Entity\FarmRoleSetting::TYPE_LCL);
+        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0, Entity\FarmRoleSetting::TYPE_LCL);
         //$dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_SERVER_ID, "");
 
         $dbSettings = $message->{$message->dbType};
 
         if ($dbSettings->snapshotConfig) {
             try {
-                
+
                 try {
                     $snapshot = Scalr_Storage_Snapshot::init();
                     $snapshot->loadBy(array(
@@ -171,22 +172,25 @@ class Scalr_Db_Msr
                 $dbFarmRole->SetSetting(Scalr_Db_Msr::SNAPSHOT_ID, $snapshot->id);
 
                 if ($message->dbType == self::DB_TYPE_MYSQL) {
-                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql::LOG_FILE, $dbSettings->logFile, DBFarmRole::TYPE_LCL);
-                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql::LOG_POS, $dbSettings->logPos, DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql::LOG_FILE, $dbSettings->logFile, Entity\FarmRoleSetting::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql::LOG_POS, $dbSettings->logPos, Entity\FarmRoleSetting::TYPE_LCL);
                 }
                 elseif ($message->dbType == self::DB_TYPE_MYSQL2 || $message->dbType == self::DB_TYPE_PERCONA || $message->dbType == self::DB_TYPE_MARIADB) {
-                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql2::LOG_FILE, $dbSettings->logFile, DBFarmRole::TYPE_LCL);
-                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql2::LOG_POS, $dbSettings->logPos, DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql2::LOG_FILE, $dbSettings->logFile, Entity\FarmRoleSetting::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Mysql2::LOG_POS, $dbSettings->logPos, Entity\FarmRoleSetting::TYPE_LCL);
                 }
                 elseif ($message->dbType == self::DB_TYPE_POSTGRESQL) {
-                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Postgresql::XLOG_LOCATION, $dbSettings->currentXlogLocation, DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Scalr_Db_Msr_Postgresql::XLOG_LOCATION, $dbSettings->currentXlogLocation, Entity\FarmRoleSetting::TYPE_LCL);
                 }
                 elseif ($message->dbType == self::DB_TYPE_REDIS) {
                     //Nothing todo
                 }
-            }
-            catch(Exception $e) {
-                Logger::getLogger(__CLASS__)->error(new FarmLogMessage($dbServer->farmId, "Cannot save storage snapshot: {$e->getMessage()}"));
+            } catch (Exception $e) {
+                \Scalr::getContainer()->logger(__CLASS__)->error(new FarmLogMessage(
+                    $dbServer->farmId,
+                    "Cannot save storage snapshot: {$e->getMessage()}",
+                    !empty($dbServer->serverId) ? $dbServer->serverId : null
+                ));
             }
         }
     }
@@ -236,10 +240,13 @@ class Scalr_Db_Msr
                         throw $e;
                 }
 
-                $dbFarmRole->SetSetting(self::VOLUME_ID, $storageVolume->id, DBFarmRole::TYPE_LCL);
-            }
-            catch(Exception $e) {
-                Logger::getLogger(__CLASS__)->error(new FarmLogMessage($dbServer->farmId, "Cannot save storage volume: {$e->getMessage()}"));
+                $dbFarmRole->SetSetting(self::VOLUME_ID, $storageVolume->id, Entity\FarmRoleSetting::TYPE_LCL);
+            } catch (Exception $e) {
+                \Scalr::getContainer()->logger(__CLASS__)->error(new FarmLogMessage(
+                    $dbServer->farmId,
+                    "Cannot save storage volume: {$e->getMessage()}",
+                    !empty($dbServer->serverId) ? $dbServer->serverId : null
+                ));
             }
         }
 
@@ -248,5 +255,3 @@ class Scalr_Db_Msr
         return true;
     }
 }
-
-?>

@@ -1,13 +1,14 @@
 <?php
+
 use Scalr\Acl\Acl;
-use Scalr\Modules\PlatformFactory;
 use Scalr\Model\Entity\ChefServer;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Core_Governance extends Scalr_UI_Controller
 {
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_GOVERNANCE);
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_GOVERNANCE_ENVIRONMENT);
     }
 
     public function defaultAction()
@@ -22,7 +23,6 @@ class Scalr_UI_Controller_Core_Governance extends Scalr_UI_Controller
             SERVER_PLATFORMS::EC2,
             SERVER_PLATFORMS::CLOUDSTACK,
             SERVER_PLATFORMS::IDCF,
-            SERVER_PLATFORMS::ECS,
             SERVER_PLATFORMS::OPENSTACK,
             SERVER_PLATFORMS::NEBULA,
             SERVER_PLATFORMS::MIRANTIS,
@@ -31,7 +31,8 @@ class Scalr_UI_Controller_Core_Governance extends Scalr_UI_Controller
             SERVER_PLATFORMS::CISCO,
             SERVER_PLATFORMS::HPCLOUD,
             SERVER_PLATFORMS::OCS,
-            SERVER_PLATFORMS::RACKSPACENG_US
+            SERVER_PLATFORMS::RACKSPACENG_US,
+            SERVER_PLATFORMS::AZURE
         );
         //intersection of enabled platforms and supported by governance
         foreach (array_intersect($this->getEnvironment()->getEnabledPlatforms(), $governanceEnabledPlatforms) as $platform) {
@@ -54,7 +55,8 @@ class Scalr_UI_Controller_Core_Governance extends Scalr_UI_Controller
             'values' => $governance->getValues(),
             'chef' => [
                 'servers' => $chefServers
-            ]
+            ],
+            'scalr.aws.ec2.limits.security_groups_per_instance' => \Scalr::config('scalr.aws.ec2.limits.security_groups_per_instance')
         ), array('ui/core/governance/lease.js'), array('ui/core/governance/edit.css'));
     }
 
@@ -81,18 +83,18 @@ class Scalr_UI_Controller_Core_Governance extends Scalr_UI_Controller
                 $farms = $this->db->GetCol('SELECT id FROM farms WHERE env_id = ?', array($this->getEnvironmentId()));
                 foreach ($farms as $farmId) {
                     $farm = DBFarm::LoadByID($farmId);
-                    $farm->SetSetting(DBFarm::SETTING_LEASE_STATUS, 'Active');
+                    $farm->SetSetting(Entity\FarmSetting::LEASE_STATUS, 'Active');
 
                     if ($farm->Status == FARM_STATUS::RUNNING) {
-                        $farm->SetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE, $dt->format('Y-m-d H:i:s'));
-                        $farm->SetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND, '');
-                        $farm->SetSetting(DBFarm::SETTING_LEASE_EXTEND_CNT, 0);
+                        $farm->SetSetting(Entity\FarmSetting::LEASE_TERMINATE_DATE, $dt->format('Y-m-d H:i:s'));
+                        $farm->SetSetting(Entity\FarmSetting::LEASE_NOTIFICATION_SEND, '');
+                        $farm->SetSetting(Entity\FarmSetting::LEASE_EXTEND_CNT, 0);
                     }
                 }
             }
         }
 
-        $governance->setValue($category, $name, $value);
+        $governance->setValue($category, $name, $value['enabled'], $value['limits']);
         $this->response->data(['governance' => $governance->getValues(true)]);
         $this->response->success('Successfully saved');
     }

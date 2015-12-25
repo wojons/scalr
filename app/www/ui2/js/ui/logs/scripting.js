@@ -22,7 +22,11 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 			type: 'scalr.paging',
 			url: '/logs/xListScriptingLogs/'
 		},
-		remoteSort: true
+        sorters: {
+            property: 'id',
+            direction: 'DESC'
+        },
+        remoteSort: true
 	});
 
 	var panel = Ext.create('Ext.grid.Panel', {
@@ -89,16 +93,20 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
                                     executionId: record.get('execution_id')
                                 },
                                 success: function (data) {
-                                    var node = Ext.fly(rowNode).down('.x-grid-rowbody');
-                                    if (node) {
-                                        node.setHtml('<p><b>Message:</b><br/><br/>' + (data.message+'').replace('STDERR:','<b>STDERR:</b>').replace('STDOUT:','<b>STDOUT:</b>') + '</p>');
-                                        record.set('message', data.message);
+                                    if (!Ext.isEmpty(data) && !Ext.isEmpty(data.message)) {
+                                        var node = Ext.fly(rowNode).down('.x-grid-rowbody');
+                                        if (node) {
+                                            node.setHtml('<p><b>Message:</b><br/><br/>' + (data.message+'').replace('STDERR:','<b>STDERR:</b>').replace('STDOUT:','<b>STDOUT:</b>') + '</p>');
+                                            record.set('message', data.message);
+                                        }
                                     }
                                 },
                                 failure: function(data) {
-                                    var node = Ext.fly(rowNode).down('.x-grid-rowbody');
-                                    if (node) {
-                                        node.setHtml('<p>' + (data.errorMessage || '') + '</p>');
+                                    if (!Ext.isEmpty(data) && !Ext.isEmpty(data.errorMessage)) {
+                                        var node = Ext.fly(rowNode).down('.x-grid-rowbody');
+                                        if (node) {
+                                            node.setHtml('<p>' + (data.errorMessage || '') + '</p>');
+                                        }
                                     }
                                 },
                                 scope: this
@@ -149,10 +157,14 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 			xtype: 'scalrpagingtoolbar',
 			store: store,
 			dock: 'top',
+            defaults: {
+                margin: '0 0 0 15'
+            },
 			items: [{
 				xtype: 'filterfield',
 				store: store,
                 width: 300,
+                margin: 0,
                 form: {
                     items: [{
                         xtype: 'textfield',
@@ -215,7 +227,7 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
                         },
                         valueField: 'id',
                         displayField: 'name',
-                        name: 'script',
+                        name: 'scriptId',
                         editable: false,
                         forceSelection: true,
                         fieldLabel: 'Script',
@@ -237,7 +249,7 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
                         },
                         valueField: 'id',
                         displayField: 'name',
-                        name: 'scheduler',
+                        name: 'schedulerId',
                         editable: false,
                         forceSelection: true,
                         fieldLabel: 'Scheduler task',
@@ -254,7 +266,7 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
                         }
                     }]
                 }
-			}, ' ', {
+			}, {
 				xtype: 'combo',
 				fieldLabel: 'Farm',
                 name: 'farmId',
@@ -278,22 +290,33 @@ Scalr.regPage('Scalr.ui.logs.scripting', function (loadParams, moduleParams) {
 						panel.store.loadPage(1);
 					}
 				}
-			}, ' ', {
-                xtype: 'combo',
-                store: [['', 'All'], ['0', 'Success'], ['1', 'Failure']],
+			}, {
+                xtype: 'cyclealt',
                 name: 'status',
-                editable: false,
-                value: loadParams['status'] || '',
-                forceSelection: true,
+                cls: 'x-btn-compressed',
                 fieldLabel: 'Result',
                 labelWidth: 45,
-                width: 180,
-				listeners: {
-					change: function (comp, value) {
-                        panel.store.proxy.extraParams['status'] = value;
-						panel.store.loadPage(1);
-					}
-				}
+                getItemIconCls: false,
+                width: 200,
+                changeHandler: function (comp, item) {
+                    store.applyProxyParams({
+                        status: item.value
+                    });
+                },
+                menu: {
+                    cls: 'x-menu-light x-menu-cycle-button-filter',
+                    minWidth: 200,
+                    items: [{
+                        text: 'All logs',
+                        value: ''
+                    },{
+                        text: 'Success logs',
+                        value: 'success'
+                    },{
+                        text: 'Failure logs',
+                        value: 'failure'
+                    }]
+                }
             }]
 		}]
 	});

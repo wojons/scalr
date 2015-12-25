@@ -44,7 +44,7 @@ Scalr.regPage('Scalr.ui.servers.messages', function (loadParams, moduleParams) {
                      '/>' ,
                 sortable: false
             },
-            { header: "Status", width: 150, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'servermessage'},
+            { header: "Status", width: 150, dataIndex: 'status', sortable: false, xtype: 'statuscolumn', statustype: 'servermessage'},
 			{ header: "Attempts", width: 100, dataIndex: 'handle_attempts', sortable: true },
 			{ header: "Last delivery attempt", width: 200, dataIndex: 'dtlasthandleattempt', sortable: true },
 			{

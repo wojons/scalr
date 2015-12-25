@@ -4,6 +4,7 @@ namespace Scalr\Model\Entity;
 use Scalr\Model\AbstractEntity;
 use \Exception;
 use Scalr\Util\CryptoTool;
+use Scalr\DataType\AccessPermissionsInterface;
 
 /**
  * SshKey entity
@@ -14,7 +15,7 @@ use Scalr\Util\CryptoTool;
  * @Entity
  * @Table(name="ssh_keys")
  */
-class SshKey extends AbstractEntity
+class SshKey extends AbstractEntity implements AccessPermissionsInterface
 {
     const TYPE_GLOBAL = 'global';
     const TYPE_USER	  = 'user';
@@ -100,37 +101,63 @@ class SshKey extends AbstractEntity
      */
     public function isUsed()
     {
-        return !!$this->db()->GetOne("SELECT COUNT(*) FROM farm_roles WHERE farmid = ? AND platform = ? AND (cloud_location = ? OR cloud_location = '')", [
-            $this->farmId,
-            $this->platform,
-            $this->cloudLocation
-        ]);
+        $sql = "SELECT COUNT(*) FROM farm_roles WHERE farmid = ? AND platform = ?";
+        $args = [ $this->farmId, $this->platform ];
+
+        if ($this->cloudLocation) {
+            // cloudLocation is always filled in farm_roles
+            $sql .= " AND cloud_location = ?";
+            $args[] = $this->cloudLocation;
+        }
+
+        return !!$this->db()->GetOne($sql, $args);
     }
 
     /**
      * Find global key by FarmID
      *
-     * @param $envId
-     * @param $farmId
-     * @param $cloudLocation
-     * @param $platform
-     * @return SshKey|null
+     * @param   int     $envId
+     * @param   string  $platform
+     * @param   string  $cloudLocation
+     * @param   int     $farmId   optional
+     * @return  SshKey|null
      */
-    public function loadGlobalByFarmId($envId, $farmId, $cloudLocation, $platform)
+    public function loadGlobalByFarmId($envId, $platform, $cloudLocation, $farmId = null)
     {
         $farmId = $farmId ? $farmId : NULL;
 
         $criteria = [
-            [ 'envId' => $envId ],
-            [ 'type' => self::TYPE_GLOBAL ],
-            [ 'platform' => $platform ],
-            [ 'farmId' => $farmId ],
-            [ '$or' => [['cloudLocation' => ''], ['cloudLocation' => $cloudLocation]] ]
+            ['envId'    => $envId],
+            ['type'     => self::TYPE_GLOBAL],
+            ['platform' => $platform],
+            ['farmId'   => $farmId],
+            ['$or'      => [['cloudLocation' => ''], ['cloudLocation' => $cloudLocation]] ]
         ];
 
         return self::findOne($criteria);
     }
 
+    /**
+     * Find global key by Name
+     *
+     * @param   int     $envId
+     * @param   string  $platform
+     * @param   string  $cloudLocation
+     * @param   string  $name
+     * @return  SshKey|null
+     */
+    public function loadGlobalByName($envId, $platform, $cloudLocation, $name)
+    {
+        $criteria = [
+            ['type'         => self::TYPE_GLOBAL],
+            ['envId'        => $envId],
+            ['platform'     => $platform],
+            ['$or'          => [['cloudLocation' => ''], ['cloudLocation' => $cloudLocation]]],
+            ['cloudKeyName' => $name],
+        ];
+
+        return self::findOne($criteria);
+    }
 
     /**
      * Get list of platforms where ssh keys are available on environment
@@ -166,9 +193,12 @@ class SshKey extends AbstractEntity
         $keyName = $this->cloudKeyName;
         if ($this->cloudLocation)
             $keyName .= ".{$this->cloudLocation}";
-        
+
+        $puttygenExecPackage = '/opt/scalr-server/embedded/bin/puttygen';
+        $puttygenExec = is_executable($puttygenExecPackage) ? $puttygenExecPackage : 'puttygen';
+
         $pipes = array();
-        $process = @proc_open("puttygen {$pemPrivateKey} -C {$keyName} -o {$ppkPrivateKey}", $descriptorSpec, $pipes);
+        $process = @proc_open("{$puttygenExec} {$pemPrivateKey} -C {$keyName} -o {$ppkPrivateKey}", $descriptorSpec, $pipes);
         if (@is_resource($process)) {
             @fclose($pipes[0]);
 
@@ -258,5 +288,20 @@ class SshKey extends AbstractEntity
 
         $this->publicKey = $this->getSshKeygenValue("-y", $this->privateKey);
         return $this->publicKey;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\DataType\AccessPermissionsInterface::hasAccessPermissions()
+     */
+    public function hasAccessPermissions($user, $environment = null, $modify = null)
+    {
+        if (empty($environment))
+            return false;
+
+        if ($environment->id != $this->envId)
+            return false;
+
+        return $this->farmId ? $user->hasAccessFarm($this->farmId, $environment->id) : true;
     }
 }

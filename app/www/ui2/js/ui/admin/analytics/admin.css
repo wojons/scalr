@@ -1,3 +1,21 @@
+.x-costanalytics-admin-dashboard .x-mode-btn{
+    right: 0!important;
+    left: auto!important;
+}
+
+.x-costanalytics-admin-dashboard .x-mode-btn .x-btn{
+    padding: 0;
+    min-width: 35px;
+}
+
+.x-costanalytics-admin-dashboard .x-mode-btn .x-btn-button{
+    height: 20px;
+}
+
+.x-costanalytics-admin-dashboard .x-mode-btn .x-btn-inner-default-small{
+    line-height: 20px;
+}
+
 /*cost analisys box*/
 .x-costanalytics .x-link-warning{
     text-decoration:underline;
@@ -245,7 +263,7 @@
 /*dashboard cabox*/
 .x-cabox2{
     text-align: center;
-    border-radius: 2px;
+    border-radius: 0;
     background: #f1f5fa;
 }
 
@@ -253,7 +271,7 @@
     font-weight: bold;
     line-height: 35px;
     height: 35px;
-    border-radius: 3px 3px 0 0;
+    border-radius: 0;
     background: #d5dee6;
     padding: 0;
     box-shadow: 0 -1px #ced9e1 inset;
@@ -293,7 +311,7 @@
 
 .x-cabox2 .x-quarter-box {
     background: #fffbff;
-    border-radius: 3px;
+    border-radius: 0;
     border-color: #eff3f7;
 }
 
@@ -306,32 +324,19 @@
     border-color: #d6dbe7;
 }
 
-.x-cabox3 table{
-    border-collapse:collapse;
-    width: 100%;
-}
 
-.x-cabox3 table td{
-    padding: 0;
-    text-align: left;
-    vertical-align: top;
-    text-overflow: ellipsis;
-    overflow: hidden;
-    white-space: nowrap;
-}
-
-.x-cabox3 table a{
+.x-cabox3 a{
     color: #212b3d;
     text-decoration: none;
 }
 
-.x-cabox3 table a:hover .link{
+.x-cabox3 a:hover .link{
     text-decoration: underline;
     color: #438bdc;
 }
 
-.x-cabox3 .x-top5-item td{
-    height: 64px;
+.x-cabox3 .x-label-pct {
+    line-height: 20px;
 }
 
 .x-costanalytics-icon-line-chart{
@@ -576,14 +581,14 @@
 /*spend details*/
 .x-costanalytics-details-header{
     background: #fff;
-    border-radius: 3px 3px 0 0;
+    border-radius: 0;
     margin: 12px 0 0 0;
     border-bottom: 1px solid #f3f5f8;
 }
 
 .x-costanalytics-details{
     background: #fff;
-    border-radius: 0 0 3px 3px;
+    border-radius: 0;
 }
 
 .x-costanalytics-details-header table,

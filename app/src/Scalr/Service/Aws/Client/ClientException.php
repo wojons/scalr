@@ -1,6 +1,8 @@
 <?php
 namespace Scalr\Service\Aws\Client;
 
+use http\Client\Request;
+use http\QueryString;
 use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\AwsException;
 
@@ -33,9 +35,9 @@ class ClientException extends AwsException
             //Action is the AWS Action name
             $this->apicall = null;
             //We need to fetch Action name from the request if possible.
-            if ($message->request instanceof \HttpRequest) {
-                if ($message->request->getMethod() == HTTP_METH_POST) {
-                    $postfields = $message->request->getPostFields();
+            if ($message->request instanceof Request) {
+                if ($message->request->getRequestMethod() == "POST") {
+                    $postfields = (new QueryString($message->request->getBody()))->toArray();
                     if (!empty($postfields['Action'])) {
                         $this->apicall = $postfields['Action'];
                     }
@@ -61,9 +63,10 @@ class ClientException extends AwsException
 
             parent::__construct(
                 sprintf(
-                    'AWS Error.%s %s',
+                    'AWS Error.%s %s (RequestID: %s)',
                     ($this->apicall ? sprintf(" Request %s failed.", $this->apicall) : ''),
-                    $this->errorData->getMessage()
+                    $this->errorData->getMessage(),
+                    $this->errorData->getRequestId()
                 ),
                 $code,
                 $previous

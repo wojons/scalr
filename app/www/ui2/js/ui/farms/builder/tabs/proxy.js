@@ -151,7 +151,9 @@ Ext.define('Scalr.ui.ProxySettingsField', {
     },
 
     setValue: function(value, selectedIndex){
-        var data = [];
+        var me = this,
+            grid,
+            data = [];
         //some data conversion for scalarizr
         Ext.Array.each(value['nginx.proxies'] || [], function(proxy, pindex){
             var templates = {};
@@ -181,14 +183,22 @@ Ext.define('Scalr.ui.ProxySettingsField', {
             }
         });
 
-        this.store.loadData(value['nginx.proxies'] || []);
-        if (this.mode === 'add') {
-            this.down('#form').loadRecord(this.store.createModel({}));
+        me.store.loadData(value['nginx.proxies'] || []);
+        if (me.mode === 'add') {
+            me.down('#form').loadRecord(me.store.createModel({}));
         }
 
         if (Ext.isNumeric(selectedIndex)) {
-            this.down('#grid').setSelectedRecord(this.store.getAt(selectedIndex));
-            this.down('#form').isValid();
+            var grid = me.down('#grid');
+            cb = function(){
+                grid.setSelectedRecord(me.store.getAt(selectedIndex));
+                me.down('#form').isValid();
+            };
+            if (me.rendered) {
+                cb();
+            } else {
+                me.on('afterrender', cb);
+            }
         }
     },
 
@@ -665,7 +675,7 @@ Ext.define('Scalr.ui.ProxySettingsField', {
                             plugins: [{
                                 ptype: 'comboaddnew',
                                 url: '/services/ssl/certificates/create',
-                                disabled: !Scalr.isAllowed('SERVICES_SSL')
+                                disabled: !Scalr.isAllowed('SERVICES_SSL', 'manage')
                             }],
                             listConfig: {
                                 width: 'auto',

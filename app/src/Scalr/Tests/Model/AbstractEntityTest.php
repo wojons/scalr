@@ -1,7 +1,12 @@
 <?php
 namespace Scalr\Tests\Model;
 
+use ADODB_mysqli;
+use ADORecordSet_mysqli;
 use Exception;
+use Scalr\Model\AbstractEntity;
+use Scalr\Model\Collections\EntityIterator;
+use Scalr\Tests\Fixtures\Model\Entity\TestEntity;
 use Scalr\Tests\TestCase;
 use Scalr\Tests\Fixtures\Model\Entity\Entity1;
 use Scalr\Model\Entity\CloudLocation;
@@ -184,5 +189,147 @@ class AbstractEntityTest extends TestCase
         $this->assertNull(CloudLocation::findPk($cl2Identifier));
 
         $this->cleanupCloudLocations();
+    }
+
+    /**
+     * @test
+     * @functional
+     */
+    public function testResultType()
+    {
+        $db = \Scalr::getDb();
+
+        $this->createTestEntities($db);
+
+        $count = $db->GetOne("SELECT COUNT(*) FROM `test_abstract_entity`");
+
+        //test RESULT_ENTITY_ITERATOR
+        $this->checkResultEntries(
+            TestEntity::result(AbstractEntity::RESULT_ENTITY_ITERATOR),
+            $count,
+            'Scalr\Model\Collections\EntityIterator',
+            'Scalr\Tests\Fixtures\Model\Entity\TestEntity'
+        );
+
+        //test RESULT_ENTITY_COLLECTION
+        $this->checkResultEntries(
+            TestEntity::result(AbstractEntity::RESULT_ENTITY_COLLECTION),
+            $count,
+            'Scalr\Model\Collections\ArrayCollection',
+            'Scalr\Tests\Fixtures\Model\Entity\TestEntity'
+        );
+
+        //test RESULT_RAW
+        $this->checkResultEntries(
+            TestEntity::result(AbstractEntity::RESULT_RAW),
+            $count,
+            '\ADORecordSet_mysqli',
+            'array',
+            null,
+            function (ADORecordSet_mysqli $result) {
+                return $result->RowCount();
+            }
+        );
+    }
+
+    private function checkResultEntries(AbstractEntity $entity, $expectedCount, $expectedResultClass, $expectedEntryType, array $criteria = null, callable $countFunction = null)
+    {
+        $result = $entity->find($criteria);
+
+        $this->assertNotEmpty($result);
+
+        $this->assertInstanceOf($expectedResultClass, $result, get_class($result));
+
+        if ($countFunction === null) {
+            $countFunction = 'count';
+        }
+
+        $this->assertEquals($expectedCount, $countFunction($result));
+
+        $classType = class_exists($expectedEntryType);
+
+        foreach ($result as $entry) {
+            if ($classType) {
+                $this->assertInstanceOf($expectedEntryType, $entry, get_class($entry));
+            } else {
+                $this->assertInternalType($expectedEntryType, $entry, gettype($entry));
+            }
+        }
+    }
+
+    private function createTestEntities($db)
+    {
+        $db->Execute("
+          CREATE TEMPORARY TABLE IF NOT EXISTS `test_abstract_entity` (
+            `id` INT NOT NULL AUTO_INCREMENT,
+            `str_id` VARCHAR(32) NOT NULL,
+            `int_field` INT NULL,
+            `string_field` VARCHAR(45) NULL,
+            `dt_field` DATETIME NOT NULL,
+            `utc_dt_field` DATETIME NOT NULL,
+            PRIMARY KEY (`id`, `str_id`))
+        ");
+
+        $entity = new TestEntity();
+        $entity->strId = 'foo';
+        $entity->intField = 100500;
+        $entity->save();
+
+        $entity = new TestEntity();
+        $entity->strId = 'bar';
+        $entity->stringField = 'foobar';
+        $entity->save();
+
+        $entity = new TestEntity();
+        $entity->strId = 'barfoo';
+        $entity->intField = 100500;
+        $entity->stringField = 'foobar';
+        $entity->save();
+
+        return $entity->table();
+    }
+
+    /**
+     * @test
+     * @functional
+     */
+    public function testDelete()
+    {
+        $db = \Scalr::getDb();
+
+        $tableName = $this->createTestEntities($db);
+
+        $count = $db->GetOne("SELECT COUNT(*) FROM {$tableName} WHERE `str_id` = 'foo'");
+        $removedCount = TestEntity::deleteBy([['strId' => 'foo']]);
+        $this->assertEquals($count, $removedCount);
+
+        $count = $db->GetOne("SELECT COUNT(*) FROM {$tableName} WHERE `str_id` = 'foobar'");
+        $removedCount = TestEntity::deleteBy([['strId' => 'foo']]);
+        $this->assertEquals($count, $removedCount);
+
+        $entities = TestEntity::findByStrId('bar');
+        $removedCount = TestEntity::deleteByStrId('bar');
+        $this->assertEquals(count($entities), $removedCount);
+
+        /* @var $entities EntityIterator */
+        $entities = TestEntity::all();
+
+        $totalCount = 0;
+        /* @var $entity TestEntity */
+        foreach ($entities as $entity) {
+            $pk = $entity->getIterator()->getPrimaryKey();
+
+            $args = [];
+
+            foreach ($pk as $fieldName) {
+                $args[] = $entity->{$fieldName};
+            }
+
+            $totalCount += $removedCount = call_user_func_array([get_class($entity), 'deletePk'], $args);
+            $this->assertEquals(1, $removedCount);
+        }
+
+        $this->assertEquals(count($entities), $totalCount);
+        $this->assertEquals(0, $db->GetOne("SELECT COUNT(*) FROM {$tableName}"));
     }
 }

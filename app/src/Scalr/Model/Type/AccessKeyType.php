@@ -23,8 +23,10 @@ class AccessKeyType extends StringType implements GeneratedValueTypeInterface
             '0','1','2','3','4','5','6','7','8','9'
         ];
 
+        $max = count($allow) - 1;
+
         for ($i = 0; $i < 16; $i++) {
-            $ret .= $allow[array_rand($allow)];
+            $ret .= $allow[mt_rand(0, $max)];
         }
 
         return 'APIK' . $ret;

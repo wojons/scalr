@@ -28,20 +28,20 @@ class Update20141210104319 extends AbstractUpdate implements SequenceInterface
 
     protected function isApplied1($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_ADMINISTRATION_ANALYTICS') && $this->db->GetOne("
+        return defined('Scalr\\Acl\\Acl::RESOURCE_ANALYTICS_ACCOUNT') && $this->db->GetOne("
             SELECT `granted` FROM `acl_role_resources`
             WHERE `resource_id` = ? AND `role_id` = ?
             LIMIT 1
         ", array(
-            Acl::RESOURCE_ADMINISTRATION_ANALYTICS,
+            Acl::RESOURCE_ANALYTICS_ACCOUNT,
             Acl::ROLE_ID_FULL_ACCESS,
         )) == 1;
     }
 
     protected function validateBefore1($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_ADMINISTRATION_ANALYTICS') &&
-        Definition::has(Acl::RESOURCE_ADMINISTRATION_ANALYTICS);
+        return defined('Scalr\\Acl\\Acl::RESOURCE_ANALYTICS_ACCOUNT') &&
+        Definition::has(Acl::RESOURCE_ANALYTICS_ACCOUNT);
     }
 
     protected function run1($stage)
@@ -52,26 +52,26 @@ class Update20141210104319 extends AbstractUpdate implements SequenceInterface
             VALUES (?, ?, 1)
         ", array(
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::RESOURCE_ADMINISTRATION_ANALYTICS
+            Acl::RESOURCE_ANALYTICS_ACCOUNT
         ));
     }
 
     protected function isApplied2($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_ENVADMINISTRATION_ANALYTICS') && $this->db->GetOne("
+        return defined('Scalr\\Acl\\Acl::RESOURCE_ANALYTICS_ENVIRONMENT') && $this->db->GetOne("
             SELECT `granted` FROM `acl_role_resources`
             WHERE `resource_id` = ? AND `role_id` = ?
             LIMIT 1
         ", array(
-            Acl::RESOURCE_ENVADMINISTRATION_ANALYTICS,
+            Acl::RESOURCE_ANALYTICS_ENVIRONMENT,
             Acl::ROLE_ID_FULL_ACCESS,
         )) == 1;
     }
 
     protected function validateBefore2($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_ENVADMINISTRATION_ANALYTICS') &&
-        Definition::has(Acl::RESOURCE_ENVADMINISTRATION_ANALYTICS);
+        return defined('Scalr\\Acl\\Acl::RESOURCE_ANALYTICS_ENVIRONMENT') &&
+        Definition::has(Acl::RESOURCE_ANALYTICS_ENVIRONMENT);
     }
 
     protected function run2($stage)
@@ -82,7 +82,7 @@ class Update20141210104319 extends AbstractUpdate implements SequenceInterface
             VALUES (?, ?, 1)
         ", array(
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::RESOURCE_ENVADMINISTRATION_ANALYTICS
+            Acl::RESOURCE_ANALYTICS_ENVIRONMENT
         ));
     }
 

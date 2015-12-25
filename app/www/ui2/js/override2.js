@@ -679,23 +679,6 @@ Ext.define(null, {
     }
 });
 
-
-Ext.define(null, {
-    override: 'Ext.Component',
-    /*Ext.util.Floating.setZIndex*/
-    setZIndex: function(index) {
-        var me = this;
-        /** Changed */
-        me.el.setZIndex(index + ((me.zIndexPriority || 0)*10000));
-        /** End */
-        index += 10;
-        if (me.floatingDescendants) {
-            index = Math.floor(me.floatingDescendants.setBase(index) / 100) * 100 + 10000;
-        }
-        return index;
-    }
-});
-
 Ext.define(null, {
     override: 'Ext.grid.CellEditor',
 

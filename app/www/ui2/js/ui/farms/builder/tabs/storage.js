@@ -7,19 +7,224 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
         align: 'stretch'
     },
 
+    settings: {
+        storages: undefined
+    },
+
     tabData: null,
 
+    isEnabled: function (record) {
+        return this.callParent(arguments) && record.get('platform') != 'azure';
+    },
+
+    showWarningRemovedEphemeralDevices: function(devices) {
+        var result = [], name;
+        Ext.each(devices, function(item) {
+            if (item['fs']) {
+                name = item['settings']['ec2_ephemeral.name'];
+                name = item['mount'] ? name + ' with mountpoint ' + item['mountPoint'] : name;
+                result.push(name)
+            }
+        });
+
+        if (result.length) {
+            Ext.defer(function() {
+                Scalr.message.Warning('Number of ephemeral devices were decreased. Following devices will be unavailable: ' + result.join(', '));
+            }, 200);
+        }
+    },
+
     onRoleUpdate: function(record, name, value, oldValue) {
-        if (!this.isEnabled(record) || !this.isVisible()) return;
-        var me = this;
+        if (!this.isEnabled(record)) return;
+        var me = this,
+            storages,
+            configs,
+            newConfigs,
+            removedDevices,
+            ephemeralDevices,
+            ephemeralDevicesNumber;
         if (name.join('.') === 'settings.aws.instance_type') {
-            record.loadEBSEncryptionSupport(function(encryptionSupported){
-                var field = me.down('[name="ebs.encrypted"]');
-                if (field) {
-                    field.encryptionSupported = encryptionSupported;
-                    field.setReadOnly(!encryptionSupported);
+
+            record.loadInstanceTypeInfo(function(instanceTypeInfo){
+                var field,
+                    ebsEncryptionSupported = instanceTypeInfo ? instanceTypeInfo.ebsencryption || false : true,
+                    osFamily = Scalr.utils.getOsById(record.get('osId'), 'family');
+                ephemeralDevices = instanceTypeInfo ? instanceTypeInfo.instancestore : null;
+                if (me.isVisible()) {
+                    me.tabData['ephemeralDevices'] = ephemeralDevices;
+                    me.down('#configuration').clearSelectedRecord();
+                    me.refreshEc2EphemeralDevices();
+                    field = me.down('[name="type"]');
+                    if (field) field.store.loadData(me.getAvailableStorageTypes(record));
+
+                    field = me.down('[name="ebs.encrypted"]');
+                    if (field) {
+                        field.encryptionSupported = ebsEncryptionSupported;
+                        field.setReadOnly(!ebsEncryptionSupported);
+                    }
+                } else {
+                    storages = record.get('storages') || {};
+                    configs = storages['configs'] || []
+                    newConfigs = [];
+                    ephemeralDevicesNumber = (ephemeralDevices || {})['number'] || 0;
+                    removedDevices = [];
+                    Ext.Array.each(configs, function(storage){
+                        if (storage['type'] === 'ec2_ephemeral') {
+                            if (storage['settings']['ec2_ephemeral.name'].replace('ephemeral', '')*1 >= ephemeralDevicesNumber) {
+                                removedDevices.push(storage);
+                                return true;
+                            } else {
+                                storage['settings']['ec2_ephemeral.size'] = ephemeralDevices['size'];
+                            }
+                        }
+                        newConfigs.push(storage);
+                    });
+                    for (var i=0;i<ephemeralDevicesNumber;i++) {
+                        if (Ext.Array.every(newConfigs, function(storage){return !(storage['type'] === 'ec2_ephemeral' && storage['settings']['ec2_ephemeral.name'] === 'ephemeral' + i); })) {
+                            newConfigs.push(Ext.merge({
+                                type: 'ec2_ephemeral',
+                                reUse: 0,
+                                settings: {
+                                    'ec2_ephemeral.name': 'ephemeral' + i,
+                                    'ec2_ephemeral.size': ephemeralDevices['size']
+                                }
+                            }, i == 0 && osFamily !== 'windows' ? {
+                                mount: true,
+                                mountPoint: '/mnt',
+                                fs: 'ext3'
+                            } : {}));
+                        }
+                    }
+                    storages['configs'] = newConfigs;
+                    record.set('storages', storages);
+                    if (removedDevices.length) {
+                        me.showWarningRemovedEphemeralDevices(removedDevices);
+                    }
                 }
             });
+        }
+    },
+
+    getAvailableStorageTypes: function(roleRecord, storageRecord) {
+        var platform, os, result;
+        roleRecord = roleRecord || this.currentRole;
+        platform = roleRecord.get('platform');
+        os = Scalr.utils.getOsById(roleRecord.get('osId')) || {};
+        result = [];
+        if (platform === 'ec2') {
+            if (!storageRecord || storageRecord.get('type') !== 'ec2_ephemeral') {
+                result.push({name: 'ebs', description: 'EBS volume'});
+                if (os.family !== 'windows') {
+                    result.push({name: 'raid.ebs', description: 'RAID array (on EBS)'});
+                }
+            }
+            if (this.tabData['ephemeralDevices'] && this.getAvailableEc2EphemeralDevices(storageRecord).length) {
+                result.push({name: 'ec2_ephemeral', description: 'Ephemeral device'});
+            }
+        } else if (Scalr.isCloudstack(platform)) {
+            result.push(
+                {name: 'csvol', description: 'CS volume'},
+                {name: 'raid.csvol', description: 'RAID array (on CS volumes)'}
+            );
+        } else if (platform === 'gce') {
+            if (!storageRecord || storageRecord.get('type') !== 'gce_ephemeral') {
+                result.push({name: 'gce_persistent', description: 'Persistent disk'});
+            }
+            if ((!storageRecord || !storageRecord.get('type') || storageRecord.get('type') === 'gce_ephemeral') && this.getAvailableGceEphemeralDevices(storageRecord).length) {
+                result.push({name: 'gce_ephemeral', description: 'Local SSD disk (ephemeral)'});
+            }
+        } else if (Scalr.isOpenstack(platform)) {
+            result.push(
+                {name: 'cinder', description: 'Persistent disk'},
+                {name: 'raid.cinder', description: 'RAID array (on Persistent disks)'}
+            );
+        }
+
+        return result;
+    },
+
+    getAvailableEc2EphemeralDevices: function(storageRecord) {
+        var ephemeralDevices = [],
+            storages = this.down('#configuration').store.getUnfiltered(),
+            editor = this.down('#editor');
+        storageRecord = storageRecord || editor.getRecord();
+        for (var i=0;i<this.tabData['ephemeralDevices']['number'];i++) {
+            var bypass = false;
+            storages.each(function(rec){
+                if (storageRecord !== rec && rec.get('type') === 'ec2_ephemeral' && rec.get('settings')['ec2_ephemeral.name'] === 'ephemeral' + i) {
+                    bypass = true;
+                    return false;
+                }
+            });
+            if (!bypass) {
+                ephemeralDevices.push({name: 'ephemeral' + i, description: 'ephemeral' + i, size: this.tabData['ephemeralDevices']['size']});
+            }
+        }
+
+        return ephemeralDevices;
+    },
+
+    getAvailableGceEphemeralDevices: function(storageRecord) {
+        var ephemeralDevices = [],
+            storages = this.down('#configuration').store.getUnfiltered(),
+            editor = this.down('#editor');
+        storageRecord = storageRecord || editor.getRecord();
+        for (var i=0;i<4;i++) {
+            var bypass = false;
+            storages.each(function(rec){
+                if (storageRecord !== rec && rec.get('type') === 'gce_ephemeral' && rec.get('settings')['gce_ephemeral.name'] === 'google-local-ssd-' + i) {
+                    bypass = true;
+                    return false;
+                }
+            });
+            if (!bypass) {
+                ephemeralDevices.push({name: 'google-local-ssd-' + i, description: 'google-local-ssd-' + i});
+            }
+        }
+
+        return ephemeralDevices;
+    },
+
+    refreshEc2EphemeralDevices: function() {
+        var me = this,
+            osFamily = Scalr.utils.getOsById(me.currentRole.get('osId'), 'family'),
+            store = me.down('#configuration').store,
+            ephemeralDevicesNumber = (me.tabData['ephemeralDevices'] || {})['number'] || 0,
+            recordsToRemove = [],
+            recordsToAdd = [];
+        store.getUnfiltered().each(function(record){
+            if (record.get('type') === 'ec2_ephemeral') {
+                if ((record.get('settings')['ec2_ephemeral.name'].replace('ephemeral', '')*1 >= ephemeralDevicesNumber)) {
+                    recordsToRemove.push(record);
+                } else {
+                    var settings = record.get('settings');
+                    settings['ec2_ephemeral.size'] = me.tabData['ephemeralDevices']['size'];
+                    record.set(settings);
+                }
+            }
+        });
+        if (recordsToRemove.length) {
+            me.showWarningRemovedEphemeralDevices(Ext.Array.map(recordsToRemove, function(item) { return item.data; }));
+            store.remove(recordsToRemove);
+        }
+        for (var i=0;i<ephemeralDevicesNumber;i++) {
+            if (!store.getUnfiltered().findBy(function(storage){return storage.get('type') === 'ec2_ephemeral' && storage.get('settings')['ec2_ephemeral.name'] === 'ephemeral' + i; })) {
+                recordsToAdd.push(Ext.merge({
+                    type: 'ec2_ephemeral',
+                    reUse: 0,
+                    settings: {
+                        'ec2_ephemeral.name': 'ephemeral' + i,
+                        'ec2_ephemeral.size': me.tabData['ephemeralDevices']['size']
+                    }
+                }, i == 0 && osFamily !== 'windows' ? {
+                    mount: true,
+                    mountPoint: '/mnt',
+                    fs: 'ext3'
+                } : {}));
+            }
+        }
+        if (recordsToAdd.length) {
+            store.loadData(recordsToAdd, true);
         }
     },
 
@@ -72,11 +277,15 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                             me
                         );
                     } else if (platform === 'ec2') {
-                        record.loadEBSEncryptionSupport(function(encryptionSupported){
+                        record.loadInstanceTypeInfo(function(instanceTypeInfo){
                             var field = me.down('[name="ebs.encrypted"]'),
+                                ebsEncryptionSupported = instanceTypeInfo ? instanceTypeInfo.ebsencryption || false : true,
                                 kmsKeys = ((Scalr.getGovernance('ec2', 'aws.kms_keys') || {})[cloudLocation] || {})['keys'];
-                            field.encryptionSupported = encryptionSupported;
-                            field.setReadOnly(!encryptionSupported);
+                            //ephemeraldevices
+                            me.tabData['ephemeralDevices'] = instanceTypeInfo ? instanceTypeInfo.instancestore : null;
+                            //ebsencryption
+                            field.encryptionSupported = ebsEncryptionSupported;
+                            field.setReadOnly(!ebsEncryptionSupported);
 
                             field = me.down('[name="ebs.kms_key_id"]');
                             field.toggleIcon('governance', kmsKeys !== undefined)
@@ -112,18 +321,25 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
     },
 
     showTab: function (record) {
-        var settingsCt = this.down('#settings'),
+        var me = this,
             settings = record.get('settings', true),
             platform = record.get('platform'),
             storages = record.get('storages', true) || {},
+            storagesUsage = storages['devices'] || [],
             os = Scalr.utils.getOsById(record.get('osId')) || {},
             rootStorage,
+            storagesToLoad,
             field,
-            volumeTypes,
-            data = [];
+            errors = record.get('errors', true) || {},
+            invalidIndex,
+            volumeTypes;
 
-        field = this.down('#configuration');
-        if (this.tabData['rootDeviceConfig']) {
+        if (Ext.isObject(errors) && Ext.isObject(errors['storages'])) {
+            invalidIndex = errors['storages'].invalidIndex;
+        }
+
+        field = me.down('#configuration');
+        if (me.tabData['rootDeviceConfig']) {
             if (settings['base.root_device_config']) {
                 rootStorage = Ext.decode(settings['base.root_device_config']);
             } else {
@@ -132,52 +348,36 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     rebuild: true,
                     reUse: false,
                     isRootDevice: true
-                }, this.tabData['rootDeviceConfig']);
+                }, me.tabData['rootDeviceConfig']);
             }
         }
-        field.store.loadData(Ext.Array.merge(storages['configs'] || [], rootStorage ? [rootStorage] : []));
-        field.devices = storages['devices'] || [];
+        storagesToLoad = Ext.Array.merge(storages['configs'] || [], rootStorage ? [rootStorage] : []);
+        Ext.Array.each(storagesToLoad, function(storage){
+            if (Ext.isArray(storagesUsage[storage['id']])) {
+                storage['usage'] = storagesUsage[storage['id']];
+            }
+        });
+        field.store.loadData(storagesToLoad);
+        if (platform === 'ec2') {
+            me.refreshEc2EphemeralDevices();
+        }
+        var grouping = field.getView().findFeature('grouping');
+        if (grouping.groupCache['Ephemeral storage']) {
+            grouping.collapse('Ephemeral storage');
+        }
 
-        this.down('[name="ebs.snapshot"]').store.getProxy().params = {cloudLocation: record.get('cloud_location')};
-
-        // Storage engine
-        if (platform == 'ec2' || platform == 'eucalyptus') {
-            data = [{
-                name: 'ebs', description: 'EBS volume'
-            }, {
-                name: 'raid.ebs', description: 'RAID array (on EBS)'
-            }];
-        } else if (Scalr.isCloudstack(platform)) {
-            data = [{
-                name: 'csvol', description: 'CS volume'
-            }, {
-                name: 'raid.csvol', description: 'RAID array (on CS volumes)'
-            }];
-            this.down('[name="csvol.disk_offering_id"]').store.load({data: this.tabData['diskOfferings'] || []});
-            this.down('[name="csvol.snapshot_id"]').store.getProxy().params = {
+        if (Scalr.isCloudstack(platform)) {
+            me.down('[name="csvol.disk_offering_id"]').store.load({data: me.tabData['diskOfferings'] || []});
+            me.down('[name="csvol.snapshot_id"]').store.getProxy().params = {
                 platform: record.get('platform'),
                 cloudLocation: record.get('cloud_location')
             };
-        } else if (platform === 'gce') {
-            data = [{
-                name: 'gce_persistent', description: 'Persistent disk'
-            }];
         } else if (Scalr.isOpenstack(platform)) {
-            data = [{
-                name: 'cinder', description: 'Persistent disk'
-            }, {
-                name: 'raid.cinder', description: 'RAID array (on Persistent disks)'
-            }];
-            field = this.down('[name="cinder.volume_type"]');
-            volumeTypes = this.tabData['volume_types'] || [];
+            field = me.down('[name="cinder.volume_type"]');
+            volumeTypes = me.tabData['volume_types'] || [];
             field.setVisible(volumeTypes.length > 0).setDisabled(!volumeTypes.length);
             field.store.load({data: volumeTypes});
         }
-
-        //storage engine
-        field = settingsCt.down('[name="type"]');
-        field.store.loadData(data);
-        field.setReadOnly(os.family === 'windows', false);
 
         // Storage filesystem
         var data = [];
@@ -190,13 +390,32 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                 data.push({ fs: 'ext4', description: 'Ext4'});
                 data.push({ fs: 'xfs', description: 'XFS'});
             }
+        } else if (platform === 'ec2') {
+            data.push({ fs: 'ntfs', description: 'NTFS'});
         }
-        field = settingsCt.down('[name="fs"]');
-        field.store.loadData(data);
-        field.setDisabled(os.family === 'windows');
-        field.setVisible(os.family !== 'windows');
 
-        this.down('#editor').hide();
+        field = me.down('[name="fs"]');
+        field.reset();
+        field.store.loadData(data);
+        field.fsIsAvailableForPlatformAndOsFamily = os.family !== 'windows' || platform === 'ec2';
+        field.setDisabled(!field.fsIsAvailableForPlatformAndOsFamily);
+        field.setVisible(field.fsIsAvailableForPlatformAndOsFamily);
+
+        me.down('#editor').hide();
+
+        if (Ext.isNumeric(invalidIndex)) {
+            var grid = me.down('#configuration');
+            cb = function(){
+                grid.setSelectedRecord(grid.store.getAt(invalidIndex + (me.tabData['rootDeviceConfig'] ? 1 : 0)));
+                me.down('#editor').isValid();
+            };
+            if (me.rendered) {
+                cb();
+            } else {
+                me.on('afterrender', cb);
+            }
+        }
+
     },
 
     hideTab: function (record) {
@@ -208,10 +427,11 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
             s = this.getStorages();
         c['configs'] = s['storages'];
         record.set('storages', c);
+
         if (s.root) {
             var settings = record.get('settings');
             settings['base.root_device_config'] = Ext.encode(s.root);
-            record.set('settings', settings)
+            record.set('settings', settings);
         }
         grid.store.removeAll();
     },
@@ -223,6 +443,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
         grid.store.getUnfiltered().each(function(record) {
             var data = record.getData();
             delete data['extInternalId'];
+            delete data['usage'];
             if (!record.get('readOnly')) {
                 if (record.get('isRootDevice')) {
                     root = data;
@@ -234,84 +455,266 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
         return {storages: storages, root: root};
     },
 
+    getAvailableWindowsDisks: function(current) {
+        var a = 65,
+            disks = {},
+            store = this.down('#configuration').store;
+        for (var i = 3; i<26; i++) {
+            var letter = String.fromCharCode(a + i);
+            if (letter === current || !store.getUnfiltered().findBy(function(storage){return storage.get('mountPoint') == letter; })) {
+                disks[letter] = letter;
+            }
+        }
+        return disks;
+    },
+
+    showStorageUsageInfo: function(data) {
+        Scalr.utils.Window({
+            width: 800,
+            title: 'Storage usage',
+            layout: 'fit',
+            scrollable: false,
+
+            items: [{
+                xtype: 'grid',
+                padding: '0 12 12',
+                disableSelection: true,
+                trackMouseOver: false,
+                viewConfig: {
+                    deferEmptyText: false,
+                    emptyText: 'Selected storage is not in use.'
+                },
+                store: {
+                    proxy: 'object',
+                    fields: [ 'serverIndex', 'serverId', 'serverInstanceId', 'farmRoleId', 'storageId', 'storageConfigId', 'placement' ],
+                    data: data
+                },
+                columns: [
+                    { header: 'Server Index', width: 125, sortable: true, dataIndex: 'serverIndex' },
+                    { header: 'Server Id', flex: 1, sortable: true, dataIndex: 'serverId', xtype: 'templatecolumn', tpl:
+                        '<tpl if="serverId"><a href="#/servers/{serverId}/dashboard">{serverId}</a> <tpl if="serverInstanceId">({serverInstanceId})</tpl><tpl else>Not running</tpl>'
+                    },
+                    { header: 'Storage Id', width: 130, sortable: true, dataIndex: 'storageId' },
+                    { header: 'Placement', width: 110, sortable: true, dataIndex: 'placement' },
+                    { width: 46, sortable: false, dataIndex: 'config', xtype: 'templatecolumn', tpl:
+                        '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-grid-icon x-grid-icon-info" data-qtip="View config" />'
+                    }, {
+                        xtype: 'templatecolumn', width: 42, sortable: false, resizable: false, dataIndex: 'id', align: 'center', tpl: [
+                            '<tpl if="serverId==\'\'">',
+                                '<img class="delete-volume x-grid-icon x-grid-icon-delete" data-qtip="Delete volume" src="'+Ext.BLANK_IMAGE_URL+'" />',
+                            '<tpl else>',
+                                '<img class="x-grid-icon x-grid-icon-simple x-grid-icon-delete" data-qtip="You can delete volume only if server is not running" src="'+Ext.BLANK_IMAGE_URL+'" />',
+                            '</tpl>'
+                        ],
+                        hidden: !Scalr.flags['betaMode']
+                    }
+                ],
+
+                listeners: {
+                    itemclick: function (view, record, item, index, e) {
+                        if (e.getTarget('img.x-grid-icon-info')) {
+                            Scalr.Request({
+                                processBox: {
+                                    type: 'action',
+                                    msg: 'Loading config ...'
+                                },
+                                url: '/farms/builder/xGetStorageConfig',
+                                params: {
+                                    farmRoleId: record.get('farmRoleId'),
+                                    configId: record.get('storageConfigId'),
+                                    serverIndex: record.get('serverIndex')
+                                },
+                                success: function(data) {
+                                    Scalr.utils.Window({
+                                        xtype: 'form',
+                                        title: 'Storage config',
+                                        width: 800,
+                                        layout: 'fit',
+                                        bodyCls: 'x-container-fieldset',
+                                        items: [{
+                                            xtype: 'codemirror',
+                                            readOnly: true,
+                                            value: JSON.stringify(data.config, null, "\t"),
+                                            mode: 'application/json',
+                                            margin: '0 0 12 0'
+                                        }],
+                                        dockedItems: [{
+                                            xtype: 'container',
+                                            dock: 'bottom',
+                                            cls: 'x-docked-buttons',
+                                            layout: {
+                                                type: 'hbox',
+                                                pack: 'center'
+                                            },
+                                            items: [{
+                                                xtype: 'button',
+                                                text: 'Close',
+                                                handler: function() {
+                                                    this.up('#box').close();
+                                                }
+                                            }]
+                                        }]
+                                    });
+                                }
+                            });
+                            e.preventDefault();
+
+                        } else if (e.getTarget('img.delete-volume')) {
+                            Scalr.Request({
+                                confirmBox: {
+                                    type: 'delete',
+                                    msg: 'Are you sure want to remove volume ?'
+                                },
+                                processBox: {
+                                    type: 'delete',
+                                    msg: 'Loading volume ...'
+                                },
+                                url: '/farms/builder/xRemoveStorageVolume',
+                                params: {
+                                    farmRoleId: record.get('farmRoleId'),
+                                    storageId: record.get('storageId')
+                                },
+                                success: function() {
+
+                                }
+                            });
+                            e.preventDefault();
+                        }
+                    }
+                }
+            }],
+
+            dockedItems: [{
+                xtype: 'container',
+                dock: 'bottom',
+                cls: 'x-docked-buttons',
+                layout: {
+                    type: 'hbox',
+                    pack: 'center'
+                },
+                items: [{
+                    xtype: 'button',
+                    text: 'Close',
+                    maxWidth: 140,
+                    handler: function (button) {
+                        button.up('panel').close();
+                    }
+                }]
+            }]
+        });
+    },
     __items: [{
-        xtype: 'container',
+        xtype: 'grid',
+        itemId: 'configuration',
         maxWidth: 900,
         minWidth: 460,
         flex: 1,
         cls: 'x-panel-column-left x-panel-column-left-with-tabs',
-        layout: {
-            type: 'vbox',
-            align: 'stretch'
-        },
-        items: [{
-            xtype: 'component',
-            cls: 'x-fieldset-subheader',
-            margin: 12,
-            html: 'Storage'
+        padding: '18 0 0',
+        features: [{
+            ftype: 'grouping',
+            restoreGroupsState: true,
+            groupHeaderTpl: '{name} ({[values.children.length]})'
         },{
-            xtype: 'grid',
-            itemId: 'configuration',
-            multiSelect: true,
-            padding: '0 12 12',
-            features: {
-                ftype: 'addbutton',
-                text: 'Add storage',
-                handler: function() {
-                    var currentRole = this.grid.up('#storage').currentRole,
-                        form = this.grid.up('#storage').down('#editor'),
-                        osFamily = Scalr.utils.getOsById(currentRole.get('osId'), 'family'),
-                        storageDefaults = { reUse: 1};
+            ftype: 'addbutton',
+            text: 'Add storage',
+            handler: function() {
+                var currentRole = this.grid.up('#storage').currentRole,
+                    form = this.grid.up('#storage').down('#editor'),
+                    osFamily = Scalr.utils.getOsById(currentRole.get('osId'), 'family');
+                    storageDefaults = {
+                        reUse: Scalr.getDefaultValue('STORAGE_RE_USE')
+                    };
 
-                    if (osFamily === 'windows') {
-                        if (currentRole.get('platform') === 'ec2' || currentRole.get('platform') === 'eucalyptus')
-                            storageDefaults['type'] = 'ebs';
-                        else if (Scalr.isOpenstack(currentRole.get('platform')))
-                            storageDefaults['type'] = 'cinder';
-                        else if (Scalr.isCloudstack(currentRole.get('platform')))
-                            storageDefaults['type'] = 'csvol';
-                        else if (currentRole.get('platform') === 'gce')
-                            storageDefaults['type'] = 'gce_persistent';
-                    }
-
-
-                    this.grid.clearSelectedRecord();
-                    form.loadRecord(this.grid.store.createModel(storageDefaults));
-                    if (!form.hasInvalidField()) {
-                        form.onLiveUpdate();//add record to store if form is valid
+                if (osFamily === 'windows') {
+                    if (currentRole.get('platform') === 'ec2') {
+                        storageDefaults['type'] = 'ebs';
+                        storageDefaults['fs'] = 'ntfs';
+                    } else if (Scalr.isOpenstack(currentRole.get('platform'))) {
+                        storageDefaults['type'] = 'cinder';
+                    } else if (Scalr.isCloudstack(currentRole.get('platform'))) {
+                        storageDefaults['type'] = 'csvol';
+                    } else if (currentRole.get('platform') === 'gce') {
+                        storageDefaults['type'] = 'gce_persistent';
                     }
                 }
-            },
-            plugins: [{
-                ptype: 'selectedrecord',
-                getForm: function() {
-                    return this.grid.up('#storage').down('form');
+
+                this.grid.clearSelectedRecord();
+                form.loadRecord(this.grid.store.createModel(storageDefaults));
+                if (!form.hasInvalidField()) {
+                    form.onLiveUpdate();//add record to store if form is valid
                 }
+            }
+        }],
+        plugins: [{
+            ptype: 'selectedrecord',
+            getForm: function() {
+                return this.grid.up('#storage').down('form');
+            }
+        },{
+            ptype: 'focusedrowpointer',
+            thresholdOffset: 26
+        }],
+        viewConfig: {
+            getRowClass: function(record) {
+                if (record.get('status') === 'Pending delete')
+                    return 'x-grid-row-strikeout';
+            }
+        },
+        store: {
+            model: Scalr.getModel({
+                fields: [
+                    'id', 'type', 'fs', 'settings', 'mount', 'mountPoint', 'label', 'reUse',
+                    {name: 'status', defaultValue: ''},
+                    'rebuild',
+                    {name: 'isRootDevice', defaultValue: false},
+                    {name: 'readOnly', defaultValue: false},
+                    {name: 'category', depends: ['type'], convert: function(v, record) {
+                        return Ext.Array.contains(['ec2_ephemeral', 'gce_ephemeral'], record.data.type) ? 'Ephemeral storage' : ' Persistent storage';
+                    }},
+                    {name: 'usage', defaultValue: null}
+                ]
+            }),
+            groupField: 'category',
+            sorters: [{
+                property: 'isRootDevice',
+                direction: 'DESC'
             },{
-                ptype: 'focusedrowpointer',
-                thresholdOffset: 26
-            }],
-            viewConfig: {
-                getRowClass: function(record) {
-                    if (record.get('status') === 'Pending delete')
-                        return 'x-grid-row-strikeout';
+                sorterFn: function(rec1, rec2){
+                    if (rec1.data.type === 'ec2_ephemeral' && rec2.data.type === 'ec2_ephemeral') {
+                        var name1 = rec1.data.settings['ec2_ephemeral.name'] || '',
+                            name2 = rec2.data.settings['ec2_ephemeral.name'] || '';
+                        return  name1.replace('ephemeral', '')*1 > name2.replace('ephemeral', '')*1  ? 1 : -1;
+                    } else if (rec1.data.type === 'gce_ephemeral' && rec2.data.type === 'gce_ephemeral') {
+                        var name1 = rec1.data.settings['gce_ephemeral.name'] || '',
+                            name2 = rec2.data.settings['gce_ephemeral.name'] || '';
+                        return  name1.replace('google-local-ssd-', '')*1 > name2.replace('google-local-ssd-', '')*1  ? 1 : -1;
+                    } else {
+                        return 0;
+                    }
                 }
+            }]
+        },
+        columns: [
+            { header: 'Mount point', flex: 1.7, sortable: false, dataIndex: 'mountPoint', xtype: 'templatecolumn', tpl:
+                '<tpl if="values.mount && values.mountPoint">' +
+                    '<tpl if="values.fs==\'ntfs\'">'+
+                        '<tpl if="label">'+
+                            '{label} ({mountPoint}:)' +
+                        '<tpl else>'+
+                            '{mountPoint}:' +
+                        '</tpl>'+
+                    '<tpl else>'+
+                        '{mountPoint}' +
+                    '</tpl>'+
+                '<tpl else>&mdash;</tpl>'
             },
-            store: {
-                model: Scalr.getModel({fields: [ 'id', 'type', 'fs', 'settings', 'mount', 'mountPoint', 'reUse', {name: 'status', defaultValue: ''}, 'rebuild', {name: 'isRootDevice', defaultValue: false}, {name: 'readOnly', defaultValue: false} ]}),
-                sorters: [{
-                    property: 'isRootDevice',
-                    direction: 'DESC'
-                }]
-            },
-            columns: [
-                { header: 'Mount point', flex: 2, sortable: false, dataIndex: 'mountPoint', xtype: 'templatecolumn', tpl:
-                    '<tpl if="mountPoint">{mountPoint}<tpl else>&mdash;</tpl>'
-                },
-                { header: 'Type', flex: 2, sortable: false, dataIndex: 'type', xtype: 'templatecolumn', tpl:
-                    new Ext.XTemplate('{[this.name(values.type)]}', {
-                        name: function(type) {
-                            var l = {
+            { header: 'Type', flex: 2, sortable: false, dataIndex: 'type', xtype: 'templatecolumn', tpl:
+                new Ext.XTemplate('{[this.name(values)]}', {
+                    name: function(values) {
+                        var type = values.type,
+                            res,
+                            l = {
                                 'ebs': 'EBS volume',
                                 'csvol': 'CS volume',
                                 'cinder': 'Persistent disk',
@@ -322,194 +725,75 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                                 'instance-store': 'Ephemeral device'
                             };
 
-                            return type ? (l[type] || type) : '&mdash;'
-                        }
-                    })
-                },
-                { header: 'Size', width: 100, sortable: false, xtype: 'templatecolumn', tpl:
-                    new Ext.XTemplate(
-                        '{[this.getSize(values)]}', {
-                        getSize: function(v) {
-                            var s;
-                            if (Ext.Array.contains(['raid.ebs', 'ebs'], v.type)) {
-                                s = v['settings']['ebs.size'];
-                            } else if (v.type === 'instance-store') {
-                                s = v['settings']['size'];
-                            } else if (Ext.Array.contains(['raid.csvol', 'csvol'], v.type)) {
-                                s = v['settings']['csvol.size'];
-                            } else if (Ext.Array.contains(['raid.cinder', 'cinder'], v.type)) {
-                                s = v['settings']['cinder.size'];
-                            } else if (v.type === 'gce_persistent') {
-                                s = v['settings']['gce_persistent.size'];
+                            if (type === 'ec2_ephemeral') {
+                                res = values['settings']['ec2_ephemeral.name'];
+                            } else if (type === 'gce_ephemeral') {
+                                res = values['settings']['gce_ephemeral.name'];
+                            } else {
+                                res = type ? (l[type] || type) + (type === 'ebs' && values['settings']['ebs.snapshot'] ? ' ('+ values['settings']['ebs.snapshot'] + ')' : ''): '&mdash;';
                             }
 
-                            return s ? Ext.String.htmlEncode(s)+ ' GB' : '&mdash;';
-                        }
-                    })
-                },
-                { header: 'Re-use', width: 60, xtype: 'templatecolumn', sortable: false, align: 'center', tpl:
-                    '<tpl if="reUse"><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"><tpl else>&mdash;</tpl>'
-                },
-                {
-                    xtype: 'templatecolumn',
-                    tpl: '<tpl if="status!=\'Pending delete\'&&!isRootDevice"><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-grid-icon x-grid-icon-delete" title="Delete storage" /></tpl>',
-                    width: 42,
-                    sortable: false,
-                    resizable: false,
-                    dataIndex: 'id',
-                    align:'left'
-            }],
-
-            listeners: {
-                viewready: function() {
-                    var me = this;
-                    me.on('selectedrecordchange', function(record) {
-                        var dev = me.next();
-                        dev.hide();
-                        dev.store.removeAll();
-                        if (record && !record.get('isRootDevice')) {
-                            var id = record.get('id');
-                            if (Ext.isArray(me.devices[id])) {
-                                dev.store.add(me.devices[id])
-                                dev.show();
-                            }
-                        }
-                    });
-                },
-                itemclick: function (view, record, item, index, e) {
-                    if (e.getTarget('img.x-grid-icon-delete')) {
-                        if (!record.get('id')) {
-                            view.getStore().remove(record);
-                        } else {
-                            record.set('status', 'Pending delete');
-                            view.up().clearSelectedRecord();
-                        }
-                        return false;
+                        return res;
                     }
+                })
+            },
+            { header: 'Size', width: 100, sortable: false, xtype: 'templatecolumn', tpl:
+                new Ext.XTemplate(
+                    '{[this.getSize(values)]}', {
+                    getSize: function(v) {
+                        var s;
+                        if (Ext.Array.contains(['raid.ebs', 'ebs'], v.type)) {
+                            s = v['settings']['ebs.size'];
+                        } else if (v.type === 'ec2_ephemeral') {
+                            s = v['settings']['ec2_ephemeral.size'];
+                        } else if (v.type === 'gce_ephemeral') {
+                            s = v['settings']['gce_ephemeral.size'];
+                        } else if (Ext.Array.contains(['raid.csvol', 'csvol'], v.type)) {
+                            s = v['settings']['csvol.size'];
+                        } else if (Ext.Array.contains(['raid.cinder', 'cinder'], v.type)) {
+                            s = v['settings']['cinder.size'];
+                        } else if (v.type === 'gce_persistent') {
+                            s = v['settings']['gce_persistent.size'];
+                        }
+
+                        return s ? Ext.String.htmlEncode(s)+ ' GB' : '&mdash;';
+                    }
+                })
+            },
+            { header: 'Re-use', width: 68, xtype: 'templatecolumn', sortable: false, align: 'center', tpl:
+                '<tpl if="reUse"><img src="'+Ext.BLANK_IMAGE_URL+'" class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"><tpl else>&mdash;</tpl>'
+            },
+            {
+                xtype: 'templatecolumn',
+                tpl:
+                    '<img src="'+Ext.BLANK_IMAGE_URL+'" style="width:20px;height:20px;margin-right:9px" <tpl if="usage && usage.length">class="x-grid-icon x-grid-icon-information" title="Storage usage"</tpl>/>'+
+                    '<tpl if="status!=\'Pending delete\'&&!isRootDevice&&type!=\'ec2_ephemeral\'">' +
+                        '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-grid-icon x-grid-icon-delete" title="Delete storage" />'+
+                    '</tpl>',
+                width: 68,
+                sortable: false,
+                resizable: false,
+                dataIndex: 'id',
+                align:'left'
+        }],
+
+        listeners: {
+            itemclick: function (view, record, item, index, e) {
+                if (e.getTarget('img.x-grid-icon-delete')) {
+                    if (!record.get('id')) {
+                        view.getStore().remove(record);
+                    } else {
+                        record.set('status', 'Pending delete');
+                        view.up().clearSelectedRecord();
+                    }
+                    return false;
+                } else if (e.getTarget('img.x-grid-icon-information')) {
+                    view.up('#storage').showStorageUsageInfo(record.get('usage'));
+                    return false;
                 }
             }
-        },{
-            xtype: 'grid',
-            padding: '0 12 12',
-            flex: 1,
-            itemId: 'devices',
-            hidden: true,
-            disableSelection: true,
-            trackMouseOver: false,
-            viewConfig: {
-                deferEmptyText: false,
-                emptyText: 'Selected storage is not in use.'
-            },
-            store: {
-                proxy: 'object',
-                fields: [ 'serverIndex', 'serverId', 'serverInstanceId', 'farmRoleId', 'storageId', 'storageConfigId', 'placement' ]
-            },
-            columns: [
-                { header: 'Server Index', width: 125, sortable: true, dataIndex: 'serverIndex' },
-                { header: 'Server Id', flex: 1, sortable: true, dataIndex: 'serverId', xtype: 'templatecolumn', tpl:
-                    '<tpl if="serverId"><a href="#/servers/{serverId}/dashboard">{serverId}</a> <tpl if="serverInstanceId">({serverInstanceId})</tpl><tpl else>Not running</tpl>'
-                },
-                { header: 'Storage Id', width: 130, sortable: true, dataIndex: 'storageId' },
-                { header: 'Placement', width: 110, sortable: true, dataIndex: 'placement' },
-                { width: 46, sortable: false, dataIndex: 'config', xtype: 'templatecolumn', tpl:
-                    '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-grid-icon x-grid-icon-info" data-qtip="View config" />'
-                }, {
-                    xtype: 'templatecolumn', width: 42, sortable: false, resizable: false, dataIndex: 'id', align: 'center', tpl: [
-                        '<tpl if="serverId==\'\'">',
-                            '<img class="delete-volume x-grid-icon x-grid-icon-delete" data-qtip="Delete volume" src="'+Ext.BLANK_IMAGE_URL+'" />',
-                        '<tpl else>',
-                            '<img class="x-grid-icon x-grid-icon-simple x-grid-icon-delete" data-qtip="You can delete volume only if server is not running" src="'+Ext.BLANK_IMAGE_URL+'" />',
-                        '</tpl>'
-                    ],
-                    hidden: !Scalr.flags['betaMode']
-                }
-            ],
+        }
 
-            listeners: {
-                itemclick: function (view, record, item, index, e) {
-                    if (e.getTarget('img.x-grid-icon-info')) {
-                        Scalr.Request({
-                            processBox: {
-                                type: 'action',
-                                msg: 'Loading config ...'
-                            },
-                            url: '/farms/builder/xGetStorageConfig',
-                            params: {
-                                farmRoleId: record.get('farmRoleId'),
-                                configId: record.get('storageConfigId'),
-                                serverIndex: record.get('serverIndex')
-                            },
-                            success: function(data) {
-                                Scalr.utils.Window({
-                                    xtype: 'form',
-                                    title: 'Storage config',
-                                    width: 800,
-                                    layout: 'fit',
-                                    bodyCls: 'x-container-fieldset',
-                                    items: [{
-                                        xtype: 'codemirror',
-                                        readOnly: true,
-                                        value: JSON.stringify(data.config, null, "\t"),
-                                        mode: 'application/json',
-                                        margin: '0 0 12 0'
-                                    }],
-                                    dockedItems: [{
-                                        xtype: 'container',
-                                        dock: 'bottom',
-                                        cls: 'x-docked-buttons',
-                                        layout: {
-                                            type: 'hbox',
-                                            pack: 'center'
-                                        },
-                                        items: [{
-                                            xtype: 'button',
-                                            text: 'Close',
-                                            handler: function() {
-                                                this.up('#box').close();
-                                            }
-                                        }]
-                                    }]
-                                });
-                            }
-                        });
-                        e.preventDefault();
-
-                    } else if (e.getTarget('img.delete-volume')) {
-                        Scalr.Request({
-                            confirmBox: {
-                                type: 'delete',
-                                msg: 'Are you sure want to remove volume ?'
-                            },
-                            processBox: {
-                                type: 'delete',
-                                msg: 'Loading volume ...'
-                            },
-                            url: '/farms/builder/xRemoveStorageVolume',
-                            params: {
-                                farmRoleId: record.get('farmRoleId'),
-                                storageId: record.get('storageId')
-                            },
-                            success: function() {
-
-                            }
-                        });
-                        e.preventDefault();
-                    }
-                }
-            },
-            dockedItems: [{
-                xtype: 'toolbar',
-                ui: 'inline',
-                dock: 'top',
-                padding: 0,
-                items: [{
-                    xtype: 'label',
-                    cls: 'x-fieldset-subheader',
-                    html: 'Storage usage'
-                }]
-            }]
-
-        }]
     },{
         xtype: 'container',
         layout: 'fit',
@@ -541,14 +825,23 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                 },
                 beforeloadrecord: function(record) {
                     var readOnly = record.get('readOnly');
+                    //storage engine
+                    this.down('[name="type"]').store.loadData(this.up('#storage').getAvailableStorageTypes(null, record));
+
                     this.prev().setVisible(readOnly);
                     return (record.get('status') === 'Pending create' || record.get('status') == '') && !readOnly;
                 },
                 loadrecord: function(record) {
-                    var form = this.getForm();
+                    var form = this.getForm(),
+                        field;
                     form.setValues(record.get('settings'));
                     form.clearInvalid();
                     this.toggleReadOnly(record);
+                    if (form.findField('fs').getValue() === 'ntfs') {
+                        field = form.findField('mountPointNtfs');
+                        field.store.load({data: this.up('#storage').getAvailableWindowsDisks(record.get('mountPoint'))});
+                        field.setValue(record.get('mountPoint'));
+                    }
                     if (!this.isVisible()) {
                         this.setVisible(true);
                     }
@@ -559,27 +852,37 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
             },
             toggleReadOnly: function(record) {
                 var isRootDevice = record.get('isRootDevice'),
-                    osFamily = Scalr.utils.getOsById(this.up('#storage').currentRole.get('osId'), 'family'),
+                    fsCount,
                     field;
-                if (osFamily !== 'windows') {
-                    this.down('[name="type"]').setReadOnly(isRootDevice);
-                    field = this.down('[name="fs"]');
-                    field.setDisabled(isRootDevice);
+                field = this.down('[name="type"]');
+                field.setReadOnly(isRootDevice || field.store.getCount()===1 && field.getValue());
+
+                field = this.down('[name="fs"]');
+                fsCount = field.store.getCount();
+                if (field.fsIsAvailableForPlatformAndOsFamily) {
+                    field.setDisabled(isRootDevice || !record.get('mount'));
                     field.setVisible(!isRootDevice);
                 }
-                this.down('#mountCt').setVisible(osFamily !== 'windows' || isRootDevice);
+                if (!isRootDevice && fsCount === 1) {
+                    field.setValue(field.store.first());
+                }
+                field.setReadOnly(fsCount === 1 && field.getValue());
+
+                this.down('#mountCt').setVisible(field.fsIsAvailableForPlatformAndOsFamily || isRootDevice);
 
                 this.down('[name="mount"]').setReadOnly(isRootDevice);
                 this.down('[name="mountPoint"]').setReadOnly(isRootDevice);
-                this.down('[name="reUse"]').setVisible(!isRootDevice);
-                this.down('[name="rebuild"]').setVisible(!isRootDevice);
+                if (isRootDevice) {
+                    this.down('[name="reUse"]').hide();
+                    this.down('[name="rebuild"]').hide();
+                }
                 this.down('[name="ebs.snapshot"]').setReadOnly(isRootDevice);
                 if (isRootDevice) {
                     this.down('[name="ebs.encrypted"]').hide();
                 }
             },
             isSettingsField: function(name) {
-                return name.indexOf('ebs') === 0 || name.indexOf('raid') === 0 || name.indexOf('csvol') === 0 || name.indexOf('cinder') === 0 || name.indexOf('gce_persistent') === 0;
+                return name.indexOf('ebs') === 0 || name.indexOf('raid') === 0 || name.indexOf('csvol') === 0 || name.indexOf('cinder') === 0 || name.indexOf('gce_persistent') === 0 || name.indexOf('ec2_ephemeral') === 0 || name.indexOf('gce_ephemeral') === 0;
             },
             updateSettings: function() {
                 var me = this,
@@ -588,6 +891,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                 Ext.Object.each(form.getFieldValues(), function(name, value){
                     if (me.isSettingsField(name)) {
                         settings[name] = value;
+                    } else if (name === 'mountPointNtfs') {
+                        form.getRecord().set('mountPoint', value);
                     }
                 });
                 form.getRecord().set('settings', settings);
@@ -601,7 +906,13 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     me.updateRecord();
                     var conf = me.up('#storage').down('#configuration');
                     if (!record.store) {
+                        var groupingFeature = conf.view.findFeature('grouping');
+                        groupingFeature.disable();//bugfix v5.0.1: updating group field fix
                         conf.store.add(record);
+                        groupingFeature.enable();
+                        if (groupingFeature.groupCache[record.get('category')]) {
+                            groupingFeature.expand(record.get('category'));
+                        }
                         conf.setSelectedRecord(record);
                         if (field && field.xtype === 'textfield') {//firefox resets cursor position, we have to fix this
                             field.selectText(100,100);
@@ -615,7 +926,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                 title: 'Storage configuration',
                 itemId: 'settings',
                 defaults: {
-                    labelWidth: 110,
+                    labelWidth: 116,
                     anchor: '100%',
                     maxWidth: 480
                 },
@@ -623,9 +934,10 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     xtype: 'combo',
                     name: 'type',
                     fieldLabel: 'Storage engine',
+                    hideInputOnReadOnly: true,
                     editable: false,
                     store: {
-                        fields: [ 'description', 'name' ],
+                        fields: [ 'description', 'name', 'isEphemeral', 'size' ],
                         proxy: 'object'
                     },
                     valueField: 'name',
@@ -634,8 +946,9 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     allowBlank: false,
                     emptyText: 'Please select storage engine',
                     listeners: {
-                        change: function(field, value) {
-                            var editor = this.up('#editor'),
+                        change: function(comp, value) {
+                            var editor = comp.up('#editor'),
+                                tab = editor.up('#storage'),
                                 ebs = editor.down('#ebs_settings'),
                                 ebsSnapshots = editor.down('[name="ebs.snapshot"]'),
                                 ebsEncrypted = editor.down('[name="ebs.encrypted"]'),
@@ -643,7 +956,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                                 csvol = editor.down('#csvol_settings'),
                                 cinder = editor.down('#cinder_settings'),
                                 gce = editor.down('#gce_settings'),
-                                platform = editor.up('#storage').currentRole.get('platform'),
+                                platform = tab.currentRole.get('platform'),
                                 field;
 
                             ebs.setVisible(value == 'ebs' || value == 'raid.ebs');
@@ -681,9 +994,116 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                                     field.setValue(field.store.first());
                                 }
                             }
+
+                            if (value === 'ec2_ephemeral') {
+                                editor.down('#ec2_ephemeral_settings').show().enable();
+                                editor.down('[name="reUse"]').hide().setValue(false);
+                                editor.down('[name="rebuild"]').hide();
+                                field = editor.down('#ec2_ephemeral_settings').down('[name="ec2_ephemeral.name"]');
+                                field.store.loadData(tab.getAvailableEc2EphemeralDevices());
+                                field.setValue(field.store.first());
+                                field.setReadOnly(field.store.getCount()<2);
+                            } else {
+                                editor.down('#ec2_ephemeral_settings').hide().disable();
+                            }
+
+                            if (value === 'gce_ephemeral') {
+                                editor.down('#gce_ephemeral_settings').show().enable();
+                                editor.down('[name="reUse"]').hide().setValue(false);
+                                editor.down('[name="rebuild"]').hide();
+                                field = editor.down('#gce_ephemeral_settings').down('[name="gce_ephemeral.name"]');
+                                field.store.loadData(tab.getAvailableGceEphemeralDevices());
+                                field.setValue(field.store.first());
+                                field.setReadOnly(field.store.getCount()<2);
+                                editor.down('#gce_ephemeral_settings').down('[name="gce_ephemeral.size"]').setValue(375);
+                            } else {
+                                editor.down('#gce_ephemeral_settings').hide().disable();
+                            }
+
+                            if (value !== 'ec2_ephemeral' && value !== 'gce_ephemeral') {
+                                editor.down('[name="reUse"]').show();
+                                editor.down('[name="rebuild"]').show();
+                            }
+
                         }
                     }
-                },{
+                }, {
+                    xtype: 'checkbox',
+                    name: 'reUse',
+                    boxLabel: 'Reuse this storage if the instance is replaced',
+                    plugins: [{
+                        ptype: 'fieldicons',
+                        align: 'right',
+                        icons: [{
+                            id: 'info',
+                            tooltip: 'If an instance is terminated, reattach this same volume to the replacement server'
+                        }]
+                    }]
+                }, {
+                    xtype: 'checkbox',
+                    name: 'rebuild',
+                    boxLabel: 'Recreate missing volumes',
+                    plugins: {
+                        ptype: 'fieldicons',
+                        align: 'right',
+                        icons: [{id: 'info', tooltip: 'If Scalr detects any missing volumes, regenerate this storage from scratch (based on configuration)'}]
+                    }
+                }]
+            }, {
+                xtype: 'fieldset',
+                itemId: 'mountCt',
+                title: 'Automatically mount device',
+                checkboxName: 'mount',
+                checkboxToggle: true,
+                collapsible: true,
+                collapsed: true,
+                listeners: {
+                    beforeexpand: function() {
+                        if (this.checkboxCmp.readOnly && !this.up('form').isRecordLoading) return false;
+                        this.onChange(true);
+                    },
+                    beforecollapse: function() {
+                        if (this.checkboxCmp.readOnly && !this.up('form').isRecordLoading) return false;
+                        this.onChange(false);
+                    }
+                },
+                onChange: function(checked) {
+                    var me = this,
+                        form = me.up('form'),
+                        fsField = me.down('[name="fs"]'),
+                        mountPointField = me.down('#mountPoint'),
+                        mountPointNtfsField = me.down('#mountPointNtfs'),
+                        labelField = me.down('[name="label"]'),
+                        isNtfs = fsField.getValue() === 'ntfs';
+                    if (checked) {
+                        if (fsField.fsIsAvailableForPlatformAndOsFamily) {
+                            fsField.enable();
+                        }
+                        if (isNtfs) {
+                            mountPointField.hide().disable();
+                            mountPointNtfsField.show().enable();
+                            if (!form.isRecordLoading && !mountPointNtfsField.getValue()) {
+                                mountPointNtfsField.setValue(mountPointNtfsField.store.first());
+                            }
+                            labelField.show().enable();
+                        } else {
+                            mountPointField.enable().show();
+                            mountPointNtfsField.hide().disable();
+                            labelField.hide().disable();
+                        }
+                    } else {
+                        mountPointField.disable();
+                        mountPointNtfsField.disable();
+                        fsField.disable();
+                        labelField.disable();
+                    }
+                },
+                defaults: {
+                    labelWidth: 116,
+                    anchor: '100%',
+                    maxWidth: 480
+                },
+                items: [{
                     xtype: 'combo',
                     name: 'fs',
                     fieldLabel: 'Filesystem',
@@ -696,10 +1116,11 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     displayField: 'description',
                     queryMode: 'local',
                     emptyText: 'Please select filesystem',
+                    hideInputOnReadOnly: true,
                     allowBlank: false,
                     listeners: {
                         beforeselect: function(comp, record) {
-                            var typeField = this.prev('[name="type"]'),
+                            var typeField = this.up('form').down('[name="type"]'),
                                 type = typeField.getValue();
                             if (!Scalr.flags['betaMode'] && Ext.isString(type) && type.indexOf('raid') !== -1 && record.get('fs') === 'xfs') {
                                 Scalr.message.InfoTip('Xfs is not available on raid.', this.inputEl, {anchor: 'bottom'});
@@ -707,56 +1128,62 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                             }
                         }
                     }
-                }, {
+                },{
                     xtype: 'fieldcontainer',
-                    itemId: 'mountCt',
+                    itemId: 'mountPointCt',
                     layout: {
                         type: 'hbox',
                         align: 'middle'
                     },
+                    defaults: {
+                        labelWidth: 116
+                    },
                     items: [{
-                        xtype: 'checkbox',
-                        boxLabel: 'Automatically mount device to',
-                        name: 'mount',
-                        inputValue: 1,
-                        handler: function (field, checked) {
-                            if (checked)
-                                this.next('[name="mountPoint"]').enable();
-                            else
-                                this.next('[name="mountPoint"]').setValue('').disable();
-                        }
-                    }, {
                         xtype: 'textfield',
-                        margin: '0 0 0 5',
                         disabled: true,
-                        validator: function(value) {
-                            var valid = true;
-                            if (this.prev().getValue() && Ext.isEmpty(value)) {
-                                valid = 'Field is required';
-                            }
-                            return valid;
-                        },
+                        allowBlank: false,
+                        fieldLabel: 'Mount point',
                         flex: 1,
-                        name: 'mountPoint'
+                        name: 'mountPoint',
+                        itemId: 'mountPoint',
+                        plugins: [{
+                            ptype: 'fieldicons',
+                            position: 'outer',
+                            icons: [{
+                                id: 'warning', hidden: true, tooltip: 'Re-mounting system mountpoint can cause unpredictable issues with an instance. Please consider mounting your device to another mountpoint.'
+                            }]
+                        }],
+                        listeners: {
+                            change: function(comp, value) {
+                                this.toggleIcon('warning', Ext.Array.contains(['/var', '/usr', '/bin', '/boot', '/etc', '/home', '/lib', '/opt', '/sys',  '/sbin'], value));
+                            }
+                        }
+                    },{
+                        xtype: 'combo',
+                        width: 180,
+                        name: 'mountPointNtfs',
+                        valueField: 'id',
+                        displayField: 'name',
+                        allowBlank: false,
+                        fieldLabel: 'Mount point',
+                        store: {
+                            fields: ['id', 'name'],
+                            proxy: 'object'
+                        },
+                        editable: false,
+                        disabled: true,
+                        hidden: true,
+                        itemId: 'mountPointNtfs'
                     }]
-                }, {
-                    xtype: 'checkbox',
-                    name: 'reUse',
-                    boxLabel: 'Reuse this storage if the instance is replaced',
-                    plugins: {
-                        ptype: 'fieldicons',
-                        align: 'right',
-                        icons: [{id: 'info', tooltip: 'If an instance is terminated, reattach this same volume to the replacement server'}]
-                    }
-                }, {
-                    xtype: 'checkbox',
-                    name: 'rebuild',
-                    boxLabel: 'Recreate missing volumes',
-                    plugins: {
-                        ptype: 'fieldicons',
-                        align: 'right',
-                        icons: [{id: 'info', tooltip: 'If Scalr detects any missing volumes, regenerate this storage from scratch (based on configuration)'}]
-                    }
+                },{
+                    xtype: 'textfield',
+                    fieldLabel: 'Disk label',
+                    disabled: true,
+                    hidden: true,
+                    validator: function(value) {
+                        return /\t/.test(value) ? 'Tab character is not allowed here' : true;
+                    },
+                    name: 'label'
                 }]
             }, {
                 xtype:'fieldset',
@@ -765,7 +1192,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                 hidden: true,
                 maskOnDisable: true,
                 defaults: {
-                    labelWidth: 110,
+                    labelWidth: 116,
                     anchor: '100%',
                     maxWidth: 480
                 },
@@ -854,7 +1281,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                 hidden: true,
                 maskOnDisable: true,
                 defaults: {
-                    labelWidth: 110,
+                    labelWidth: 116,
                     anchor: '100%',
                     maxWidth: 480
                 },
@@ -863,7 +1290,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     name: 'ebs.size',
                     fieldLabel: 'Size (GB)',
                     allowBlank: false,
-                    maxWidth: 170,
+                    maxWidth: 195,
                     vtype: 'ebssize',
                     getEbsType: function() {
                         return this.up('#editor').down('[name="ebs.type"]').getValue();
@@ -875,9 +1302,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                         var form = this.up('#editor'),
                             field = form.down('[name="ebs.snapshot"]');
                         if (! field.isDisabled() && field.getValue()) {
-                            var record = field.findRecord(field.valueField, field.getValue());
-                            if (record && (parseInt(value) < record.get('size')))
-                                return 'Value must be bigger than snapshot size: ' + record.get('size') + 'GB';
+                            if (field.snapshotData && (value*1 < field.snapshotData.size*1))
+                                return 'Value must be bigger or equal to snapshot size: ' + field.snapshotData.size + 'GB';
                         }
                         return true;
                     }
@@ -921,75 +1347,90 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                         maxWidth: 60
                     }]
                 }, {
-                    xtype: 'combo',
+                    xtype: 'textfield',
                     fieldLabel: 'Snapshot',
                     name: 'ebs.snapshot',
                     emptyText: 'Create an empty volume',
-                    valueField: 'snapshotId',
-                    displayField: 'snapshotId',
                     anchor: '100%',
-                    matchFieldWidth: true,
-
-                    queryCaching: false,
-                    minChars: 0,
-                    queryDelay: 10,
-                    autoSearch: false,
-                    ebsEncryptionMessage: 'Encrypted EBS storages are not supported by current instance type.',
-                    validator: function(value) {
-                        var record;
-                        record = this.findRecordByValue(value);
-                        if (record && record.get('encrypted') && !this.next('[name="ebs.encrypted"]').encryptionSupported) {
-                            return this.ebsEncryptionMessage;
+                    cls: 'x-form-filterfield',
+                    snapshotData: null,
+                    editable: false,
+                    fieldStyle: 'cursor: pointer',
+                    triggers: {
+                        reset: {
+                            hideOnReadOnly: false,
+                            hidden: true,
+                            extraCls: 'x-form-filterfield-trigger-cancel-button',
+                            handler: function() {
+                                this.reset();
+                                delete this.snapshotData;
+                            }
+                        },
+                        lookup: {
+                            extraCls: 'x-form-filterfield-trigger-search-button',
+                            handler: function() {
+                                this.showPopup();
+                            }
                         }
-                        return true;
-                    },
-                    store: {
-                        fields: [ 'snapshotId', 'createdDate', 'size', 'volumeId', 'description', 'encrypted' ],
-                        proxy: {
-                            type: 'cachedrequest',
-                            crscope: 'farmDesigner',
-                            url: '/platforms/ec2/xGetSnapshots',
-                            filterFields: ['snapshotId', 'volumeId', 'description'],//fliterFn
-                            prependData: [{}]//Create an empty volume
-                        }
-                    },
-                    listConfig: {
-                        cls: 'x-boundlist-alt',
-                        tpl:
-                            '<tpl for="."><div class="x-boundlist-item" style="height: auto; width: auto">' +
-                                '<tpl if="snapshotId">' +
-                                    '<div><span class="x-semibold">{snapshotId} ({size}GB)</span> {[values.encrypted?\'<i>encrypted</i>\':\'\']}</div>' +
-                                    '<div>created <span class="x-semibold">{createdDate}</span> on <span class="x-semibold">{volumeId}</span></div>' +
-                                    '<div style="font-style: italic; font-size: 11px;">{description}</div>' +
-                                '<tpl else><div style="line-height: 26px;">Create an empty volume</div></tpl>' +
-                            '</div></tpl>'
                     },
                     listeners: {
-                        blur: function(comp) {
-                            if (comp.lastQuery && !comp.disabled && !comp.readOnly && !comp.findRecordByValue(comp.getValue())) {
-                                comp.reset();
-                            }
+                        afterrender: function() {
+                            var me = this;
+                            this.inputEl.on('mouseup', function(){
+                                me.showPopup();
+                            });
                         },
-                        beforeselect: function(comp, record) {
-                            if (record.get('encrypted')) {
-                                if (!comp.next('[name="ebs.encrypted"]').encryptionSupported) {
-                                    Scalr.message.InfoTip(this.ebsEncryptionMessage, comp.inputEl, {anchor: 'bottom'});
-                                    return false;
-                                }
-                            }
+                        writeablechange: function(comp) {
+                            this.getTrigger('reset').setVisible(!!this.getValue());
                         },
-                        change: function(comp, value){
-                            var encryptionField, record, encrypted;
+                        change: function(comp, value) {
+                            var encryptionField;
                             encryptionField = comp.next('[name="ebs.encrypted"]');
+                            this.getTrigger('reset').setVisible(!!value);
+                            if (comp.snapshotData && comp.snapshotData.snapshotId != value) {
+                                delete this.snapshotData;
+                            }
                             if (encryptionField.encryptionSupported) {
-                                record = comp.findRecordByValue(value);
-                                if (record && record.get('snapshotId')) {
-                                    encryptionField.setValue(record.get('encrypted') ? 1 : 0);
+                                if (comp.snapshotData) {
+                                    encryptionField.setValue(comp.snapshotData.encrypted ? 1 : 0);
                                     encryptionField.setReadOnly(true);
                                 } else {
-                                    encryptionField.setReadOnly(false);
+                                    encryptionField.setReadOnly(!!value);
                                 }
                             }
+                        }
+                    },
+                    showPopup: function() {
+                        if (!this.readOnly && !this.disabled) {
+                            Scalr.Confirm({
+                                formWidth: 1050,
+                                formLayout: 'fit',
+                                alignTop: true,
+                                winConfig: {
+                                    height: '80%',
+                                    autoScroll: false,
+                                    layout: 'fit'
+                                },
+                                form: [{
+                                    xtype: 'snapshotselect',
+                                    title: 'Select Snapshot',
+                                    titleAlignCenter: true,
+                                    minHeight: 200,
+                                    encryptionSupported: this.next('[name="ebs.encrypted"]').encryptionSupported,
+                                    storeExtraParams: {
+                                        cloudLocation: this.up('#storage').currentRole.get('cloud_location')
+                                    }
+                                }],
+                                ok: 'Select',
+                                disabled: true,
+                                closeOnSuccess: true,
+                                scope: this,
+                                success: function (formValues, form) {
+                                    this.snapshotData = form.down('snapshotselect').selection.getData();
+                                    this.setValue(this.snapshotData.snapshotId);
+                                    return true;
+                                }
+                            });
                         }
                     }
                 }, {
@@ -1009,11 +1450,12 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                         writeablechange: function(comp, readOnly) {
                             this.toggleIcon('question', readOnly);
                             if (readOnly) {
-                                this.updateIconTooltip('question', this.encryptionSupported ? 'EBS encryption is set according to snapshot settings' : 'EBS encryption is not supported by selected instance type')
+                                this.updateIconTooltip('question', this.encryptionSupported ? 'EBS encryption is set according to snapshot settings' : 'EBS encryption is not supported by selected instance type');
                             }
+                            comp.next('[name="ebs.kms_key_id"]').setVisible(!readOnly && comp.getValue() == 1).reset();
                         },
                         change: function(comp, value) {
-                            comp.next('[name="ebs.kms_key_id"]').setVisible(value == 1).setValue('');
+                            comp.next('[name="ebs.kms_key_id"]').setVisible(value == 1).reset();
                         }
                     }
                 },{
@@ -1042,6 +1484,11 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     store: {
                         fields: [ 'id', 'alias', {name: 'displayField', convert: function(v, record){return record.data.alias ? record.data.alias.replace('alias/', ''):''}} ],
                         proxy: 'object',
+                        filters: [
+                            function(record) {
+                                return !Ext.Array.contains(['alias/aws/rds', 'alias/aws/redshift', 'alias/aws/s3'], record.get('alias'));
+                            }
+                        ],
                         sorters: {
                             property: 'alias',
                             transform: function(value){
@@ -1081,7 +1528,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     valueField: 'id',
                     displayField: 'fullname',
                     allowBlank: false,
-                    labelWidth: 110,
+                    labelWidth: 116,
                     listeners: {
                         change: function(field, value){
                             var record = field.findRecordByValue(value),
@@ -1108,7 +1555,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     items: [{
                         xtype: 'textfield',
                         fieldLabel: 'Size',
-                        labelWidth: 110,
+                        labelWidth: 116,
                         maxWidth: 160,
                         name: 'csvol.size',
                         allowBlank: false
@@ -1127,7 +1574,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     emptyText: 'Create an empty volume',
                     valueField: 'snapshotId',
                     displayField: 'snapshotId',
-                    labelWidth: 110,
+                    labelWidth: 116,
                     anchor: '100%',
                     maxWidth: 480,
                     matchFieldWidth: true,
@@ -1230,7 +1677,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     items: [{
                         xtype: 'textfield',
                         fieldLabel: 'Size',
-                        labelWidth: 110,
+                        labelWidth: 116,
                         name: 'gce_persistent.size',
                         width: 225,
                         allowBlank: false
@@ -1243,7 +1690,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     xtype: 'combo',
                     store: Scalr.constants.gceDiskTypes,
                     width: 225,
-                    labelWidth: 110,
+                    labelWidth: 116,
                     valueField: 'id',
                     displayField: 'name',
                     fieldLabel: 'Type',
@@ -1259,7 +1706,211 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                         ]
                     }
                 }]
+            }, {
+                xtype:'fieldset',
+                itemId: 'ec2_ephemeral_settings',
+                title: 'Volume settings',
+                hidden: true,
+                maskOnDisable: true,
+                items: [{
+                    xtype: 'combo',
+                    name: 'ec2_ephemeral.name',
+                    maxWidth: 300,
+                    labelWidth: 116,
+                    anchor: '100%',
+                    fieldLabel: 'Name',
+                    hideInputOnReadOnly: true,
+                    editable: false,
+                    store: {
+                        fields: [ 'description', 'name', 'size'],
+                        proxy: 'object'
+                    },
+                    valueField: 'name',
+                    displayField: 'description',
+                    queryMode: 'local',
+                    allowBlank: false,
+                    listeners: {
+                        change: function(comp, value) {
+                            var record = comp.findRecordByValue(value);
+                            if (record) {
+                                this.up('#ec2_ephemeral_settings').down('[name="ec2_ephemeral.size"]').setValue(record.get('size'));
+                            }
+                        }
+                    }
+                },{
+                    xtype: 'fieldcontainer',
+                    layout: {
+                        type: 'hbox',
+                        align: 'middle'
+                    },
+                    items: [{
+                        xtype: 'textfield',
+                        fieldLabel: 'Size',
+                        labelWidth: 116,
+                        name: 'ec2_ephemeral.size',
+                        readOnly: true,
+                        width: 200,
+                        allowBlank: false
+                    },{
+                        xtype: 'label',
+                        text: 'GB',
+                        margin: '0 0 0 6'
+                    }]
+                }]
+            }, {
+                xtype:'fieldset',
+                itemId: 'gce_ephemeral_settings',
+                title: 'Volume settings',
+                hidden: true,
+                maskOnDisable: true,
+                items: [{
+                    xtype: 'combo',
+                    name: 'gce_ephemeral.name',
+                    maxWidth: 300,
+                    labelWidth: 116,
+                    anchor: '100%',
+                    fieldLabel: 'Name',
+                    hideInputOnReadOnly: true,
+                    editable: false,
+                    store: {
+                        fields: [ 'description', 'name'],
+                        proxy: 'object'
+                    },
+                    valueField: 'name',
+                    displayField: 'description',
+                    queryMode: 'local',
+                    allowBlank: false
+                },{
+                    xtype: 'fieldcontainer',
+                    layout: {
+                        type: 'hbox',
+                        align: 'middle'
+                    },
+                    items: [{
+                        xtype: 'textfield',
+                        fieldLabel: 'Size',
+                        labelWidth: 116,
+                        name: 'gce_ephemeral.size',
+                        width: 200,
+                        readOnly: true,
+                        allowBlank: false
+                    },{
+                        xtype: 'label',
+                        text: 'GB',
+                        margin: '0 0 0 6'
+                    }]
+                }]
             }]
         }]
     }]
+});
+
+Ext.define('Scalr.ui.SnapshotSelect', {
+	extend: 'Ext.form.FieldSet',
+	alias: 'widget.snapshotselect',
+
+    cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
+    layout: 'fit',
+
+    initComponent: function() {
+        var me = this;
+        me.callParent(arguments);
+        var store = Ext.create('Scalr.ui.ContinuousStore', {
+            model: Ext.define(null, {
+                extend: 'Ext.data.Model',
+                idProperty: 'snapshotId',
+                fields: [ 'snapshotId', 'createdDate', 'volumeSize', 'volumeId', 'description', 'encrypted' ]
+            }),
+
+            proxy: {
+                type: 'ajax',
+                url: '/platforms/ec2/xGetSnapshots',
+                extraParams: {
+                    cloudLocation: me.storeExtraParams.cloudLocation
+                },
+                reader: {
+                    type: 'json',
+                    rootProperty: 'data',
+                    totalProperty: 'total',
+                    successProperty: 'success'
+                }
+            },
+            listeners: {
+                load: function(store) {
+                    store.proxy.extraParams.nextToken = store.proxy.reader.rawData.nextToken;
+                    if (store.proxy.extraParams.nextToken) {
+                        store.totalCount = store.getCount() + 1;
+                    }
+                }
+            }
+        });
+
+        me.add([{
+            xtype: 'grid',
+            store: store,
+            plugins: [{
+                ptype: 'continuousrenderer'
+            }],
+            viewConfig: {
+                emptyText: 'No snapshots found',
+                //deferEmptyText: false,
+                /*focusedItemCls: 'no-focus',
+                emptyText: 'No security groups found',
+                loadingText: 'Loading security groups ...',*/
+                listeners: {
+                    viewready: function() {
+                        store.applyProxyParams();
+                    }
+                }
+            },
+
+            columns: [
+                { header: "Snapshot ID", width: 140, dataIndex: 'snapshotId', sortable: false },
+                { header: "Created", width: 180, dataIndex: 'createdDate', sortable: false },
+                { header: "Volume ID", width: 120, dataIndex: 'volumeId', sortable: false },
+                { header: "Size (GB)", width: 80, dataIndex: 'volumeSize', sortable: false },
+                { header: "Comment", flex: 1, dataIndex: 'description', sortable: false, xtype: 'templatecolumn', tpl: '<tpl if="description"><span data-qtip="{description:htmlEncode}">{description}</span></tpl>' },
+                { header: "Encrypted", width: 90, dataIndex: 'encrypted', resizeable: false, sortable: false, align:'center', xtype: 'templatecolumn', tpl:
+                    '<tpl if="encrypted">'+
+                        '<div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div>'+
+                    '<tpl else>&mdash;</tpl>'}
+
+            ],
+
+            listeners: {
+                selectionchange: function(selModel, selections) {
+                    if (selections.length) {
+                        me.selection = selections[0];
+                    } else {
+                        delete me.selection;
+                    }
+
+                    me.updateButtonState(me.selection);
+                }
+            },
+
+            dockedItems: [{
+                xtype: 'toolbar',
+                dock: 'top',
+                ui: 'inline',
+                items: [{
+                    xtype: 'filterfield',
+                    store: store,
+                    listeners: {
+                        beforefilter: function() {
+                            delete this.getStore().proxy.extraParams.nextToken;
+                        }
+                    }
+                }]
+            }]
+        }]);
+    },
+    updateButtonState: function(selection) {
+        var btnOk = this.up('#box').down('#buttonOk');
+        if (selection && selection.get('encrypted') && !this.encryptionSupported) {
+            btnOk.setDisabled(true).setTooltip('Encrypted EBS storage is not supported by current instance type.');
+        } else {
+            btnOk.setDisabled(!selection).setTooltip('');
+        }
+    }
 });

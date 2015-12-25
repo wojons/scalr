@@ -18,11 +18,13 @@ use Scalr\DataType\AccessPermissionsInterface;
  */
 class Acl
 {
+    const NAME_MANAGE = 'manage';
 
     // Associative groups of the ACL resources.
     // This group is needed just to visually separate resources by belonging to group.
-    const GROUP_ADMINISTRATION = 'Account management';
-    const GROUP_ENVADMINISTRATION = 'Environment management';
+    const GROUP_ACCOUNT = 'Account management';
+    const GROUP_ENVIRONMENT = 'Environment management';
+    const GROUP_CLOUD_CREDENTIALS = 'Cloud credentials management';
     const GROUP_GENERAL = 'General';
     const GROUP_SECURITY = 'Security';
     const GROUP_ROLES_IMAGES = 'Roles and Images';
@@ -48,8 +50,11 @@ class Acl
     const RESOURCE_TEAM_FARMS = 0x108;
     const RESOURCE_OWN_FARMS = 0x109;
     const RESOURCE_FARMS_STATISTICS = 0x103;
-    const RESOURCE_FARMS_ROLES = 0x104;
-    const RESOURCE_FARMS_IMAGES = 0x107;
+
+    const RESOURCE_ROLES_ENVIRONMENT = 0x104;
+    const RESOURCE_IMAGES_ENVIRONMENT = 0x107;
+    const RESOURCE_ROLES_ACCOUNT = 0x1B0;
+    const RESOURCE_IMAGES_ACCOUNT = 0x1C0;
 
     const RESOURCE_CLOUDSTACK_VOLUMES = 0x110;
     const RESOURCE_CLOUDSTACK_SNAPSHOTS = 0x111;
@@ -57,8 +62,6 @@ class Acl
 
     const RESOURCE_OPENSTACK_VOLUMES = 0x210;
     const RESOURCE_OPENSTACK_SNAPSHOTS = 0x211;
-    const RESOURCE_OPENSTACK_PUBLIC_IPS = 0x212;
-    const RESOURCE_OPENSTACK_ELB = 0x213;
 
     const RESOURCE_GCE_STATIC_IPS = 0x230;
     const RESOURCE_GCE_PERSISTENT_DISKS = 0x231;
@@ -84,18 +87,18 @@ class Acl
     const RESOURCE_LOGS_EVENT_LOGS = 0x143;
 
     const RESOURCE_SERVICES_APACHE = 0x150;
-    const RESOURCE_SERVICES_ENVADMINISTRATION_CHEF = 0x151;
+    const RESOURCE_SERVICES_CHEF_ENVIRONMENT = 0x151;
     const RESOURCE_SERVICES_SSL = 0x152;
     const RESOURCE_SERVICES_RABBITMQ = 0x153;
-    const RESOURCE_SERVICES_ADMINISTRATION_CHEF = 0x154;
+    const RESOURCE_SERVICES_CHEF_ACCOUNT = 0x154;
 
-    const RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES = 0x160;
+    const RESOURCE_GLOBAL_VARIABLES_ENVIRONMENT = 0x160;
     const RESOURCE_GENERAL_CUSTOM_SCALING_METRICS = 0x163;
     const RESOURCE_GENERAL_CUSTOM_EVENTS = 0x164;
     const RESOURCE_GENERAL_SCHEDULERTASKS = 0x165;
-    const RESOURCE_ENVADMINISTRATION_WEBHOOKS = 0x166;
-    const RESOURCE_ADMINISTRATION_GLOBAL_VARIABLES = 0x167;
-    const RESOURCE_ADMINISTRATION_WEBHOOKS = 0x168;
+    const RESOURCE_WEBHOOKS_ENVIRONMENT = 0x166;
+    const RESOURCE_GLOBAL_VARIABLES_ACCOUNT = 0x167;
+    const RESOURCE_WEBHOOKS_ACCOUNT = 0x168;
 
     const RESOURCE_DB_BACKUPS = 0x170;
     const RESOURCE_DB_DATABASE_STATUS = 0x171;
@@ -107,16 +110,21 @@ class Acl
 
     const RESOURCE_DNS_ZONES = 0x190;
 
-    const RESOURCE_ENVADMINISTRATION_GOVERNANCE = 0x161;
-    const RESOURCE_ADMINISTRATION_BILLING = 0x162;
-    const RESOURCE_ENVADMINISTRATION_ENV_CLOUDS = 0x202;
+    const RESOURCE_GOVERNANCE_ENVIRONMENT = 0x161;
+    const RESOURCE_BILLING_ACCOUNT = 0x162;
+    const RESOURCE_ENV_CLOUDS_ENVIRONMENT = 0x202;
 
-    const RESOURCE_ANALYTICS_PROJECTS = 0x240;
-    const RESOURCE_ADMINISTRATION_ANALYTICS = 0x241;
-    const RESOURCE_ENVADMINISTRATION_ANALYTICS = 0x242;
+    const RESOURCE_CLOUD_CREDENTIALS_ACCOUNT = 0x221;
+    const RESOURCE_CLOUD_CREDENTIALS_ENVIRONMENT = 0x222;
 
-    const RESOURCE_ADMINISTRATION_ORCHESTRATION = 0x250;
-    const RESOURCE_ADMINISTRATION_SCRIPTS = 0x106;
+    const RESOURCE_ANALYTICS_ACCOUNT = 0x241;
+    const RESOURCE_ANALYTICS_ENVIRONMENT = 0x242;
+
+    const RESOURCE_ORCHESTRATION_ACCOUNT = 0x250;
+    const RESOURCE_SCRIPTS_ACCOUNT = 0x106;
+    const RESOURCE_SCRIPTS_ENVIRONMENT = 0x105;
+
+    const RESOURCE_ORPHANED_SERVERS = 0x1A0;
 
     // ... add more resource_id here
     // const RESOURCE_FOO = 0x101;
@@ -125,39 +133,90 @@ class Acl
     // Values need to be defined in the lowercase less than 64 characters.
     // These values have to be synchronized with mysql data
     // (acl_role_resource_permissions, acl_account_role_resource_permissions tables)
-    const PERM_FARMS_MANAGE = 'manage';
+    const PERM_GCE_STATIC_IPS_MANAGE = self::NAME_MANAGE;
+    const PERM_GCE_PERSISTENT_DISKS_MANAGE = self::NAME_MANAGE;
+    const PERM_GCE_SNAPSHOTS_MANAGE = self::NAME_MANAGE;
+
+    const PERM_CLOUDSTACK_VOLUMES_MANAGE = self::NAME_MANAGE;
+    const PERM_CLOUDSTACK_SNAPSHOTS_MANAGE = self::NAME_MANAGE;
+    const PERM_CLOUDSTACK_PUBLIC_IPS_MANAGE = self::NAME_MANAGE;
+
+    const PERM_OPENSTACK_VOLUMES_MANAGE = self::NAME_MANAGE;
+    const PERM_OPENSTACK_SNAPSHOTS_MANAGE = self::NAME_MANAGE;
+
+    const PERM_AWS_S3_MANAGE = self::NAME_MANAGE;
+    const PERM_AWS_ELASTIC_IPS_MANAGE = self::NAME_MANAGE;
+    const PERM_AWS_ELB_MANAGE = self::NAME_MANAGE;
+    const PERM_AWS_IAM_MANAGE = self::NAME_MANAGE;
+    const PERM_AWS_RDS_MANAGE = self::NAME_MANAGE;
+    const PERM_AWS_SNAPSHOTS_MANAGE = self::NAME_MANAGE;
+    const PERM_AWS_VOLUMES_MANAGE = self::NAME_MANAGE;
+    const PERM_AWS_ROUTE53_MANAGE = self::NAME_MANAGE;
+
+    const PERM_SECURITY_SECURITY_GROUPS_MANAGE = self::NAME_MANAGE;
+    const PERM_SECURITY_SSH_KEYS_MANAGE = self::NAME_MANAGE;
+
+    const PERM_SERVICES_APACHE_MANAGE = self::NAME_MANAGE;
+    const PERM_SERVICES_CHEF_ENVIRONMENT_MANAGE = self::NAME_MANAGE;
+    const PERM_SERVICES_CHEF_ACCOUNT_MANAGE = self::NAME_MANAGE;
+    const PERM_SERVICES_SSL_MANAGE = self::NAME_MANAGE;
+
+    const PERM_GENERAL_CUSTOM_EVENTS_MANAGE = self::NAME_MANAGE;
+    const PERM_GENERAL_CUSTOM_SCALING_METRICS_MANAGE = self::NAME_MANAGE;
+    const PERM_GENERAL_SCHEDULERTASKS_MANAGE = self::NAME_MANAGE;
+
+    const PERM_ORCHESTRATION_ACCOUNT_MANAGE = self::NAME_MANAGE;
+    const PERM_GLOBAL_VARIABLES_ACCOUNT_MANAGE = self::NAME_MANAGE;
+    const PERM_WEBHOOKS_ACCOUNT_MANAGE = self::NAME_MANAGE;
+
+    const PERM_GLOBAL_VARIABLES_ENVIRONMENT_MANAGE = self::NAME_MANAGE;
+    const PERM_WEBHOOKS_ENVIRONMENT_MANAGE = self::NAME_MANAGE;
+
+    const PERM_DNS_ZONES_MANAGE = self::NAME_MANAGE;
+
+    const PERM_FARMS_MANAGE = self::NAME_MANAGE;
     const PERM_FARMS_CLONE = 'clone';
     const PERM_FARMS_LAUNCH_TERMINATE = 'launch-terminate';
     const PERM_FARMS_CHANGE_OWNERSHIP = 'change-ownership';
     const PERM_FARMS_SERVERS = 'servers';
     const PERM_FARMS_STATISTICS = 'statistics';
 
-    const PERM_FARMS_ROLES_MANAGE = 'manage';
-    const PERM_FARMS_ROLES_CLONE = 'clone';
-    const PERM_FARMS_ROLES_BUNDLETASKS = 'bundletasks';
-    const PERM_FARMS_ROLES_CREATE = 'create';
+    const PERM_ROLES_ENVIRONMENT_MANAGE = self::NAME_MANAGE;
+    const PERM_ROLES_ENVIRONMENT_CLONE = 'clone';
 
-    const PERM_FARMS_IMAGES_MANAGE = 'manage';
-    const PERM_FARMS_IMAGES_CREATE = 'create';
+    const PERM_ROLES_ACCOUNT_MANAGE = self::NAME_MANAGE;
+    const PERM_ROLES_ACCOUNT_CLONE = 'clone';
 
-    const PERM_ADMINISTRATION_SCRIPTS_MANAGE = 'manage';
-    const PERM_ADMINISTRATION_SCRIPTS_EXECUTE = 'execute';
-    const PERM_ADMINISTRATION_SCRIPTS_FORK = 'fork';
+    const PERM_IMAGES_ENVIRONMENT_MANAGE = self::NAME_MANAGE;
+    const PERM_IMAGES_ENVIRONMENT_BUILD = 'build';
+    const PERM_IMAGES_ENVIRONMENT_IMPORT = 'import';
+    const PERM_IMAGES_ENVIRONMENT_BUNDLETASKS = 'bundletasks';
+
+    const PERM_IMAGES_ACCOUNT_MANAGE = self::NAME_MANAGE;
+
+    const PERM_SCRIPTS_ACCOUNT_MANAGE = self::NAME_MANAGE;
+    const PERM_SCRIPTS_ACCOUNT_FORK = 'fork';
+
+    const PERM_SCRIPTS_ENVIRONMENT_MANAGE = self::NAME_MANAGE;
+    const PERM_SCRIPTS_ENVIRONMENT_EXECUTE = 'execute';
+    const PERM_SCRIPTS_ENVIRONMENT_FORK = 'fork';
 
     const PERM_DB_BACKUPS_REMOVE = 'remove';
 
     const PERM_DB_DATABASE_STATUS_PMA = 'phpmyadmin';
+    const PERM_DB_DATABASE_STATUS_MANAGE = self::NAME_MANAGE;
 
     const PERM_GENERAL_CUSTOM_EVENTS_FIRE = 'fire';
 
-    const PERM_ADMINISTRATION_ANALYTICS_MANAGE_PROJECTS = 'manage-projects';
+    const PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS = 'manage-projects';
 
-    const PERM_ADMINISTRATION_ANALYTICS_ALLOCATE_BUDGET = 'allocate-budget';
+    const PERM_ANALYTICS_ACCOUNT_ALLOCATE_BUDGET = 'allocate-budget';
 
     // ... add more permission_id for existing resource here
     // const PERM_FOORESOURCE_FOOPERMISSIONNAME
 
     const ROLE_ID_FULL_ACCESS = 10;
+    const ROLE_ID_READ_ONLY_ACCESS = 5;
     const ROLE_ID_EVERYTHING_FORBIDDEN = 1;
 
     /**
@@ -263,7 +322,7 @@ class Acl
 
             if (!\Scalr::config('scalr.billing.enabled')) {
                 //If Billing is disabled in the config we should not use it in the ACL
-                self::$disabledResources[] = self::RESOURCE_ADMINISTRATION_BILLING;
+                self::$disabledResources[] = self::RESOURCE_BILLING_ACCOUNT;
             }
 
             if (array_intersect(PlatformFactory::getCloudstackBasedPlatforms(), $allowedClouds) === array()) {
@@ -277,7 +336,6 @@ class Acl
                 //If any openstack base cloud is not allowed we should not use these permissions
                 self::$disabledResources[] = self::RESOURCE_OPENSTACK_VOLUMES;
                 self::$disabledResources[] = self::RESOURCE_OPENSTACK_SNAPSHOTS;
-                self::$disabledResources[] = self::RESOURCE_OPENSTACK_PUBLIC_IPS;
             }
         }
 
@@ -337,13 +395,16 @@ class Acl
     public function getRolesComputed()
     {
         $groups = self::getGroups();
+
         $baseRoles = array();
+
         foreach ($this->getRoles() as $role) {
             $baseRole = array(
                 'id'        => $role->getRoleId(),
                 'name'      => $role->getName(),
                 'resources' => null
             );
+
             foreach ($role->getIteratorResources() as $resource) {
                 $r = array(
                     'id'          => $resource->getResourceId(),
@@ -353,9 +414,11 @@ class Acl
                     'groupOrder'  => (isset($groups[$resource->getGroup()]) ? $groups[$resource->getGroup()] : 0),
                     'permissions' => null
                 );
+
                 foreach ($resource->getPermissions() as $permissionId => $permissionDescription) {
                     $r['permissions'][$permissionId] = $role->isAllowed($resource->getResourceId(), $permissionId) ? 1 : 0;
                 }
+
                 $baseRole['resources'][] = $r;
             }
             $baseRoles[] = $baseRole;
@@ -409,6 +472,7 @@ class Acl
                 'automatic'  => $role->isAutomatic(),
                 'resources'  => null
             );
+
             foreach ($role->getIteratorResources() as $resource) {
                 $accountRoleResource = array(
                     'id'          => $resource->getResourceId(),
@@ -418,9 +482,16 @@ class Acl
                     'groupOrder'  => (isset($groups[$resource->getGroup()]) ? $groups[$resource->getGroup()] : 0),
                     'permissions' => null
                 );
+
+                if ($resource->getMode() !== null) {
+                    $r = $role->getResource($resource->getResourceId());
+                    $accountRoleResource['mode'] = $r ? $r->getMode() : null;
+                }
+
                 foreach ($resource->getPermissions() as $permissionId => $permissionDescription) {
                     $accountRoleResource['permissions'][$permissionId] = $role->isAllowed($resource->getResourceId(), $permissionId) ? 1 : 0;
                 }
+
                 $accountRole['resources'][] = $accountRoleResource;
             }
         }
@@ -446,41 +517,61 @@ class Acl
      */
     protected function loadRolePermissions(Role\RoleObject $role)
     {
-        $sAcc = $role instanceof Role\AccountRoleObject ? 'account_' : '';
+        if ($role instanceof Role\AccountRoleObject) {
+            $sAcc = 'account_';
+            $rmJoin = "LEFT JOIN acl_account_role_resource_modes rm ON rr.`account_role_id` = rm.account_role_id "
+                    . " AND rr.`resource_id` = rm.`resource_id`";
+        } else {
+            $sAcc = '';
+            $rmJoin = '';
+        }
+
+        $disabledResources = Acl::getDisabledResources();
+        $disabledSql = !empty($disabledResources) ?
+                       "AND rr.resource_id NOT IN (" . implode(',', array_fill(0, count($disabledResources), '?')) . ")" :
+                       "";
 
         $res = $this->db->Execute("
             SELECT
-                rr.`" . $sAcc . "role_id` as `role_id`,
+                rr.`" . $sAcc . "role_id` AS `role_id`,
                 rr.`resource_id`, rr.`granted`, rp.`perm_id`,
-                rp.`granted` AS `perm_granted`
+                rp.`granted` AS `perm_granted`,
+                " . (!empty($rmJoin) ? "rm.`mode`" : "NULL AS `mode`") . "
             FROM `acl_" . $sAcc . "role_resources` rr
+            " . $rmJoin . "
             LEFT JOIN `acl_" . $sAcc . "role_resource_permissions` rp
                 ON rp.`" . $sAcc . "role_id` = rr.`" . $sAcc . "role_id`
                 AND rp.`resource_id` = rr.`resource_id`
             WHERE rr.`" . $sAcc . "role_id` = ?
-        ", array($role->getRoleId()));
+            {$disabledSql}
+        ", array_merge((array) $role->getRoleId(), $disabledResources));
 
         if ($res) {
             $resources = $role->getResources();
+
             while ($rec = $res->FetchRow()) {
                 if (!isset($resources[$rec['resource_id']])) {
                     //Adds resource to role object
-                    $resource = new Role\RoleResourceObject($rec['role_id'], $rec['resource_id'], $rec['granted']);
+                    $resource = new Role\RoleResourceObject($rec['role_id'], $rec['resource_id'], $rec['granted'], $rec['mode']);
                     $role->appendResource($resource);
                 } else {
                     $resource = $resources[$rec['resource_id']];
                 }
+
                 if ($rec['perm_id'] !== null) {
                     $permission = new Role\RoleResourcePermissionObject(
                         $rec['role_id'], $rec['resource_id'], $rec['perm_id'], $rec['perm_granted']
                     );
                     //We should append permission only if it's been declared in the definition.
                     $resourceDefinition = Resource\Definition::get($resource->getResourceId());
+
                     if ($resourceDefinition->hasPermission($permission->getPermissionId())) {
                         $resource->appendPermission($permission);
                     }
+
                     unset($permission);
                 }
+
                 unset($resource);
             }
         }
@@ -491,7 +582,7 @@ class Acl
      *
      * @param   string    $accountRoleId  The ID of the account role
      * @param   int       $accountId      optional Restricts result by identifier of the account
-     * @return  Scalr\Acl\Role\AccountRoleObject    Returns AccountRoleObject for the specified ID of account role.
+     * @return  \Scalr\Acl\Role\AccountRoleObject    Returns AccountRoleObject for the specified ID of account role.
      *                                    It returns null if object does not exist.
      * @throws  Exception\AclException
      */
@@ -609,7 +700,7 @@ class Acl
         ));
 
         //Disables administration section in Full access ACL
-        foreach ([self::RESOURCE_ADMINISTRATION_BILLING] as $resourceId) {
+        foreach ([self::RESOURCE_BILLING_ACCOUNT] as $resourceId) {
             $this->db->Execute("
                 INSERT IGNORE `acl_account_role_resources` (account_role_id, resource_id, granted)
                 VALUES (?, ?, 0)
@@ -711,6 +802,7 @@ class Acl
                 }
 
                 $permissions = $resource->getPermissions();
+
                 foreach ($resourceDefinition->getPermissions() as $permissionId => $description) {
                     // Absence of the record is considered as forbidden
                     if (!$allowed && !isset($permissions[$permissionId])) continue;
@@ -734,6 +826,7 @@ class Acl
                         );
                     }
                 }
+
                 unset($permissions);
             }
 
@@ -779,11 +872,13 @@ class Acl
                     ", array(
                         $accountRoleId
                     ));
-                    $cnt = $this->db->GetOne('SELECT FOUND_ROWS()');
+
                     while ($rec = $r->FetchRow()) {
                         $users .= $rec['name'] . " ,";
                     }
                     $users = rtrim($users, " ,");
+
+                    $cnt = $this->db->GetOne('SELECT FOUND_ROWS()');
 
                     if ($cnt == 0) {
                         $cntTeams = 0;
@@ -796,11 +891,13 @@ class Acl
                         ", array(
                             $accountRoleId, $accountId
                         ));
-                        $cntTeams = $this->db->GetOne('SELECT FOUND_ROWS()');
+
                         while ($rec = $r->FetchRow()) {
                             $teams .= $rec['name'] . " ,";
                         }
                         $teams = rtrim($teams, " ,");
+
+                        $cntTeams = $this->db->GetOne('SELECT FOUND_ROWS()');
                     }
                 } catch (\Exception $sub) {
                 }
@@ -1330,7 +1427,8 @@ class Acl
      *                                            'granted' => [0|1], #is granted
      *                                            'permissions' => array(
      *                                                permissionId => [0|1], #is granted
-     *                                            )
+     *                                            ),
+     *                                            mode => valueId | null, # identifier of the Resource Mode value
      *                                    );
      * @param   string     $accountRoleId optional The ID of the ACL role of account level. NULL if the new role.
      * @return  string     Returns the ID of the created or modified account role on success
@@ -1338,7 +1436,12 @@ class Acl
      */
     public function setAccountRole($accountId, $baseRoleId, $name, $color, $resources, $accountRoleId = null)
     {
-         if (empty($accountRoleId)) {
+        $id = $this->db->getOne('SELECT account_role_id FROM `acl_account_roles` WHERE name = ? AND account_id = ? LIMIT 1', [$name, $accountId]);
+        if ($id && $accountRoleId != $id) {
+            throw new \Exception('Account role with such name already exists');
+        }
+
+        if (empty($accountRoleId)) {
             //Creates new account role
             $accountRoleId = self::generateAccountRoleId();
             $new = true;
@@ -1374,24 +1477,27 @@ class Acl
         }
 
         $baseRole = $accountRole->getBaseRole();
+
         foreach ($accountRole->getIteratorResources() as $resourceDefinition) {
             /* @var $resourceDefinition \Scalr\Acl\Resource\ResourceObject */
             $resourceId = $resourceDefinition->getResourceId();
             $accountResource = $accountRole->getResource($resourceId);
             $toUpdate = null;
-            $toUpdatePerm = array();
+            $toUpdatePerm = [];
+
             foreach ($resourceDefinition->getPermissions() as $permissionId => $permissionName) {
                 $granted = isset($resources[$resourceId]['permissions'][$permissionId]) ?
                     $resources[$resourceId]['permissions'][$permissionId] == 1 : false;
+
                 if ($granted != $baseRole->isAllowed($resourceId, $permissionId)) {
                     //Unique permission is overridden on account level and needs to be created
-                    $toUpdatePerm[$permissionId] = array(
+                    $toUpdatePerm[$permissionId] = [
                         $accountRoleId,
                         $resourceId,
                         $permissionId,
                         $granted ? 1 : 0,
                         $granted ? 1 : 0
-                    );
+                    ];
                 } else if ($accountResource !== null) {
                     //Unique permission needs to be removed
                     $this->db->Execute("
@@ -1406,7 +1512,9 @@ class Acl
                     ));
                 }
             }
+
             $granted = isset($resources[$resourceId]['granted']) ? $resources[$resourceId]['granted'] == 1 : false;
+
             if ($granted != $baseRole->isAllowed($resourceId)) {
                 //Resource record is overridden on account level and needs to be created
                 $toUpdate = array(
@@ -1415,7 +1523,7 @@ class Acl
                     $granted ? 1 : 0,
                     $granted ? 1 : 0,
                 );
-            } elseif (!empty($toUpdatePerm) && $granted) {
+            } elseif ($resourceDefinition->getMode() !== null || !empty($toUpdatePerm) && $granted) {
                 //Referenced resource must be created as foreign key requires.
                 $toUpdate = array(
                     $accountRoleId,
@@ -1445,6 +1553,29 @@ class Acl
                         `granted` = ?
                 ", $toUpdate);
             }
+
+            if ($resourceDefinition->getMode() !== null) {
+                //Saves ACL Resource Mode only if it's defined in the Resouce Definition
+                $modeValue = !empty($resources[$resourceId]['mode']) &&
+                in_array(intval($resources[$resourceId]['mode']), array_keys($resourceDefinition->getMode()->getMapping())) ?
+                intval($resources[$resourceId]['mode']) : $resourceDefinition->getMode()->getDefault();
+
+                $this->db->Execute("
+                    INSERT `acl_account_role_resource_modes`
+                    SET `account_role_id` = ?,
+                        `resource_id` = ?,
+                        `mode` = ?
+                    ON DUPLICATE KEY UPDATE
+                        `mode` = ?
+                ", [
+                    $accountRoleId,
+                    $resourceId,
+                    $modeValue,
+
+                    $modeValue,
+                ]);
+            }
+
             if ($toUpdatePerm) {
                 foreach ($toUpdatePerm as $opt) {
                     $this->db->Execute("

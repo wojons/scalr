@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Model\Entity;
+
 class DBDNSZone
 {
     public
@@ -139,7 +141,7 @@ class DBDNSZone
         $zone->status = DNS_ZONE_STATUS::PENDING_CREATE;
 
         $nameservers = Scalr::config('scalr.dns.global.nameservers');
-        
+
         $zone->soaOwner = $soaOwner;
         $zone->soaTtl = 14400;
         $zone->soaParent = $nameservers[0];
@@ -172,35 +174,33 @@ class DBDNSZone
         $zone = new Scalr_Net_Dns_Zone();
         $zone->addRecord($soaRecord);
 
-        if (!$config_contents)
-        {
-            $rCache = array();
-            foreach ($this->records as $record)
-            {
-                if (!$rCache[$record['type']])
-                {
+        if (!$config_contents) {
+            $rCache = [];
+            foreach ($this->records as $record) {
+                if (empty($rCache[$record['type']])) {
                     $r = new ReflectionClass("Scalr_Net_Dns_{$record['type']}Record");
 
-                    $params = array();
-                    foreach ($r->getConstructor()->getParameters() as $p)
+                    $params = [];
+                    foreach ($r->getConstructor()->getParameters() as $p) {
                         $params[] = $p->name;
+                    }
 
                     $rCache[$record['type']] = array(
-                        'reflect'	=> $r,
-                        'params'	=> $params
+                        'reflect' => $r,
+                        'params'  => $params
                     );
                 }
 
-                $args = array();
-                foreach ($rCache[$record['type']]['params'] as $p)
-                    $args[$p] = $record[$p];
+                $args = [];
+                foreach ($rCache[$record['type']]['params'] as $p) {
+                    $args[$p] = isset($record[$p]) ? $record[$p] : null;
+                }
 
-                try
-                {
+                try {
                     $r = $rCache[$record['type']]['reflect']->newInstanceArgs($args);
                     $zone->addRecord($r);
+                } catch(Exception $e){
                 }
-                catch(Exception $e){}
             }
         }
 
@@ -304,7 +304,7 @@ class DBDNSZone
             return $records;
 
         $DBFarmRole = $DBServer->GetFarmRoleObject();
-        if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_EXCLUDE_FROM_DNS))
+        if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::EXCLUDE_FROM_DNS))
             return $records;
 
         if ($DBFarmRole->ID == $this->farmRoleId) {
@@ -321,13 +321,13 @@ class DBDNSZone
             }
         }
 
-        if (!$DBFarmRole->GetSetting(DBFarmRole::SETTING_DNS_CREATE_RECORDS))
+        if (!$DBFarmRole->GetSetting(Entity\FarmRoleSetting::DNS_CREATE_RECORDS))
             return $records;
 
-        $int_record_alias = $DBFarmRole->GetSetting(DBFarmRole::SETTING_DNS_INT_RECORD_ALIAS);
+        $int_record_alias = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::DNS_INT_RECORD_ALIAS);
         $int_record = "int-{$DBFarmRole->GetRoleObject()->name}";
 
-        $ext_record_alias = $DBFarmRole->GetSetting(DBFarmRole::SETTING_DNS_EXT_RECORD_ALIAS);
+        $ext_record_alias = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::DNS_EXT_RECORD_ALIAS);
         $ext_record = "ext-{$DBFarmRole->GetRoleObject()->name}";
 
 
@@ -561,8 +561,9 @@ class DBDNSZone
         $this->records = $records;
         $this->updateRecords = true;
 
-        if ($this->status == DNS_ZONE_STATUS::ACTIVE)
+        if ($this->status == DNS_ZONE_STATUS::ACTIVE) {
             $this->status = DNS_ZONE_STATUS::PENDING_UPDATE;
+        }
     }
 
     public function remove()

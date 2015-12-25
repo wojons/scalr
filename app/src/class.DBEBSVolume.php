@@ -71,7 +71,7 @@ class DBEBSVolume
     {
         $this->volumeId = $volumeId;
         $this->db = \Scalr::getDb();
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
     }
 
     /**

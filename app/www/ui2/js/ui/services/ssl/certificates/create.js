@@ -52,6 +52,27 @@ Ext.define('Scalr.ui.CertificateForm', {
         return me;
     },
 
+    setReadOnly: function (readOnly) {
+        var me = this;
+
+        me.getForm().getFields().each(function (field) {
+            if (field.xtype !== 'filefield') {
+                field.setReadOnly(readOnly);
+            } else {
+                field.button.setDisabled(readOnly);
+            }
+        });
+
+        me.down('#save').setDisabled(readOnly);
+        me.down('#delete').setDisabled(readOnly);
+
+        if (readOnly) {
+            me.disableButtons(null, null, null);
+        }
+
+        return me;
+    },
+
     disableButtons: function (certificate, chain, key) {
         var me = this;
 
@@ -215,6 +236,7 @@ Ext.define('Scalr.ui.CertificateForm', {
             xtype: 'container',
             dock: 'bottom',
             cls: 'x-docked-buttons',
+            hidden: !Scalr.isAllowed('SERVICES_SSL', 'manage'),
             layout: {
                 type: 'hbox',
                 pack: 'center'

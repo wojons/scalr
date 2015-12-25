@@ -29,7 +29,7 @@ class Scripts extends ApiController
      */
     public function describeAction()
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_SCRIPTS);
+        $this->checkPermissions(Acl::RESOURCE_SCRIPTS_ENVIRONMENT);
 
         return $this->adapter('script')->getDescribeResult($this->getDefaultCriteria());
     }
@@ -41,13 +41,7 @@ class Scripts extends ApiController
      */
     private function getDefaultCriteria()
     {
-        $environment = $this->getEnvironment();
-
-        return [[ '$or' => [
-            ['envId'     => $environment->id],
-            ['accountId' => $environment->accountId],
-            [ '$and'     => [['envId' => null], ['accountId' => null]]]
-        ]]];
+        return $this->getScopeCriteria();
     }
 
     /**
@@ -89,7 +83,7 @@ class Scripts extends ApiController
      */
     public function fetchAction($scriptId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_SCRIPTS);
+        $this->checkPermissions(Acl::RESOURCE_SCRIPTS_ENVIRONMENT);
 
         return $this->result($this->adapter('script')->toData($this->getScript($scriptId)));
     }
@@ -99,7 +93,7 @@ class Scripts extends ApiController
      */
     public function createAction()
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_SCRIPTS, Acl::PERM_ADMINISTRATION_SCRIPTS_MANAGE);
+        $this->checkPermissions(Acl::RESOURCE_SCRIPTS_ENVIRONMENT, Acl::PERM_SCRIPTS_ENVIRONMENT_MANAGE);
 
         $object = $this->request->getJsonBody();
 
@@ -140,7 +134,7 @@ class Scripts extends ApiController
      */
     public function modifyAction($scriptId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_SCRIPTS, Acl::PERM_ADMINISTRATION_SCRIPTS_MANAGE);
+        $this->checkPermissions(Acl::RESOURCE_SCRIPTS_ENVIRONMENT, Acl::PERM_SCRIPTS_ENVIRONMENT_MANAGE);
 
         $object = $this->request->getJsonBody();
 
@@ -176,9 +170,8 @@ class Scripts extends ApiController
      */
     public function deleteAction($scriptId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_SCRIPTS, Acl::PERM_ADMINISTRATION_SCRIPTS_MANAGE);
+        $this->checkPermissions(Acl::RESOURCE_SCRIPTS_ENVIRONMENT, Acl::PERM_SCRIPTS_ENVIRONMENT_MANAGE);
 
-        //We only allow to delete images that are from the environment scope
         $script = $this->getScript($scriptId, true);
 
         $script->delete();

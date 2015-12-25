@@ -13,7 +13,7 @@ use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 class EnvironmentTest extends TestCase
 {
 
-    const KEY1 = Ec2PlatformModule::ACCESS_KEY;
+    const KEY1 = 'ec2.access_key';
 
     /**
      * Gets storage mock

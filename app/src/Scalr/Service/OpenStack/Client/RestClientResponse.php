@@ -1,10 +1,9 @@
 <?php
 namespace Scalr\Service\OpenStack\Client;
 
-use Scalr\Service\Aws\Exception\AwsResponseErrorFactory;
+use http\Client\Response;
 use Scalr\Service\OpenStack\Exception\OpenStackResponseErrorFactory;
 use Scalr\Service\OpenStack\Type\AppFormat;
-use Scalr\Service\OpenStack\Exception\RestClientException;
 
 /**
  * OpenStack Rest Client Response
@@ -15,9 +14,9 @@ use Scalr\Service\OpenStack\Exception\RestClientException;
 class RestClientResponse implements ClientResponseInterface
 {
     /**
-     * @var \HttpMessage
+     * @var Response
      */
-    private $message;
+    private $response;
 
     /**
      * @var ErrorData|bool
@@ -38,32 +37,32 @@ class RestClientResponse implements ClientResponseInterface
     /**
      * Constructor
      *
-     * @param   \HttpMessage $message  An HTTP message
-     * @param   AppFormat    $format   An responce body application format
+     * @param   Response     $response  An HTTP response
+     * @param   AppFormat    $format    An response body application format
      */
-    public function __construct(\HttpMessage $message, AppFormat $format)
+    public function __construct(Response $response, AppFormat $format)
     {
-        $this->message = $message;
+        $this->response = $response;
         $this->format = $format;
     }
 
     /**
-     * Gets an HTTP Message
+     * Gets an HTTP Response
      *
-     * @return \HttpMessage Returns an HttpMessage object
+     * @return Response Returns an http Response object
      */
-    public function getMessage()
+    public function getResponse()
     {
-        return $this->message;
+        return $this->response;
     }
 
     /**
      * {@inheritdoc}
-     * @see Scalr\Service\OpenStack\Client.ClientResponseInterface::getContent()
+     * @see \Scalr\Service\OpenStack\Client\ClientResponseInterface::getContent()
      */
     public function getContent()
     {
-        return $this->message->getBody();
+        return $this->response->getBody()->toString();
     }
 
 
@@ -73,7 +72,7 @@ class RestClientResponse implements ClientResponseInterface
      */
     public function getResponseCode()
     {
-        return $this->message->getResponseCode();
+        return $this->response->getResponseCode();
     }
 
     /**
@@ -82,7 +81,7 @@ class RestClientResponse implements ClientResponseInterface
      */
     public function getHeader($headerName)
     {
-        return $this->message->getHeader($headerName);
+        return $this->response->getHeader($headerName);
     }
 
     /**
@@ -91,7 +90,7 @@ class RestClientResponse implements ClientResponseInterface
      */
     public function getHeaders()
     {
-        return $this->message->getHeaders();
+        return $this->response->getHeaders();
     }
 
     /**
@@ -102,7 +101,7 @@ class RestClientResponse implements ClientResponseInterface
     {
         if (!isset($this->errorData)) {
             $this->errorData = false;
-            $code = $this->message->getResponseCode();
+            $code = $this->response->getResponseCode();
             if ($code < 200 || $code > 299) {
                 $this->errorData = new ErrorData();
                 if ($this->format == AppFormat::APP_JSON) {

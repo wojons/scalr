@@ -4,6 +4,7 @@ namespace Scalr\Service\Aws\Client;
 use Scalr\Service\Aws\Plugin\EventObserver;
 use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\DataType\Loader\ErrorLoader;
+use http\Header;
 
 /**
  * Soap Client Response
@@ -62,7 +63,7 @@ class SoapClientResponse implements ClientResponseInterface
     public function __construct($response, $responseHeaders, $request)
     {
         $this->response = $response;
-        $this->responseHeaders = @http_parse_headers($responseHeaders);
+        $this->responseHeaders = Header::parse($responseHeaders);
         $this->request = $request;
     }
 

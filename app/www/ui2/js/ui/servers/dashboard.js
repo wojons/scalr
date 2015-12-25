@@ -1,12 +1,134 @@
 Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) {
-    var showInstanceHealth = moduleParams['general']['status'] === 'Running';
 
-	var panel = Ext.create('Ext.form.Panel', {
-		scalrOptions: {
-			'modal': true
-		},
-		width: 1140,
-		title: 'Server status',
+    var generalServerInfo = moduleParams.general;
+    var platform = generalServerInfo.platform;
+    var cloudLocation = generalServerInfo['cloud_location'];
+    var serverStatus = generalServerInfo.status;
+    var showInstanceHealth = serverStatus === 'Running';
+
+    var changeInstanceType = function (farmRoleInstanceType, instanceType, imageType, imageArchitecture, vpcId) {
+        imageType = Ext.isString(imageType) ? imageType : '';
+        imageArchitecture = Ext.isString(imageArchitecture) ? imageArchitecture : '';
+
+        Scalr.utils.loadInstanceTypes(platform, cloudLocation, function (instancesTypes) {
+            var limites = Scalr.getGovernance('ec2', 'aws.instance_type');
+            var isPolicyEnabled = !Ext.isEmpty(limites);
+
+            var instanceTypeRestrictions = {
+                ebs: imageType.indexOf('ebs') !== -1,
+                hvm: imageType.indexOf('hvm') !== -1,
+                x64: imageArchitecture !== 'i386',
+                vpc: !Ext.isEmpty(vpcId)
+            };
+
+            Scalr.Confirm({
+                formWidth: 400,
+                ok: 'Change',
+                form: [{
+                    xtype: 'fieldset',
+                    title: 'Change Instance type',
+                    fieldDefaults: {
+                        anchor: '100%',
+                        labelWidth: 120
+                    },
+                    items: [{
+                        xtype: 'hiddenfield',
+                        name: 'serverId',
+                        value: loadParams.serverId
+                    }, {
+                        xtype: 'displayfield',
+                        fieldLabel: 'Farm Role configuration',
+                        value: farmRoleInstanceType
+                    }, {
+                        xtype: 'displayfield',
+                        fieldLabel: 'Current type',
+                        value: instanceType
+                    }, {
+                        xtype: 'instancetypefield',
+                        fieldLabel: 'New type',
+                        name: 'instanceType',
+                        value: !isPolicyEnabled ? instanceType : limites.default,
+                        iconsPosition: 'outer',
+                        store: {
+                            proxy: 'object',
+                            fields: [ 'id', 'name', 'note', 'ram', 'type', 'vcpus', 'disk', 'ebsencryption', 'ebsoptimized', 'placementgroups', 'instancestore', {name: 'disabled', defaultValue: false}, 'disabledReason', 'restrictions' ],
+                            data: instancesTypes,
+                            filters: [{
+                                id: 'governancePolicyFilter',
+                                filterFn: function (record) {
+                                    return !isPolicyEnabled
+                                        ? true
+                                        : Ext.Array.contains(limites.value, record.get('id'));
+                                }
+                            }, {
+                                id: 'awsRestrictionsFilter',
+                                filterFn: function (record) {
+                                    var allowed = true;
+                                    var restrictions = record.get('restrictions');
+
+                                    if (!Ext.isEmpty(restrictions)) {
+                                        Ext.Object.each(instanceTypeRestrictions, function (type, isAllowed) {
+                                            if (Ext.isDefined(restrictions[type]) && restrictions[type] !== isAllowed) {
+                                                allowed = false;
+                                                return false;
+                                            }
+                                        });
+                                    }
+
+                                    return allowed;
+                                }
+                            }],
+                            sorters: {
+                                property: 'disabled'
+                            }
+                        },
+                        disableChangeButton: function (disabled) {
+                            var me = this;
+
+                            me.up('#box').down('#buttonOk')
+                                .setDisabled(disabled);
+
+                            return me;
+                        },
+                        listeners: {
+                            afterrender: function (field) {
+                                var value = field.getValue();
+
+                                field
+                                    .disableChangeButton(
+                                        Ext.isEmpty(value) || (value === instanceType)
+                                    )
+                                    .toggleIcon('governance', isPolicyEnabled);
+                            },
+                            change: function (field, value) {
+                                field.disableChangeButton(value === instanceType);
+                            }
+                        }
+                    }]
+                }],
+                success: function (values, form) {
+                    Scalr.Request({
+                        processBox: {
+                            type: 'save'
+                        },
+                        url: '/servers/xChangeInstanceType',
+                        params: values,
+                        success: function () {
+                            panel.down('[name=instType]')
+                                .setValue(values.instanceType);
+                        }
+                    });
+                }
+            });
+        });
+    };
+
+    var panel = Ext.create('Ext.form.Panel', {
+        scalrOptions: {
+            'modal': true
+        },
+        width: 1140,
+        title: 'Server status',
         layout: 'auto',
         overflowX: 'hidden',
         bodyStyle: 'overflow-x:hidden!important',
@@ -18,6 +140,9 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
             text: 'Actions',
             style: 'position:absolute;right:32px;top:21px;z-index:2',
             menuAlign: 'tr-br',
+            hidden: !(Scalr.isAllowed('FARMS', 'servers') ||
+                    moduleParams['general']['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                    moduleParams['general']['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')),
             menu: {
                 xtype: 'servermenu',
                 hideOptionInfo: true,
@@ -74,7 +199,12 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                         fieldLabel: 'Role name',
                         renderer: function(value, comp) {
                             var name = value.name;
-                            if (value.id) {
+
+                            if (name === 'unknown') {
+                                return '';
+                            }
+
+                            if (value.id && Scalr.isAllowed('ROLES_ENVIRONMENT')) {
                                 name = '<a href="#/roles?roleId=' + value.id + '">' + name + '</a>';
                             }
                             return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-platform-small x-icon-platform-small-' + value.platform + '"/>&nbsp;&nbsp;' + name;
@@ -123,8 +253,43 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                         name: 'cloud_location',
                         fieldLabel: 'Location'
                     },{
-                        name: 'instType',
-                        fieldLabel: 'Instance type'
+                        xtype: 'fieldcontainer',
+                        fieldLabel: 'Instance type',
+                        labelWidth: 130,
+                        layout: 'hbox',
+                        items: [{
+                            xtype: 'displayfield',
+                            name: 'instType',
+                        }, {
+                            xtype: 'button',
+                            text: 'Change',
+                            margin: '0 0 0 15',
+                            hidden: !(Scalr.isAllowed('FARMS', 'servers') ||
+                                    moduleParams['general']['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                                    moduleParams['general']['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')),
+                            disabled: platform !== 'ec2' || serverStatus !== 'Suspended',
+                            tooltip: function (platform, serverStatus) {
+                                if (platform !== 'ec2') {
+                                    return Scalr.utils.getPlatformName(platform)
+                                        + ' doesn\'t support this operation.';
+                                }
+
+                                if (serverStatus !== 'Suspended') {
+                                    return 'Instance type change available only for suspended servers.';
+                                }
+
+                                return '';
+                            }(platform, serverStatus),
+                            handler: function (button) {
+                                changeInstanceType(
+                                    generalServerInfo.farmRoleInstanceType,
+                                    button.prev('[name=instType]').getValue(),
+                                    generalServerInfo.imageType,
+                                    generalServerInfo.imageArchitecture,
+                                    moduleParams.internalProperties['ec2.vpc-id']
+                                );
+                            }
+                        }]
                     }, {
                         name: 'imageId',
                         fieldLabel: 'Cloud Image ID',
@@ -134,7 +299,11 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                             icons: [{id: 'warning', hidden: true, tooltip: "This Server was launched using an Image that is no longer used in its Role's configuration."}]
                         },
                         renderer: function(value) {
-                            return '<a href="#/images?hash=' + moduleParams['general']['imageHash'] + '">' + value + '</a>';
+                            var imageHash = moduleParams['general']['imageHash'];
+
+                            return Scalr.isAllowed('IMAGES_ENVIRONMENT') && !Ext.isEmpty(imageHash)
+                                ? '<a href="#/images?hash=' + imageHash + '">' + value + '</a>'
+                                : value;
                         },
                         listeners: {
                             afterrender: function() {
@@ -406,6 +575,9 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                             width: 190,
                             height: 32
                         },
+                        hidden: !(Scalr.isAllowed('FARMS', 'servers') ||
+                                moduleParams['general']['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                                moduleParams['general']['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')),
                         items: [{
                             xtype: 'button',
                             itemId: 'btnUpdateScalarizr',
@@ -582,20 +754,29 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
             title: 'Scalr internal properties',
             cls: 'x-fieldset-separator-top'
         }],
-		tools: [{
-			type: 'refresh',
-			handler: function () {
-				Scalr.event.fireEvent('refresh');
-			}
-		}, {
-			type: 'close',
-			handler: function () {
-				Scalr.event.fireEvent('close');
-			}
-		}],
+        tools: [{
+            type: 'refresh',
+            handler: function () {
+                Scalr.event.fireEvent('refresh');
+            }
+        }, {
+            type: 'close',
+            handler: function () {
+                Scalr.event.fireEvent('close');
+            }
+        }],
 
-		loadChartsData: function() {
-            var me = this;
+        loadChartsData: function() {
+            var me = this,
+                chartPreview = me.down('#chartPreview');
+
+            if (!(Scalr.isAllowed('FARMS', 'statistics') ||
+                moduleParams['general']['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'statistics') ||
+                moduleParams['general']['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'statistics')
+            )) {
+                chartPreview.hide();
+                return;
+            }
 
             var hostUrl = moduleParams['general']['monitoring_host_url'];
             var farmId = moduleParams['general']['farm_id'];
@@ -605,16 +786,15 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
             var metrics = 'mem,cpu,la,net';
             var period = 'daily';
             var params = {farmId: farmId, farmRoleId: farmRoleId, index: index, hash: farmHash, period: period, metrics: metrics};
-            var chartPreview = me.down('#chartPreview');
 
             var callback = function() {
                 me.lcdDelayed = Ext.Function.defer(me.loadChartsData, 60000, me);
             };
 
             chartPreview.loadStatistics(hostUrl, params, callback);
-		},
+        },
 
-		loadGeneralMetrics: function() {
+        loadGeneralMetrics: function() {
             var me = this,
                 serverId = moduleParams['general']['server_id'],
                 scrollTop = me.body.getScroll().top;
@@ -736,15 +916,15 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
         });
         cloudPropertiesCt.add(items);
         if (moduleParams['cloudProperties']['Security groups']) {
-            securityGroupsField.setValue(moduleParams['cloudProperties']['Security groups']);
+            securityGroupsField.setValue(Scalr.isAllowed('SECURITY_GROUPS') ? moduleParams['cloudProperties']['Security groups'] : Ext.util.Format.stripTags(moduleParams['cloudProperties']['Security groups']));
         } else {
             securityGroupsField.hide();
         }
 
         if (moduleParams['cloudProperties']['Block storage']) {
-        	blockStorageField.setValue(moduleParams['cloudProperties']['Block storage']);
+            blockStorageField.setValue(Scalr.isAllowed('AWS_VOLUMES') ? moduleParams['cloudProperties']['Block storage'] : Ext.util.Format.stripTags(moduleParams['cloudProperties']['Block storage']));
         } else {
-        	blockStorageField.hide();
+            blockStorageField.hide();
         }
     } else {
         cloudPropertiesCt.hide();
@@ -781,105 +961,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
         });
     }
 
-	return panel;
-});
-
-Ext.define('Scalr.RepeatingRequest', {
-    extend: 'Ext.Evented',
-
-    requestCount: 0,
-
-    requestLimit: 3,
-
-    timeout: 0,
-
-    step: 5000,
-
-    doNotHideErrorMessages: false,
-
-    setTimeout: function (timeout) {
-        var me = this;
-
-        me.timeout = timeout;
-
-        return me;
-    },
-
-    getTimeout: function () {
-        return this.timeout;
-    },
-
-    getRequestConfig: function () {
-        return Ext.clone(this.requestConfig);
-    },
-
-    doStep: function () {
-        var me = this;
-
-        me.setTimeout(me.getTimeout() + me.step);
-
-        me.requestConfig.hideErrorMessage = !me.doNotHideErrorMessages
-            ? me.requestLimit - me.requestCount !== 1
-            : false;
-
-        return me;
-    },
-
-    onSuccess: function (responseData) {
-        var me = this;
-
-        me.fireEvent('success', responseData);
-        me.destroy();
-
-        return me;
-    },
-
-    onFailure: function (responseData) {
-        var me = this;
-
-        me.requestCount++;
-
-        if (me.requestCount >= me.requestLimit) {
-            me.fireEvent('failure', responseData);
-            me.destroy();
-            return me;
-        }
-
-        me.doStep();
-
-        Ext.Function.defer(
-            me.doRequest,
-            me.getTimeout(),
-            me
-        );
-
-        return me;
-    },
-
-    doRequest: function () {
-        var me = this;
-
-        var request = Scalr.Request(me.getRequestConfig());
-
-        me.fireEvent('request', request);
-
-        return me;
-    },
-
-    request: function (config) {
-        var me = this;
-
-        me.requestConfig = Ext.apply(config, {
-            hideErrorMessage: !me.doNotHideErrorMessages,
-            success: me.onSuccess,
-            failure: me.onFailure,
-            scope: me
-        });
-
-        me.doRequest();
-
-        return me;
-    }
+    return panel;
 });
 
 Ext.define('Scalr.ScalarizrRequest', {

@@ -100,6 +100,13 @@ class VolumeData extends AbstractEc2DataType
      */
     public $encrypted;
 
+    /**
+     * The full ARN of the AWS Key Management Service (AWS KMS) customer master key (CMK) that was used to protect the volume encryption key for the volume.
+     *
+     * @var string
+     */
+    public $kmsKeyId;
+
     protected function throwExceptionIfNotInitialized()
     {
         parent::throwExceptionIfNotInitialized();

@@ -191,7 +191,11 @@ class CloudLocation extends AbstractEntity
         $url = static::normalizeUrl($url);
 
         //Search for cloud location record
-        $cl = static::findOne([['platform' => $platform], ['url' => $url], ['cloudLocation' => $cloudLocation]]);
+        $cl = static::findOne([
+            ['platform'      => $platform],
+            ['url'           => $url],
+            ['cloudLocation' => $cloudLocation]
+        ]);
 
         if (!($cl instanceof CloudLocation)) {
             $isNew = true;

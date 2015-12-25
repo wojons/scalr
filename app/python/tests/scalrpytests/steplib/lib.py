@@ -186,3 +186,7 @@ def generate_endpoint_id():
 
 def generate_event_id():
     return str(uuid.uuid4())
+
+
+def generate_cloud_credentials_id():
+    return uuid.uuid4().hex[-12:]

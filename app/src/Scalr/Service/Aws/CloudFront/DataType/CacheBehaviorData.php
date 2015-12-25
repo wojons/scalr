@@ -31,10 +31,11 @@ use Scalr\Service\Aws\CloudFront\AbstractCloudFrontDataType;
  */
 class CacheBehaviorData extends AbstractCloudFrontDataType
 {
-
     const VIEWER_PROTOCOL_POLICY_ALLOW_ALL = 'allow-all';
 
-    const VIEWER_PROTOCOL_POLICY_HTTPS = 'https';
+    const VIEWER_PROTOCOL_POLICY_REDIRECT_TO_HTTPS = 'redirect-to-https';
+
+    const VIEWER_PROTOCOL_POLICY_HTTPS_ONLY = 'https-only';
 
     /**
      * List of external identifier names.
@@ -122,19 +123,47 @@ class CacheBehaviorData extends AbstractCloudFrontDataType
     public $minTtl;
 
     /**
+     * Default TTL in seconds for objects specified by PathPattern<
+     *
+     * @var int
+     */
+    public $defaultTtl;
+
+    /**
+     * Maximum TTL in seconds for objects specified by PathPattern
+     *
+     * @var int
+     */
+    public $maxTtl;
+
+    /**
+     * @var bool
+     */
+    public $smoothStreaming;
+
+    public $allowedMethods = ['GET', 'HEAD'];
+
+    public $cachedMethods = ['GET', 'HEAD'];
+
+    /**
      * Constructor
      *
      * @param   string     $targetOriginId       optional
      * @param   string     $viewerProtocolPolicy optional
      * @param   int        $minTtl               optional
+     * @param   int        $defaultTtl           optional
+     * @param   int        $maxTtl               optional
      * @param   string     $pathPattern          optional
      */
-    public function __construct($targetOriginId = null, $viewerProtocolPolicy = null, $minTtl = null, $pathPattern = null)
+    public function __construct($targetOriginId = null, $viewerProtocolPolicy = null, $minTtl = null,
+                                $defaultTtl = null, $maxTtl = null, $pathPattern = null)
     {
         $this->targetOriginId = $targetOriginId;
         $this->pathPattern = $pathPattern;
         $this->viewerProtocolPolicy = $viewerProtocolPolicy;
         $this->minTtl = $minTtl;
+        $this->defaultTtl = $defaultTtl;
+        $this->maxTtl = $maxTtl;
         $this->setForwardedValues(new ForwardedValuesData(false));
         $ts = new TrustedSignerList();
         $ts->setEnabled(false);
@@ -188,6 +217,32 @@ class CacheBehaviorData extends AbstractCloudFrontDataType
         }
         $top->appendChild($xml->createElement('ViewerProtocolPolicy', $this->viewerProtocolPolicy));
         $top->appendChild($xml->createElement('MinTTL', $this->minTtl));
+
+        $allowedMethodsNode = $xml->createElement('AllowedMethods');
+        $top->appendChild($allowedMethodsNode);
+        $allowedMethodsNode->appendChild($xml->createElement('Quantity', count($this->allowedMethods)));
+        if (!empty($this->allowedMethods)) {
+            $items = $xml->createElement('Items');
+            $allowedMethodsNode->appendChild($items);
+            foreach ($this->allowedMethods as $method) {
+                $items->appendChild($xml->createElement('Method', $method));
+            }
+        }
+
+        $cachedMethodsNode = $xml->createElement('CachedMethods');
+        $allowedMethodsNode->appendChild($cachedMethodsNode);
+        $cachedMethodsNode->appendChild($xml->createElement('Quantity', count($this->cachedMethods)));
+        if (!empty($this->cachedMethods)) {
+            $items = $xml->createElement('Items');
+            $cachedMethodsNode->appendChild($items);
+            foreach ($this->cachedMethods as $method) {
+                $items->appendChild($xml->createElement('Method', $method));
+            }
+        }
+
+        $top->appendChild($xml->createElement('SmoothStreaming', $this->smoothStreaming ? 'true' : 'false'));
+        $top->appendChild($xml->createElement('DefaultTTL', $this->defaultTtl));
+        $top->appendChild($xml->createElement('MaxTTL', $this->maxTtl));
 
         return $returnAsDom ? $xml : $xml->saveXML();
     }

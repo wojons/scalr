@@ -9,6 +9,12 @@ use Scalr\Service\Aws\Ec2\Ec2ListDataType;
  * @author   Vitaliy Demidov   <vitaliy@scalr.com>
  * @since    21.01.2013
  *
+ * @method   string getNextToken() getNextToken()
+ *           Gets a next token.
+ *
+ * @method   string getRequestId() getRequestId()
+ *           Gets an ID of the request.
+ *
  * @method   \Scalr\Service\Aws\Ec2\DataType\VolumeData get()
  *           get(int $index)
  *           Returns VolumeData object from the specified position in the list.
@@ -22,7 +28,7 @@ class VolumeList extends Ec2ListDataType
      *
      * @var  array
      */
-    protected $_properties = array('requestId');
+    protected $_properties = array('nextToken', 'requestId');
 
     /**
      * Constructor

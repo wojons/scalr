@@ -3,19 +3,23 @@
 class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role_iBehavior
 {
     /** DBFarmRole settings **/
-    const ROLE_CHEF_SERVER_ID           = 'chef.server_id';
-    const ROLE_CHEF_BOOTSTRAP           = 'chef.bootstrap';
-    const ROLE_CHEF_ROLE_NAME           = 'chef.role_name';
-    const ROLE_CHEF_ENVIRONMENT         = 'chef.environment';
-    const ROLE_CHEF_ATTRIBUTES          = 'chef.attributes';
-    const ROLE_CHEF_NODENAME_TPL        = 'chef.node_name_tpl';
-    const ROLE_CHEF_SSL_VERIFY_MODE     = 'chef.ssl_verify_mode';
-    const ROLE_CHEF_RUNLIST             = 'chef.runlist';
-    const ROLE_CHEF_COOKBOOK_URL        = 'chef.cookbook_url';
-    const ROLE_CHEF_COOKBOOK_URL_TYPE   = 'chef.cookbook_url_type';
-    const ROLE_CHEF_SSH_PRIVATE_KEY     = 'chef.ssh_private_key';
-    const ROLE_CHEF_RELATIVE_PATH       = 'chef.relative_path';
-    const ROLE_CHEF_LOG_LEVEL           = 'chef.log_level';
+    const ROLE_CHEF_SERVER_ID               = 'chef.server_id';
+    const ROLE_CHEF_BOOTSTRAP               = 'chef.bootstrap';
+    const ROLE_CHEF_ROLE_NAME               = 'chef.role_name';
+    const ROLE_CHEF_ENVIRONMENT             = 'chef.environment';
+    const ROLE_CHEF_ATTRIBUTES              = 'chef.attributes';
+    const ROLE_CHEF_NODENAME_TPL            = 'chef.node_name_tpl';
+    const ROLE_CHEF_SSL_VERIFY_MODE         = 'chef.ssl_verify_mode';
+    const ROLE_CHEF_RUNLIST                 = 'chef.runlist';
+    const ROLE_CHEF_COOKBOOK_URL            = 'chef.cookbook_url';
+    const ROLE_CHEF_COOKBOOK_URL_TYPE       = 'chef.cookbook_url_type';
+    const ROLE_CHEF_SSH_PRIVATE_KEY         = 'chef.ssh_private_key';
+    const ROLE_CHEF_RELATIVE_PATH           = 'chef.relative_path';
+    const ROLE_CHEF_LOG_LEVEL               = 'chef.log_level';
+    const ROLE_CHEF_CLIENT_RB_TEMPLATE      = 'chef.client_rb_template';
+    const ROLE_CHEF_SOLO_RB_TEMPLATE        = 'chef.solo_rb_template';
+    const ROLE_CHEF_RUNLIST_APPEND          = 'chef.runlist_append';
+    const ROLE_CHEF_ALLOW_TO_APPEND_RUNLIST = 'chef.allow_to_append_runlist';
 
     /**
      * @deprecated
@@ -59,9 +63,18 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
         */
     }
 
-    public function onHostDown(DBServer $dbServer) {
+    /**
+     * {@inheritdoc}
+     * @see Scalr_Role_Behavior::onHostDown()
+     */
+    public function onHostDown(DBServer $dbServer, HostDownEvent $event)
+    {
+        if ($event->isSuspended)
+            return;
+
         $nodeName = $dbServer->GetProperty(self::SERVER_CHEF_NODENAME);
         $config = $this->getConfiguration($dbServer);
+
         if (!empty($nodeName) && isset($config->serverUrl)) {
             $this->removeNodeFromChefServer($dbServer, $config, $nodeName);
             $dbServer->SetProperty(self::SERVER_CHEF_NODENAME, "");
@@ -79,20 +92,20 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
         try {
             $status = $chefClient->removeNode($nodeName);
             if ($status) {
-                Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
+                \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
                     $dbServer->farmId,
                     sprintf("Chef node '%s' removed from chef server", $nodeName),
                     $dbServer->serverId
                 ));
             } else {
-                Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
+                \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
                     $dbServer->farmId,
                     sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $status),
                     $dbServer->serverId
                 ));
             }
         } catch (Exception $e) {
-            Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
+            \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
                 $dbServer->farmId,
                 sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $e->getMessage()),
                 $dbServer->serverId
@@ -102,20 +115,20 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
         try {
             $status2 = $chefClient->removeClient($nodeName);
             if ($status2) {
-                Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
+                \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
                     $dbServer->farmId,
                     sprintf("Chef client '%s' removed from chef server", $nodeName),
                     $dbServer->serverId
                 ));
             } else {
-                Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
+                \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
                     $dbServer->farmId,
                     sprintf("Unable to remove chef client '%s' from chef server: %s", $nodeName, $status2),
                     $dbServer->serverId
                 ));
             }
         } catch (Exception $e) {
-            Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
+            \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
                 $dbServer->farmId,
                 sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $e->getMessage()),
                 $dbServer->serverId
@@ -157,10 +170,13 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
         $jsonAttributes = $chefSettings[self::ROLE_CHEF_ATTRIBUTES];
         if (!empty($chefSettings[self::ROLE_CHEF_COOKBOOK_URL])) {
             $configuration->cookbookUrl = $chefSettings[self::ROLE_CHEF_COOKBOOK_URL];
-            $configuration->runList = $dbServer->applyGlobalVarsToValue($chefSettings[self::ROLE_CHEF_RUNLIST]);
+            $configuration->runList = $dbServer->applyGlobalVarsToValue($this->mergeRunlists($chefSettings[self::ROLE_CHEF_RUNLIST], $chefSettings[self::ROLE_CHEF_RUNLIST_APPEND]));
             $configuration->cookbookUrlType = $chefSettings[self::ROLE_CHEF_COOKBOOK_URL_TYPE];
             $configuration->sshPrivateKey = isset($chefSettings[self::ROLE_CHEF_SSH_PRIVATE_KEY]) ? $chefSettings[self::ROLE_CHEF_SSH_PRIVATE_KEY] : false;
             $configuration->relativePath = isset($chefSettings[self::ROLE_CHEF_RELATIVE_PATH]) ? $chefSettings[self::ROLE_CHEF_RELATIVE_PATH] : false;
+            if ($chefSettings[self::ROLE_CHEF_SOLO_RB_TEMPLATE]) {
+                $configuration->soloRbTemplate = $chefSettings[self::ROLE_CHEF_SOLO_RB_TEMPLATE];
+            }
         } else {
 
             // Get chef server info
@@ -186,10 +202,14 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
             if (!empty($chefSettings[self::ROLE_CHEF_ROLE_NAME]))
                 $configuration->role = $chefSettings[self::ROLE_CHEF_ROLE_NAME];
             else
-                $configuration->runList = $dbServer->applyGlobalVarsToValue($chefSettings[self::ROLE_CHEF_RUNLIST]);
+                $configuration->runList = $dbServer->applyGlobalVarsToValue($this->mergeRunlists($chefSettings[self::ROLE_CHEF_RUNLIST], $chefSettings[self::ROLE_CHEF_RUNLIST_APPEND]));
 
             $configuration->environment = $chefSettings[self::ROLE_CHEF_ENVIRONMENT];
             $configuration->daemonize = $chefSettings[self::ROLE_CHEF_DAEMONIZE];
+
+            if ($chefSettings[self::ROLE_CHEF_CLIENT_RB_TEMPLATE]) {
+                $configuration->clientRbTemplate = $chefSettings[self::ROLE_CHEF_CLIENT_RB_TEMPLATE];
+            }
         }
 
         $configuration->logLevel = !$chefSettings[self::ROLE_CHEF_LOG_LEVEL] ? 'auto' : $chefSettings[self::ROLE_CHEF_LOG_LEVEL];
@@ -211,7 +231,7 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
                 $config = $this->getConfiguration($dbServer);
                 if ($config->serverUrl || $config->cookbookUrl) {
                     $message->chef = $config;
-                    
+
                     $message->chef->scriptName = '[Scalr built-in] Chef bootstrap';
                     $message->chef->executionId = Scalr::GenerateUID();
                     $message->chef->eventName = 'HostInit';
@@ -221,5 +241,24 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
         }
 
         return $message;
+    }
+    
+    /**
+     * Merges two chef runlists
+     * @param   string  $runlist1 runlist 1
+     * @param   string  $runlist2 runlist 2
+     * @return  string  resulting runlist
+     */
+    private function mergeRunlists($runlist1, $runlist2)
+    {
+        if (!empty($runlist1) && !empty($runlist2)) {
+            $runlistDecoded1 = json_decode($runlist1, true);
+            $runlistDecoded2 = json_decode($runlist2, true);
+            $result = json_encode(array_merge(is_array($runlistDecoded1) ? $runlistDecoded1 : [], is_array($runlistDecoded2) ? $runlistDecoded2 : []));
+        } else {
+            $result = (!empty($runlist1) ? $runlist1 : '') . (!empty($runlist2) ? $runlist2 : '');
+        }
+        
+        return $result;
     }
 }

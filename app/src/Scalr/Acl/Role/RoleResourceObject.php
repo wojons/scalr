@@ -44,18 +44,27 @@ class RoleResourceObject
     private $permissions;
 
     /**
+     * Resource Mode value
+     *
+     * @var int
+     */
+    private $mode;
+
+    /**
      * Constructor
      *
      * @param   int        $roleId     The ID of the ACL role associated with the resource
      * @param   int        $resourceId The ID of the ACL resource
-     * @param   bool       $granted    optional
+     * @param   bool       $granted    optional Whether resource is allowed for the Role
+     * @param   int        $mode       optional Resouce Mode value
      */
-    public function __construct($roleId, $resourceId, $granted = null)
+    public function __construct($roleId, $resourceId, $granted = null, $mode = null)
     {
         $this->roleId = $roleId;
         $this->resourceId = $resourceId;
         $this->granted = $granted !== null ? (bool) $granted : null;
         $this->permissions = new \ArrayObject(array());
+        $this->mode = $mode;
     }
 
     /**
@@ -165,5 +174,15 @@ class RoleResourceObject
     public function getGroup()
     {
         return Definition::get($this->resourceId)->getGroup();
+    }
+
+    /**
+     * Gets Resource Mode
+     *
+     * @return  int Returns Resource Mode value
+     */
+    public function getMode()
+    {
+        return $this->mode;
     }
 }

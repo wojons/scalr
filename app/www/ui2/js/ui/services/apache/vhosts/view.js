@@ -42,6 +42,7 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.view', function (loadParams, modu
 			},
 			{
 				xtype: 'optionscolumn',
+                hidden: !Scalr.isAllowed('SERVICES_APACHE', 'manage'),
 				menu: [{
 					text: 'Edit',
                     iconCls: 'x-menu-icon-edit',
@@ -51,7 +52,7 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.view', function (loadParams, modu
 			}
 		],
 
-        selModel: 'selectedmodel',
+        selModel: Scalr.isAllowed('SERVICES_APACHE', 'manage') ? 'selectedmodel' : null,
 		listeners: {
 			selectionchange: function(selModel, selections) {
 				this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
@@ -68,6 +69,7 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.view', function (loadParams, modu
                 cls: 'x-btn-red',
 				tooltip: 'Select one or more virtual hosts to delete them',
 				disabled: true,
+                hidden: !Scalr.isAllowed('SERVICES_APACHE', 'manage'),
 				handler: function() {
 					var me = this,
                         request = {
@@ -98,6 +100,7 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.view', function (loadParams, modu
 			beforeItems: [{
                 text: 'New virtualhost',
                 cls: 'x-btn-green',
+                hidden: !Scalr.isAllowed('SERVICES_APACHE', 'manage'),
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/services/apache/vhosts/create');
 				}

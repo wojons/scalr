@@ -1,9 +1,11 @@
 <?php
+
 namespace Scalr\Upgrade\Updates;
 
 use Scalr\Upgrade\SequenceInterface;
 use Scalr\Upgrade\AbstractUpdate;
 use Scalr\Modules\PlatformFactory;
+use Scalr\Model\Entity;
 
 class Update20140612235154 extends AbstractUpdate implements SequenceInterface
 {
@@ -43,8 +45,13 @@ class Update20140612235154 extends AbstractUpdate implements SequenceInterface
                     $server = $routerRole->GetServersByFilter(array('status' => \SERVER_STATUS::RUNNING));
                     if ($server[0]) {
                         $platform = PlatformFactory::NewPlatform(\SERVER_PLATFORMS::EC2);
-                        $info = $platform->GetServerExtendedInformation($server[0]);
-                        if ($info['Network Interface']) {
+                        try {
+                            $info = $platform->GetServerExtendedInformation($server[0]);
+                        } catch (\Exception $e) {
+                            // no need to do anything here
+                        }
+                        
+                        if (!empty($info['Network Interface'])) {
                             $this->console->out("Updating router.vpc.networkInterfaceId property for Farm Role: %s", $routerRole->ID);
                             $routerRole->SetSetting(\Scalr_Role_Behavior_Router::ROLE_VPC_NID, $info['Network Interface']);
                         }
@@ -66,7 +73,7 @@ class Update20140612235154 extends AbstractUpdate implements SequenceInterface
             $dbFarm = \DBFarm::LoadByID($farm['farmid']);
             $roles = $dbFarm->GetFarmRoles();
             foreach ($roles as $dbFarmRole) {
-                $vpcSubnetId = $dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_VPC_SUBNET_ID);
+                $vpcSubnetId = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_VPC_SUBNET_ID);
                 if ($vpcSubnetId && substr($vpcSubnetId, 0, 6) != 'subnet') {
                     $subnets = json_decode($vpcSubnetId);
                     $vpcSubnetId = $subnets[0];

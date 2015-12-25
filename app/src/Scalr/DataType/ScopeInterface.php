@@ -16,6 +16,7 @@ interface ScopeInterface
     const SCOPE_FARM        = 'farm';
     const SCOPE_ROLE        = 'role';
     const SCOPE_FARMROLE    = 'farmrole';
+    const SCOPE_SERVER      = 'server';
 
     /**
      * Gets scope

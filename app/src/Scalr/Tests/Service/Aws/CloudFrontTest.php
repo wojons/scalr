@@ -3,6 +3,7 @@ namespace Scalr\Tests\Service\Aws;
 
 use Scalr\Tests\Service\AwsTestCase;
 use Scalr\Service\Aws\CloudFront;
+use Scalr\Service\Aws\CloudFront\DataType as CloudFrontDataType;
 
 /**
  * Amazon CloudFront Test
@@ -170,10 +171,11 @@ class CloudFrontTest extends AwsTestCase
     {
         $this->skipIfEc2PlatformDisabled();
         $aws = $this->aws;
-        $client = $aws->cloudFront->getApiHandler()->getClient();
+        //$aws->setDebug(true);
 
         $list = $aws->cloudFront->distribution->describe();
         $this->assertInstanceOf($this->getCloudFrontClassName('DataType\\DistributionList'), $list);
+
         /* @var $dist CloudFrontDataType\DistirbutionData */
         foreach ($list as $dist) {
             $dist->refresh();
@@ -188,44 +190,45 @@ class CloudFrontTest extends AwsTestCase
             $this->assertEqualXMLStructure($dom->firstChild, $dist->distributionConfig->toXml(true)->firstChild);
             unset($dist);
         }
+
         unset($list);
 
         //Creates distribution
-//         $origin = new CloudFrontDataType\DistributionConfigOriginData();
-//         $origin->originId = 'MyOriginId';
-//         $origin->domainName = 'test.s3.amazonaws.com';
-//         $origin->setS3OriginConfig(new CloudFrontDataType\DistributionS3OriginConfigData(''));
+        $origin = new CloudFrontDataType\DistributionConfigOriginData();
+        $origin->originId = 'MyOriginId';
+        $origin->domainName = 'test.s3.amazonaws.com';
+        $origin->setS3OriginConfig(new CloudFrontDataType\DistributionS3OriginConfigData(''));
 
-//         $fvd = new CloudFrontDataType\ForwardedValuesData();
-//         $fvd->queryString = false;
-//         $fvd->setCookies(new CloudFrontDataType\ForwardedValuesCookiesData(
-//             CloudFrontDataType\ForwardedValuesCookiesData::FORWARD_NONE
-//         ));
+        $fvd = new CloudFrontDataType\ForwardedValuesData();
+        $fvd->queryString = false;
+        $fvd->setCookies(new CloudFrontDataType\ForwardedValuesCookiesData(
+            CloudFrontDataType\ForwardedValuesCookiesData::FORWARD_NONE
+        ));
 
-//         $ts = new CloudFrontDataType\TrustedSignerList();
-//         $ts->setEnabled(false);
+        $ts = new CloudFrontDataType\TrustedSignerList();
+        $ts->setEnabled(false);
 
-//         $dcb = new CloudFrontDataType\CacheBehaviorData();
-//         $dcb->minTtl = 3600;
-//         $dcb->targetOriginId = $origin->originId;
-//         $dcb->viewerProtocolPolicy = 'allow-all';
-//         $dcb->setForwardedValues($fvd);
-//         $dcb->setTrustedSigners($ts);
+        $dcb = new CloudFrontDataType\CacheBehaviorData();
+        $dcb->minTtl = 3600;
+        $dcb->targetOriginId = $origin->originId;
+        $dcb->viewerProtocolPolicy = 'allow-all';
+        $dcb->setForwardedValues($fvd);
+        $dcb->setTrustedSigners($ts);
 
-//         $dc = new CloudFrontDataType\DistributionConfigData();
-//         $dc->comment = 'phpunit test distribution';
-//         $dc->enabled = false;
-//         $dc->setAliases(array(
-//             array('cname' => 'test2.scalr.com')
-//         ));
-//         $dc->priceClass = 'PriceClass_All';
-//         $dc->setOrigins($origin);
-//         $dc->setDefaultCacheBehavior($dcb);
+        $dc = new CloudFrontDataType\DistributionConfigData();
+        $dc->comment = 'phpunit test distribution';
+        $dc->enabled = false;
+        $dc->setAliases(array(
+            array('cname' => 'test2.scalr.com')
+        ));
+        $dc->priceClass = 'PriceClass_All';
+        $dc->setOrigins($origin);
+        $dc->setDefaultCacheBehavior($dcb);
 
-//         $dist = $aws->cloudFront->distribution->create($dc);
-//         $this->assertInstanceOf($this->getCloudFrontClassName('DataType\\DistributionData'), $dist);
+        $dist = $aws->cloudFront->distribution->create($dc);
+        $this->assertInstanceOf($this->getCloudFrontClassName('DataType\\DistributionData'), $dist);
 
-//         $dist->refresh();
+        $dist->refresh();
         //Too time consuming test
 //         $ret = $dist->delete();
 //         $this->assertTrue($ret);

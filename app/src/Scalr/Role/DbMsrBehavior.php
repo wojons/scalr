@@ -2,6 +2,7 @@
 
 use Scalr\Modules\PlatformFactory;
 use Scalr\Exception\NotApplicableException;
+use Scalr\Model\Entity;
 
 class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
 {
@@ -28,7 +29,7 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
     public function onFarmTerminated(DBFarmRole $dbFarmRole)
     {
         if (in_array($this->behavior, array(ROLE_BEHAVIORS::PERCONA, ROLE_BEHAVIORS::MYSQL2, ROLE_BEHAVIORS::MARIADB))) {
-            $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 1, DBFarmRole::TYPE_LCL);
+            $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 1, Entity\FarmRoleSetting::TYPE_LCL);
         }
     }
 
@@ -40,13 +41,16 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
         $storageGeneration = $storageType == 'lvm' ? 2 : 1;
 
         if ($storageGeneration == 2) {
-            if (in_array($this->behavior, array(ROLE_BEHAVIORS::PERCONA, ROLE_BEHAVIORS::MYSQL2, ROLE_BEHAVIORS::MARIADB)) && $master && $dbFarmRole->GetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES)) {
-                Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($dbFarmRole->FarmID,
+            if (in_array($this->behavior, array(ROLE_BEHAVIORS::PERCONA, ROLE_BEHAVIORS::MYSQL2, ROLE_BEHAVIORS::MARIADB)) &&
+                $master && $dbFarmRole->GetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES)) {
+                \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
+                    $dbFarmRole->FarmID,
                     sprintf("No suitable data bundle found for launching slaves on %s -> %s. Please perform data bundle on master to be able to launch slaves.",
                         $dbFarmRole->GetFarmObject()->Name,
                         $dbFarmRole->GetRoleObject()->name
                     )
                 ));
+
                 return Scalr_Scaling_Decision::NOOP;
             }
         }
@@ -93,9 +97,9 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
             $currentServer->SendMessage(new Scalr_Messaging_Msg_DbMsr_CreateBackup());
         
 
-        $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BACKUP_IS_RUNNING"), 1, DBFarmRole::TYPE_LCL);
-        $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BACKUP_RUNNING_TS"), time(), DBFarmRole::TYPE_LCL);
-        $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BACKUP_SERVER_ID"), $currentServer->serverId, DBFarmRole::TYPE_LCL);
+        $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BACKUP_IS_RUNNING"), 1, Entity\FarmRoleSetting::TYPE_LCL);
+        $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BACKUP_RUNNING_TS"), time(), Entity\FarmRoleSetting::TYPE_LCL);
+        $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BACKUP_SERVER_ID"), $currentServer->serverId, Entity\FarmRoleSetting::TYPE_LCL);
     }
 
     /**
@@ -178,9 +182,9 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
             $currentServer->SendMessage($message);
         
 
-        $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BUNDLE_IS_RUNNING"), 1, DBFarmRole::TYPE_LCL);
-        $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BUNDLE_RUNNING_TS"), time(), DBFarmRole::TYPE_LCL);
-        $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BUNDLE_SERVER_ID"), $currentServer->serverId, DBFarmRole::TYPE_LCL);
+        $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BUNDLE_IS_RUNNING"), 1, Entity\FarmRoleSetting::TYPE_LCL);
+        $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BUNDLE_RUNNING_TS"), time(), Entity\FarmRoleSetting::TYPE_LCL);
+        $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_BUNDLE_SERVER_ID"), $currentServer->serverId, Entity\FarmRoleSetting::TYPE_LCL);
     }
 
     /**
@@ -390,7 +394,7 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
                 $message->addDbMsrInfo($dbMsrInfo);
 
                 // Reset Slaves data bundle
-                $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 1, DBFarmRole::TYPE_LCL);
+                $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 1, Entity\FarmRoleSetting::TYPE_LCL);
 
                 $noDataBundle = $dbFarmRole->GetSetting(self::ROLE_NO_DATA_BUDNLE_ON_PROMOTE);
                 if ($noDataBundle)
@@ -515,7 +519,7 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
                     $dbMsrInfo = Scalr_Db_Msr_Info::init($dbFarmRole, $dbServer, $message->dbType);
                     $dbMsrInfo->setMsrSettings($message->{$message->dbType});
                     if ($message->{$message->dbType}->snapshotConfig) {
-                        $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0, DBFarmRole::TYPE_LCL);
+                        $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0, Entity\FarmRoleSetting::TYPE_LCL);
                     }
 
                     if ($message->{$message->dbType}->restore) {
@@ -523,28 +527,28 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
                             $dbFarmRole->ID,
                             $message->{$message->dbType}->restore->cloudfsSource
                         ));
-                        $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0, DBFarmRole::TYPE_LCL);
-                        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_LAST_TS, time(), DBFarmRole::TYPE_LCL);
-                        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0, DBFarmRole::TYPE_LCL);
+                        $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0, Entity\FarmRoleSetting::TYPE_LCL);
+                        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_LAST_TS, time(), Entity\FarmRoleSetting::TYPE_LCL);
+                        $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0, Entity\FarmRoleSetting::TYPE_LCL);
                     }
 
                     if ($message->{$message->dbType}->volumeTemplate) {
                         $dbFarmRole->SetSetting(
                             Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE,
                             $message->{$message->dbType}->volumeTemplate->size,
-                            DBFarmRole::TYPE_CFG
+                            Entity\FarmRoleSetting::TYPE_CFG
                         );
                         $dbFarmRole->SetSetting(
                             Scalr_Db_Msr::DATA_STORAGE_EBS_TYPE,
                             $message->{$message->dbType}->volumeTemplate->volumeType,
-                            DBFarmRole::TYPE_CFG
+                            Entity\FarmRoleSetting::TYPE_CFG
                            );
 
-                        $dbFarmRole->SetSetting(self::ROLE_DATA_STORAGE_GROW_CONFIG, "", DBFarmRole::TYPE_CFG);
+                        $dbFarmRole->SetSetting(self::ROLE_DATA_STORAGE_GROW_CONFIG, "", Entity\FarmRoleSetting::TYPE_CFG);
                     }
 
                     if ($message->{$message->dbType}->masterPassword) {
-                        $dbFarmRole->SetSetting(self::ROLE_MASTER_PASSWORD, $message->{$message->dbType}->masterPassword, DBFarmRole::TYPE_LCL);
+                        $dbFarmRole->SetSetting(self::ROLE_MASTER_PASSWORD, $message->{$message->dbType}->masterPassword, Entity\FarmRoleSetting::TYPE_LCL);
                     }
                 }
 
@@ -558,13 +562,13 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
                         $message->{$message->dbType}->restore->cloudfsSource
                     ));
 
-                    $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0, DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0, Entity\FarmRoleSetting::TYPE_LCL);
                 }
 
                 if (Scalr_Db_Msr::onPromoteToMasterResult($message, $dbServer)) {
 
                     if ($message->{$this->behavior}->snapshotConfig)
-                        $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0, DBFarmRole::TYPE_LCL);
+                        $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0, Entity\FarmRoleSetting::TYPE_LCL);
 
                     Scalr::FireEvent($dbServer->farmId, new NewDbMsrMasterUpEvent($dbServer));
                 }
@@ -593,11 +597,11 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
                         unset($t);
                     }
 
-                    $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0, DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES, 0, Entity\FarmRoleSetting::TYPE_LCL);
 
                     Scalr_Db_Msr::onCreateDataBundleResult($message, $dbServer);
                 } else {
-                    $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0, DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BUNDLE_IS_RUNNING, 0, Entity\FarmRoleSetting::TYPE_LCL);
                     // TODO: store last error
                 }
 
@@ -610,7 +614,7 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
                 if ($message->status == "ok")
                        Scalr_Db_Msr::onCreateBackupResult($message, $dbServer);
                    else {
-                       $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING, 0, DBFarmRole::TYPE_LCL);
+                       $dbFarmRole->SetSetting(Scalr_Db_Msr::DATA_BACKUP_IS_RUNNING, 0, Entity\FarmRoleSetting::TYPE_LCL);
 
                    }
 

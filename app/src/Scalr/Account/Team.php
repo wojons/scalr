@@ -14,12 +14,14 @@ class Scalr_Account_Team extends Scalr_Model
         'id'			  => 'id',
         'account_id'	  => 'accountId',
         'account_role_id' => 'accountRoleId',
-        'name'			  => 'name'
+        'name'			  => 'name',
+        'description'     => 'description'
     );
 
     public
         $accountId,
         $name,
+        $description,
         $accountRoleId;
 
     /**

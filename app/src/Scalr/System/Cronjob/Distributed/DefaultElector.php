@@ -11,7 +11,7 @@ class Scalr_System_Cronjob_Distributed_DefaultElector
             throw new Scalr_System_Cronjob_Exception("Configuration array must have a key for 'leader' "
                 . "that names the leader node apointed by administrator");
         }
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
     }
 
     function getElectionData () {

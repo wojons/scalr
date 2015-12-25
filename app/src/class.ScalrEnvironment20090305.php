@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Model\Entity;
+
 class ScalrEnvironment20090305 extends ScalrEnvironment20081216
 {
     protected function ListRoleParams()
@@ -14,8 +16,8 @@ class ScalrEnvironment20090305 extends ScalrEnvironment20081216
             $ParamsDOMNode = $DOMXPath->query("//params")->item(0);
 
             $mysql_options = array(
-                "mysql_data_storage_engine" 	=> $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_DATA_STORAGE_ENGINE),
-                "mysql_master_ebs_volume_id" 	=> $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_MASTER_EBS_VOLUME_ID),
+                "mysql_data_storage_engine" 	=> $DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_DATA_STORAGE_ENGINE),
+                "mysql_master_ebs_volume_id" 	=> $DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_MASTER_EBS_VOLUME_ID),
 
 
             /*

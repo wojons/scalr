@@ -184,7 +184,12 @@ Scalr.regPage('Scalr.ui.monitoring.view', function (loadParams, moduleParams) {
                     xtype: 'filterfield',
                     store: store,
                     filterFields: ['text'],
-                    flex: 1
+                    flex: 1,
+                    listeners: {
+                        afterfilter: function() {
+                            this.up().next('#filterMessage')[this.getStore().count() ? 'hide' : 'show']();
+                        }
+                    }
                 }, {
                     xtype: 'button',
                     enableToggle: true,
@@ -198,7 +203,7 @@ Scalr.regPage('Scalr.ui.monitoring.view', function (loadParams, moduleParams) {
                         var selectionModel = treePanel.getSelectionModel();
 
                         if (toggle) {
-                            var selectedNode = selectionModel.getLastSelected(),
+                            var selectedNode = selectionModel.getLastSelected() || treePanel.monitoredItem,
                                 compareModeParams = treePanel.prepareDataForMonitoring([selectedNode]);
 
                             selectedNode.set('checked', true);
@@ -340,7 +345,7 @@ Scalr.regPage('Scalr.ui.monitoring.view', function (loadParams, moduleParams) {
                             title = '';
                         for (var i = 0; i < currentNode.data.depth - 1; i++) {
                             var parentsParams = researchableNode.parentNode.raw;
-                            title = parentsParams.value + ' \u2192 ' + title;
+                            title = parentsParams.value + ' &rarr; ' + title;
                             researchableNode = researchableNode.parentNode;
                         }
                         title += currentNodesParams.value;

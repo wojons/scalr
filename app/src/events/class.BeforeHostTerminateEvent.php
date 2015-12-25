@@ -1,6 +1,6 @@
 <?php
 
-class BeforeHostTerminateEvent extends Event
+class BeforeHostTerminateEvent extends AbstractServerEvent
 {
     /**
      *
@@ -34,6 +34,7 @@ class BeforeHostTerminateEvent extends Event
         return array(
             "termination_reason" => "terminationReason",
             "termination_reason_code" => "terminationReasonId",
+            "is_suspend" => "suspend"
         );
     }
 }

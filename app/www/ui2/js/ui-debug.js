@@ -2,6 +2,7 @@ Scalr.application.addDocked({
     xtype: 'toolbar',
     dock: 'bottom',
     layout: 'hbox',
+    itemId: 'debugSqlPanel',
     items: [{
         xtype: 'button',
         enableToggle: true,
@@ -21,6 +22,12 @@ Scalr.application.addDocked({
         margin: '0 0 0 10',
         handler: function() {
             Scalr.application.getDockedComponent('debugSql')['lockScroll'] = this.pressed;
+        }
+    }, '->', {
+        xtype: 'button',
+        text: 'Disable debug',
+        handler: function() {
+            Scalr.debugSql();
         }
     }]
 });
@@ -45,7 +52,7 @@ Scalr.application.addDocked({
             '<tpl if="report.length">' +
                 '<ul style="padding-left: 20px; margin: 0 0 8px 0; list-style-type: none; display: none">' +
                     '<tpl for="report">' +
-                        '<li style="margin: 2px; white-space: pre-wrap; color: {[this.color(values)]}">{value}</li>' +
+                        '<li style="margin: 2px; white-space: pre-wrap; color: {[this.color(values)]}"><div style="width: 40px; height: 20px; position: absolute;" data-qtip="{backtrace:htmlEncode}"></div>{value}</li>' +
                     '</tpl>' +
                     '<a href="#" class="collapse">&#8593; Collapse</a>'+
                 '</ul>' +

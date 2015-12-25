@@ -4,6 +4,8 @@ namespace Scalr\Tests\Functional\Ui\Controller;
 
 use Scalr\Tests\WebTestCase;
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
+use SERVER_PLATFORMS;
+use Scalr\Model\Entity;
 
 /**
  * Functional test for the Scalr_UI_Controller_Sshkeys class.
@@ -28,14 +30,14 @@ class SshkeysTest extends WebTestCase
      */
     public function testXListSshKeysAction()
     {
-        $uri = '/sshkeys/xListSshKeys/';
+        $uri = '/sshkeys/xList/';
         $content = $this->request($uri);
-        $this->assertResponseDataHasKeys(array('id', 'type', 'cloud_key_name', 'farm_id', 'cloud_location'), $content);
+        $this->assertResponseDataHasKeys(array('id', 'type', 'cloudKeyName', 'farmId', 'platform', 'cloudLocation'), $content);
         if (!empty($content['data'])) {
             $obj = reset($content['data']);
             $sub = $this->request($uri, array(
                 'sshKeyId' => $obj['id'],
-                'farmId'   => $obj['farm_id'],
+                'farmId'   => $obj['farmId'],
             ));
             $this->assertInternalType('array', $sub);
             $this->assertEquals($obj, $sub['data'][0]);
@@ -53,10 +55,11 @@ class SshkeysTest extends WebTestCase
             $this->markTestSkipped(sprintf("EC2 platform is not enabled."));
         }
 
-        $this->assertNotNull($env->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY));
-        $this->assertNotNull($env->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY));
-        $this->assertNotNull($env->getPlatformConfigValue(Ec2PlatformModule::PRIVATE_KEY));
-        $this->assertNotNull($env->getPlatformConfigValue(Ec2PlatformModule::CERTIFICATE));
+        $ccProps = $env->cloudCredentials(SERVER_PLATFORMS::EC2)->properties;
+        $this->assertNotNull($ccProps[Entity\CloudCredentialsProperty::AWS_ACCESS_KEY]);
+        $this->assertNotNull($ccProps[Entity\CloudCredentialsProperty::AWS_SECRET_KEY]);
+        $this->assertNotNull($ccProps[Entity\CloudCredentialsProperty::AWS_PRIVATE_KEY]);
+        $this->assertNotNull($ccProps[Entity\CloudCredentialsProperty::AWS_CERTIFICATE]);
 
 //         echo $env->awsAccountNumber . "\n\n";
 //         echo $env->awsAccessKeyId . "\n\n";

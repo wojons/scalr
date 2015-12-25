@@ -28,10 +28,9 @@ import datetime
 from textwrap import dedent
 
 from scalrpy.util import helper
-from scalrpy.util import exceptions
 
-from scalrpy import __version__
 from scalrpy import LOG
+from scalrpy import exceptions
 
 
 class Application(object):
@@ -60,7 +59,6 @@ class Application(object):
           -g <group>, --group=<group>       group
           -v <level>, --verbosity=<level>   verbosity level ({log_levels}),
                                                 default: ERROR
-          -V, --version
           -h, --help
         """
     )
@@ -71,7 +69,7 @@ class Application(object):
     config = {
         'user': False,
         'group': False,
-        'log_size': 1024 * 1024 * 10,
+        'log_size': 1024 * 1024 * 100,
         'log_file': '/var/log/scalr.%s.log' % name,
         'pid_file': '/var/run/scalr.%s.pid' % name,
     }
@@ -80,11 +78,14 @@ class Application(object):
     _custom_options = ''
 
     def __init__(self, argv=None):
-        self.args = docopt.docopt(self.help(), argv=argv, version=__version__, help=True)
+        self.args = docopt.docopt(self.help(), argv=argv, help=True)
         self.validate_args()
         self._update_config()
 
         self.start_dtime = None
+
+        self._starting_msg = 'Starting'
+        self._stopping_msg = 'Stopping'
 
     @abc.abstractmethod
     def __call__(self):
@@ -156,7 +157,7 @@ class Application(object):
     def _start(self):
         if helper.check_pid(self.config['pid_file']):
             raise exceptions.AlreadyRunningError(self.config['pid_file'])
-        LOG.debug('Starting')
+        LOG.debug(self._starting_msg)
         if self.args['--daemon']:
             helper.daemonize()
         helper.create_pid_file(self.config['pid_file'])
@@ -168,7 +169,7 @@ class Application(object):
         LOG.info('Stopped')
 
     def _stop(self):
-        LOG.debug('Stopping')
+        LOG.debug(self._stopping_msg)
         try:
             if not os.path.exists(self.config['pid_file']):
                 msg = "Can't stop, pid file %s doesn't exist\n" % self.config['pid_file']
@@ -225,11 +226,13 @@ class ScalrApplication(Application):
                     'host': None,
                     'port': 3306,
                     'name': None,
-                    'pool_size': 10,
+                    'pool_size': 50,
                 },
             },
             'instances_connection_timeout': 5,
         })
+
+        self._starting_msg = "Starting with config file: {}".format(os.path.abspath(self.args['--config']))
 
     def validate_args(self):
         Application.validate_args(self)
@@ -254,8 +257,8 @@ class ScalrApplication(Application):
             self.scalr_config.get('connections', {}).get('mysql', {}),
             self.config['connections']['mysql'])
         self.config['instances_connection_timeout'] = self.scalr_config.get(
-            'system', {}).get(
-            'instances_connection_timeout', self.config['instances_connection_timeout'])
+                'system', {}).get(
+                'instances_connection_timeout', self.config['instances_connection_timeout'])
 
 
 class ScalrIterationApplication(ScalrApplication):
@@ -274,18 +277,8 @@ class ScalrIterationApplication(ScalrApplication):
     def _do_iteration(self):
         try:
             return self.do_iteration()
-        except SystemExit:
-            if sys.exc_info()[1].args[0] != 0:
-                raise
-        except exceptions.QuitError:
-            return
-        except KeyboardInterrupt:
-            raise
-        except exceptions.NothingToDoError:
-            time.sleep(self.nothing_to_do_sleep)
         except:
-            if logging.getLevelName(self.args['--verbosity']) < logging.ERROR:
-                LOG.exception(helper.exc_info(where=False))
+            helper.handle_error()
             raise
 
     def on_iteration_error(self):
@@ -313,13 +306,20 @@ class ScalrIterationApplication(ScalrApplication):
                     if not g.ready():
                         g.kill()
                     self.after_iteration()
+            except:
+                try:
+                    helper.handle_error(message='Iteration failed')
+                except (SystemExit, KeyboardInterrupt):
+                    return
+                except:
+                    pass
+                time.sleep(self.error_sleep)
+            finally:
                 iteration_time = time.time() - self.iteration_timestamp
                 msg = 'End iteration: {0:.1f} seconds'.format(iteration_time)
                 LOG.debug(msg)
-            except:
-                LOG.exception('Iteration failed')
-                time.sleep(self.error_sleep)
-            finally:
                 if self.config['interval']:
                     next_iteration_time = self.iteration_timestamp + self.config['interval']
-                    time.sleep(next_iteration_time - time.time())
+                    sleep_time = next_iteration_time - time.time()
+                    if sleep_time:
+                        time.sleep(sleep_time)

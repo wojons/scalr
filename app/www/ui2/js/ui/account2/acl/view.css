@@ -1,0 +1,49 @@
+.scalr-ui-panel-account-roles .x-dataview-tab-title{
+	max-width: 240px;
+	word-wrap: break-word;
+}
+
+.scalr-ui-panel-account-roles .x-dataview-tab table td{
+    width: auto;
+}
+
+.scalr-ui-panel-account-roles .x-dataview-tab-param-title{
+	width:125px;
+}
+
+.scalr-ui-panel-account-roles .x-dataview-tab-param-value{
+	word-wrap:break-word;
+	max-width:130px;
+}
+
+.scalr-ui-panel-account-roles .x-permission-warn{
+    color: #924203;
+}
+
+.scalr-ui-panel-account-roles .x-full-access{
+    color: #008000;
+}
+
+.scalr-ui-panel-account-roles .x-no-access{
+    color: #c00000;
+}
+
+.scalr-ui-panel-account-roles .x-limited-access{
+    color: #337dce;
+}
+
+.scalr-ui-panel-account-roles-btn-full .x-btn-inner {
+     color: #A2FAA5;
+}
+
+.scalr-ui-panel-account-roles-btn-limited .x-btn-inner {
+    color: #B5E4FC;
+}
+
+.scalr-ui-panel-account-roles-btn-readonly .x-btn-inner {
+    color: #DFCEFF;
+}
+
+.scalr-ui-panel-account-roles-btn-no .x-btn-inner {
+    color: #F8BCC0;
+}

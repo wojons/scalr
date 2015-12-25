@@ -269,30 +269,25 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function (loadParams, module
                                     }
                                 }
                             },{
-                                xtype: 'textfield',
+                                xtype: 'numberfield',
                                 name: 'lbPort',
                                 fieldLabel: 'Load balancer port',
                                 labelWidth: 150,
                                 allowBlank: false,
-                                validator: function (value) {
-                                    if (value < 1024 || value > 65535) {
-                                        if (value != 80 && value != 443)
-                                            return 'Valid LoadBalancer ports are - 80, 443 and 1024 through 65535';
-                                    }
-                                    return true;
-                                }
+                                minValue: 1,
+                                minText: 'Valid Load Balancer ports are one (1) through 65535',
+                                maxValue: 65535,
+                                maxText: 'Valid Load Balancer ports are one (1) through 65535',
                             },{
-                                xtype: 'textfield',
+                                xtype: 'numberfield',
                                 name: 'instancePort',
                                 fieldLabel: 'Instance port',
                                 labelWidth: 150,
                                 allowBlank: false,
-                                validator: function (value) {
-                                    if (value < 1 || value > 65535)
-                                        return 'Valid instance ports are one (1) through 65535';
-                                    else
-                                        return true;
-                                }
+                                minValue: 1,
+                                minText: 'Valid instance ports are one (1) through 65535',
+                                maxValue: 65535,
+                                maxText: 'Valid instance ports are one (1) through 65535'
                             },{
                                 xtype: 'combo',
                                 name: 'certificateId',
@@ -324,7 +319,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.details', function (loadParams, module
                         },
                         url: '/tools/aws/ec2/elb/'+ loadBalancer['loadBalancerName'] +'/xCreateListeners/',
                         scope: this,
-                        success: function (data, response, options){
+                        success: function (data, response, options) {
                             listenerStore.add({
                                 protocol: options.params.protocol,
                                 loadBalancerPort: options.params.lbPort,

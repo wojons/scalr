@@ -2,10 +2,12 @@
 
 namespace Scalr\Modules\Platforms\Ec2\Observers;
 
-use \DBServer;
-use \DBFarmRole;
+use Scalr\Model\Entity;
+use DBServer;
+use DBFarmRole;
+use Scalr\Observer\AbstractEventObserver;
 
-class ElbObserver extends \EventObserver
+class ElbObserver extends AbstractEventObserver
 {
     public $ObserverName = 'Elastic Load Balancing';
 
@@ -19,9 +21,9 @@ class ElbObserver extends \EventObserver
         try {
             $DBFarmRole = $DBServer->GetFarmRoleObject();
 
-            if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_ELB_ENABLED)) {
+            if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_ELB_ENABLED)) {
                 $useElb = true;
-                $elbId = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_ELB_ID);
+                $elbId = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_ELB_ID);
             }
 
             if ($useElb) {
@@ -31,7 +33,7 @@ class ElbObserver extends \EventObserver
                     $elbId,
                     $DBServer->GetProperty(\EC2_SERVER_PROPERTIES::INSTANCE_ID)
                 );
-                \Logger::getLogger(\LOG_CATEGORY::FARM)->info(new \FarmLogMessage($this->FarmID,
+                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(new \FarmLogMessage($this->FarmID,
                     sprintf(_("Instance '%s' deregistered from '%s' load balancer"),
                         $DBServer->GetProperty(\EC2_SERVER_PROPERTIES::INSTANCE_ID),
                         $elbId
@@ -40,7 +42,7 @@ class ElbObserver extends \EventObserver
                 ));
             }
         } catch(\Exception $e) {
-            \Logger::getLogger(\LOG_CATEGORY::FARM)->info(new \FarmLogMessage($this->FarmID,
+            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(new \FarmLogMessage($this->FarmID,
                 sprintf(_("Cannot deregister instance from the load balancer: %s"), $e->getMessage()),
                 $DBServer->serverId
             ));
@@ -49,7 +51,7 @@ class ElbObserver extends \EventObserver
 
     /**
      * {@inheritdoc}
-     * @see EventObserver::OnHostDown()
+     * @see \Scalr\Observer\AbstractEventObserver::OnHostDown()
      */
     public function OnHostDown(\HostDownEvent $event)
     {
@@ -61,7 +63,7 @@ class ElbObserver extends \EventObserver
 
     /**
      * {@inheritdoc}
-     * @see EventObserver::OnBeforeHostTerminate()
+     * @see \Scalr\Observer\AbstractEventObserver::OnBeforeHostTerminate()
      */
     public function OnBeforeHostTerminate(\BeforeHostTerminateEvent $event)
     {
@@ -70,21 +72,21 @@ class ElbObserver extends \EventObserver
 
     /**
      * {@inheritdoc}
-     * @see EventObserver::OnHostUp()
+     * @see \Scalr\Observer\AbstractEventObserver::OnHostUp()
      */
     public function OnHostUp(\HostUpEvent $event)
     {
         try {
             $DBFarmRole = $event->DBServer->GetFarmRoleObject();
 
-            if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_BALANCING_USE_ELB)) {
+            if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::BALANCING_USE_ELB)) {
                 $useElb = true;
-                $elbId = $DBFarmRole->GetSetting(DBFarmRole::SETTING_BALANCING_NAME);
+                $elbId = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::BALANCING_NAME);
             }
 
-            if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_ELB_ENABLED)) {
+            if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_ELB_ENABLED)) {
                 $useElb = true;
-                $elbId = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_ELB_ID);
+                $elbId = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_ELB_ID);
             }
 
             if ($useElb) {
@@ -94,7 +96,7 @@ class ElbObserver extends \EventObserver
                     $elbId,
                     $event->DBServer->GetProperty(\EC2_SERVER_PROPERTIES::INSTANCE_ID)
                 );
-                \Logger::getLogger(\LOG_CATEGORY::FARM)->info(new \FarmLogMessage($this->FarmID,
+                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(new \FarmLogMessage($this->FarmID,
                     sprintf(_("Instance '%s' registered on '%s' load balancer"),
                         $event->DBServer->GetProperty(\EC2_SERVER_PROPERTIES::INSTANCE_ID),
                         $elbId

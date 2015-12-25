@@ -25,15 +25,23 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
         $instancesNumber,
         $lastValue;
 
-    protected $metric,
-        $settingsRaw,
-        $settings,
-        $logger;
+    /**
+     * Related ScalingMetric instance
+     *
+     * @var \Scalr\Model\Entity\ScalingMetric
+     */
+    protected $metric;
+
+    protected $settingsRaw;
+
+    protected $settings;
+
+    protected $logger;
 
     function __construct($id = null)
     {
         parent::__construct($id);
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
     }
 
     function loadBy($info)
@@ -67,6 +75,13 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
         $this->settingsRaw = serialize($this->settings);
     }
 
+    public function clearSettings()
+    {
+        $this->settings = [];
+        $this->settingsRaw = serialize($this->settings);
+    }
+
+
     function getScalingDecision()
     {
         $algo = Entity\ScalingMetric::getAlgorithm($this->getMetric()->algorithm);
@@ -77,12 +92,15 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
         if ($sensor) {
             try {
                 $sensorValue = $sensor->getValue($dbFarmRole, $this);
-                if ($sensorValue === false)
+                if ($sensorValue === false) {
                     return Scalr_Scaling_Decision::NOOP;
+                }
             } catch (Exception $e) {
-                $this->logger->warn(new FarmLogMessage($dbFarmRole->FarmID,
+                $this->logger->warn(new FarmLogMessage(
+                    $dbFarmRole->FarmID,
                     sprintf("Unable to read Scaling Metric (%s) on farmrole %s value: %s",
-                    $this->getMetric()->alias, $dbFarmRole->ID, $e->getMessage())
+                    	$this->getMetric()->alias, $dbFarmRole->ID, $e->getMessage()
+                    )
                 ));
 
                 return Scalr_Scaling_Decision::NOOP;
@@ -95,27 +113,31 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
                 serialize($sensorValue)
             ));
 
-            switch($this->getMetric()->calcFunction) {
-                default:
-                    $value = $sensorValue[0];
-                    break;
-
-                case "avg":
+            switch ($this->getMetric()->calcFunction) {
+                case Entity\ScalingMetric::CALC_FUNCTION_AVERAGE:
                     $value = (is_array($sensorValue) && count($sensorValue) != 0) ? @array_sum($sensorValue) / count($sensorValue) : 0;
                     break;
 
-                case "sum":
+                case Entity\ScalingMetric::CALC_FUNCTION_SUM:
                     $value = @array_sum($sensorValue);
                     break;
-                case "max":
+
+                case Entity\ScalingMetric::CALC_FUNCTION_MAXIMUM:
                     $value = @max($sensorValue);
                     break;
+
+                case Entity\ScalingMetric::CALC_FUNCTION_MINIMUM:
+                    $value = @min($sensorValue);
+                    break;
+
+                default:
+                    $value = $sensorValue[0];
             }
 
             $this->lastValue = round($value, 5);
             $this->save();
 
-            $invert = $sensor->isInvert;
+            $invert = $sensor instanceof Scalr_Scaling_Sensors_Custom ? $this->getMetric()->isInvert : $sensor->isInvert;
         } else {
             $invert = false;
         }
@@ -127,22 +149,26 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
 
             return $decision;
         } elseif ($this->getMetric()->name == 'FreeRam') {
-            if ($this->lastValue == 0)
+            if ($this->lastValue == 0) {
                 return Scalr_Scaling_Decision::NOOP;
-            else
+            } else {
                 return $algo->makeDecision($dbFarmRole, $this, $invert);
-        } else
+            }
+        } else {
             return $algo->makeDecision($dbFarmRole, $this, $invert);
+        }
     }
 
     /**
+     * Gets related ScalingMetric entity
      *
-     * @return Entity\ScalingMetric
+     * @return \Scalr\Model\Entity\ScalingMetric
      */
     function getMetric()
     {
-        if (!$this->metric)
+        if (!$this->metric) {
             $this->metric = Entity\ScalingMetric::findPk($this->metricId);
+        }
 
         return $this->metric;
     }

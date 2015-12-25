@@ -11,6 +11,7 @@ use Scalr\Stats\CostAnalytics\Entity\NotificationEntity;
 use Scalr\Stats\CostAnalytics\Entity\ReportEntity;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 use Scalr\UI\Request\JsonData;
+use Scalr\UI\Request\Validator;
 
 class Scalr_UI_Controller_Admin_Analytics_Projects extends Scalr_UI_Controller
 {
@@ -131,6 +132,10 @@ class Scalr_UI_Controller_Admin_Analytics_Projects extends Scalr_UI_Controller
      */
     public function xSaveAction($ccId, $projectId, $name, $description, $billingCode, $leadEmail, $shared, $accountId = null, $checkAccountAccessToCc = true, $grantAccountAccessToCc = false)
     {
+
+        $validator = new Validator();
+        $validator->validate($name, 'name', Validator::NOEMPTY);
+
         if ($projectId) {
             $project = $this->getContainer()->analytics->projects->get($projectId);
 
@@ -144,7 +149,7 @@ class Scalr_UI_Controller_Admin_Analytics_Projects extends Scalr_UI_Controller
 
             $cc = $this->getContainer()->analytics->ccs->get($ccId);
             if (!$cc) {
-                $this->request->addValidationErrors('ccId', 'Cost center ID should be set');
+                $validator->addError('ccId', 'Cost center ID should be set');
             }
 
             $project->ccId = $ccId;
@@ -161,11 +166,8 @@ class Scalr_UI_Controller_Admin_Analytics_Projects extends Scalr_UI_Controller
             throw new Scalr_UI_Exception_NotFound();
         }
 
-        if (!$this->request->isValid()) {
-            $this->response->data($this->request->getValidationErrors());
-            $this->response->failure();
+        if (!$validator->isValid($this->response))
             return;
-        }
 
         if ($project->shared == ProjectEntity::SHARED_WITHIN_ACCOUNT) {
             if (!AccountCostCenterEntity::findOne([['accountId' => $project->accountId], ['ccId' => $ccId]])) {
@@ -230,7 +232,7 @@ class Scalr_UI_Controller_Admin_Analytics_Projects extends Scalr_UI_Controller
         }
 
         $this->response->data(array('removable' => $removable));
-        $this->response->success();
+        $this->response->success('Project successfully ' . ($removable ? 'removed' : 'archived'));
     }
 
     /**

@@ -15,21 +15,22 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
 
     public function hasAccess()
     {
-        return ($this->request->getScope() == WebhookConfig::SCOPE_ENVIRONMENT && $this->request->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_WEBHOOKS) && !$this->user->isScalrAdmin() ||
-               $this->request->getScope() == WebhookConfig::SCOPE_ACCOUNT && $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_WEBHOOKS) && !$this->user->isScalrAdmin() ||
+        return ($this->request->getScope() == WebhookConfig::SCOPE_ENVIRONMENT && $this->request->isAllowed(Acl::RESOURCE_WEBHOOKS_ENVIRONMENT) && !$this->user->isScalrAdmin() ||
+               $this->request->getScope() == WebhookConfig::SCOPE_ACCOUNT && $this->request->isAllowed(Acl::RESOURCE_WEBHOOKS_ACCOUNT) && !$this->user->isScalrAdmin() ||
                $this->request->getScope() == WebhookConfig::SCOPE_SCALR && $this->user->isScalrAdmin());
     }
 
     /**
      * @param WebhookConfig $webhook
+     * @return bool
      * @throws Exception
      */
-    private function canEditWebhook($webhook)
+    private function canManageWebhook($webhook)
     {
         return $this->request->getScope() == $webhook->getScope() &&
                ($webhook->getScope() == WebhookConfig::SCOPE_SCALR ||
-                $webhook->getScope() == WebhookConfig::SCOPE_ACCOUNT && $webhook->accountId == $this->user->getAccountId() ||
-                $webhook->getScope() == WebhookConfig::SCOPE_ENVIRONMENT && $webhook->envId == $this->getEnvironmentId() && $webhook->accountId == $this->user->getAccountId());
+                $webhook->getScope() == WebhookConfig::SCOPE_ACCOUNT && $webhook->accountId == $this->user->getAccountId() && $this->request->isAllowed(Acl::RESOURCE_WEBHOOKS_ACCOUNT, Acl::PERM_WEBHOOKS_ACCOUNT_MANAGE) ||
+                $webhook->getScope() == WebhookConfig::SCOPE_ENVIRONMENT && $webhook->envId == $this->getEnvironmentId() && $webhook->accountId == $this->user->getAccountId() && $this->request->isAllowed(Acl::RESOURCE_WEBHOOKS_ENVIRONMENT, Acl::PERM_WEBHOOKS_ENVIRONMENT_MANAGE));
     }
 
     public function defaultAction()
@@ -57,7 +58,8 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
     public function xRemoveAction($webhookId)
     {
         $webhook = WebhookConfig::findPk($webhookId);
-        if (!$this->canEditWebhook($webhook)) {
+
+        if (!$this->canManageWebhook($webhook)) {
             throw new Scalr_Exception_Core('Insufficient permissions to remove webhook');
         }
 
@@ -84,7 +86,8 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
             $webhook->setScope($this->request->getScope(), $this->user->getAccountId(), $this->getEnvironmentId(true));
         } else {
             $webhook = WebhookConfig::findPk($webhookId);
-            if (!$this->canEditWebhook($webhook)) {
+
+            if (!$this->canManageWebhook($webhook)) {
                 throw new Scalr_Exception_Core('Insufficient permissions to edit webhook');
             }
         }
@@ -245,7 +248,7 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
         if (!empty($webhookIds)) {
             $webhooks = WebhookConfig::find([['webhookId'  => ['$in' => $webhookIds]]]);
             foreach ($webhooks as $webhook) {
-                if (!$this->canEditWebhook($webhook)) {
+                if (!$this->canManageWebhook($webhook)) {
                     $errors[] = 'Insufficient permissions to remove webhook';
                 } else {
                     $processed[] = $webhook->webhookId;
@@ -255,10 +258,10 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
         }
         $num = count($webhookIds);
         if (count($processed) == $num) {
-            $this->response->success('Webhooks successfully processed');
+            $this->response->success('Selected webhook(s) successfully removed');
         } else {
             array_walk($errors, function(&$item) { $item = '- ' . $item; });
-            $this->response->warning(sprintf("Successfully processed only %d from %d webhooks. \nFollowing errors occurred:\n%s", count($processed), $num, join($errors, '')));
+            $this->response->warning(sprintf("Successfully removed only %d from %d webhooks. \nFollowing errors occurred:\n%s", count($processed), $num, join($errors, '')));
         }
 
         $this->response->data(array('processed' => $processed));
@@ -397,7 +400,8 @@ class Scalr_UI_Controller_Webhooks_Configs extends Scalr_UI_Controller
             $endpoints[] = [
                 'id'         => $entity->endpointId,
                 'url'        => $entity->url,
-                'isValid'    => $entity->isValid
+                'isValid'    => $entity->isValid,
+                'scope'      => $entity->getScope()
             ];
         }
 

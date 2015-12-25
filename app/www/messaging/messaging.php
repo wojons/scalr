@@ -2,7 +2,7 @@
 
 require __DIR__ . "/../../src/prepend.inc.php";
 
-$logger = Logger::getLogger("Messaging");
+$logger = \Scalr::getContainer()->logger("Messaging");
 $logger->info("Messaging server received request");
 
 try {

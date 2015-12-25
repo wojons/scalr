@@ -87,14 +87,6 @@ class YamlTest extends TestCase
         }
 
         $this->assertEquals(3, count($imports));
-        $this->assertEquals(false, $config('scalr.auditlog.enabled'));
-        $this->assertEquals('scalr', $config('scalr.auditlog.mysql.name'));
-        $this->assertEquals('localhost', $config->get('scalr.auditlog.mysql.host'));
-        $this->assertEquals('', $config->get('scalr.auditlog.mysql.port'));
-        $this->assertEquals('mysql', $config->get('scalr.auditlog.mysql.driver'));
-        $this->assertEquals('scalruser', $config->get('scalr.auditlog.mysql.user'));
-        $this->assertEquals('scalrpassword', $config->get('scalr.auditlog.mysql.pass'));
-
         $this->assertEquals('scalr', $config->get('scalr.connections.mysql.name'));
         $this->assertEquals('localhost', $config->get('scalr.connections.mysql.host'));
         $this->assertEquals('', $config->get('scalr.connections.mysql.port'));

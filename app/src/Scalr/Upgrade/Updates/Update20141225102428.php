@@ -30,30 +30,30 @@ class Update20141225102428 extends AbstractUpdate implements SequenceInterface
 
     protected function isApplied1($stage)
     {
-        return  defined('Scalr\\Acl\\Acl::RESOURCE_ADMINISTRATION_ANALYTICS') &&
-                defined('Scalr\\Acl\\Acl::PERM_ADMINISTRATION_ANALYTICS_MANAGE_PROJECTS') &&
+        return  defined('Scalr\\Acl\\Acl::RESOURCE_ANALYTICS_ACCOUNT') &&
+                defined('Scalr\\Acl\\Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS') &&
                 $this->db->GetOne("
                     SELECT `granted` FROM `acl_role_resource_permissions`
                     WHERE `resource_id` = ? AND `role_id` = ? AND `perm_id` = ?
                     LIMIT 1
                     ", array(
-                    Acl::RESOURCE_ADMINISTRATION_ANALYTICS,
+                    Acl::RESOURCE_ANALYTICS_ACCOUNT,
                     Acl::ROLE_ID_FULL_ACCESS,
-                    Acl::PERM_ADMINISTRATION_ANALYTICS_MANAGE_PROJECTS
+                    Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS
                 )) == 1;
     }
 
     protected function validateBefore1($stage)
     {
-        return  defined('Scalr\\Acl\\Acl::RESOURCE_ADMINISTRATION_ANALYTICS') &&
-                defined('Scalr\\Acl\\Acl::PERM_ADMINISTRATION_ANALYTICS_MANAGE_PROJECTS') &&
-                Definition::has(Acl::RESOURCE_ADMINISTRATION_ANALYTICS) &&
+        return  defined('Scalr\\Acl\\Acl::RESOURCE_ANALYTICS_ACCOUNT') &&
+                defined('Scalr\\Acl\\Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS') &&
+                Definition::has(Acl::RESOURCE_ANALYTICS_ACCOUNT) &&
                 $this->db->GetOne("
                     SELECT `granted` FROM `acl_role_resources`
                     WHERE `resource_id` = ? AND `role_id` = ?
                     LIMIT 1
                 ", array(
-                    Acl::RESOURCE_ADMINISTRATION_ANALYTICS,
+                    Acl::RESOURCE_ANALYTICS_ACCOUNT,
                     Acl::ROLE_ID_FULL_ACCESS,
                 )) == 1;
     }
@@ -66,37 +66,37 @@ class Update20141225102428 extends AbstractUpdate implements SequenceInterface
             VALUES (?, ?, ?, 1)
         ", array(
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::RESOURCE_ADMINISTRATION_ANALYTICS,
-            Acl::PERM_ADMINISTRATION_ANALYTICS_MANAGE_PROJECTS
+            Acl::RESOURCE_ANALYTICS_ACCOUNT,
+            Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS
         ));
     }
 
     protected function isApplied2($stage)
     {
-        return  defined('Scalr\\Acl\\Acl::RESOURCE_ADMINISTRATION_ANALYTICS') &&
-        defined('Scalr\\Acl\\Acl::PERM_ADMINISTRATION_ANALYTICS_ALLOCATE_BUDGET') &&
+        return  defined('Scalr\\Acl\\Acl::RESOURCE_ANALYTICS_ACCOUNT') &&
+        defined('Scalr\\Acl\\Acl::PERM_ANALYTICS_ACCOUNT_ALLOCATE_BUDGET') &&
         $this->db->GetOne("
                     SELECT `granted` FROM `acl_role_resource_permissions`
                     WHERE `resource_id` = ? AND `role_id` = ? AND `perm_id` = ?
                     LIMIT 1
                     ", array(
-            Acl::RESOURCE_ADMINISTRATION_ANALYTICS,
+            Acl::RESOURCE_ANALYTICS_ACCOUNT,
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::PERM_ADMINISTRATION_ANALYTICS_ALLOCATE_BUDGET
+            Acl::PERM_ANALYTICS_ACCOUNT_ALLOCATE_BUDGET
         )) == 1;
     }
 
     protected function validateBefore2($stage)
     {
-        return  defined('Scalr\\Acl\\Acl::RESOURCE_ADMINISTRATION_ANALYTICS') &&
-        defined('Scalr\\Acl\\Acl::PERM_ADMINISTRATION_ANALYTICS_ALLOCATE_BUDGET') &&
-        Definition::has(Acl::RESOURCE_ADMINISTRATION_ANALYTICS) &&
+        return  defined('Scalr\\Acl\\Acl::RESOURCE_ANALYTICS_ACCOUNT') &&
+        defined('Scalr\\Acl\\Acl::PERM_ANALYTICS_ACCOUNT_ALLOCATE_BUDGET') &&
+        Definition::has(Acl::RESOURCE_ANALYTICS_ACCOUNT) &&
         $this->db->GetOne("
                     SELECT `granted` FROM `acl_role_resources`
                     WHERE `resource_id` = ? AND `role_id` = ?
                     LIMIT 1
                 ", array(
-            Acl::RESOURCE_ADMINISTRATION_ANALYTICS,
+            Acl::RESOURCE_ANALYTICS_ACCOUNT,
             Acl::ROLE_ID_FULL_ACCESS,
         )) == 1;
     }
@@ -109,8 +109,8 @@ class Update20141225102428 extends AbstractUpdate implements SequenceInterface
             VALUES (?, ?, ?, 1)
         ", array(
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::RESOURCE_ADMINISTRATION_ANALYTICS,
-            Acl::PERM_ADMINISTRATION_ANALYTICS_ALLOCATE_BUDGET
+            Acl::RESOURCE_ANALYTICS_ACCOUNT,
+            Acl::PERM_ANALYTICS_ACCOUNT_ALLOCATE_BUDGET
         ));
     }
 

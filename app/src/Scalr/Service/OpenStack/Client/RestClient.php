@@ -1,13 +1,16 @@
 <?php
+
 namespace Scalr\Service\OpenStack\Client;
 
+use http\Client\Response;
 use Scalr\Service\OpenStack\Client\Auth\LoaderFactory;
 use Scalr\Service\OpenStack\Services\ServiceInterface;
 use Scalr\Service\OpenStack\Exception\RestClientException;
 use Scalr\Service\OpenStack\OpenStackConfig;
 use Scalr\Service\OpenStack\Type\AppFormat;
-use \HttpRequest;
-use \HttpException;
+use Scalr\System\Http\Client\Request;
+use Scalr\Util\CallbackInterface;
+use Scalr\Util\CallbackTrait;
 
 /**
  * OpenStack Rest Client
@@ -15,8 +18,10 @@ use \HttpException;
  * @author   Vitaliy Demidov  <vitaliy@scalr.com>
  * @since    06.12.2012
  */
-class RestClient implements ClientInterface
+class RestClient implements ClientInterface, CallbackInterface
 {
+
+    use CallbackTrait;
 
     /**
      * OpenStack config
@@ -24,13 +29,6 @@ class RestClient implements ClientInterface
      * @var OpenStackConfig
      */
     protected $config;
-
-    /**
-     * Default useragent
-     *
-     * @var string
-     */
-    protected $useragent;
 
     /**
      * @var bool
@@ -45,9 +43,6 @@ class RestClient implements ClientInterface
     public function __construct(OpenStackConfig $config)
     {
         $this->config = $config;
-        $this->useragent = sprintf('Scalr OpenStack Client (http://scalr.com) PHP/%s pecl_http/%s',
-            phpversion(), phpversion('http')
-        );
     }
 
     /**
@@ -61,21 +56,20 @@ class RestClient implements ClientInterface
     }
 
     /**
-     * Creates new HttpRequest object
+     * Creates new http Request object
      *
-     * @return HttpRequest Returns new HttpRequest object
+     * @return Request Returns new http Request object
      */
     protected function createHttpRequest()
     {
-        $req = new HttpRequest();
-        $req->resetCookies();
+        $req = new Request();
         $req->setOptions(array(
             'redirect'       => 10,
-            'useragent'      => $this->useragent,
             'verifypeer'     => false,
             'verifyhost'     => false,
             'timeout'        => \Scalr::config('scalr.openstack.api_client.timeout'),
-            'connecttimeout' => 30
+            'connecttimeout' => 30,
+            'cookiesession' => true
         ));
 
         $proxySettings = $this->getConfig()->getProxySettings();
@@ -101,29 +95,33 @@ class RestClient implements ClientInterface
     /**
      * Tries to send request on several attempts.
      *
-     * @param    HttpRequest     $httpRequest
+     * @param    Request         $httpRequest
      * @param    int             $attempts     Attempts count.
      * @param    int             $interval     An sleep interval between an attempts in microseconds.
      * @throws   RestClientException
-     * @return   HttpMessage    Returns HttpMessage if success.
+     * @return   Response    Returns http Response if success.
      */
     protected function tryCall($httpRequest, $attempts = 1, $interval = 200)
     {
         try {
-            $message = $httpRequest->send();
-        } catch (HttpException $e) {
+            $response = \Scalr::getContainer()->http->sendRequest($httpRequest);
+
+            if (is_callable($this->callback)) {
+                call_user_func($this->callback, $httpRequest, $response);
+            }
+        } catch (\http\Exception $e) {
             if (--$attempts > 0) {
                 usleep($interval);
-                $message = $this->tryCall($httpRequest, $attempts, $interval * 2);
+                $response = $this->tryCall($httpRequest, $attempts, $interval * 2);
             } else {
                 throw new RestClientException(sprintf(
                     'Cannot establish connection with OpenStack server (%s). (%s).',
-                    $httpRequest->getUrl(),
+                    $httpRequest->getRequestUrl(),
                     (isset($e->innerException) ? preg_replace('/(\(.*\))/', '', $e->innerException->getMessage()) : $e->getMessage())
                 ));
             }
         }
-        return $message;
+        return $response;
     }
 
     /**
@@ -172,7 +170,7 @@ class RestClient implements ClientInterface
             }
         }
 
-        $req->setMethod(constant('HTTP_METH_' . $verb));
+        $req->setRequestMethod($verb);
         $ctype = 'json';
         $headers = array(
             'Accept'       => 'application/' . (string)$accept,
@@ -208,28 +206,28 @@ class RestClient implements ClientInterface
         }
 
         $req->addHeaders($headers);
-        $req->setUrl($endpoint . $path);
+        $req->setRequestUrl($endpoint . $path);
 
         if ($verb == 'POST') {
-            $req->setBody(json_encode($options));
+            $req->append(json_encode($options));
         } elseif ($verb == 'PUT') {
             if (isset($customOptions['putData'])) {
-                $req->setPutData($customOptions['putData']);
+                $req->append($customOptions['putData']);
             } else if (isset($customOptions['putFile'])) {
-                $req->setPutFile($customOptions['putFile']);
+                $req->addFiles([ $customOptions['putFile'] ]);
             }
         } else {
-            $req->addQueryData($options);
+            $req->addQuery($options);
         }
 
         $message = $this->tryCall($req, $attempts);
 
         $response = new RestClientResponse($message, $accept);
-        $response->setRawRequestMessage($req->getRawRequestMessage());
+        $response->setRawRequestMessage($req->toString());
         if ($this->debug) {
-            echo "\nURL: " . $req->getUrl() . "\n";
-            echo $req->getRawRequestMessage() . "\n";
-            echo $req->getRawResponseMessage() . "\n";
+            echo "\nURL: " . $req->getRequestUrl() . "\n",
+                 "{$req}\n",
+                 "{$message}\n";
         }
 
         if ($response->getResponseCode() === 401 && !isset($bAuthRequestSent) && $this->getConfig()->getAuthToken() !== null) {

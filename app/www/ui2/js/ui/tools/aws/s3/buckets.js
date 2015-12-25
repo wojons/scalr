@@ -12,7 +12,9 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
 		scalrOptions: {
 			reload: false,
 			maximize: 'all',
-            menuTitle: 'AWS Cloudfront'
+            menuTitle: 'AWS Cloudfront',
+            menuFavorite: true,
+            menuHref: '#/tools/aws/s3/manageBuckets'
 		},
 		store: store,
 		stateId: 'grid-tools-aws-s3-buckets',
@@ -42,6 +44,7 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
 		}, {
 			xtype: 'optionscolumn',
 			width: 120,
+            hidden: !Scalr.isAllowed('AWS_S3', 'manage'),
 			menu: [{
 				text: 'Create distribution',
 				iconCls: 'x-menu-icon-create',
@@ -118,7 +121,7 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
 			}]
 		}],
 
-        selModel: 'selectedmodel',
+        selModel: Scalr.isAllowed('AWS_S3', 'manage') ? 'selectedmodel' : null,
         listeners: {
             selectionchange: function(selModel, selections) {
                 this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
@@ -132,6 +135,7 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
             beforeItems: [{
                 text: 'New bucket',
                 cls: 'x-btn-green',
+                hidden: !Scalr.isAllowed('AWS_S3', 'manage'),
                 handler: function() {
                     Scalr.Request({
                         confirmBox: {
@@ -191,6 +195,7 @@ Scalr.regPage('Scalr.ui.tools.aws.s3.buckets', function (loadParams, moduleParam
                 cls: 'x-btn-red',
                 tooltip: 'Select one or more buckets to delete them',
                 disabled: true,
+                hidden: !Scalr.isAllowed('AWS_S3', 'manage'),
                 handler: function() {
                     var request = {
                         confirmBox: {

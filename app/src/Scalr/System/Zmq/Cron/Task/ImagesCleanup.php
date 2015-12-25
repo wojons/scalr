@@ -19,14 +19,13 @@ class ImagesCleanup extends AbstractTask
      */
     public function enqueue()
     {
+        /* @var $image Image */
         foreach (Image::find([['status' => Image::STATUS_DELETE]]) as $image) {
             try {
                 /* @var $image Image */
                 $image->deleteCloudImage();
                 $image->delete();
             } catch (Exception $e) {
-                $flag = false;
-
                 if (strpos($e->getMessage(), 'The resource could not be found') !== false ||
                     strpos($e->getMessage(), 'The requested URL / was not found on this server.') !== false ||
                     strpos($e->getMessage(), 'Not Found') !== false ||

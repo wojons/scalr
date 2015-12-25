@@ -1,0 +1,13 @@
+#### `{{ parameter["name"] }}` ####
+
+{{ parameter.get("description", "") }}
+
+{% if "type" in parameter %}
+Parameter of type: `{{ parameter["type"] }}`.
+{% endif %}
+
+{% if "schema" in parameter %}
+An object of type: {{ parameter["schema"]|link_to_ref }}.
+{% endif %}
+
+{% if "enum" in parameter %}{{ unsupported.unsupported }}{% endif %}

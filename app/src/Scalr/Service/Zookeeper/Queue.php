@@ -41,7 +41,7 @@ class Scalr_Service_Zookeeper_Queue implements Scalr_Util_Queue {
         foreach ($config as $k => $v) {
             $this->{$k} = $v;
         }
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
 
         if ($this->autoInit) {
             $this->init();

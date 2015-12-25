@@ -1,155 +1,205 @@
 <?php
 
-use \Scalr\Service\Aws\Rds\DataType\ParameterData;
-use \Scalr\Acl\Acl;
+use Scalr\Acl\Acl;
+use Scalr\Service\Aws\Rds\DataType;
 
 class Scalr_UI_Controller_Tools_Aws_Rds_Pg extends Scalr_UI_Controller
 {
-
+    /**
+     * {@inheritdoc}
+     * @see Scalr_UI_Controller::hasAccess()
+     */
     public function hasAccess()
     {
         return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_RDS);
     }
 
+    /**
+     * Forwards the controller to the default action
+     */
     public function defaultAction()
     {
         $this->viewAction();
     }
 
-    public function viewAction()
+    /**
+     * Gets AWS Client for the current environment
+     *
+     * @param  string $cloudLocation Cloud location
+     * @return \Scalr\Service\Aws Returns Aws client for current environment
+     */
+    protected function getAwsClient($cloudLocation)
     {
-        $this->response->page('ui/tools/aws/rds/pg/view.js', array(
-            'locations'	=> self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false)
-        ));
+        return $this->environment->aws($cloudLocation);
     }
 
-    public function xListAction()
+    public function viewAction()
     {
-        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
+        $this->response->page('ui/tools/aws/rds/pg/view.js', [
+            'locations'	=> self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false)
+        ]);
+    }
 
-        $groupList = $aws->rds->dbParameterGroup->describe();
-        $groups = array();
+    /**
+     * List parameter groups
+     *
+     * @param string $cloudLocation Cloud location
+     */
+    public function xListAction($cloudLocation)
+    {
+        $groups = [];
         /* @var $pargroup \Scalr\Service\Aws\Rds\DataType\DBParameterGroupData */
-        foreach ($groupList as $pargroup){
-            $groups[] = array(
+        foreach ($this->getAwsClient($cloudLocation)->rds->dbParameterGroup->describe() as $pargroup){
+            $groups[] = [
                 'Engine'               => $pargroup->dBParameterGroupFamily,
                 'DBParameterGroupName' => $pargroup->dBParameterGroupName,
                 'Description'          => $pargroup->description,
-            );
+            ];
         }
 
-        $response = $this->buildResponseFromData($groups, array('Description', 'DBParameterGroupName'));
+        $response = $this->buildResponseFromData($groups, ['Description', 'DBParameterGroupName']);
 
         $this->response->data($response);
     }
 
-    public function xCreateAction()
+    /**
+     * Create a parameter group
+     *
+     * @param string $cloudLocation        Cloud location
+     * @param string $dbParameterGroupName Group name
+     * @param string $EngineFamily         Group family
+     * @param string $Description          Group description
+     */
+    public function xCreateAction($cloudLocation, $dbParameterGroupName, $EngineFamily, $Description)
     {
-        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
-        $aws->rds->dbParameterGroup->create(new Scalr\Service\Aws\Rds\DataType\DBParameterGroupData(
-            $this->getParam('dbParameterGroupName'),
-            $this->getParam('EngineFamily'),
-            $this->getParam('Description')
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_RDS, Acl::PERM_AWS_RDS_MANAGE);
+
+        $this->getAwsClient($cloudLocation)->rds->dbParameterGroup->create(new DataType\DBParameterGroupData(
+            $dbParameterGroupName,
+            $EngineFamily,
+            $Description
         ));
 
         $this->response->success("DB parameter group successfully created");
     }
 
-    public function xDeleteAction()
+    /**
+     * Delete parameter group
+     *
+     * @param string $cloudLocation Cloud location
+     * @param string $name          Group name
+     */
+    public function xDeleteAction($cloudLocation, $name)
     {
-        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
-        $aws->rds->dbParameterGroup->delete($this->getParam('name'));
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_RDS, Acl::PERM_AWS_RDS_MANAGE);
+
+        $this->getAwsClient($cloudLocation)->rds->dbParameterGroup->delete($name);
         $this->response->success("DB parameter group successfully removed");
     }
 
-    public function editAction()
+    /**
+     * Get parameter groups for editing
+     *
+     * @param string $cloudLocation Cloud location
+     * @param string $name          Group name
+     */
+    public function editAction($cloudLocation, $name)
     {
-        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_RDS, Acl::PERM_AWS_RDS_MANAGE);
 
-        $params = $aws->rds->dbParameterGroup->describeParameters($this->getParam('name'));
+        $aws = $this->getAwsClient($cloudLocation);
 
-        $groups = $aws->rds->dbParameterGroup->describe($this->getParam('name'))->get(0);
+        $params = $aws->rds->dbParameterGroup->describeParameters($name);
 
-        $items = array();
+        $groups = $aws->rds->dbParameterGroup->describe($name)->get(0);
+
+        $items = [];
         /* @var $value ParameterData */
         foreach ($params as $value) {
             $value = $value->toArray();
             $value = array_combine(array_map('ucfirst', array_keys($value)), array_values($value));
+            $value["Source"] = lcfirst(str_replace(" ", "", ucwords(str_replace("-", " ", $value["Source"]))));
             $itemField = new stdClass();
             if (strpos($value['AllowedValues'], ',') && $value['DataType'] != 'boolean') {
-                    $store = explode(',', $value['AllowedValues']);
-                    $itemField->xtype = 'combo';
-                    $itemField->allowBlank = true;
-                    $itemField->editable = false;
-                    $itemField->queryMode = 'local';
-                    $itemField->displayField = 'name';
-                    $itemField->valueField = 'name';
-                    $itemField->store = $store;
-            } else if($value['DataType'] == 'boolean') {
-                $itemField->xtype = 'checkbox';
-                $itemField->inputValue = 1;
-                $itemField->checked = ($value['ParameterValue'] == 1);
+                $store = explode(',', $value['AllowedValues']);
+
+                $itemField->xtype        = 'combo';
+                $itemField->allowBlank   = true;
+                $itemField->editable     = false;
+                $itemField->queryMode    = 'local';
+                $itemField->displayField = 'name';
+                $itemField->valueField   = 'name';
+                $itemField->store        = $store;
+            } elseif ($value['DataType'] == 'boolean') {
+                $itemField->xtype        = 'checkbox';
+                $itemField->inputValue   = 1;
+                $itemField->checked      = $value['ParameterValue'] == 1;
             } else {
-                if ($value['IsModifiable'] === false)
-                    $itemField->xtype = 'displayfield';
-                else
-                    $itemField->xtype = 'textfield';
+                if ($value['IsModifiable'] === false) {
+                    $itemField->xtype    = 'displayfield';
+                } else {
+                    $itemField->xtype    = 'textfield';
+                }
             }
-            $itemField->name = $value['Source'] . '[' . $value['ParameterName'] . ']';
-            $itemField->fieldLabel = $value['ParameterName'];
-            $itemField->value = $value['ParameterValue'];
-            $itemField->labelWidth = 300;
-            $itemField->width = 790;
-            $itemField->readOnly = ($value['IsModifiable'] === false && $itemField->xtype != 'displayfield') ? true : false;
+            $itemField->name        = $value['Source'] . '[' . $value['ParameterName'] . ']';
+            $itemField->fieldLabel  = $value['ParameterName'];
+            $itemField->value       = $value['ParameterValue'];
+            $itemField->labelWidth  = 300;
+            $itemField->width       = 790;
+            $itemField->readOnly    = $value['IsModifiable'] === false && $itemField->xtype != 'displayfield';
             $itemField->submitValue = $value['IsModifiable'] !== false;
 
             $itemDesc = new stdClass();
-            $itemDesc->xtype = 'displayinfofield';
-            $itemDesc->width = 16;
+            $itemDesc->xtype  = 'displayinfofield';
+            $itemDesc->width  = 16;
             $itemDesc->margin = '0 0 0 5';
-            $itemDesc->info = $value['Description'];
+            $itemDesc->info   = $value['Description'];
 
             $item = new stdClass();
-            $item->xtype = 'fieldcontainer';
+            $item->xtype  = 'fieldcontainer';
             $item->layout = 'hbox';
-            $item->items = array(
-                $itemField,
-                $itemDesc
-            );
+            $item->items  = [$itemField, $itemDesc];
 
             $items[$value['Source']][] = $item;
         }
-        $this->response->page('ui/tools/aws/rds/pg/edit.js', array('params' => $items, 'group' => $groups));
+
+        $this->response->page('ui/tools/aws/rds/pg/edit.js', ['params' => $items, 'group' => $groups]);
     }
 
-    public function xSaveAction()
+    /**
+     * Save parameter groups
+     *
+     * @param string $cloudLocation         Cloud location
+     * @param string $name                  Group name
+     * @param array  $system        optional
+     * @param array  $user          optional
+     * @param array  $engineDefault optional
+     */
+    public function xSaveAction($cloudLocation, $name, array $system = [], array $user = [], array $engineDefault = [])
     {
-        $this->request->defineParams(array(
-            'system' => array('type' => 'array'),
-            'user' => array('type' => 'array'),
-            'engine-default' => array('type' => 'array')
-        ));
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_RDS, Acl::PERM_AWS_RDS_MANAGE);
 
-        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
+        $aws = $this->getAwsClient($cloudLocation);
 
-        $params = $aws->rds->dbParameterGroup->describeParameters($this->getParam('name'));
+        $params = $aws->rds->dbParameterGroup->describeParameters($name);
 
-        $modifiedParameters = new \Scalr\Service\Aws\Rds\DataType\ParameterList();
-        $newParams = array();
-        foreach ($this->getParam('system') as $system => $f) {
-            $newParams[] = new Scalr\Service\Aws\Rds\DataType\ParameterData($system, null, $f);
+        $modifiedParameters = new DataType\ParameterList();
+        $newParams = [];
+        foreach ($system as $system => $f) {
+            $newParams[] = new DataType\ParameterData($system, null, $f);
         }
-        foreach ($this->getParam('engine-default') as $default => $f) {
-            $newParams[] = new Scalr\Service\Aws\Rds\DataType\ParameterData($default, null, $f);
+        foreach ($engineDefault as $default => $f) {
+            $newParams[] = new DataType\ParameterData($default, null, $f);
         }
-        foreach ($this->getParam('user') as $user => $f) {
-            $newParams[] = new Scalr\Service\Aws\Rds\DataType\ParameterData($user, null, $f);
+        foreach ($user as $user => $f) {
+            $newParams[] = new DataType\ParameterData($user, null, $f);
         }
+
         //This piece of code needs to be optimized.
         foreach ($newParams as $newParam) {
-            /* @var $newParam ParameterData */
+            /* @var $newParam DataType\ParameterData */
             foreach ($params as $param) {
-                /* @var $param ParameterData */
+                /* @var $param DataType\ParameterData */
                 if ($param->parameterName == $newParam->parameterName) {
                     if ((empty($param->parameterValue) && !empty($newParam->parameterValue)) ||
                         (!empty($param->parameterValue) && empty($newParam->parameterValue)) ||
@@ -157,60 +207,86 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Pg extends Scalr_UI_Controller
                         !empty($newParam->parameterValue) && !empty($param->parameterValue))
                     ) {
                         if ($param->applyType === 'static') {
-                            $newParam->applyMethod = ParameterData::APPLY_METHOD_PENDING_REBOOT;
+                            $newParam->applyMethod = DataType\ParameterData::APPLY_METHOD_PENDING_REBOOT;
                         } else {
-                            $newParam->applyMethod = ParameterData::APPLY_METHOD_IMMEDIATE;
+                            $newParam->applyMethod = DataType\ParameterData::APPLY_METHOD_IMMEDIATE;
                         }
                         $modifiedParameters->append($newParam);
                     }
                 }
             }
         }
-        $oldBoolean = array();
+
+        $oldBoolean = [];
         foreach ($params as $param) {
             if ($param->dataType == 'boolean' && $param->parameterValue == 1) {
-                if ($param->applyType == 'static')
-                    $param->applyMethod = ParameterData::APPLY_METHOD_PENDING_REBOOT;
-                else
-                    $param->applyMethod = ParameterData::APPLY_METHOD_IMMEDIATE;
+                if ($param->applyType == 'static') {
+                    $param->applyMethod = DataType\ParameterData::APPLY_METHOD_PENDING_REBOOT;
+                } else {
+                    $param->applyMethod = DataType\ParameterData::APPLY_METHOD_IMMEDIATE;
+                }
                 $oldBoolean[] = $param;
             }
         }
+
         foreach ($oldBoolean as $old) {
             $found = false;
             foreach ($newParams as $newParam) {
-                if ($old->parameterName == $newParam->parameterName)
+                if ($old->parameterName == $newParam->parameterName) {
                     $found = true;
+                }
             }
+
             if (!$found && $old->isModifiable) {
                 $old->parameterValue = 0;
                 $modifiedParameters->append($old);
             }
         }
+
         if (count($modifiedParameters)) {
-            $aws->rds->dbParameterGroup->modify($this->getParam('name'), $modifiedParameters);
+            $aws->rds->dbParameterGroup->modify($name, $modifiedParameters);
         }
+
         $this->response->success("DB parameter group successfully updated");
     }
 
-    public function xResetAction()
+    /**
+     * Reset parameters in the given group
+     *
+     * @param string $cloudLocation Cloud location
+     * @param string $name          Group name
+     */
+    public function xResetAction($cloudLocation, $name)
     {
-        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_RDS, Acl::PERM_AWS_RDS_MANAGE);
 
-        $params = $aws->rds->dbParameterGroup->describeParameters($this->getParam('name'));
+        $aws = $this->getAwsClient($cloudLocation);
 
-        $modifiedParameters = new \Scalr\Service\Aws\Rds\DataType\ParameterList();
+        $params = $aws->rds->dbParameterGroup->describeParameters($name);
+
+        $modifiedParameters = new DataType\ParameterList();
         foreach ($params as $param) {
             if ($param->parameterValue && !empty($param->parameterValue)) {
-                if ($param->applyType == 'static')
-                    $modifiedParameters->append(new ParameterData($param->parameterName, ParameterData::APPLY_METHOD_PENDING_REBOOT, $param->parameterValue));
-                else
-                    $modifiedParameters->append(new ParameterData($param->parameterName, ParameterData::APPLY_METHOD_IMMEDIATE, $param->parameterValue));
+                if ($param->applyType == 'static') {
+                    $modifiedParameters->append(new DataType\ParameterData(
+                        $param->parameterName,
+                        DataType\ParameterData::APPLY_METHOD_PENDING_REBOOT,
+                        $param->parameterValue
+                    ));
+                } else {
+                    $modifiedParameters->append(new DataType\ParameterData(
+                        $param->parameterName,
+                        DataType\ParameterData::APPLY_METHOD_IMMEDIATE,
+                        $param->parameterValue
+                    ));
+                }
             }
         }
+
         if (count($modifiedParameters)) {
-            $aws->rds->dbParameterGroup->reset($this->getParam('name'), $modifiedParameters);
+            $aws->rds->dbParameterGroup->reset($name, $modifiedParameters);
         }
+
         $this->response->success("DB parameter group successfully reset to default");
     }
 
@@ -221,13 +297,9 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Pg extends Scalr_UI_Controller
      */
     public function xGetDBFamilyListAction($cloudLocation)
     {
-        $aws = $this->getEnvironment()->aws($cloudLocation);
-
-        $versions = $aws->rds->describeDBEngineVersions();
-
         $engineFamilyList = [];
 
-        foreach ($versions as $version) {
+        foreach ($this->getAwsClient($cloudLocation)->rds->describeDBEngineVersions() as $version) {
             /* @var $version \Scalr\Service\Aws\Rds\DataType\DBEngineVersionData */
             $entry = [$version->dBParameterGroupFamily];
 
@@ -238,5 +310,4 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Pg extends Scalr_UI_Controller
 
         $this->response->data(['engineFamilyList' => $engineFamilyList]);
     }
-
 }

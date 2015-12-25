@@ -2,7 +2,6 @@
 
 namespace Scalr\Tests\Functional\Api\Service\User\V1beta0\Controller;
 
-use DateTime;
 use Scalr\Api\DataType\ApiEntityAdapter;
 use Scalr\Api\DataType\ErrorMessage;
 use Scalr\Api\Rest\Controller\ApiController;
@@ -24,7 +23,7 @@ class ScriptsTest extends ScriptsTestCase
 
     public function scriptToDelete($scriptId)
     {
-        static::$testData['Scalr\Model\Entity\Script'][] = $scriptId;
+        static::toDelete('Scalr\Model\Entity\Script', $scriptId);
     }
 
     /**
@@ -128,6 +127,7 @@ class ScriptsTest extends ScriptsTestCase
             'description' => 'test-post',
             'timeoutDefault' => 1000,
             'blockingDefault' => true,
+            'osType' => 'linux',
             'scope' => ScopeInterface::SCOPE_ENVIRONMENT
         ];
         $response = $this->postScript($data);
@@ -167,6 +167,7 @@ class ScriptsTest extends ScriptsTestCase
             'id' => $script->id,
             'name' => 'test-post-existing',
             'description' => 'test-post-existing',
+            'osType' => 'linux',
             'scope' => ScopeInterface::SCOPE_ENVIRONMENT
         ];
         $response = $this->postScript($data);
@@ -179,11 +180,40 @@ class ScriptsTest extends ScriptsTestCase
 
         $this->assertNotEquals($data['id'], $scriptId);
 
+        //post script with name already exists in current (environment) scope
+        unset($data['id']);
+        $envScript = $this->createEntity(new Script(), array_merge($data, [
+            'accountId' => $user->getAccountId(),
+            'envId' => $environment->id
+        ]));
+
+        $data['name'] = 'test-post-existing';
+        $response = $this->postScript($data);
+
+        $this->assertErrorMessageContains($response, 409, ErrorMessage::ERR_UNICITY_VIOLATION);
+
+        $envScript->delete();
+
+        //post script with name already exists in other scope
+        //NOTE: ignored until the introduction of account-scope scripts API
+//        $data['scope'] = 'account';
+//        $data['name'] = 'test-post-existing';
+//        $accScript = $this->createEntity(new Script(), array_merge($data, ['accountId' => $user->getAccountId()]));
+//
+//        $data['name'] = 'test-post-existing';
+//        $response = $this->postScript($data);
+//
+//        $this->assertErrorMessageContains($response, 409, ErrorMessage::ERR_UNICITY_VIOLATION);
+//
+//        $accScript->delete();
+
         //post script with properties that not existing
         $data = [
             'name' => 'test-post-not-existing-field',
             'description' => 'test-post-not-existing-field',
-            'foo' => 'bar'
+            'foo' => 'bar',
+            'osType' => 'linux',
+            'scope' => ScopeInterface::SCOPE_ENVIRONMENT
         ];
         $response = $this->postScript($data);
 
@@ -193,7 +223,8 @@ class ScriptsTest extends ScriptsTestCase
         $data = [
             'name' => 'test-post-scalr-scoped',
             'description' => 'test-post-scalr-scoped',
-            'scope' => ScopeInterface::SCOPE_SCALR
+            'scope' => ScopeInterface::SCOPE_SCALR,
+            'osType' => 'linux'
         ];
         $response = $this->postScript($data);
 
@@ -202,7 +233,8 @@ class ScriptsTest extends ScriptsTestCase
         //post script without required fields
         $data = [
             'name' => 'test-post-no-scope',
-            'description' => 'test-post-no-scope'
+            'description' => 'test-post-no-scope',
+            'osType' => 'linux'
         ];
         $response = $this->postScript($data);
 
@@ -214,6 +246,12 @@ class ScriptsTest extends ScriptsTestCase
 
         $this->assertErrorMessageContains($response, 400, ErrorMessage::ERR_INVALID_VALUE);
 
+        //post account script to environment
+        $data['scope'] = 'account';
+        $response = $this->postScript($data);
+
+        $this->assertErrorMessageContains($response, 403, ErrorMessage::ERR_SCOPE_VIOLATION);
+
         //test script fetch
         $response = $this->getScript($script->id);
 
@@ -222,7 +260,7 @@ class ScriptsTest extends ScriptsTestCase
         $this->assertObjectEqualsEntity($response->getBody()->data, $script);
 
         //test fetch script that doe not exists
-        $response = $this->getScript(Script::findOne([], [ 'id' => '' ])->id + 1);
+        $response = $this->getScript(Script::findOne([], null, ['id' => false])->id + 1);
 
         $this->assertErrorMessageContains($response, 404, ErrorMessage::ERR_OBJECT_NOT_FOUND);
 
@@ -238,8 +276,6 @@ class ScriptsTest extends ScriptsTestCase
         $this->assertEquals(200, $response->status, $this->printResponseError($response));
 
         $this->assertObjectEqualsEntity($response->getBody()->data, Script::findPk($script->id));
-
-        $modifyUri = static::getUserApiUrl("/scripts/{$script->id}");
 
         //modify property that does not exists
         $data = [ 'foo' => 'bar' ];
@@ -264,7 +300,7 @@ class ScriptsTest extends ScriptsTestCase
 
         //modify script that does not exists
         $data = [ 'name' => 'test-modify-not-found' ];
-        $response = $this->modifyScript(Script::findOne([], [ 'id' => '' ])->id + 1, $data);
+        $response = $this->modifyScript(Script::findOne([], null, ['id' => false])->id + 1, $data);
 
         $this->assertErrorMessageContains($response, 404, ErrorMessage::ERR_OBJECT_NOT_FOUND);
 
@@ -308,6 +344,32 @@ class ScriptsTest extends ScriptsTestCase
             $this->assertTrue(Script::findPk($script->id)->hasAccessPermissions($user), "Script id: {$script->id}");
         }
 
+        //test list scripts filters
+        $filterable = $scriptAdapter->getRules()[ApiEntityAdapter::RULE_TYPE_FILTERABLE];
+
+        /* @var $script Script */
+        foreach ($scripts as $script) {
+            foreach ($filterable as $property) {
+                $filterValue = $script->{$property};
+
+                $listResult = $this->listScripts([ $property => $filterValue ]);
+
+                if (!static::isRecursivelyEmpty($filterValue)) {
+                    foreach ($listResult as $filtered) {
+                        $this->assertEquals($filterValue, $filtered->{$property}, "Property '{$property}' mismatch");
+                    }
+                }
+            }
+
+            $response = $this->getScript($script->id);
+
+            $this->assertEquals(200, $response->status, $this->printResponseError($response));
+
+            $dbScript = Script::findPk($script->id);
+
+            $this->assertObjectEqualsEntity($response->getBody()->data, $dbScript, $scriptAdapter);
+        }
+
         //test have write access to environments and account scoped scripts
         foreach (array_merge(
                      $this->listScripts([ 'scope' => ScopeInterface::SCOPE_ENVIRONMENT ]),
@@ -349,7 +411,7 @@ class ScriptsTest extends ScriptsTestCase
         $this->assertErrorMessageContains($response, 403, ErrorMessage::ERR_PERMISSION_VIOLATION);
 
         //delete script that does not exists
-        $response = $this->deleteScript(Script::findOne([], [ 'id' => '' ])->id + 1);
+        $response = $this->deleteScript(Script::findOne([], null, ['id' => false])->id + 1);
 
         $this->assertErrorMessageContains($response, 404, ErrorMessage::ERR_OBJECT_NOT_FOUND);
     }

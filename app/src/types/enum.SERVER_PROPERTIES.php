@@ -65,10 +65,7 @@ class SERVER_PROPERTIES
     //System properties
     const ARCHITECTURE = "system.architecture";
     const REBOOTING = "system.rebooting";
-    const RESUMING = "system.resuming";
     const MISSING = "system.missing";
-    const CRASHED = "system.crashed";
-    const INITIALIZED_TIME = "system.date.initialized";
     const TERMINATION_REQUEST_UNIXTIME = "system.termination.request.unixtime";
 
     //Healthcheck properties
@@ -102,6 +99,7 @@ class SERVER_PROPERTIES
     const SCALR_INBOUND_REQ_RATE = 'scalr.inbound.req.rate';
 
     const INFO_INSTANCE_TYPE_NAME = 'info.instance_type_name';
+    const INFO_INSTANCE_VCPUS = 'info.instance_vcpus';
 
     /**
      * Gets a list of important properties which must not be deleted
@@ -122,7 +120,8 @@ class SERVER_PROPERTIES
             self::LAUNCHED_BY_EMAIL,
             self::TERMINATED_BY_ID,
             self::TERMINATED_BY_EMAIL,
-            self::INFO_INSTANCE_TYPE_NAME
+            self::INFO_INSTANCE_TYPE_NAME,
+            self::INFO_INSTANCE_VCPUS,
         ];
     }
 }

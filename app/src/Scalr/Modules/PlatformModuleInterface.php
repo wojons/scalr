@@ -2,6 +2,10 @@
 
 namespace Scalr\Modules;
 
+use DBServer;
+use Scalr\Model\Entity\CloudInstanceType;
+use Scalr\Modules\Platforms\OrphanedServer;
+
 interface PlatformModuleInterface
 {
     /**
@@ -10,14 +14,6 @@ interface PlatformModuleInterface
      * @return  \Scalr\DependencyInjection\Container  Returns DI container
      */
     public function getContainer();
-
-
-    /**
-     * Gets platform resume strategy
-     *
-     * @return  string reboot | init
-     */
-    public function getResumeStrategy();
 
     /**
      * Gets cloud locations
@@ -161,16 +157,9 @@ interface PlatformModuleInterface
     public function GetServerCloudLocation(\DBServer $DBServer);
 
     /**
-     * Gets type of the instance for the specified server
-     *
-     * @param   \DBServer $DBServer  The DBServer object
-     * @return  string    Returns the flavor for specified DBServer
-     */
-    public function GetServerFlavor(\DBServer $DBServer);
-
-    /**
      * Gets platform property
      *
+     * @deprecated by cloud credentials
      * @param    string             $name           The name of the platform property
      * @param    \Scalr_Environment $env            The environment
      * @param    string             $encrypted      optional This is ignored
@@ -201,6 +190,16 @@ interface PlatformModuleInterface
     public function getInstanceTypes(\Scalr_Environment $env = null, $cloudLocation = null, $details = false);
 
     /**
+     * Returns vCPUs for an instance by its ID
+     *
+     * @param  string             $instanceTypeId           Instance type identifier
+     * @param  \Scalr_Environment $env                      The Scalr environment object
+     * @param  string             $cloudLocation   optional The cloud location
+     * @return CloudInstanceType  Cloud Instance Type entity
+     */
+    public function getInstanceType($instanceTypeId, \Scalr_Environment $env, $cloudLocation = null);
+
+    /**
      * Checks whether there is some price for the appropriate cloud and url from the specified environment
      *
      * It returns first found url which has not any price set for.
@@ -216,9 +215,46 @@ interface PlatformModuleInterface
      * Gets endpoint url for private clouds
      *
      * @param \Scalr_Environment $env       The scalr environment object
-     * @param string             $group     optional The group name for eucaliptus
+     * @param string             $group     optional The group name
      * @return string|null Returns endpoint url for private clouds. Null otherwise.
      */
     public function getEndpointUrl(\Scalr_Environment $env, $group = null);
 
+    /**
+     * Gets the list of the orphaned instances
+     * for the specified environment and location
+     * that are not managed by Scalr
+     *
+     * @param  \Scalr_Environment $environment   Environment Object
+     * @param  string             $cloudLocation Location name
+     * @return OrphanedServer[] Returns array of orphaned servers
+     */
+    public function getOrphanedServers(\Scalr_Environment $environment, $cloudLocation);
+
+    /**
+     * Gets string which is used to retrieve instance is from server_properties table
+     *
+     * @return string Returns instance id's property name for each platform
+     */
+    public function getInstanceIdPropertyName();
+
+    /**
+     * Gets API HTTP client configured for specified server
+     *
+     * @param   DBServer    $dbServer   DBServer to configure client
+     *
+     * @return  mixed   Returns low-level API HTTP client
+     */
+    public function getHttpClient(DBServer $dbServer);
+
+    /**
+     * Get information for an image instance
+     *
+     * @param \Scalr_Environment $environment   Environment object
+     * @param string             $cloudLocation Location if exists
+     * @param string             $imageId       Image identifier
+     * @return array Array of image related information
+     * @throws Exception
+     */
+    public function getImageInfo(\Scalr_Environment $environment, $cloudLocation, $imageId);
 }

@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Model\Entity;
+
 class ScalrEnvironment20150410 extends ScalrEnvironment20120701
 {
     public function ListFarmRoleParamsJson()
@@ -36,11 +38,11 @@ class ScalrEnvironment20150410 extends ScalrEnvironment20120701
             if ($data === null) {
                 if ($behavior == ROLE_BEHAVIORS::MYSQL) {
                     $data = new stdClass();
-                    $data->logFile = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_LOG_FILE);
-                    $data->logPos = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_LOG_POS);
-                    $data->rootPassword = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_ROOT_PASSWORD);
-                    $data->replPassword = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_REPL_PASSWORD);
-                    $data->statPassword = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_STAT_PASSWORD);
+                    $data->logFile = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_LOG_FILE);
+                    $data->logPos = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_LOG_POS);
+                    $data->rootPassword = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_ROOT_PASSWORD);
+                    $data->replPassword = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_REPL_PASSWORD);
+                    $data->statPassword = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_STAT_PASSWORD);
                     $data->replicationMaster = (int)$this->DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER);
                 } else {
                     try {

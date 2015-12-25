@@ -11,20 +11,21 @@ scalrpytests_dir = os.path.join(cwd, '../..')
 sys.path.insert(0, scalrpytests_dir)
 
 import time
+import random
+import subprocess
 
-from gevent import pywsgi
-
-from scalrpy.util import cryptotool
+from scalrpy.util import dbmanager
 from scalrpy.msg_sender import MsgSender
 
+import scalrpytests
 from scalrpytests.steplib import lib
 from scalrpytests.steplib.steps import *
+from scalrpytests import configure_log
 
 from lettuce import step, before, after
 
 
-CRYPTO_KEY = '8mYTcBxiE70DtXCBRjn7AMuTQNzBJJcTa5uFok24X40ePafq1gUyyg=='
-CRYPTO_ALGO = dict(name="des_ede3_cbc", key_size=24, iv_size=8)
+configure_log(os.path.join(os.path.dirname(__file__), 'test_msg_sender.log'))
 
 
 class MsgSenderScript(lib.Script):
@@ -36,32 +37,26 @@ class MsgSenderScript(lib.Script):
 lib.ScriptCls = MsgSenderScript
 
 
-def answer(environ, start_response):
-    server_id = environ['HTTP_X_SERVER_ID']
-    data = environ['wsgi.input'].readline()
-    crypto_key = lib.world.server_properties[server_id]['scalarizr.key']
-    msg = cryptotool.decrypt_scalarizr(CRYPTO_ALGO, data, cryptotool.decrypt_key(crypto_key))
-    if msg != 'Carrot':
-        start_response('400 NOT OK', [('Content-Type', 'text/html')])
-    else:
-        time.sleep(0.4)
-        start_response('201 OK', [('Content-Type', 'text/html')])
-    yield '<b>Hello world!</b>\n'
-
-
-@step(u"White Rabbit starts wsgi server on port (\d+)")
+@step(u"^White Rabbit starts wsgi server on port (\d+)$")
 def start_wsgi_server(step, port):
     if not hasattr(lib.world, 'wsgi_servers'):
         lib.world.wsgi_servers = {}
-    wsgi_server = pywsgi.WSGIServer(('127.0.0.1', int(port)), answer)
-    wsgi_server.start()
+    server = os.path.join(os.path.dirname(__file__), 'scalarizr.py')
+    cmd = "/usr/bin/python {server} {port}".format(server=server, port=port)
+    wsgi_server = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    time.sleep(1)
+    assert not wsgi_server.poll(), wsgi_server.stderr.read()
     lib.world.wsgi_servers[port] = wsgi_server
-    time.sleep(0)
 
 
-@step(u"White Rabbit stops wsgi server on port (\d+)")
+@step(u"^White Rabbit stops wsgi server on port (\d+)$")
 def stop_wsgi_server(step, port):
-    lib.world.wsgi_servers[port].stop()
+    try:
+        lib.world.wsgi_servers[port].kill()
+    except KeyError:
+        raise
+    except:
+        pass
 
 
 @step(u"^Database has (\d+) messages$")
@@ -106,15 +101,31 @@ def db_has_messages(step, count):
     for record in step.hashes:
         # server_properties
         record['name'] = "'scalarizr.ctrl_port'"
-        record['value'] = "'8013'"
+        record['value'] = random.choice(["'8010'",
+                                         "'8011'",
+                                         "'8012'",
+                                         "'8013'",
+                                         "'8014'",
+                                         "'8015'",
+                                         "'8016'",
+                                         "'8017'",
+                                         "'8018'",
+                                         "'8019'"])
     fill_server_properties(step)
 
     for record in step.hashes:
         # server_properties
         record['name'] = "'scalarizr.key'"
-        record['value'] = "'8mYTcBxiE70DtXCBRjn7AMuTQNzBJJcTa5uFok24X40ePafq1gUyyg=='"
+        record['value'] = "'{0}'".format(scalrpytests.scalarizr_key)
     fill_server_properties(step)
 
+
+@step(u"^White Rabbit checks all messages were tried to send$")
+def check_tried(step):
+    db = dbmanager.DB(lib.world.config['connections']['mysql'])
+    query = "SELECT count(*) AS count FROM messages WHERE handle_attempts = 0"
+    result = db.execute(query)[0]
+    assert result['count'] == 0, result['count']
 
 
 @step(u"^White Rabbit checks all messages has status (\d+)$")
@@ -122,7 +133,7 @@ def check_messages_status(step, status):
     db = dbmanager.DB(lib.world.config['connections']['mysql'])
     query = "SELECT count(messageid) AS count FROM messages WHERE status != {0}".format(int(status))
     result = db.execute(query)[0]
-    assert result['count'] == 0
+    assert result['count'] == 0, result['count']
 
 
 def before_scenario(scenario):
@@ -132,7 +143,10 @@ def before_scenario(scenario):
 def after_scenario(scenario):
     if hasattr(lib.world, 'wsgi_servers'):
         for wsgi_server in lib.world.wsgi_servers.values():
-            wsgi_server.stop()
+            try:
+                wsgi_server.kill()
+            except:
+                pass
     if hasattr(lib.world, 'script') and lib.world.script:
         lib.world.script.stop()
 

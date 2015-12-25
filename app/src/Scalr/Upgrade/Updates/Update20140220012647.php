@@ -89,9 +89,6 @@ class Update20140220012647 extends AbstractUpdate implements SequenceInterface
                 if ($dbServer->platform == \SERVER_PLATFORMS::EC2)
                     $dbServer->cloudLocationZone = $dbServer->GetProperty(\EC2_SERVER_PROPERTIES::AVAIL_ZONE);
 
-                if ($dbServer->platform == \SERVER_PLATFORMS::EUCALYPTUS)
-                    $dbServer->cloudLocationZone = $dbServer->GetProperty(\EUCA_SERVER_PROPERTIES::AVAIL_ZONE);
-
                 if ($dbServer->platform == \SERVER_PLATFORMS::GCE)
                     $dbServer->cloudLocationZone = $dbServer->GetProperty(\GCE_SERVER_PROPERTIES::CLOUD_LOCATION);
 

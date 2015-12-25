@@ -133,8 +133,8 @@ class Scalr_Validator
 
     public function validateDomain($value, $type = null, $options = null)
     {
-        $allowed = isset($options['allowed']) ? preg_quote($options['allowed']) : '';
-        $forbidden = isset($options['disallowed']) ? preg_quote($options['disallowed']) : '';
+        $allowed = isset($options['allowed']) ? preg_quote($options['allowed'], '/') : '';
+        $forbidden = isset($options['disallowed']) ? preg_quote($options['disallowed'], '/') : '';
 
         $value = rtrim($value, ".");
 
@@ -148,7 +148,6 @@ class Scalr_Validator
 
         return $retval ?: array('This is not a valid domain.');
     }
-
 
     public function validateRegexp($value, $pattern)
     {

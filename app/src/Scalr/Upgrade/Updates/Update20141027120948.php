@@ -87,20 +87,20 @@ class Update20141027120948 extends AbstractUpdate implements SequenceInterface
 
     protected function isApplied4($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_SERVICES_ADMINISTRATION_CHEF') && $this->db->GetOne("
+        return defined('Scalr\\Acl\\Acl::RESOURCE_SERVICES_CHEF_ACCOUNT') && $this->db->GetOne("
             SELECT `granted` FROM `acl_role_resources`
             WHERE `resource_id` = ? AND `role_id` = ?
             LIMIT 1
         ", array(
-            Acl::RESOURCE_SERVICES_ADMINISTRATION_CHEF,
+            Acl::RESOURCE_SERVICES_CHEF_ACCOUNT,
             Acl::ROLE_ID_FULL_ACCESS,
         )) == 1;
     }
 
     protected function validateBefore4($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_SERVICES_ADMINISTRATION_CHEF') &&
-               Definition::has(Acl::RESOURCE_SERVICES_ADMINISTRATION_CHEF);
+        return defined('Scalr\\Acl\\Acl::RESOURCE_SERVICES_CHEF_ACCOUNT') &&
+               Definition::has(Acl::RESOURCE_SERVICES_CHEF_ACCOUNT);
     }
 
     protected function run4($stage)
@@ -111,7 +111,7 @@ class Update20141027120948 extends AbstractUpdate implements SequenceInterface
             VALUES (?, ?, 1)
         ", array(
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::RESOURCE_SERVICES_ADMINISTRATION_CHEF
+            Acl::RESOURCE_SERVICES_CHEF_ACCOUNT
         ));
     }
 }

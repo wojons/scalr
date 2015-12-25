@@ -3,6 +3,7 @@
 namespace Scalr\Acl\Resource;
 
 use Scalr\Acl\Acl;
+use Scalr\Acl\Resource\Mode\CloudResourceScopeMode;
 
 /**
  * Resource Definition class
@@ -42,9 +43,10 @@ class Definition
      * This method describes all available resources
      *
      * @return  \ArrayObject Returns array looks like [
-     *                resource_id => [name, description, resourceGroup, [[permission_id => description)]]]
+     *                resource_id => [name, description, resourceGroup, [[permission_id => description)][, ModeInterface]] ]
      *                Third value of array is optional and determines unique permissions for specified
      *                resource which can be allowed or forbidden separately.
+     *                Forth value of the array is optional Resource Mode.
      */
     public static function getAll($raw = false)
     {
@@ -53,6 +55,18 @@ class Definition
         if (!isset(self::$list)) {
             self::$rawList = [
                 //resource_id => [name, description, resourceGroup, [[pemission_id => description)])
+                Acl::RESOURCE_CLOUD_CREDENTIALS_ENVIRONMENT => [
+                    'Cloud credentials (environment scope)',
+                    "{$allows}to manage cloud credentials in the environment scope",
+                    Acl::GROUP_CLOUD_CREDENTIALS
+                ],
+
+                Acl::RESOURCE_CLOUD_CREDENTIALS_ACCOUNT => [
+                    'Cloud credentials (account scope)',
+                    "{$allows}to manage cloud credentials in the account scope",
+                    Acl::GROUP_CLOUD_CREDENTIALS
+                ],
+
                 Acl::RESOURCE_FARMS => [
                     'All Farms',
                     $allows . 'access to farms and servers.',
@@ -62,10 +76,12 @@ class Definition
                         Acl::PERM_FARMS_MANAGE              => $allows . 'to manage (create/configure/delete) farms.',
                         Acl::PERM_FARMS_CLONE               => $allows . 'to clone farms.',
                         Acl::PERM_FARMS_LAUNCH_TERMINATE    => $allows . 'to launch/terminate farms.',
-                        Acl::PERM_FARMS_CHANGE_OWNERSHIP   => $allows . 'to change owner or team',
+                        Acl::PERM_FARMS_CHANGE_OWNERSHIP    => $allows . 'to change owner or team',
                         Acl::PERM_FARMS_SERVERS             => $allows . 'to manage servers',
                         Acl::PERM_FARMS_STATISTICS          => $allows . 'to access statistics'
-                    ]
+                    ],
+                    //Resource Mode object that must be instance of ModeInterface
+                    null
                 ],
 
                 Acl::RESOURCE_TEAM_FARMS => [
@@ -77,7 +93,7 @@ class Definition
                         Acl::PERM_FARMS_MANAGE              => $allows . 'to manage (create/configure/delete) farms.',
                         Acl::PERM_FARMS_CLONE               => $allows . 'to clone farms.',
                         Acl::PERM_FARMS_LAUNCH_TERMINATE    => $allows . 'to launch/terminate farms.',
-                        Acl::PERM_FARMS_CHANGE_OWNERSHIP   => $allows . 'to change owner or team',
+                        Acl::PERM_FARMS_CHANGE_OWNERSHIP    => $allows . 'to change owner or team',
                         Acl::PERM_FARMS_SERVERS             => $allows . 'to manage servers',
                         Acl::PERM_FARMS_STATISTICS          => $allows . 'to access statistics'
                     ]
@@ -98,92 +114,126 @@ class Definition
                     ]
                 ],
 
-                Acl::RESOURCE_FARMS_ROLES => [
+                Acl::RESOURCE_ROLES_ENVIRONMENT => [
                     'Roles',
                     $allows . 'access to roles.',
                     Acl::GROUP_ROLES_IMAGES,
                     [
-                        Acl::PERM_FARMS_ROLES_CREATE      => $allows . 'to create (build/import) roles.',
-                        Acl::PERM_FARMS_ROLES_MANAGE      => $allows . 'to manage (edit/delete) roles.',
-                        Acl::PERM_FARMS_ROLES_CLONE       => $allows . 'to clone roles.',
-                        Acl::PERM_FARMS_ROLES_BUNDLETASKS => $allows . 'to bundle tasks (role creation process logs).',
+                        Acl::PERM_ROLES_ENVIRONMENT_MANAGE      => $allows . 'to manage (edit/delete) roles.',
+                        Acl::PERM_ROLES_ENVIRONMENT_CLONE       => $allows . 'to clone roles.',
                     ]
                 ],
 
-                Acl::RESOURCE_FARMS_IMAGES => [
+                Acl::RESOURCE_IMAGES_ENVIRONMENT => [
                     'Images',
                     $allows . 'access to images.',
                     Acl::GROUP_ROLES_IMAGES,
                     [
-                        Acl::PERM_FARMS_ROLES_CREATE      => $allows . 'to create (build/import) images.',
-                        Acl::PERM_FARMS_ROLES_MANAGE      => $allows . 'to manage (edit/delete) images.'
+                        Acl::PERM_IMAGES_ENVIRONMENT_IMPORT      => $allows . 'to import images.',
+                        Acl::PERM_IMAGES_ENVIRONMENT_BUILD       => $allows . 'to build images.',
+                        Acl::PERM_IMAGES_ENVIRONMENT_MANAGE      => $allows . 'to manage (register/edit/delete) images.',
+                        Acl::PERM_IMAGES_ENVIRONMENT_BUNDLETASKS => $allows . 'to bundle tasks (image creation process logs).',
+                    ]
+                ],
+
+                Acl::RESOURCE_ROLES_ACCOUNT => [
+                    'Roles',
+                    $allows . 'access to roles in the account scope.',
+                    Acl::GROUP_ACCOUNT,
+                    [
+                        Acl::PERM_ROLES_ACCOUNT_MANAGE      => $allows . 'to manage (edit/delete) roles.',
+                        Acl::PERM_ROLES_ACCOUNT_CLONE       => $allows . 'to clone roles.'
+                    ]
+                ],
+
+                Acl::RESOURCE_IMAGES_ACCOUNT => [
+                    'Images',
+                    $allows . 'access to images in the account scope.',
+                    Acl::GROUP_ACCOUNT,
+                    [
+                        Acl::PERM_ROLES_ACCOUNT_MANAGE      => $allows . 'to manage (edit/delete) images.'
                     ]
                 ],
 
                 Acl::RESOURCE_GCE_STATIC_IPS => [
                     'Static IPs',
                     $allows . 'access to GCE static IPs.',
-                    Acl::GROUP_GCE
+                    Acl::GROUP_GCE,
+                    [
+                        Acl::PERM_GCE_STATIC_IPS_MANAGE => $allows . 'to manage (edit/delete) static IPs.'
+                    ]
                 ],
 
                 Acl::RESOURCE_GCE_PERSISTENT_DISKS => [
                     'Persistent disks',
                     $allows . 'access to GCE persistent disks.',
-                    Acl::GROUP_GCE
+                    Acl::GROUP_GCE,
+                    [
+                        Acl::PERM_GCE_PERSISTENT_DISKS_MANAGE => $allows . 'to manage (edit/delete) persistent disks.'
+                    ]
                 ],
 
                 Acl::RESOURCE_GCE_SNAPSHOTS => [
                     'Snapshots',
                     $allows . 'access to GCE snapshots.',
-                    Acl::GROUP_GCE
+                    Acl::GROUP_GCE,
+                    [
+                        Acl::PERM_GCE_SNAPSHOTS_MANAGE => $allows . 'to manage (edit/delete) snapshots.'
+                    ]
                 ],
 
                 Acl::RESOURCE_CLOUDSTACK_VOLUMES => [
                     'Volumes',
                     $allows . 'access to CloudStack volumes.',
-                    Acl::GROUP_CLOUDSTACK
+                    Acl::GROUP_CLOUDSTACK,
+                    [
+                        Acl::PERM_CLOUDSTACK_VOLUMES_MANAGE => $allows . 'to manage (edit/delete) volumes.'
+                    ]
                 ],
 
                 Acl::RESOURCE_CLOUDSTACK_SNAPSHOTS => [
                     'Snapshots',
                     $allows . 'access to CloudStack snapshots.',
-                    Acl::GROUP_CLOUDSTACK
+                    Acl::GROUP_CLOUDSTACK,
+                    [
+                        Acl::PERM_CLOUDSTACK_SNAPSHOTS_MANAGE => $allows . 'to manage (edit/delete) snapshots.'
+                    ]
                 ],
 
                 Acl::RESOURCE_CLOUDSTACK_PUBLIC_IPS => [
                     'Public IPs',
                     $allows . 'access to CloudStack public IPs.',
-                    Acl::GROUP_CLOUDSTACK
+                    Acl::GROUP_CLOUDSTACK,
+                    [
+                        Acl::PERM_CLOUDSTACK_PUBLIC_IPS_MANAGE => $allows . 'to manage (edit/delete) public IPs.'
+                    ]
                 ],
 
                 Acl::RESOURCE_OPENSTACK_VOLUMES => [
                     'Volumes',
                     $allows . 'access to OpenStack volumes.',
-                    Acl::GROUP_OPENSTACK
+                    Acl::GROUP_OPENSTACK,
+                    [
+                        Acl::PERM_OPENSTACK_VOLUMES_MANAGE => $allows . 'to manage (edit/delete) volumes.'
+                    ]
                 ],
 
                 Acl::RESOURCE_OPENSTACK_SNAPSHOTS => [
                     'Snapshots',
                     $allows . 'access to OpenStack snapshots.',
-                    Acl::GROUP_OPENSTACK
-                ],
-
-                Acl::RESOURCE_OPENSTACK_PUBLIC_IPS => [
-                    'Public IPs',
-                    $allows . 'access to OpenStack public IPs.',
-                    Acl::GROUP_OPENSTACK
-                ],
-
-                Acl::RESOURCE_OPENSTACK_ELB => [
-                    'Load Balancing (LBaaS)',
-                    $allows . 'access to load balancing service.',
-                    Acl::GROUP_OPENSTACK
+                    Acl::GROUP_OPENSTACK,
+                    [
+                        Acl::PERM_OPENSTACK_SNAPSHOTS_MANAGE => $allows . 'to manage (edit/delete) snapshots.'
+                    ]
                 ],
 
                 Acl::RESOURCE_AWS_S3 => [
                     'S3 and Cloudfront',
                     $allows . 'access to AWS S3 and Cloudfront.',
-                    Acl::GROUP_AWS
+                    Acl::GROUP_AWS,
+                    [
+                        Acl::PERM_AWS_S3_MANAGE => $allows . 'to manage (create/edit/delete) AWS S3 and Cloudfront resources.'
+                    ]
                 ],
 
                 Acl::RESOURCE_AWS_CLOUDWATCH => [
@@ -195,49 +245,74 @@ class Definition
                 Acl::RESOURCE_AWS_ELASTIC_IPS => [
                     'Elastic IPs',
                     $allows . 'access to AWS Elastic IPs.',
-                    Acl::GROUP_AWS
+                    Acl::GROUP_AWS,
+                    [
+                        Acl::PERM_AWS_ELASTIC_IPS_MANAGE => $allows . 'to manage (edit/delete) AWS Elastic IPs.'
+                    ]
                 ],
 
                 Acl::RESOURCE_AWS_ELB => [
                     'Elastic Load Balancing (ELB)',
                     $allows . 'access to AWS Elastic Load Balancing.',
-                    Acl::GROUP_AWS
+                    Acl::GROUP_AWS,
+                    [
+                        Acl::PERM_AWS_ELB_MANAGE => $allows . 'to manage (create/edit/delete) AWS Elastic Load Balancing.'
+                    ]
                 ],
 
                 Acl::RESOURCE_AWS_IAM => [
                     'Identity and Access Management (IAM)',
                     $allows . 'access to AWS Identity and Access Management.',
-                    Acl::GROUP_AWS
+                    Acl::GROUP_AWS,
+                    [
+                        Acl::PERM_AWS_IAM_MANAGE => $allows . 'to manage (create/edit/delete) AWS Identity and Access Management.'
+                    ]
                 ],
 
                 Acl::RESOURCE_AWS_RDS => [
                     'Relational Database Service (RDS)',
                     $allows . 'access to Amazon Relational Database Service.',
-                    Acl::GROUP_AWS
+                    Acl::GROUP_AWS,
+                    [
+                        Acl::PERM_AWS_RDS_MANAGE => $allows . 'to manage (create/edit/delete) Amazon Relational Database Service.'
+                    ]
                 ],
 
                 Acl::RESOURCE_AWS_SNAPSHOTS => [
                     'Snapshots',
                     $allows . 'access to AWS snapshots.',
-                    Acl::GROUP_AWS
+                    Acl::GROUP_AWS,
+                    [
+                        Acl::PERM_AWS_SNAPSHOTS_MANAGE => $allows . 'to manage (create/edit/delete) AWS snapshots.'
+                    ]
                 ],
 
                 Acl::RESOURCE_AWS_VOLUMES => [
                     'Volumes',
                     $allows . 'access to AWS Volumes.',
-                    Acl::GROUP_AWS
+                    Acl::GROUP_AWS,
+                    [
+                        Acl::PERM_AWS_VOLUMES_MANAGE => $allows . 'to manage (create/edit/delete) AWS Volumes.'
+                    ],
+                    new CloudResourceScopeMode(Acl::RESOURCE_AWS_VOLUMES, 'AWS Volumes'),
                 ],
 
                 Acl::RESOURCE_AWS_ROUTE53 => [
                     'Route53',
                     $allows . 'access to AWS Route53.',
-                    Acl::GROUP_AWS
+                    Acl::GROUP_AWS,
+                    [
+                        Acl::PERM_AWS_ROUTE53_MANAGE => $allows . 'to manage (create/edit/delete) AWS Route53 resources.'
+                    ]
                 ],
 
                 Acl::RESOURCE_SECURITY_SECURITY_GROUPS => [
                     'Security groups',
                     $allows . 'access to security groups.',
-                    Acl::GROUP_SECURITY
+                    Acl::GROUP_SECURITY,
+                    [
+                        Acl::PERM_SECURITY_SECURITY_GROUPS_MANAGE => $allows . 'to manage (create/edit/delete) security groups.'
+                    ]
                 ],
 
                 Acl::RESOURCE_SECURITY_RETRIEVE_WINDOWS_PASSWORDS => [
@@ -249,13 +324,17 @@ class Definition
                 Acl::RESOURCE_SECURITY_SSH_KEYS => [
                     'SSH keys',
                     $allows . 'access to SSH keys.',
-                    Acl::GROUP_SECURITY
+                    Acl::GROUP_SECURITY,
+                    [
+                        Acl::PERM_SECURITY_SSH_KEYS_MANAGE => $allows . 'to manage (edit/delete) SSH keys.'
+                    ]
                 ],
 
                 Acl::RESOURCE_LOGS_EVENT_LOGS => [
                     'Event Log',
                     $allows . 'access to the Event Log.',
-                    Acl::GROUP_LOGS
+                    Acl::GROUP_LOGS,
+
                 ],
 
                 Acl::RESOURCE_LOGS_SYSTEM_LOGS => [
@@ -279,25 +358,37 @@ class Definition
                 Acl::RESOURCE_SERVICES_APACHE => [
                     'Apache',
                     $allows . 'access to apache.',
-                    Acl::GROUP_SERVICES
+                    Acl::GROUP_SERVICES,
+                    [
+                        Acl::PERM_SERVICES_APACHE_MANAGE => $allows . 'to manage (create/edit/delete) virtual hosts.'
+                    ]
                 ],
 
-                Acl::RESOURCE_SERVICES_ENVADMINISTRATION_CHEF => [
+                Acl::RESOURCE_SERVICES_CHEF_ENVIRONMENT => [
                     'Chef (environment scope)',
-                    $allows . 'to manage chef servers in the environment scope.',
-                    Acl::GROUP_SERVICES
+                    $allows . 'to view chef servers in the environment scope.',
+                    Acl::GROUP_SERVICES,
+                    [
+                        Acl::PERM_SERVICES_CHEF_ENVIRONMENT_MANAGE => $allows . 'to manage (create/edit/delete) chef servers.'
+                    ]
                 ],
 
-                Acl::RESOURCE_SERVICES_ADMINISTRATION_CHEF => [
+                Acl::RESOURCE_SERVICES_CHEF_ACCOUNT => [
                     'Chef (account scope)',
-                    $allows . 'to manage chef servers in the account scope.',
-                    Acl::GROUP_SERVICES
+                    $allows . 'to view chef servers in the account scope.',
+                    Acl::GROUP_SERVICES,
+                    [
+                        Acl::PERM_SERVICES_CHEF_ACCOUNT_MANAGE => $allows . 'to manage (create/edit/delete) chef servers.'
+                    ]
                 ],
 
                 Acl::RESOURCE_SERVICES_SSL => [
                     'SSL',
                     $allows . 'access to SSL.',
-                    Acl::GROUP_SERVICES
+                    Acl::GROUP_SERVICES,
+                    [
+                        Acl::PERM_SERVICES_SSL_MANAGE => $allows . 'to manage (create/edit/delete) SSL certificates.'
+                    ]
                 ],
 
                 Acl::RESOURCE_SERVICES_RABBITMQ => [
@@ -311,6 +402,7 @@ class Definition
                     $allows . 'access to custom events.',
                     Acl::GROUP_GENERAL,
                     [
+                        Acl::PERM_GENERAL_CUSTOM_EVENTS_MANAGE => $allows . 'to manage (create/edit/delete) custom events.',
                         Acl::PERM_GENERAL_CUSTOM_EVENTS_FIRE => $allows . 'to fire custom events.'
                     ]
                 ],
@@ -318,13 +410,19 @@ class Definition
                 Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS => [
                     'Custom scaling metrics',
                     $allows . 'access to custom scaling metrics.',
-                    Acl::GROUP_GENERAL
+                    Acl::GROUP_GENERAL,
+                    [
+                        Acl::PERM_GENERAL_CUSTOM_SCALING_METRICS_MANAGE => $allows . 'to manage (create/edit/delete) custom scaling metrics.'
+                    ]
                 ],
 
                 Acl::RESOURCE_GENERAL_SCHEDULERTASKS => [
                     'Tasks scheduler',
                     $allows . 'access to tasks scheduler.',
-                    Acl::GROUP_GENERAL
+                    Acl::GROUP_GENERAL,
+                    [
+                        Acl::PERM_GENERAL_SCHEDULERTASKS_MANAGE => $allows . 'to manage (create/edit/delete) tasks scheduler.'
+                    ]
                 ],
 
                 Acl::RESOURCE_DB_BACKUPS => [
@@ -341,7 +439,8 @@ class Definition
                     $allows . 'access to database status.',
                     Acl::GROUP_DATABASES,
                     [
-                        Acl::PERM_DB_DATABASE_STATUS_PMA => $allows . 'access to PMA.',
+                        Acl::PERM_DB_DATABASE_STATUS_PMA    => $allows . 'access to PMA.',
+                        Acl::PERM_DB_DATABASE_STATUS_MANAGE => $allows . 'to manage database settings.',
                     ]
                 ],
 
@@ -372,88 +471,116 @@ class Definition
                 Acl::RESOURCE_DNS_ZONES => [
                     'Zones',
                     $allows . 'access to DNS zones.',
-                    Acl::GROUP_DNS
+                    Acl::GROUP_DNS,
+                    [
+                        Acl::PERM_DNS_ZONES_MANAGE => $allows . 'to manage (create/edit/delete) DNS zones.'
+                    ]
                 ],
 
-                Acl::RESOURCE_ADMINISTRATION_BILLING => [
+                Acl::RESOURCE_BILLING_ACCOUNT => [
                     'Billing',
                     $allows . 'access to billing.',
-                    Acl::GROUP_ADMINISTRATION
+                    Acl::GROUP_ACCOUNT
                 ],
 
-                Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION => [
+                Acl::RESOURCE_ORCHESTRATION_ACCOUNT => [
                     'Orchestration (account scope)',
                     $allows . 'access to orchestration in the account scope.',
-                    Acl::GROUP_ADMINISTRATION
+                    Acl::GROUP_ACCOUNT,
+                    [
+                        Acl::PERM_ORCHESTRATION_ACCOUNT_MANAGE => $allows . 'to manage (create/edit/delete) orchestration rules.'
+                    ]
                 ],
 
-                Acl::RESOURCE_ADMINISTRATION_GLOBAL_VARIABLES => [
+                Acl::RESOURCE_GLOBAL_VARIABLES_ACCOUNT => [
                     'Global variables (account scope)',
                     $allows . 'access to global variables in the account scope.',
-                    Acl::GROUP_ADMINISTRATION
+                    Acl::GROUP_ACCOUNT,
+                    [
+                        Acl::PERM_GLOBAL_VARIABLES_ACCOUNT_MANAGE => $allows . 'to manage (create/edit/delete) global variables.'
+                    ]
                 ],
 
-                Acl::RESOURCE_ADMINISTRATION_SCRIPTS => [
+                Acl::RESOURCE_SCRIPTS_ACCOUNT => [
                     'Scripts (account scope)',
                     $allows . 'access to scripts.',
-                    Acl::GROUP_ADMINISTRATION,
+                    Acl::GROUP_ACCOUNT,
                     [
-                        Acl::PERM_ADMINISTRATION_SCRIPTS_MANAGE    => $allows . 'to manage (create/edit/delete) scripts.',
-                        Acl::PERM_ADMINISTRATION_SCRIPTS_EXECUTE   => $allows . 'to execute scripts.',
-                        Acl::PERM_ADMINISTRATION_SCRIPTS_FORK      => $allows . 'to fork scripts.',
+                        Acl::PERM_SCRIPTS_ACCOUNT_MANAGE    => $allows . 'to manage (create/edit/delete) scripts.',
+                        Acl::PERM_SCRIPTS_ACCOUNT_FORK      => $allows . 'to fork scripts.',
                     ]
                 ],
 
-                Acl::RESOURCE_ADMINISTRATION_WEBHOOKS => [
+                Acl::RESOURCE_SCRIPTS_ENVIRONMENT => [
+                    'Scripts (environment scope)',
+                    $allows . 'access to scripts.',
+                    Acl::GROUP_ENVIRONMENT,
+                    [
+                        Acl::PERM_SCRIPTS_ENVIRONMENT_MANAGE    => $allows . 'to manage (create/edit/delete) scripts.',
+                        Acl::PERM_SCRIPTS_ENVIRONMENT_FORK      => $allows . 'to fork scripts.',
+                        Acl::PERM_SCRIPTS_ENVIRONMENT_EXECUTE   => $allows . 'to execute scripts.',
+                    ]
+                ],
+
+                Acl::RESOURCE_WEBHOOKS_ACCOUNT => [
                     'Webhooks (account scope)',
                     $allows . 'to manage webhooks in the account scope.',
-                    Acl::GROUP_ADMINISTRATION
-                ],
-
-                Acl::RESOURCE_ENVADMINISTRATION_ENV_CLOUDS => [
-                    'Setup clouds',
-                    $allows . 'to manage cloud credentials for environments in which this user is a team member',
-                    Acl::GROUP_ENVADMINISTRATION
-                ],
-
-                Acl::RESOURCE_ENVADMINISTRATION_GOVERNANCE => [
-                    'Governance',
-                    $allows . 'access to governance.',
-                    Acl::GROUP_ENVADMINISTRATION
-                ],
-
-                Acl::RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES => [
-                    'Global variables (environment scope)',
-                    $allows . 'access to global variables in the environment scope.',
-                    Acl::GROUP_ENVADMINISTRATION
-                ],
-
-                Acl::RESOURCE_ENVADMINISTRATION_WEBHOOKS => [
-                    'Webhooks (environment scope)',
-                    $allows . 'to manage webhooks in the environment scope.',
-                    Acl::GROUP_ENVADMINISTRATION
-                ],
-
-                Acl::RESOURCE_ANALYTICS_PROJECTS => [
-                    'Cost Analytics Projects',
-                    $allows . ' account users to create a new projects for cost analytics',
-                    Acl::GROUP_ANALYTICS
-                ],
-
-                Acl::RESOURCE_ADMINISTRATION_ANALYTICS => [
-                    'Cost Analytics (account scope)',
-                    $allows . ' access to Cost Analytics in the account scope',
-                    Acl::GROUP_ADMINISTRATION,
+                    Acl::GROUP_ACCOUNT,
                     [
-                        Acl::PERM_ADMINISTRATION_ANALYTICS_MANAGE_PROJECTS => $allows . 'to edit/create projects in the account scope.',
-                        Acl::PERM_ADMINISTRATION_ANALYTICS_ALLOCATE_BUDGET => $allows . "to set/edit projects' budgets in the account scope.",
+                        Acl::PERM_WEBHOOKS_ACCOUNT_MANAGE => $allows . 'to manage (create/edit/delete) webhooks.'
                     ]
                 ],
 
-                Acl::RESOURCE_ENVADMINISTRATION_ANALYTICS => [
+                Acl::RESOURCE_ENV_CLOUDS_ENVIRONMENT => [
+                    'Setup clouds',
+                    $allows . 'to manage cloud credentials for environments in which this user is a team member',
+                    Acl::GROUP_ENVIRONMENT
+                ],
+
+                Acl::RESOURCE_GOVERNANCE_ENVIRONMENT => [
+                    'Governance',
+                    $allows . 'access to governance.',
+                    Acl::GROUP_ENVIRONMENT
+                ],
+
+                Acl::RESOURCE_GLOBAL_VARIABLES_ENVIRONMENT => [
+                    'Global variables (environment scope)',
+                    $allows . 'access to global variables in the environment scope.',
+                    Acl::GROUP_ENVIRONMENT,
+                    [
+                        Acl::PERM_GLOBAL_VARIABLES_ENVIRONMENT_MANAGE => $allows . 'to manage (create/edit/delete) global variables.'
+                    ]
+                ],
+
+                Acl::RESOURCE_WEBHOOKS_ENVIRONMENT => [
+                    'Webhooks (environment scope)',
+                    $allows . 'to manage webhooks in the environment scope.',
+                    Acl::GROUP_ENVIRONMENT,
+                    [
+                        Acl::PERM_WEBHOOKS_ENVIRONMENT_MANAGE => $allows . 'to manage (create/edit/delete) webhooks.'
+                    ]
+                ],
+
+                Acl::RESOURCE_ANALYTICS_ACCOUNT => [
+                    'Cost Analytics (account scope)',
+                    $allows . ' access to Cost Analytics in the account scope',
+                    Acl::GROUP_ACCOUNT,
+                    [
+                        Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS => $allows . 'to edit/create projects in the account scope.',
+                        Acl::PERM_ANALYTICS_ACCOUNT_ALLOCATE_BUDGET => $allows . "to set/edit projects' budgets in the account scope.",
+                    ]
+                ],
+
+                Acl::RESOURCE_ANALYTICS_ENVIRONMENT => [
                     'Cost Analytics (environment scope)',
                     $allows . ' access to Cost Analytics in the environment scope',
-                    Acl::GROUP_ENVADMINISTRATION
+                    Acl::GROUP_ENVIRONMENT
+                ],
+
+                Acl::RESOURCE_ORPHANED_SERVERS => [
+                    'Orphaned servers',
+                    $allows . ' to manage servers created outside of Scalr',
+                    Acl::GROUP_ENVIRONMENT
                 ],
 
                 // ... add more resources here

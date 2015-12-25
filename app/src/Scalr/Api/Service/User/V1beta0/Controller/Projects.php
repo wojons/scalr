@@ -14,7 +14,6 @@ use Scalr\Exception\AnalyticsException;
 use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectPropertyEntity;
-use Scalr_Environment;
 
 /**
  * User/Version-1beta0/Projects API Controller
@@ -51,14 +50,10 @@ class Projects extends ApiController
      * @param   string  $projectId  Unique identifier of the project
      *
      * @return ProjectEntity Returns the Project Entity on success
-     *
      * @throws ApiErrorException
-     *
      */
     public function getProject($projectId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ANALYTICS_PROJECTS);
-
         /* @var $project ProjectEntity */
         $project = ProjectEntity::findPk($projectId);
 
@@ -78,24 +73,25 @@ class Projects extends ApiController
      * Retrieves the list of the projects
      *
      * @return array Returns describe result
-     *
      * @throws ApiErrorException
      */
     public function describeAction()
     {
-        $this->checkPermissions(Acl::RESOURCE_ANALYTICS_PROJECTS);
+        $criteria = $this->getDefaultCriteria();
 
-        return $this->adapter('project')->getDescribeResult($this->getDefaultCriteria());
+        if (empty($this->params('name')) && empty($this->params('billingCode'))) {
+            $criteria[] = ['archived' => ProjectEntity::NOT_ARCHIVED];
+        }
+        
+        return $this->adapter('project')->getDescribeResult($criteria);
     }
 
     /**
      * Creates a new Project in this Environment
-     *
-     *
      */
     public function createAction()
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_ANALYTICS, Acl::PERM_ADMINISTRATION_ANALYTICS_MANAGE_PROJECTS);
+        $this->checkPermissions(Acl::RESOURCE_ANALYTICS_ACCOUNT, Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS);
 
         $object = $this->request->getJsonBody();
 
@@ -120,13 +116,17 @@ class Projects extends ApiController
         $cc = $this->getCcController()->getCostCenter($project->ccId);
 
         if (!empty($cc)) {
+            if ($cc->archived) {
+                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Cost center '{$cc->ccId}' already archived and can not be used");
+            }
+
             if ($cc->getProperty(CostCentrePropertyEntity::NAME_LOCKED) == 1) {
                 throw new ApiErrorException(403, ErrorMessage::ERR_PERMISSION_VIOLATION, "Insufficient permissions");
             }
 
             $email = $cc->getProperty(CostCentrePropertyEntity::NAME_LEAD_EMAIL);
             $emailData = [
-                'projectName' => $project->name,
+                'projectName' => $projectAdapter->validateString(trim($project->name)),
                 'ccName'      => $cc->name
             ];
 
@@ -134,13 +134,17 @@ class Projects extends ApiController
             throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Cost center with ID '{$project->ccId}' not found");
         }
 
-        if (empty($object->billingCode) || !($billingCode = filter_var($object->billingCode, FILTER_SANITIZE_FULL_SPECIAL_CHARS))) {
+        if (empty($object->billingCode)) {
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property billingCode");
         }
 
-        if (empty($object->leadEmail) || !($leadEmail = filter_var($object->leadEmail, FILTER_SANITIZE_EMAIL))) {
+        $projectAdapter->validateString($object->billingCode, "Billing code contains invalid characters");
+
+        if (empty($object->leadEmail) || !filter_var($object->leadEmail, FILTER_VALIDATE_EMAIL)) {
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property leadEmail");
         }
+
+        $projectAdapter->validateString($object->leadEmail, "Lead E-Mail code contains invalid characters");
 
         $projectAdapter->validateEntity($project);
 
@@ -151,11 +155,13 @@ class Projects extends ApiController
         try {
             $project->save();
 
-            $project->saveProperty(ProjectPropertyEntity::NAME_BILLING_CODE, $billingCode);
-            $project->saveProperty(ProjectPropertyEntity::NAME_LEAD_EMAIL, $leadEmail);
+            $project->saveProperty(ProjectPropertyEntity::NAME_BILLING_CODE, $object->billingCode);
+            $project->saveProperty(ProjectPropertyEntity::NAME_LEAD_EMAIL, $object->leadEmail);
 
             if (!empty($object->description)) {
-                $project->saveProperty(ProjectPropertyEntity::NAME_DESCRIPTION, filter_var($object->description, FILTER_SANITIZE_FULL_SPECIAL_CHARS));
+                $projectAdapter->validateString($object->description, "Description contains invalid characters");
+
+                $project->saveProperty(ProjectPropertyEntity::NAME_DESCRIPTION, $object->description);
             }
 
             $db->CommitTrans();
@@ -184,10 +190,26 @@ class Projects extends ApiController
      * Gets default search criteria
      *
      * @return array Returns array of the search criteria
+     * @throws ApiErrorException
      */
     public function getDefaultCriteria()
     {
-        return [['ccId' => Scalr_Environment::init()->loadById($this->getEnvironment()->id)->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID)]];
+        $ccId = $this->getCcController()->getEnvironmentCostCenterId();
+
+        if (empty($ccId)) {
+            throw new ApiErrorException(500, ErrorMessage::ERR_INTERNAL_SERVER_ERROR, "Cost Center not configured for this environment");
+        }
+
+        return [
+            ['ccId' => $ccId],
+            ['$or' => [
+                ['shared' => ProjectEntity::SHARED_WITHIN_CC],
+                ['$and' => [
+                    ['shared' => ProjectEntity::SHARED_WITHIN_ACCOUNT],
+                    ['accountId' => $this->getUser()->getAccountId()]
+                ]]
+            ]]
+        ];
     }
 
     /**
@@ -201,8 +223,6 @@ class Projects extends ApiController
      */
     public function fetchAction($projectId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ANALYTICS_PROJECTS);
-
         return $this->result($this->adapter('project')->toData($this->getProject($projectId)));
     }
 }

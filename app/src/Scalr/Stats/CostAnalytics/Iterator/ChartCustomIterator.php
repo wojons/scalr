@@ -138,7 +138,13 @@ class ChartCustomIterator extends ChartPeriodIterator
                     break;
 
                 case '1 month':
-                    $chartPoint->show = $chartPoint->label = $chartPoint->dt->format('M');
+                    $diffdays = $this->start->diff($this->end, true)->days;
+
+                    if ($diffdays < 366) {
+                        $chartPoint->show = $chartPoint->label = $chartPoint->dt->format('M');
+                    } else {
+                        $chartPoint->show = $chartPoint->label = $chartPoint->dt->format('M, Y');
+                    }
 
                     $chartPoint->key = $chartPoint->dt->format('Y-m');
                     $chartPoint->previousPeriodKey = $previousPeriodDt->format('Y-m');

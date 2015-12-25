@@ -14,7 +14,7 @@ class Update20140915094208 extends AbstractUpdate implements SequenceInterface
 
     protected $description = 'Update table images and fill with name and size';
 
-    protected $ignoreChanges = false;
+    protected $ignoreChanges = true;
 
     protected $dbservice = 'adodb';
 
@@ -56,7 +56,6 @@ class Update20140915094208 extends AbstractUpdate implements SequenceInterface
     {
         $this->console->notice('Modify os columns and re-fill it from bundle tasks');
 
-        $this->db->Execute('UPDATE images SET cloud_location = "" WHERE platform = ?', [\SERVER_PLATFORMS::ECS]);
         $this->db->Execute('ALTER TABLE images CHANGE `os_name` `os` varchar(60) DEFAULT NULL AFTER `name`,
              MODIFY `os_family` varchar(30) DEFAULT NULL,
              ADD `os_generation` varchar(10) DEFAULT NULL AFTER `os_family`,
@@ -93,8 +92,8 @@ class Update20140915094208 extends AbstractUpdate implements SequenceInterface
 
         $images = Image::find([
             ['status' => 'active'],
-            ['size' => NULL],
-            ['name' => NULL]
+            ['size'   => null],
+            ['name'   => null]
         ]);
 
         foreach ($images as $i) {

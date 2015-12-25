@@ -87,8 +87,8 @@ trait Forecast
         if (isset($data['ccId']) || isset($data['projectId'])) {
             //Gets budget for projects and ccs
             $ret = $this->getBudgetUsedPercentage([
-                'ccId'      => $data['ccId'],
-                'projectId' => $data['projectId'],
+                'ccId'      => isset($data['ccId']) ? $data['ccId'] : null,
+                'projectId' => isset($data['projectId']) ? $data['projectId'] : null,
             ]) + $ret;
         }
 
@@ -110,7 +110,7 @@ trait Forecast
         if (!empty($request['projectId'])) {
             $subjectType = QuarterlyBudgetEntity::SUBJECT_TYPE_PROJECT;
             $subjectId = $request['projectId'];
-        } else if (!empty($request['ccId'])) {
+        } elseif (!empty($request['ccId'])) {
             $subjectType = QuarterlyBudgetEntity::SUBJECT_TYPE_CC;
             $subjectId = $request['ccId'];
         }
@@ -561,12 +561,12 @@ trait Forecast
         if (!isset($usage)) {
             if (isset($criteria['farmId']) && isset($accountId)) {
                 $usage = \Scalr::getContainer()->analytics->usage->getFarmData($accountId, ['farmId' => $criteria['farmId']], $start, $end);
-            } else if (isset($criteria['envId']) && isset($accountId)) {
+            } elseif (isset($criteria['envId']) && isset($accountId)) {
                 $usage = \Scalr::getContainer()->analytics->usage->getFarmData($accountId, ['envId' => $criteria['envId']], $start, $end);
             } else {
                 $usage = \Scalr::getContainer()->analytics->usage->get($criteria, $start, $end, $queryInterval);
             }
-        } else if (isset($breakdown)) {
+        } elseif (isset($breakdown)) {
             foreach ($breakdown as $itemId => $itemName) {
                 $arr = (new AggregationCollection([$itemId], ['cost' => 'sum']))->load($usage)->calculatePercentage();
 
@@ -583,9 +583,9 @@ trait Forecast
         }
 
         return [
-            'rollingAverage'        => round(($num == 0 ? 0 : $usage['cost'] / $num), 2),
+            'rollingAverage'        => round(($num == 0 || !isset($usage['cost']) ? 0 : $usage['cost'] / $num), 2),
             'rollingAverageMessage' => $info,
-            'rollingAverageDaily'   => round(($days == 0 ? 0 : $usage['cost'] / $days), 2),
+            'rollingAverageDaily'   => round(($days == 0 || !isset($usage['cost']) ? 0 : $usage['cost'] / $days), 2),
         ] + $itemsAverage;
     }
 

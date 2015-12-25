@@ -1,12 +1,12 @@
 <?php
 namespace Scalr\Modules;
 
+use Scalr\Exception;
 use Scalr\Model\Entity\CloudLocation;
+use Scalr\Model\Entity\CloudInstanceType;
 
 abstract class AbstractPlatformModule
 {
-    protected $resumeStrategy = \Scalr_Role_Behavior::RESUME_STRATEGY_NOT_SUPPORTED;
-
     protected $platform;
 
     /**
@@ -28,10 +28,6 @@ abstract class AbstractPlatformModule
         $this->db = $this->container->adodb;
     }
 
-    public function getResumeStrategy() {
-        return $this->resumeStrategy;
-    }
-
     /**
      * Gets DI container
      *
@@ -45,6 +41,7 @@ abstract class AbstractPlatformModule
     /**
      * Gets platform property
      *
+     * @deprecated by cloud credentials
      * @param    string             $name           The name of the platform property
      * @param    \Scalr_Environment $env            The environment
      * @param    string             $encrypted      optional This is ignored
@@ -61,6 +58,7 @@ abstract class AbstractPlatformModule
     /**
      * Sets the values for the specified platform properties
      *
+     * @deprecated by cloud credentials
      * @param    array              $pars          Associative array of the keys -> value
      * @param    \Scalr_Environment $env           The environment object
      * @param    string             $encrypted     optional This parameter is already ignored
@@ -80,13 +78,10 @@ abstract class AbstractPlatformModule
 
     public function ResumeServer(\DBServer $DBServer)
     {
-        if ($this->getResumeStrategy() == \Scalr_Role_Behavior::RESUME_STRATEGY_INIT)
-            $DBServer->status = \SERVER_STATUS::PENDING;
-
-        $DBServer->SetProperty(\SERVER_PROPERTIES::RESUMING, 1);
-        $DBServer->dateAdded = date("Y-m-d H:i:s");
-
-        $DBServer->Save();
+        $DBServer->update([
+            'status'    => \SERVER_STATUS::RESUMING,
+            'dateAdded' => date("Y-m-d H:i:s")
+        ]);
     }
 
     /**
@@ -105,12 +100,42 @@ abstract class AbstractPlatformModule
      * Gets endpoint url for private clouds
      *
      * @param \Scalr_Environment $env       The scalr environment object
-     * @param string             $group     optional The group name for eucaliptus
+     * @param string             $group     optional The group name
      * @return string|null Returns endpoint url for private clouds. Null otherwise.
      */
     public function getEndpointUrl(\Scalr_Environment $env, $group = null)
     {
         return null;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Modules\PlatformModuleInterface::getOrphanedServers()
+     * @throws \Scalr\Exception\NotYetImplementedException
+     */
+    public function getOrphanedServers(\Scalr_Environment $environment, $cloudLocation)
+    {
+        throw new Exception\NotYetImplementedException(sprintf("Orphaned server's listing has not been implemented for the platform '%s' yet", $this->platform));
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Modules\PlatformModuleInterface::getInstanceType()
+     */
+    public function getInstanceType($instanceTypeId, \Scalr_Environment $env, $cloudLocation = null)
+    {
+        $cloudLocationId = CloudLocation::calculateCloudLocationId($this->platform, $cloudLocation, $this->getEndpointUrl($env));
+        $cit = CloudInstanceType::findPk($cloudLocationId, $instanceTypeId);
+
+        if ($cit === null) {
+            $instanceTypes = $this->getInstanceTypes($env, $cloudLocation, true);
+
+            if (!empty($instanceTypes[$instanceTypeId])) {
+                $cit = CloudInstanceType::findPk($cloudLocationId, $instanceTypeId);
+            }
+        }
+
+        return $cit;
     }
 
     /**
@@ -154,5 +179,14 @@ abstract class AbstractPlatformModule
         //Retrieves an instance types for this cloud location.
         //We should actually return only active types.
         return $cl->getActiveInstanceTypes();
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see PlatformModuleInterface::getImageInfo()
+     */
+    public function getImageInfo(\Scalr_Environment $environment, $cloudLocation, $imageId)
+    {
+        return [];
     }
 }

@@ -21,6 +21,15 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.view', function () {
             }
         },
 
+        listeners: {
+            beforeload: function () {
+                grid.down('#add').toggle(false, true);
+            },
+            filterchange: function () {
+                grid.down('#add').toggle(false, true);
+            }
+        },
+
         removeByCertificateId: function (ids) {
             var me = this;
 
@@ -65,7 +74,7 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.view', function () {
             deferEmptyText: false
         },
 
-        selModel: 'selectedmodel',
+        selModel: Scalr.isAllowed('SERVICES_SSL', 'manage') ? 'selectedmodel' : null,
 
         listeners: {
             selectionchange: function (selModel, selections) {
@@ -140,20 +149,56 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.view', function () {
             return me;
         },
 
-		columns:[
-			{ header: "ID", width: 60, dataIndex: 'id', sortable: true },
-			{ header: "SSL Certificate", flex: 1, dataIndex: 'name', sortable: true },
-			{
-				header: 'Certificate', width: 100, dataIndex: 'certificate', sortable: false, xtype: 'templatecolumn', align: 'center',
-				tpl: '<tpl if="!!certificate"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div><tpl else>&mdash;</tpl>'
-			}, {
-				header: 'Certificate chain', width: 140, dataIndex: 'caBundle', sortable: false, xtype: 'templatecolumn', align: 'center',
-				tpl: '<tpl if="!!caBundle"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div><tpl else>&mdash;</tpl>'
-			}, {
-                header: 'Private key', width: 100, dataIndex: 'privateKey', sortable: false, xtype: 'templatecolumn', align: 'center',
-                tpl: '<tpl if="privateKey"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div><tpl else>&mdash;</tpl>'
-            }
-		],
+        columns: [{
+            header: "ID",
+            width: 60,
+            dataIndex: 'id',
+            sortable: true
+        }, {
+            header: "SSL Certificate",
+            flex: 1,
+            dataIndex: 'name',
+            sortable: true
+        }, {
+            header: 'Certificate',
+            width: 100,
+            sortable: false,
+            xtype: 'templatecolumn',
+            align: 'center',
+            tpl: [
+                '<tpl if="!Ext.isEmpty(values.certificate)">',
+                    '<div class="x-grid-icon x-grid-icon-ok"></div>',
+                '<tpl else>',
+                    '&mdash;',
+                '</tpl>'
+            ]
+        }, {
+            header: 'Certificate chain',
+            width: 140,
+            sortable: false,
+            xtype: 'templatecolumn',
+            align: 'center',
+            tpl: [
+                '<tpl if="!Ext.isEmpty(values.caBundle)">',
+                    '<div class="x-grid-icon x-grid-icon-ok"></div>',
+                '<tpl else>',
+                    '&mdash;',
+                '</tpl>'
+            ]
+        }, {
+            header: 'Private key',
+            width: 100,
+            sortable: false,
+            xtype: 'templatecolumn',
+            align: 'center',
+            tpl: [
+                '<tpl if="!Ext.isEmpty(values.privateKey)">',
+                    '<div class="x-grid-icon x-grid-icon-ok"></div>',
+                '<tpl else>',
+                    '&mdash;',
+                '</tpl>'
+            ]
+        }],
 
 		dockedItems: [{
 			xtype: 'toolbar',
@@ -180,6 +225,7 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.view', function () {
                 itemId: 'add',
                 cls: 'x-btn-green',
                 enableToggle: true,
+                hidden: !Scalr.isAllowed('SERVICES_SSL', 'manage'),
                 toggleHandler: function (button, state) {
                     if (state) {
                         grid.clearSelectedRecord();
@@ -204,7 +250,6 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.view', function () {
                 tooltip: 'Refresh',
                 handler: function () {
                     store.load();
-                    grid.down('#add').toggle(false, true);
                 }
             }, {
                 itemId: 'delete',
@@ -212,6 +257,7 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.view', function () {
                 cls: 'x-btn-red',
                 tooltip: 'Select one or more certificates to delete them',
                 disabled: true,
+                hidden: !Scalr.isAllowed('SERVICES_SSL', 'manage'),
                 handler: function () {
                     grid.deleteSelectedCertificates();
                 }
@@ -246,16 +292,19 @@ Scalr.regPage('Scalr.ui.services.ssl.certificates.view', function () {
             afterloadrecord: function (record) {
                 var me = this;
 
+                var isManageAllowed = Scalr.isAllowed('SERVICES_SSL', 'manage');
+
                 me
-                    .setHeader('Edit SSL Certificate')
+                    .setHeader((isManageAllowed ? 'Edit' : 'View') + ' SSL Certificate')
                     .disableButtons(
                         record.get('certificate'),
                         record.get('caBundle'),
                         record.get('privateKey')
                     );
 
-                form.down('#save').setText('Save');
+                me.down('#save').setText('Save');
                 me.down('#delete').show();
+                me.setReadOnly(!isManageAllowed);
 
                 grid.down('#add').toggle(false, true);
             }

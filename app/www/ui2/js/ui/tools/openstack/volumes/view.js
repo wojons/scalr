@@ -35,7 +35,7 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
 		},
 
 		columns: [
-			{ header: "Used by", flex: 1, dataIndex: 'id', sortable: false, xtype: 'templatecolumn', tpl:
+			{ header: "Used by", flex: 1, dataIndex: 'farmId', sortable: false, xtype: 'templatecolumn', tpl:
 				'<tpl if="farmId">' +
 					'<a href="#/farms?farmId={farmId}" title="Farm {farmName}">{farmName}</a>' +
 					'<tpl if="roleName">' +
@@ -60,10 +60,14 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
 				'<tpl if="instanceId">{instanceId}</tpl>'
 			}, {
 				xtype: 'optionscolumn',
+                hidden: !Scalr.isAllowed('OPENSTACK_SNAPSHOTS', 'manage') && !Scalr.isAllowed('OPENSTACK_VOLUMES', 'manage'),
 				menu: [{
 					text: 'Create snapshot',
 					iconCls: 'x-menu-icon-create',
                     showAsQuickAction: true,
+                    getVisibility: function(data) {
+                        return Scalr.isAllowed('OPENSTACK_SNAPSHOTS', 'manage');
+                    },
 					menuHandler: function(data) {
 						Scalr.event.fireEvent('redirect','#/tools/openstack/snapshots/create?' +
 							Ext.Object.toQueryString({
@@ -81,7 +85,7 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
                         Scalr.event.fireEvent('redirect', "#/tools/openstack/volumes/" + data['volumeId'] + "/attach?cloudLocation=" + store.proxy.extraParams.cloudLocation + '&platform=' + loadParams['platform']);
 					},
                     getVisibility: function(data) {
-                        return !data['instanceId'];
+                        return !data['instanceId'] && Scalr.isAllowed('OPENSTACK_VOLUMES', 'manage');
                     }
 				}, {
 					iconCls: 'x-menu-icon-detach',
@@ -111,13 +115,13 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
 						}
 					},
                     getVisibility: function(data) {
-                        return data['instanceId'];
+                        return data['instanceId'] && Scalr.isAllowed('OPENSTACK_VOLUMES', 'manage');
                     }
 				}]
 			}
 		],
 
-        selModel: 'selectedmodel',
+        selModel: Scalr.isAllowed('OPENSTACK_VOLUMES', 'manage') ? 'selectedmodel' : null,
         listeners: {
 			selectionchange: function(selModel, selections) {
 				this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
@@ -130,6 +134,7 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
 			dock: 'top',
 			beforeItems: [{
                 text: 'New volume',
+                hidden: !Scalr.isAllowed('OPENSTACK_VOLUMES', 'manage'),
                 cls: 'x-btn-green',
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/tools/openstack/volumes/create?' +
@@ -146,6 +151,7 @@ Scalr.regPage('Scalr.ui.tools.openstack.volumes.view', function (loadParams, mod
                 cls: 'x-btn-red',
 				tooltip: 'Select one or more volumes to delete them',
 				disabled: true,
+                hidden: !Scalr.isAllowed('OPENSTACK_VOLUMES', 'manage'),
 				handler: function() {
 					var request = {
 						confirmBox: {

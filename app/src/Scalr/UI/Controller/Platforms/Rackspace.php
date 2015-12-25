@@ -1,14 +1,17 @@
 <?php
 
-use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Platforms_Rackspace extends Scalr_UI_Controller
 {
     public function xGetFlavorsAction()
     {
+        //TODO: check correct platform name
+        $ccProps = $this->environment->cloudCredentials("{$this->getParam('cloudLocation')}." . SERVER_PLATFORMS::RACKSPACE)->properties;
+
         $cs = Scalr_Service_Cloud_Rackspace::newRackspaceCS(
-            $this->getEnvironment()->getPlatformConfigValue(RackspacePlatformModule::USERNAME, true, $this->getParam('cloudLocation')),
-            $this->getEnvironment()->getPlatformConfigValue(RackspacePlatformModule::API_KEY, true, $this->getParam('cloudLocation')),
+            $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_USERNAME],
+            $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_API_KEY],
             $this->getParam('cloudLocation')
         );
 

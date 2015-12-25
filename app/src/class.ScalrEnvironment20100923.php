@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Model\Entity;
+
 class ScalrEnvironment20100923 extends ScalrEnvironment20090305
 {
     protected function GetScalingMetrics()
@@ -43,7 +45,7 @@ class ScalrEnvironment20100923 extends ScalrEnvironment20090305
 
         $dbRole = $dbFarmRole->GetRoleObject();
 
-        if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_SYSTEM_NEW_PRESETS_USED) != 1) {
+        if ($dbFarmRole->GetSetting(Entity\FarmRoleSetting::SYSTEM_NEW_PRESETS_USED) != 1) {
             foreach ($dbRole->getBehaviors() as $behavior)
             {
                 $settingsNode = $ResponseDOMDocument->createElement("settings");

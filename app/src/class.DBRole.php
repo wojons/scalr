@@ -3,6 +3,7 @@
 use Scalr\Model\Entity\Role;
 use Scalr\Model\Entity\Os;
 use Scalr\Util\CryptoTool;
+use Scalr\DataType\ScopeInterface;
 
 class DBRole
 {
@@ -18,6 +19,8 @@ class DBRole
         $description,
         $isDevel,
         $generation,
+        $isQuickStart,
+        $isDeprecated,
         $addedByUserId,
         $dtLastUsed,
         $addedByEmail,
@@ -51,6 +54,8 @@ class DBRole
         'is_devel'		=> 'isDevel',
         'generation'	=> 'generation',
         'os_id'			=> 'osId',
+        'is_quick_start'=> 'isQuickStart',
+        'is_deprecated' => 'isDeprecated',
 
         'dtadded'         => 'dateAdded',
         'dt_last_used'    => 'dtLastUsed',
@@ -167,6 +172,7 @@ class DBRole
     {
         if (!$this->behaviors) {
             $this->behaviors = array_unique(explode(",", $this->behaviorsRaw));
+            sort($this->behaviors);
         }
 
         return $this->behaviors;
@@ -235,9 +241,7 @@ class DBRole
         }
 
         if (!$DBRole->__os) {
-            $DBRole->__os = Os::findOne([
-                ['id' => $DBRole->osId]
-            ]);
+            $DBRole->__os = Os::findOne([['id' => $DBRole->osId]]);
         }
 
         return $DBRole;
@@ -302,9 +306,11 @@ class DBRole
                     name		= ?,
                     description	= ?,
                     behaviors	= ?,
-                    dt_last_used = ?
+                    dt_last_used = ?,
+                    is_quick_start = ?,
+                    is_deprecated = ?
                 WHERE id =?
-            ", array($this->name, $this->description, $this->behaviorsRaw, $this->dtLastUsed, $this->id));
+            ", array($this->name, $this->description, $this->behaviorsRaw, $this->dtLastUsed, $this->isQuickStart, $this->isDeprecated, $this->id));
 
             $this->db->Execute("DELETE FROM role_behaviors WHERE role_id = ?", array($this->id));
 
@@ -363,50 +369,6 @@ class DBRole
         }
 
         return $this->__newRoleObject;
-    }
-
-    public function getParameters()
-    {
-        $dbParams = $this->db->Execute("SELECT * FROM role_parameters WHERE role_id = ?", array($this->id));
-        $retval = array();
-        while ($param = $dbParams->FetchRow()) {
-            $retval[] = array(
-                'name'	=> $param['name'],
-                'hash'	=> $param['hash'],
-                'type'	=> $param['type'],
-                'required'	=> $param['isrequired'],
-                'defval'	=> $param['defval']
-            );
-        }
-
-        return $retval;
-    }
-
-    public function setParameters(array $params = array())
-    {
-        $this->db->Execute("DELETE FROM role_parameters WHERE role_id = ?", array($this->id));
-        foreach ($params as $param) {
-            $param = (array)$param;
-
-            $this->db->Execute("INSERT INTO role_parameters SET
-                `role_id`		= ?,
-                `name`			= ?,
-                `type`			= ?,
-                `isrequired`	= ?,
-                `defval`		= ?,
-                `allow_multiple_choice`	= 0,
-                `options`		= '',
-                `hash`			= ?,
-                `issystem`		= 1
-            ", array(
-                $this->id,
-                $param['name'],
-                $param['type'],
-                $param['required'],
-                $param['defval'],
-                str_replace(" ", "_", strtolower($param['name']))
-            ));
-        }
     }
 
     public function getScripts()
@@ -596,7 +558,7 @@ class DBRole
             }
 
             //Set global variables
-            $variables = new Scalr_Scripting_GlobalVariables($this->clientId, $this->envId, Scalr_Scripting_GlobalVariables::SCOPE_ROLE);
+            $variables = new Scalr_Scripting_GlobalVariables($this->clientId, $this->envId, ScopeInterface::SCOPE_ROLE);
             $variables->setValues($variables->getValues($this->id), $newRoleId);
 
             //Set scripts
@@ -619,6 +581,19 @@ class DBRole
                     $newRoleId, $r8['event_name'], $r8['target'], $r8['script_id'], $r8['version'],
                     $r8['timeout'], $r8['issync'], $r8['params'], $r8['order_index'], $r8['script_type'], $r8['script_path'], CryptoTool::sault(12)
                 ));
+            }
+
+            //Set environments only for account-scope roles
+            if (!empty($accountId) && empty($envId)) {
+                $rsr9 = $this->db->Execute("SELECT * FROM role_environments WHERE role_id = ?", array($this->id));
+                while ($r9 = $rsr9->FetchRow()) {
+                    $this->db->Execute("INSERT INTO role_environments SET
+                    role_id = ?,
+                    env_id = ?
+                ", array(
+                        $newRoleId, $r9['env_id']
+                    ));
+                }
             }
         } catch (Exception $e) {
             $this->db->RollbackTrans();
@@ -646,8 +621,10 @@ class DBRole
             if (!$proto_role['architecture'])
                 $proto_role['architecture'] = $DBServer->GetProperty(SERVER_PROPERTIES::ARCHITECTURE);
         } else {
+            $behaviors = array_unique(explode(',', $DBServer->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_BEHAVIOR)));
+            sort($behaviors);
             $proto_role = array(
-                "behaviors" => $DBServer->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_BEHAVIOR),
+                "behaviors" => join(',', $behaviors),
                 "architecture" => $DBServer->GetProperty(SERVER_PROPERTIES::ARCHITECTURE),
                 "name" => "*import*"
             );
@@ -749,11 +726,6 @@ class DBRole
 
         // Set params
         if ($proto_role['id']){
-            $dbParams = $db->GetAll("SELECT name,type,isrequired,defval,allow_multiple_choice,options,hash,issystem
-                FROM role_parameters WHERE role_id = ?", array($proto_role['id'])
-            );
-            $role->setParameters($dbParams);
-
             $dbSecRules = $db->GetAll("SELECT * FROM role_security_rules WHERE role_id = ?", array($proto_role['id']));
             foreach ($dbSecRules as $dbSecRule) {
                 $db->Execute("INSERT INTO role_security_rules SET role_id = ?, rule = ?", array(
@@ -772,7 +744,7 @@ class DBRole
 
             $role->setScripts($scripts);
 
-            $variables = new Scalr_Scripting_GlobalVariables($BundleTask->clientId, $proto_role['env_id'], Scalr_Scripting_GlobalVariables::SCOPE_ROLE);
+            $variables = new Scalr_Scripting_GlobalVariables($BundleTask->clientId, $proto_role['env_id'], ScopeInterface::SCOPE_ROLE);
             $variables->setValues($variables->getValues($proto_role['id']), $role->id);
         }
 
@@ -796,18 +768,13 @@ class DBRole
         }
 
         $usedBy = $this->db->GetOne("
-            SELECT SUM(number) FROM
+            SELECT SUM(number) as result FROM
                 (SELECT COUNT(*) AS number
                 FROM farm_roles fr
                 " . $join . "
-                WHERE fr.role_id=?
-            UNION ALL
-                SELECT COUNT(*) AS number
-                FROM farm_roles fr
-                " . $join . "
-                WHERE fr.new_role_id=?)
-            AS result",
-            array($this->id, $this->id));
+                WHERE fr.role_id=?) t
+            ",
+            array($this->id));
 
         return $usedBy;
     }
@@ -831,11 +798,7 @@ class DBRole
             FROM farm_roles fr
             " . $join . "
             WHERE fr.role_id=?
-            UNION
-            SELECT fr.farmid
-            FROM farm_roles fr
-            " . $join . "
-            WHERE fr.new_role_id=?", array($this->id, $this->id));
+        ", array($this->id));
 
         return $usedBy;
     }

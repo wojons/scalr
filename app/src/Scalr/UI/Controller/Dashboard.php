@@ -1,4 +1,7 @@
 <?php
+
+use Scalr\UI\Request\JsonData;
+
 class Scalr_UI_Controller_Dashboard extends Scalr_UI_Controller
 {
     public function hasAccess()
@@ -129,6 +132,7 @@ class Scalr_UI_Controller_Dashboard extends Scalr_UI_Controller
 
     public function fillDash($panel)
     {
+        $loadJs = [];
         foreach ($panel['configuration'] as &$column) {
             foreach ($column as &$wid) {
                 $tt = microtime(true);
@@ -145,8 +149,19 @@ class Scalr_UI_Controller_Dashboard extends Scalr_UI_Controller
 
                 $info = $widget->getDefinition();
 
-                if (!empty($info['js']))
+                if (!empty($info['js'])) {
                     $loadJs[] = $info['js'];
+                }
+
+                $wid['params'] = isset($wid['params']) && is_array($wid['params']) ? $wid['params'] : [];
+
+                try {
+                    $widget->hasWidgetAccess($wid['params']);
+                } catch (Exception $e) {
+                    // temp solution, need to refactor
+                    $wid['params']['widgetError'] = $e->getMessage();
+                    continue;
+                }
 
                 if ($info['type'] == 'local') {
                     try {
@@ -186,15 +201,36 @@ class Scalr_UI_Controller_Dashboard extends Scalr_UI_Controller
         ));
     }
 
-    public function xUpdatePanelAction()
+    /**
+     * @param   JsonData    $widget
+     * @throws  Scalr_Exception_Core
+     */
+    public function xUpdatePanelAction(JsonData $widget)
     {
-        $this->request->defineParams(array(
-            'widget' => array('type' => 'json')
-        ));
-
         $panel = $this->user->getDashboard($this->getEnvironmentId(true));
-        if (!strpos(json_encode($panel['configuration']), json_encode($this->getParam('widget')))) {
-            $this->user->addDashboardWidget($this->getEnvironmentId(true), $this->getParam('widget'));
+
+        if (!empty($widget['name'])) {
+            // check if a such widget's configuration has already existed in dashboard
+            $existed = false;
+            foreach ($panel['configuration'] as $column) {
+                foreach ($column as $wid) {
+                    if ($wid['name'] == $widget['name']) {
+                        if (!empty($widget['params']) || !empty($wid['params'])) {
+                            $a = $widget['params'];
+                            sort($a);
+                            $b = $wid['params'];
+                            sort($b);
+                            $existed = $existed || (json_encode($a) === json_encode($b));
+                        } else {
+                            $existed = true;
+                        }
+                    }
+                }
+            }
+
+            if (!$existed) {
+                $this->user->addDashboardWidget($this->getEnvironmentId(true), (array) $widget);
+            }
         }
 
         $panel = $this->user->getDashboard($this->getEnvironmentId(true));

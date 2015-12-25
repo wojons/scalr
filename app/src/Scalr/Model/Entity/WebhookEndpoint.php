@@ -1,9 +1,11 @@
 <?php
+
 namespace Scalr\Model\Entity;
 
 use Scalr\Model\AbstractEntity;
 use Scalr\Exception\ScalrException;
 use Scalr\DataType\ScopeInterface;
+use Scalr\System\Http\Client\Request;
 
 /**
  * WebhookEndpoint entity
@@ -101,7 +103,7 @@ class WebhookEndpoint extends AbstractEntity implements ScopeInterface
     public function validateUrl()
     {
         if (!$this->isValid && $this->endpointId) {
-            $q = new \HttpRequest($this->url, HTTP_METH_GET);
+            $q = new Request($this->url, "GET");
             $q->addHeaders(array(
                 'X-Scalr-Webhook-Enpoint-Id' => $this->endpointId,
                 'Content-Type' => 'application/x-www-form-urlencoded; charset=UTF-8',
@@ -109,26 +111,25 @@ class WebhookEndpoint extends AbstractEntity implements ScopeInterface
             ));
             $q->setOptions(array(
                 'redirect'       => 10,
-                'useragent'      => sprintf('Scalr client (http://scalr.com) PHP/%s pecl_http/%s', phpversion(), phpversion('http')),
                 'verifypeer'     => false,
                 'verifyhost'     => false,
                 'timeout'        => 10,
                 'connecttimeout' => 10,
             ));
             try {
-                $message = $q->send();
-                if ($message->getResponseCode() == 200) {
-                    $code = trim($q->getResponseBody());
-                    $h = $message->getHeader('X-Validation-Token');
+                $response = \Scalr::getContainer()->http->sendRequest($q);
+                if ($response->getResponseCode() == 200) {
+                    $code = trim($response->getBody()->toString());
+                    $h = $response->getHeader('X-Validation-Token');
                     $this->isValid = ($code == $this->validationToken) || ($h == $this->validationToken);
                     if ($this->isValid) {
                         $this->save();
                     }
 
                 } else
-                    throw new ScalrException(sprintf("Validation failed. Endpoint '%s' returned http code %s", strip_tags($this->url), $message->getResponseCode()));
+                    throw new ScalrException(sprintf("Validation failed. Endpoint '%s' returned http code %s", strip_tags($this->url), $response->getResponseCode()));
 
-            } catch (\HttpException $e) {
+            } catch (\http\Exception $e) {
                 throw new ScalrException(sprintf("Validation failed. Cannot connect to '%s'.", strip_tags($this->url)));
             }
         }

@@ -5,6 +5,8 @@ use Scalr\Model\Entity\Image;
 use Scalr\Model\Entity\Os;
 use Scalr\UI\Request\JsonData;
 use Scalr\Modules\PlatformFactory;
+use Scalr\DataType\ScopeInterface;
+use Scalr\Model\Entity\Role;
 
 class Scalr_UI_Controller_Images extends Scalr_UI_Controller
 {
@@ -20,17 +22,29 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_IMAGES);
+        $this->restrictAccess('IMAGES');
 
         $this->response->page('ui/images/view.js', [
-            'platforms' => Image::getEnvironmentPlatforms($this->getEnvironmentId(true))
+            'platforms' => Image::getPlatforms($this->user->getAccountId() ?: null, $this->getEnvironmentId(true))
         ]);
     }
 
     public function createAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_IMAGES, Acl::PERM_FARMS_IMAGES_CREATE);
-        $this->response->page('ui/images/create.js');
+        if ($this->request->isAllowed(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_MANAGE) ||
+            $this->request->isAllowed(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_BUILD) ||
+            $this->request->isAllowed(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_IMPORT)
+        ) {
+            $this->response->page('ui/images/create.js');
+        } else {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+    }
+
+    public function registerAction()
+    {
+        $this->restrictAccess('IMAGES', 'MANAGE');
+        $this->response->page('ui/images/register.js');
     }
 
     /**
@@ -45,28 +59,34 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
      * @param JsonData $sort
      * @param int $start
      * @param int $limit
-     * @param JsonData $os
      * @param JsonData $hideLocation
      * @param bool $hideNotActive
      * @throws Exception
      */
     public function xListAction($query = null, $platform = null, $cloudLocation = null, $scope = null, $osFamily = null, $osId = null, $id = null, $hash = null, JsonData $sort, $start = 0, $limit = 20, JsonData $hideLocation, $hideNotActive = false)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_IMAGES);
+        $this->restrictAccess('IMAGES');
 
-        $criteria = [];
+        $osIds = $criteria = [];
+        $accountId = $this->user->getAccountId() ?: NULL;
+        $envId = $this->getEnvironmentId(true);
+
+        if ($this->request->getScope() == ScopeInterface::SCOPE_SCALR) {
+            $criteria[] = ['accountId' => NULL];
+        } else if ($this->request->getScope() == ScopeInterface::SCOPE_ACCOUNT) {
+            $criteria[] = ['$or' => [['accountId' => $accountId], ['accountId' => NULL]]];
+            $criteria[] = ['envId' => NULL];
+        } else {
+            $enabledPlatforms = $this->getEnvironment()->getEnabledPlatforms();
+            $criteria[] = ['$or' => [
+                ['$and' => [['accountId' => NULL], ['platform' => empty($enabledPlatforms) ? NULL : ['$in' => $enabledPlatforms]]]],
+                ['$and' => [['accountId' => $accountId], ['envId' => NULL]]],
+                ['envId' => $envId]
+            ]];
+        }
 
         if ($hash) {
             $criteria[] = ['hash' => $hash];
-            if ($this->getEnvironment()) {
-                $enabledPlatforms = $this->getEnvironment()->getEnabledPlatforms();
-                $criteria[] = ['$or' => [
-                    ['envId' => $this->getEnvironmentId(true)],
-                    ['$and' => [['envId' => NULL], ['platform' => empty($enabledPlatforms) ? NULL : ['$in' => $enabledPlatforms]]]]
-                ]];
-            } else {
-                $criteria[] = ['envId' => NULL];
-            }
         } else {
             if ($query) {
                 $querySql = '%' . $query . '%';
@@ -81,32 +101,18 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
                 $criteria[] = ['cloudLocation' => $cloudLocation];
             }
 
-            if ($this->getEnvironment()) {
-                $enabledPlatforms = $this->getEnvironment()->getEnabledPlatforms();
-                if ($scope) {
-                    if ($scope == 'env') {
-                        $criteria[] = ['envId' => $this->getEnvironmentId(true)];
-                    } else {
-                        // hide shared images, which platforms are not configured
-                        if (empty($enabledPlatforms)) {
-                            $criteria[] = ['platform' => NULL];
-                        } else {
-                            $criteria[] = ['envId' => NULL];
-                            $criteria[] = ['platform' => ['$in' => $enabledPlatforms]];
-                        }
-                    }
-                } else {
-                    $criteria[] = ['$or' => [
-                        ['envId' => $this->getEnvironmentId(true)],
-                        ['$and' => [['envId' => NULL], ['platform' => empty($enabledPlatforms) ? NULL : ['$in' => $enabledPlatforms]]]]
-                    ]];
-                }
-            } else {
+            if ($scope == ScopeInterface::SCOPE_SCALR) {
+                $criteria[] = ['accountId' => NULL];
+            } else if ($scope == ScopeInterface::SCOPE_ACCOUNT) {
+                $criteria[] = ['accountId' => $accountId];
                 $criteria[] = ['envId' => NULL];
+            } else if ($scope == ScopeInterface::SCOPE_ENVIRONMENT) {
+                $criteria[] = ['envId' => $envId];
             }
 
-            if ($osFamily)
+            if ($osFamily) {
                 $osIds = Os::findIdsBy($osFamily);
+            }
 
             if ($osId) {
                 $os = Os::find([['id' => $osId]]);
@@ -117,14 +123,14 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
                 }
             }
 
-            if (count($osIds) > 0) {
+            if (!empty($osIds)) {
                 $criteria[] = ['osId' => ['$in' => $osIds]];
             }
 
             if ($id) {
                 $criteria[] = ['id' => [ '$like' => $id . '%']];
             }
-            
+
             if ($hideLocation) {
                 foreach ($hideLocation as $platform => $locations) {
                     foreach ($locations as $loc) {
@@ -146,38 +152,77 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
 
         }
 
-        $result = Image::find($criteria, \Scalr\UI\Utils::convertOrder($sort, ['id' => 'ASC'], ['id', 'platform', 'cloudLocation', 'name', 'osId', 'dtAdded', 'architecture', 'createdByEmail', 'source']), $limit, $start, true);
+        $image = new Image();
+        $os = new Os();
+
+        $order = \Scalr\UI\Utils::convertOrder($sort, ['dtAdded' => false], ['id', 'platform', 'cloudLocation', 'name', 'osId', 'dtAdded', 'architecture', 'createdByEmail', 'source', 'type']);
+        if (!empty($order)) {
+            $sOrder = '';
+            foreach ($order as $k => $v) {
+                if ($k == 'osId') {
+                    $sOrder .= ', IF(os.family IS NOT NULL, os.family, images.os_id)' . ($v ? '' : ' DESC') . ", CAST(os.version AS DECIMAL(10,2))" . ($v ? '' : ' DESC');
+                } else {
+                    $field = $image->getIterator()->getField($k);
+                    if (!$field) {
+                        throw new InvalidArgumentException(sprintf(
+                            "Property %s does not exist in %s",
+                            $k, get_class($image)
+                        ));
+                    }
+                    $sOrder .= ', ' . $field->getColumnName() . ($v ? '' : ' DESC');
+                }
+            }
+            $sOrder = ($sOrder != '' ? 'ORDER BY ' . substr($sOrder, 2) : '');
+        }
+
+        $result = $this->db->Execute("
+            SELECT " . (isset($limit) ? 'SQL_CALC_FOUND_ROWS ' : '') . $image->fields('images') . "
+            FROM " . $image->table('images') . "
+            LEFT JOIN " . $os->table('os') . " ON {$os->columnId} = {$image->columnOsId}
+            WHERE " . $image->_buildQuery($criteria, 'AND', 'images')['where'] . "
+            " . (!empty($sOrder) ? $sOrder : "") . "
+            " . (isset($limit) ? "LIMIT " . ($start ? intval($start) . ',' : '') . intval($limit) : "") . "
+        ");
+
+        if (isset($limit)) {
+            $totalNumber = $this->db->getOne('SELECT FOUND_ROWS()');
+        } else {
+            $totalNumber = $result->RowCount();
+        }
+
         $data = [];
-        foreach ($result as $image) {
-            /* @var $image Image */
+        while ($rec = $result->FetchRow()) {
+            $image = new Image();
+            $image->load($rec);
+
             $s = get_object_vars($image);
             $dtAdded = $image->getDtAdded();
 
             $s['dtAdded'] = $dtAdded ? Scalr_Util_DateTime::convertTz($dtAdded) : '';
             $s['dtLastUsed'] = $image->dtLastUsed ? Scalr_Util_DateTime::convertTz($image->dtLastUsed) : '';
-            $s['used'] = $image->getUsed($this->getEnvironmentId(true));
+            $s['used'] = $image->getUsed($accountId, $envId);
             $s['software'] = $image->getSoftwareAsString();
             $s['osFamily'] = $image->getOs()->family;
             $s['osGeneration'] = $image->getOs()->generation;
             $s['osVersion'] = $image->getOs()->version;
             $s['os'] = $image->getOs()->name;
+            $s['scope'] = $image->getScope();
             $data[] = $s;
         }
 
         $this->response->data([
-            'total' => $result->totalNumber,
-            'data' => $data,
-            'debug' => $criteria
+            'total' => $totalNumber,
+            'data' => $data
         ]);
     }
 
     /**
-     * @param $osFamily
-     * @param $osVersion
+     * @param string $osFamily
+     * @param string $osVersion
      */
     public function xGetRoleImagesAction($osFamily, $osVersion)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_MANAGE);
+        $this->restrictAccess('IMAGES', 'MANAGE');
 
         $data = [];
 
@@ -185,7 +230,7 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
 
         foreach (Image::find([
             ['$or' => [['envId' => $this->getEnvironmentId(true)], ['envId' => NULL]]],
-            'osId' => ['$in' => $osIds],
+            ['osId' => ['$in' => $osIds]],
             ['status' => Image::STATUS_ACTIVE]
         ]) as $image) {
             /* @var $image Image */
@@ -215,14 +260,14 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
      */
     public function xGetEc2MigrateDetailsAction($id, $cloudLocation)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_IMAGES, Acl::PERM_FARMS_IMAGES_MANAGE);
+        $this->request->restrictAccess(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_MANAGE);
 
         /* @var $image Image */
         $image = Image::findOne([['platform' => SERVER_PLATFORMS::EC2], ['id' => $id], ['cloudLocation' => $cloudLocation], ['envId' => $this->getEnvironmentId()]]);
         if (! $image)
             throw new Exception('Image not found');
 
-        $this->user->getPermissions()->validate($image);
+        $this->checkPermissions($image, true);
 
         if (!$this->getEnvironment()->isPlatformEnabled(SERVER_PLATFORMS::EC2))
             throw new Exception('You can migrate image between regions only on EC2 cloud');
@@ -247,23 +292,23 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
     }
 
     /**
-     * @param $id
-     * @param $cloudLocation
-     * @param $destinationRegion
+     * @param string $id
+     * @param string $cloudLocation
+     * @param string $destinationRegion
      * @throws Exception
      * @throws Scalr_Exception_Core
      * @throws Scalr_Exception_InsufficientPermissions
      */
     public function xEc2MigrateAction($id, $cloudLocation, $destinationRegion)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_IMAGES, Acl::PERM_FARMS_IMAGES_MANAGE);
+        $this->request->restrictAccess(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_MANAGE);
 
         /* @var $image Image */
         $image = Image::findOne([['platform' => SERVER_PLATFORMS::EC2], ['id' => $id], ['cloudLocation' => $cloudLocation], ['envId' => $this->getEnvironmentId()]]);
         if (! $image)
             throw new Exception('Image not found');
 
-        $this->user->getPermissions()->validate($image);
+        $this->checkPermissions($image, true);
 
         $newImage = $image->migrateEc2Location($destinationRegion, $this->request->getUser());
 
@@ -272,21 +317,32 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
     }
 
     /**
-     * @param $imageId
-     * @param $platform
-     * @param $cloudLocation
+     * @param   string  $imageId
+     * @param   string  $platform
+     * @param   string  $cloudLocation
+     * @throws  Scalr_Exception_Core
      */
     public function xCheckAction($imageId, $platform, $cloudLocation = '')
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_IMAGES, Acl::PERM_FARMS_IMAGES_CREATE);
+        $this->request->restrictAccess(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_MANAGE);
 
-        $image = Image::findOne([['id' => $imageId], ['envId' => $this->getEnvironmentId()], ['platform' => $platform], ['cloudLocation' => $cloudLocation]]);
-        if ($image) {
-            $this->response->failure('This Image has already been registered in Scalr.');
-            return;
+        if ($platform == SERVER_PLATFORMS::GCE || $platform == SERVER_PLATFORMS::AZURE) {
+            $cloudLocation = '';
         }
 
-        if (Image::findOne([['id' => $imageId], ['envId' => NULL], ['platform' => $platform], ['cloudLocation' => $cloudLocation]])) {
+        if (($accountId = $this->user->getAccountId())) {
+            if (($envId = $this->getEnvironmentId(true))) {
+                if (Image::findOne([['id' => $imageId], ['envId' => $envId], ['platform' => $platform], ['cloudLocation' => $cloudLocation]])) {
+                    throw new Scalr_Exception_Core('This Image has already been registered in the Environment Scope.');
+                }
+            }
+
+            if (Image::findOne([['id' => $imageId], ['accountId' => $this->user->getAccountId()], ['envId' => null], ['platform' => $platform], ['cloudLocation' => $cloudLocation]])) {
+                throw new Scalr_Exception_Core('This Image has already been registered in the Account Scope.');
+            }
+        }
+
+        if (Image::findOne([['id' => $imageId], ['accountId' => null], ['platform' => $platform], ['cloudLocation' => $cloudLocation]])) {
             $this->response->failure('This Image has already been registered in the Scalr Scope.');
             return;
         }
@@ -296,52 +352,79 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
         $image->id = $imageId;
         $image->platform = $platform;
         $image->cloudLocation = $cloudLocation;
-        if ($image->checkImage()) {
-            $this->response->data(['data' => [
-                'name' => $image->name ? $image->name : $image->id,
-                'size' => $image->size,
-                'architecture' => $image->architecture ? $image->architecture : 'x86_64'
-            ]]);
+        if (($data = $image->checkImage()) !== false) {
+            $data['name'] = $image->name ? $image->name : $image->id;
+            $data['size'] = $image->size;
+            $data['architecture'] = $image->architecture ? $image->architecture : 'x86_64';
+
+            if ($image->platform == SERVER_PLATFORMS::EC2) {
+                $data['ec2Type'] = strstr($image->type, 'ebs') ? 'ebs' : 'instance-store';
+                $data['ec2Hvm']  = strstr($image->type, 'hvm') !== false;
+            }
+
+            $this->response->data(['data' => $data]);
         } else {
             $this->response->failure("This Image does not exist, or isn't usable by your account");
         }
     }
 
     /**
-     * @param   string  $imageId
-     * @param   string  $platform
-     * @param   string  $cloudLocation
-     * @param   string  $name
-     * @param   string  $architecture
-     * @param   int     $size
-     * @param   string  $osId,
-     * @param   string  $ec2Type
-     * @param   bool    $ec2Hvm
-     * @param   array   $software
+     * @param   string   $imageId
+     * @param   string   $platform
+     * @param   string   $osId
+     * @param   string   $name
+     * @param   string   $cloudLocation
+     * @param   string   $architecture
+     * @param   int      $size
+     * @param   string   $ec2Type
+     * @param   bool     $ec2Hvm
+     * @param   JsonData $software
+     * @throws  Scalr_Exception_Core
      */
-    public function xSaveAction($imageId, $platform, $cloudLocation = '', $name, $architecture = '', $osId, $size = NULL, $ec2Type = NULL, $ec2Hvm = NULL, $software = [])
+    public function xSaveAction($imageId, $platform, $osId, $name, $cloudLocation = '', $architecture = '', $size = null, $ec2Type = null, $ec2Hvm = null, JsonData $software = null)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_IMAGES, Acl::PERM_FARMS_IMAGES_CREATE);
+        $this->restrictAccess('IMAGES', 'MANAGE');
 
-        $image = Image::findOne([['id' => $imageId], ['envId' => $this->getEnvironmentId(true)], ['platform' => $platform], ['cloudLocation' => $cloudLocation]]);
-        if ($image) {
-            $this->response->failure('This Image has already been registered in Scalr.');
-            return;
+        if ($platform == SERVER_PLATFORMS::GCE || $platform == SERVER_PLATFORMS::AZURE) {
+            $cloudLocation = '';
         }
 
-        if (Image::findOne([['id' => $imageId], ['envId' => NULL], ['platform' => $platform], ['cloudLocation' => $cloudLocation]])) {
+        if (($accountId = $this->user->getAccountId())) {
+            if (($envId = $this->getEnvironmentId(true))) {
+                if (Image::findOne([['id' => $imageId], ['envId' => $envId], ['platform' => $platform], ['cloudLocation' => $cloudLocation]])) {
+                    throw new Scalr_Exception_Core('This Image has already been registered in the Environment Scope.');
+                }
+            }
+
+            if (Image::findOne([['id' => $imageId], ['accountId' => $this->user->getAccountId()], ['envId' => null], ['platform' => $platform], ['cloudLocation' => $cloudLocation]])) {
+                throw new Scalr_Exception_Core('This Image has already been registered in the Account Scope.');
+            }
+        }
+
+        if (Image::findOne([['id' => $imageId], ['accountId' => null], ['platform' => $platform], ['cloudLocation' => $cloudLocation]])) {
             $this->response->failure('This Image has already been registered in the Scalr Scope.');
             return;
         }
 
+        if (!Role::isValidName($name)) {
+            $this->response->failure('Name should start and end with letter or number and contain only letters, numbers and dashes.');
+            return;
+        }
+
         $image = new Image();
+        $image->accountId = $this->user->getAccountId() ?: null;
         $image->envId = $this->getEnvironmentId(true);
         $image->id = $imageId;
         $image->platform = $platform;
         $image->cloudLocation = $cloudLocation;
         $image->architecture = 'x86_64';
 
-        if ($this->user->isScalrAdmin()) {
+        if ($this->request->getScope() == ScopeInterface::SCOPE_ENVIRONMENT) {
+            if ($image->checkImage() === false) {
+                $this->response->failure("This Image does not exist, or isn't usable by your account");
+                return;
+            }
+        } else {
             $image->architecture = $architecture;
             $image->size = $size;
             if ($platform == SERVER_PLATFORMS::EC2) {
@@ -351,11 +434,6 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
                         $image->type = $image->type . '-hvm';
                     }
                 }
-            }
-        } else {
-            if (!$image->checkImage(true)) {
-                $this->response->failure("This Image does not exist, or isn't usable by your account");
-                return;
             }
         }
 
@@ -368,39 +446,38 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
 
         $image->save();
 
-        if (count($software)) {
-            $props = [];
-            foreach ($software as $value)
-                $props[$value] = null;
+        $props = [];
 
-            $image->setSoftware($props);
+        foreach ($software as $value) {
+            $props[$value] = null;
         }
+
+        $image->setSoftware($props);
 
         $this->response->data(['hash' => $image->hash]);
         $this->response->success('Image has been added');
     }
 
     /**
-     * @param $id
-     * @param $platform
-     * @param $cloudLocation
-     * @param $name
+     * @param   string  $hash
+     * @param   string  $name
      */
-    public function xUpdateNameAction($id, $platform, $cloudLocation, $name)
+    public function xUpdateNameAction($hash, $name)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_IMAGES, Acl::PERM_FARMS_IMAGES_MANAGE);
+        $this->restrictAccess('IMAGES', 'MANAGE');
 
-        if (! \Scalr\Model\Entity\Role::validateName($name)) {
+        if (! \Scalr\Model\Entity\Role::isValidName($name)) {
             $this->response->failure('Invalid name for image');
             return;
         }
 
         /* @var $image Image */
-        $image = Image::findOne([['id' => $id], ['envId' => $this->getEnvironmentId(true)], ['platform' => $platform], ['cloudLocation' => $cloudLocation]]);
+        $image = Image::findPk($hash);
         if (!$image) {
             $this->response->failure('Image not found');
             return;
         }
+        $this->checkPermissions($image, true);
 
         $image->name = $name;
         $image->save();
@@ -411,22 +488,24 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
 
     /**
      * @param JsonData $images
-     * @param bool $removeFromCloud
+     * @param bool     $removeFromCloud
      * @throws Scalr_Exception_Core
      * @throws \Scalr\Exception\ModelException
      */
     public function xRemoveAction(JsonData $images, $removeFromCloud = false)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_IMAGES, Acl::PERM_FARMS_IMAGES_MANAGE);
+        $this->restrictAccess('IMAGES', 'MANAGE');
         $errors = [];
         $processed = [];
         $pending = [];
 
-        foreach ($images as $i) {
+        foreach ($images as $hash) {
             try {
                 /* @var $im Image */
-                $im = Image::findOne([['id' => $i['id']], ['envId' => $this->getEnvironmentId(true)], ['platform' => $i['platform']], ['cloudLocation' => $i['cloudLocation']]]);
+                $im = Image::findPk($hash);
                 if ($im) {
+                    $this->checkPermissions($im, true);
+
                     if (! $im->getUsed()) {
                         if ($removeFromCloud && $this->user->isUser()) {
                             if ($im->isUsedGlobal()) {
@@ -435,6 +514,7 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
 
                             $im->status = Image::STATUS_DELETE;
                             $im->save();
+                            $pending[] = $im->hash;
                         } else {
                             if ($this->user->isScalrAdmin() && $im->isUsedGlobal())
                                 throw new Exception(sprintf("Unable to delete %s, this Image may be:\n- Still registered in another Environment or Account\n- Currently in-use by a Server in another Environment", $im->id));

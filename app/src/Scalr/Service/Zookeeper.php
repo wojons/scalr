@@ -39,7 +39,7 @@ class Scalr_Service_Zookeeper {
             }
         }
 
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
 
         // Failover stuff
         if (is_array($this->url)) {

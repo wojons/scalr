@@ -1,6 +1,8 @@
 <?php
 namespace Scalr\Service\Aws\Client\QueryClient;
 
+use finfo;
+use http\QueryString;
 use Scalr\Service\Aws\Client\QueryClient;
 use Scalr\Service\Aws\Event\EventType;
 
@@ -73,14 +75,14 @@ class Route53QueryClient extends QueryClient
             $options['Content-Type'] = 'application/xml';
 
             if (array_key_exists('putData', $extraOptions)) {
-                $httpRequest->setBody($extraOptions['putData']);
+                $httpRequest->append($extraOptions['putData']);
             } elseif (array_key_exists('putFile', $extraOptions)) {
-                $httpRequest->setBody(file_get_contents($extraOptions['putFile']));
+                $httpRequest->addFiles([ $extraOptions['putFile'] ]);
             }
         }
 
-        $httpRequest->setUrl('https://' . $options['Host'] . $path);
-        $httpRequest->setMethod(constant('HTTP_METH_' . $httpMethod));
+        $httpRequest->setRequestUrl('https://' . $options['Host'] . $path);
+        $httpRequest->setRequestMethod($httpMethod);
         $httpRequest->addHeaders($options);
 
         if (true) {
@@ -95,9 +97,9 @@ class Route53QueryClient extends QueryClient
         $response = $this->tryCall($httpRequest);
 
         if ($this->getAws() && $this->getAws()->getDebug()) {
-            echo "\n";
-            echo $httpRequest->getRawRequestMessage() . "\n";
-            echo $httpRequest->getRawResponseMessage() . "\n";
+            echo "\n",
+                 "{$httpRequest}\n",
+                 "{$response->getResponse()}\n";
         }
 
         return $response;

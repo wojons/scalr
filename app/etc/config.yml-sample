@@ -21,15 +21,8 @@ scalr:
 #      pass: ''
 #      type: 0
 #      authtype: 1
-#      # allowed values: scalr, instance, both 
+#      # allowed values: scalr, instance, both
 #      use_on: both
-
-#    # Mongodb may be used as storage for auditlog. This feature is still under development.
-#    mongodb: &connections_mongo
-#      driver: mongodb
-#      host: 'localhost'
-#      port: 27017
-#      name: 'db'
 
 #    # This section is optional and it is required only when you use ldap for user's authentication (scalr.auth_mode: ldap).
 #    ldap:
@@ -83,19 +76,6 @@ scalr:
     # Email From name, Default: null
     name: ~
 
-#  #Audit feature is under development
-#  auditlog:
-#    # Disabled by default. Default: false
-#    enabled: false
-#    # Valid values: mysql | mongodb
-#    storage: mysql
-#    connections:
-#      mysql:
-#        <<: *connections_mysql
-#      mongodb:
-#        <<: *connections_mongo
-#        collection: 'auditlog'
-
 #  cloudyn:
 #    master_email: ''
 #    # Allowed values: DEV | ITG | QA | PROD Default: PROD
@@ -107,120 +87,133 @@ scalr:
 #      delay: 18000
 #      # ZMP MDP liveness (Default: 3)
 #      liveness: 3
-    
+
 #    sockets:
 #      # DSN of the ZMQ MDP broker (Default: ipc://[SYSTEM-TMP-PATH]/[SCALR-ID].broker.ipc)
 #      broker: ipc:///tmp/{SCALR_ID}.broker.ipc
-    
+
 #    # Path to the log file of the service. Default: (/dev/null)
 #    log: /var/log/scalr/service.log
-    
+
 #    # Log level of the service. Type:Integer. Valid predefined values are FATAL|ERROR|WARN|INFO|DEBUG (Default: ERROR)
-#    log_level: ERROR    
+#    log_level: ERROR
 
     services:
 #      # Cron task template. It may be used as an example how to define a service.
 #      # Default values should be defined in the Scalr\System\Config\Extension.
-#      
+#
 #      # The name of the service
 #      the_name_of_the_service_here:
 #        # Whether the service is enabled (Default: no)
 #        # System administrator is in charge of enable a new service when doing Scalr upgrade.
 #        enabled: no
-#                
+#
 #        # What time task should start at. Format: "minute hour dayOfMonth month dayOfWeek"
 #        # where:
-#        #   minute     values range from 0 to 59, 
-#        #   hour       values range from 0 to 23, 
-#        #   dayOfMonth values range from 1 to 31, 
-#        #   month      values range from 1 to 12, 
-#        #   dayOfWeek  values range from 0 to 6, with 0 meaning Sunday 
+#        #   minute     values range from 0 to 59,
+#        #   hour       values range from 0 to 23,
+#        #   dayOfMonth values range from 1 to 31,
+#        #   month      values range from 1 to 12,
+#        #   dayOfWeek  values range from 0 to 6, with 0 meaning Sunday
 #        # If it is a demonized service, time does not need to be set here, whereas 'daemon' property has to be set to yes.
 #        time: "1 */4 * * *"
-#        
-#        ## The number of parallel workers 
+#
+#        ## The number of parallel workers
 #        workers: 1
-#        
+#
 #        ## Whether process should be demonized
 #        daemon: no
 #
 #        ## The idle time for demonized task in seconds
 #        idle: 5
-#        
+#
 #        ## Time zone which is used to run task. System timezone will be used by default.
 #        timezone: ~
-#        
+#
 #        ## Log destination
 #        log: /dev/null
-#        
+#
 #        ## Log level. Type:Integer. Valid predefined values are FATAL|ERROR|WARN|INFO|DEBUG
 #        log_level: WARN
 #
 #        ## Memory limit in Mb
 #        memory_limit: 0
-      
+
       analytics_notifications:
         enabled: no
 #        log: /var/log/scalr/analytics_notifications.log
 #        time: "1 1 * * *"
 #        timezone: UTC
-      
+
       cloud_poller:
         enabled: no
 #        log: /var/log/scalr/cloud_poller.log
 #        time: "*/2 * * * *"
 #        workers: 14
-      
+#        ## It is possible optionally to separate the pool of worker threads by cloud platform
+#        #replicate:
+#        #  type:
+#        #  # Either [cloud-platform, number-of-workers] or [cloud-platform] or cloud-platform
+#        #  - [openstack, 5]
+
       cloud_pricing:
         enabled: no
 #        log: /var/log/scalr/cloud_pricing.log
 #        time: "1 */4 * * *"
 #        workers: 4
 #        timezone: UTC
-      
+
       db_msr_maintenance:
         enabled: no
 #        log: /var/log/scalr/db_msr_maintenance.log
 #        time: "*/5 * * * *"
 #        workers: 10
-      
+
       dns_manager:
         enabled: no
 #        log: /var/log/scalr/dns_manager.log
 #        workers: 4
-      
+
       images_builder:
         enabled: no
 #        log: /var/log/scalr/images_builder.log
 #        workers: 4
-      
+
       images_cleanup:
         enabled: no
 #        log: /var/log/scalr/images_cleanup.log
 #        time: "0/20 * * * *"
-      
+
       lease_manager:
         enabled: no
 #        log: /var/log/scalr/lease_manager.log
 #        time: "2/20 * * * *"
 #        workers: 3
-      
+
+#      # This cron is not mandatory and have to be used only by EE customers.
+#      platform_usage:
+#        enabled: no
+#        log: /var/log/scalr/platform_usage.log
+#        time: "30 11,23 * * *"
+#        workers: 1
+
       rotate:
         enabled: no
 #        log: /var/log/scalr/rotate.log
 #        time: "17 */2 * * *"
 #        # Depending on your load and database master-slave replication characteristics
-#        delete: 
+#        delete:
 #          # The number of the records to delete per one time. (Default: 1000)
 #          limit: 1000
 #          # Idle time in secodns between consecutive deletions. (Default: 60)
 #          sleep: 60
-#        # How long it will keep data for the specified tables. 
-#        # The value must be valid relative DateTime unit (http://php.net/manual/en/datetime.formats.relative.php)  
+#        # How long it will keep data for the specified tables.
+#        # The value must be valid relative DateTime unit (http://php.net/manual/en/datetime.formats.relative.php)
 #        keep:
 #          scalr:
 #            logentries: "-10 days"
 #            scripting_log: "-7 days"
+#            api_log: "-14 days"
 #            events: "-2 months"
 #            messages: "-10 days"
 #            webhook_history: "-30 days"
@@ -229,39 +222,40 @@ scalr:
 #          analytics:
 #            # Long periods here will hit performance
 #            poller_sessions: "-7 days"
-#            usage_h: "-14 days"
-      
+#            usage_h: "-1 month"
+#            aws_billing_records: "-4 month"
+
       scalarizr_messaging:
         enabled: no
 #        log: /var/log/scalr/scalarizr_messaging.log
         replicate:
-          type: 
+          type:
           - HostInit
           - BeforeHostUp
           - HostUp
 #        workers: 4
-      
+
       scaling:
         enabled: no
 #        log: /var/log/scalr/scaling.log
 #        time: "*/2 * * * *"
 #        workers: 14
-      
+
       scheduler:
-        enabled: no  
-#        log: /var/log/scalr/scheduler.log      
+        enabled: no
+#        log: /var/log/scalr/scheduler.log
 #        workers: 4
-      
+
       server_status_manager:
         enabled: no
 #        log: /var/log/scalr/server_status_manager.log
 #        workers: 4
-      
+
       server_terminate:
         enabled: no
 #        log: /var/log/scalr/server_terminate.log
 #        workers: 4
-      
+
   system:
     default_disable_firewall_management: no
     instances_connection_timeout: 4
@@ -277,7 +271,20 @@ scalr:
     global_variables:
       format: ~
 #        SCALR_INSTANCE_INDEX: '%d'
-  
+#    monitoring:
+#      # Path to the file if it should collect access log for an each UI and API request
+#      access_log_path: ~
+
+  security:
+    user:
+      suspension:
+        # It will suspend user account when he has not used Scalr for N days. 0 - to disable.
+        # Default: 0
+        inactivity_days: 0
+        # It will suspend user account just after N failed sign in attempts. 0 - to disable.
+        # Default: 10
+        failed_login_attempts: 10
+
   ui:
     support_url: 'https://groups.google.com/d/forum/scalr-discuss'
     wiki_url: 'http://wiki.scalr.com'
@@ -293,17 +300,17 @@ scalr:
       url: ''
       server_ip: ''
 
-  # Allowed values: scalr | ldap
+  # Allowed values: scalr | ldap | saml
   auth_mode: scalr
 
   # Allowed values: public | local | auto.
   instances_connection_policy: public
 
-  # By default it's allowed all avalialbe
+  # By default it's allowed all available
   allowed_clouds:
   - ec2
   - gce
-  - eucalyptus
+  - azure
 
   # cloudstack based
   - cloudstack
@@ -312,10 +319,12 @@ scalr:
   # openstack based
   - openstack
   - ocs
-  - ecs
   - rackspacenguk
   - rackspacengus
-  - nebula
+  - hpcloud
+  - mirantis
+  - vio
+  - cisco
 
 #  analytics:
 #    # Whether it is enabled. Optional, default value: no
@@ -339,8 +348,6 @@ scalr:
 #    #  pid_file: '/var/run/scalr.analytics-poller.pid'
 #    ## Processes raw data script
 #    #processing:
-#    #  # Number of threads in pool Default: 50
-#    #  pool_size: 50
 #    #  log_file: '/var/log/scalr.analytics-processing.log'
 #    #  pid_file: '/var/run/scalr.analytics-processing.pid'
 
@@ -388,12 +395,16 @@ scalr:
 #      statistics:
 #        # max_heap_table_size in bytes which is taken into consideration on create table with MEMORY type. Default value: 256Mb
 #        storage_max_size: 268435456
+#    ec2:
+#      limits:
+#        # Maximum number of security groups per EC2 instance. (Default: 10)
+#        security_groups_per_instance: 10
 
   billing:
     enabled: no
     chargify_api_key: ''
     chargify_domain: ''
-    emergency_phone_number: ''    
+    emergency_phone_number: ''
 
   dns:
     mysql:
@@ -545,12 +556,10 @@ scalr:
 #    # value from account_users.id must be provided here
 #    userid: 0
 #    # client_environments.id must be provided here
-#    envid: 0  
+#    envid: 0
 #    openstack:
 #      platforms:
 #      #- [platform, region, imageid]
-#      # Enter.It
-#      - [ecs, RegionOne, b54b4117-fd27-4576-9947-a1b03b1209ce]
 #      # Rackspace NewGen US
 #      - [rackspacengus, DFW, 3afe97b2-26dc-49c5-a2cc-a2fc8d80c001]
 #      # Rackspace NewGen UK

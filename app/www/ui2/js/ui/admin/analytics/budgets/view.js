@@ -106,6 +106,10 @@ Scalr.regPage('Scalr.ui.admin.analytics.budgets.view', function (loadParams, mod
                         return data;
                     }
                 }
+            },
+            extraParams: {
+                year: moduleParams['fiscalYear'],
+                quarter: Scalr.utils.Quarters.getQuarterForDate()
             }
 		},
         updateParamsAndLoad: function(params, reset) {
@@ -208,7 +212,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.budgets.view', function (loadParams, mod
             renderer: function(value, m, record) {
                 return '<span class="x-semibold">' + value + '</span><br/><span style="font-size:80%">'+record.get('billingCode') + '</span>'
             }
-            
+
         },{
             xtype: 'templatecolumn',
             flex: 1,
@@ -336,13 +340,13 @@ Scalr.regPage('Scalr.ui.admin.analytics.budgets.view', function (loadParams, mod
                 itemId: 'yearInput',
                 fieldStyle: 'text-align:center',
                 width: 60,
-                value: (Scalr.utils.Quarters.getDate()).getFullYear(),
+                value: moduleParams['fiscalYear'],
                 readOnly: true,
                 readOnlyCls: '',
                 margin: 0,
                 listeners: {
                     change: function(field, value){
-                        var curYear = (Scalr.utils.Quarters.getDate()).getFullYear();
+                        var curYear = moduleParams['fiscalYear'];
                         this.next().setDisabled(curYear+1 == value);
                         this.prev().setDisabled(curYear-4 == value);
                         store.updateParamsAndLoad({year: value});

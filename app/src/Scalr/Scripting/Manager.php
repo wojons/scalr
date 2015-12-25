@@ -91,7 +91,7 @@ class Scalr_Scripting_Manager
         return (float) $sec + ((float) $usec * 100000);
     }
 
-    public static function extendMessage(Scalr_Messaging_Msg $message, Event $event, DBServer $eventServer, DBServer $targetServer)
+    public static function extendMessage(Scalr_Messaging_Msg $message, AbstractServerEvent $event, DBServer $eventServer, DBServer $targetServer)
     {
         $db = \Scalr::getDb();
 
@@ -123,7 +123,7 @@ class Scalr_Scripting_Manager
                     $itm->executionId = $script['execution_id'];
 
                     $retval[] = $itm;
-                    
+
                     $event->scriptsCount++;
                 }
             }
@@ -140,45 +140,46 @@ class Scalr_Scripting_Manager
         return $message;
     }
 
-    public static function prepareScript($scriptSettings, DBServer $targetServer, Event $event = null)
+    public static function prepareScript($scriptSettings, DBServer $targetServer, AbstractServerEvent $event = null)
     {
-        $db = \Scalr::getDb();
-
-        $template = array(
-            'type'    => $scriptSettings['type'],
-            'timeout' => $scriptSettings['timeout'],
-            'issync'  => $scriptSettings['issync'],
-            'run_as'  => $scriptSettings['run_as'],
+        $template = [
+            'type'         => isset($scriptSettings['type'])    ? $scriptSettings['type']    : null,
+            'timeout'      => isset($scriptSettings['timeout']) ? $scriptSettings['timeout'] : null,
+            'issync'       => isset($scriptSettings['issync'])  ? $scriptSettings['issync']  : null,
+            'run_as'       => isset($scriptSettings['run_as'])  ? $scriptSettings['run_as']  : null,
             'execution_id' => Scalr::GenerateUID()
-        );
+        ];
 
         if ($scriptSettings['type'] == self::ORCHESTRATION_SCRIPT_TYPE_SCALR) {
             /* @var $script Script */
             $script = Script::findPk($scriptSettings['scriptid']);
-            if (! $script)
+            if (!$script) {
                 return false;
+            }
             // TODO: validate permission to access script ?
-            
-            if ($script->os && $targetServer->osType && $script->os != $targetServer->osType)
-            	return false;
+
+            if ($script->os && $targetServer->osType && $script->os != $targetServer->osType) {
+                return false;
+            }
 
             if ($scriptSettings['version'] == 'latest' || (int)$scriptSettings['version'] == -1) {
                 $version = $script->getLatestVersion();
-            }
-            else {
+            } else {
                 $version = $script->getVersion((int)$scriptSettings['version']);
             }
 
-            if (! $version)
+            if (!$version) {
                 return false;
+            }
 
             $template['name'] = $script->name;
             $template['id'] = $script->id;
             $template['body'] = $version->content;
 
-            $scriptParams = $script->allowScriptParameters ? (array) $version->variables : []; // variables could be null
-            foreach ($scriptParams as &$val)
+            $scriptParams = $script->allowScriptParameters ? (array)$version->variables : []; // variables could be null
+            foreach ($scriptParams as &$val) {
                 $val = "";
+            }
 
             $params = array_merge($scriptParams, $targetServer->GetScriptingVars(), (array)unserialize($scriptSettings['params']));
 
@@ -188,19 +189,21 @@ class Scalr_Scripting_Manager
                     $params["event_{$k}"] = $v;
                 }
 
-                foreach ($event->GetScriptingVars() as $k=>$v)
+                foreach ($event->GetScriptingVars() as $k => $v) {
                     $params[$k] = $event->{$v};
+                }
 
-                if (isset($event->params) && is_array($event->params))
-                    foreach ($event->params as $k=>$v)
+                if (isset($event->params) && is_array($event->params)) {
+                    foreach ($event->params as $k => $v) {
                         $params[$k] = $v;
+                    }
+                }
 
                 $params['event_name'] = $event->GetName();
             }
 
-            if ($event instanceof CustomEvent) {
-                if (count($event->params) > 0)
-                    $params = array_merge($params, $event->params);
+            if (($event instanceof CustomEvent) && (count($event->params) > 0)) {
+                $params = array_merge($params, $event->params);
             }
 
             // Prepare keys array and array with values for replacement in script
@@ -219,17 +222,21 @@ class Scalr_Scripting_Manager
             $chef = new stdClass();
             $chefSettings = (array)unserialize($scriptSettings['params']);
 
-            if ($chefSettings['chef.cookbook_url'])
+            if ($chefSettings['chef.cookbook_url']) {
                 $chef->cookbookUrl = $chefSettings['chef.cookbook_url'];
+            }
 
-            if ($chefSettings['chef.cookbook_url_type'])
+            if ($chefSettings['chef.cookbook_url_type']) {
                 $chef->cookbookUrlType = $chefSettings['chef.cookbook_url_type'];
+            }
 
-            if ($chefSettings['chef.relative_path'])
+            if ($chefSettings['chef.relative_path']) {
                 $chef->relativePath = $chefSettings['chef.relative_path'];
+            }
 
-            if ($chefSettings['chef.ssh_private_key'])
+            if ($chefSettings['chef.ssh_private_key']) {
                 $chef->sshPrivateKey = $chefSettings['chef.ssh_private_key'];
+            }
 
             if ($chefSettings['chef.role_name']) {
                 $chef->role = $chefSettings['chef.role_name'];
@@ -244,7 +251,7 @@ class Scalr_Scripting_Manager
         return $template;
     }
 
-    public static function getEventScriptList(Event $event, DBServer $eventServer, DBServer $targetServer)
+    public static function getEventScriptList(AbstractServerEvent $event, DBServer $eventServer, DBServer $targetServer)
     {
         $db = \Scalr::getDb();
 
@@ -282,20 +289,20 @@ class Scalr_Scripting_Manager
                 $script['params'] = $params;
 
             $scripts[] = array(
-             "id" => "r{$script['id']}",
-             "scriptid" => $script['script_id'],
-             "type" => $script['script_type'],
-             "params" => $script['params'],
-             "event_name" => $event->GetName(),
-             "target" => $script['target'],
-             "version" => $script['version'],
-             "timeout" => $script['timeout'],
-             "issync" => $script['issync'],
-             "order_index" => $script['order_index'],
-             "scope"   => "role",
-             'script_path' => $script['script_path'],
-             'run_as' => $script['run_as'],
-             'script_type' => $script['script_type']
+                "id" => "r{$script['id']}",
+                "scriptid" => $script['script_id'],
+                "type" => $script['script_type'],
+                "params" => $script['params'],
+                "event_name" => $event->GetName(),
+                "target" => $script['target'],
+                "version" => $script['version'],
+                "timeout" => $script['timeout'],
+                "issync" => $script['issync'],
+                "order_index" => $script['order_index'],
+                "scope"   => "role",
+                'script_path' => $script['script_path'],
+                'run_as' => $script['run_as'],
+                'script_type' => $script['script_type']
             );
         }
 

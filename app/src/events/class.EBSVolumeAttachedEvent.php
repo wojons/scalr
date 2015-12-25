@@ -1,6 +1,6 @@
 <?php
 
-class EBSVolumeAttachedEvent extends Event
+class EBSVolumeAttachedEvent extends AbstractServerEvent
 {
     public $DeviceName;
     public $VolumeID;

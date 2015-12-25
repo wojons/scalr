@@ -87,7 +87,7 @@ def fill_messages(step):
         record['handle_attempts'] = record.get('handle_attempts', 0)
         record['dtlasthandleattempt'] = record.get(
             'dthandleattempt', "'%s'" % datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-        record['message'] = "'Carrot'"
+        record['message'] = record.get('message', "'Some message'")
         record['server_id'] = record.get('server_id', "'%s'" % lib.generate_server_id())
         record['type'] = record.get('type', "'out'")
         record['message_version'] = record.get('message_version', 2)
@@ -125,20 +125,55 @@ def fill_servers(step):
         record['remote_ip'] = record.get('remote_ip', 'NULL')
         record['local_ip'] = record.get('local_ip', 'NULL')
         record['index'] = record.get('index', 1)
+        record['instance_type_name'] = record.get('instance_type_name', 'NULL')
+        record['type'] = record.get('type', 'NULL')
         record['os_type'] = record.get('os_type', random.choice(["'linux'", "'windows'"]))
         query = (
             "INSERT INTO servers "
             "(server_id, farm_id, farm_roleid, client_id, env_id, platform, cloud_location, "
-            "status, remote_ip, local_ip, `index`, os_type) "
+            "status, remote_ip, local_ip, `index`, instance_type_name, type, os_type) "
             "VALUES ({server_id}, {farm_id}, {farm_roleid}, {client_id}, {env_id}, "
-            "{platform}, {cloud_location}, {status}, {remote_ip}, {local_ip}, {index}, {os_type})"
+            "{platform}, {cloud_location}, {status}, {remote_ip}, {local_ip}, {index}, "
+            "{instance_type_name}, {type}, {os_type})"
         ).format(**record)
         db.execute(query)
         server = db.execute("SELECT * FROM servers where server_id='%s'" %
-                            strip(record['server_id']))
-        server = db.execute("SELECT * FROM servers where server_id='%s'" %
                             strip(record['server_id']))[0]
+        for k, v in server.items():
+            if isinstance(v, basestring):
+                server[k] = "'%s'" % v
         lib.world.servers[server['server_id']] = server
+
+
+@step(u"Database has servers_history records")
+def fill_servers_history(step):
+    db = dbmanager.DB(lib.world.config['connections']['mysql'])
+    for record in step.hashes:
+        record['server_id'] = record.get('server_id', "'%s'" % lib.generate_server_id())
+        server = lib.world.servers.get(record['server_id'], {})
+        record['cloud_server_id'] = record['cloud_server_id']
+        record['farm_id'] = record.get('farm_id') or server.get('farm_id') or lib.generate_id()
+        record['farm_roleid'] = record.get('farm_roleid') or server.get('farm_roleid') or lib.generate_id()
+        record['client_id'] = record.get('client_id') or server.get('client_id') or lib.generate_id()
+        record['env_id'] = record.get('env_id') or server.get('env_id') or lib.generate_id()
+        record['platform'] = record.get('platform') or server.get('platform') or random.choice(
+                ["'ec2'", "'gce'", "'idcf'", "'openstack'"])
+        record['cloud_location'] = record.get('cloud_location') or server.get('cloud_location') or "'us-east-1'"
+        record['instance_type_name'] = record.get('instance_type_name') or server.get('instance_type_name') or 'NULL'
+        record['type'] = record.get('type') or server.get('type') or 'NULL'
+        record['server_index'] = record.get('server_index') or server.get('index') or 1
+        record['role_id'] = record.get('role_id') or lib.generate_id()
+        record['project_id'] = uuid.UUID(strip(record.get('project_id', '00000000-0000-0000-0000-000000000001'))).hex.upper()
+        record['cc_id'] = uuid.UUID(strip(record.get('cc_id', '00000000-0000-0000-0000-000000000001'))).hex.upper()
+        query = (
+            "INSERT INTO servers_history "
+            "(server_id, cloud_server_id, farm_id, farm_roleid, role_id, client_id, env_id, "
+            "platform, cloud_location, server_index, instance_type_name, type, project_id, cc_id) "
+            "VALUES ({server_id}, {cloud_server_id}, {farm_id}, {farm_roleid}, {role_id}, "
+            "{client_id}, {env_id}, {platform}, {cloud_location}, {server_index}, "
+            "{instance_type_name}, {type}, UNHEX('{project_id}'), UNHEX('{cc_id}'))"
+        ).format(**record)
+        db.execute(query)
 
 
 @step(u"Database has webhook_history records")
@@ -146,19 +181,19 @@ def fill_webhook_history(step):
     db = dbmanager.DB(lib.world.config['connections']['mysql'])
     lib.world.webhook_history = {}
     for record in step.hashes:
-        record['history_id'] = record.get('history_id', "'%s'" %
-                                          lib.generate_history_id()).replace('-', '').upper()
-        record['webhook_id'] = record.get('webhook_id', "'%s'" %
-                                          lib.generate_webhook_id()).replace('-', '').upper()
-        record['endpoint_id'] = record.get('endpoint_id', "'%s'" %
-                                           lib.generate_endpoint_id()).replace('-', '').upper()
-        record['event_id'] = record.get('event_id', "'%s'" % lib.generate_id())
+        record['history_id'] = uuid.UUID(strip(record.get('history_id', "'%s'" %
+                                         lib.generate_history_id()))).hex.upper()
+        record['webhook_id'] = uuid.UUID(strip(record.get('webhook_id', "'%s'" %
+                                         lib.generate_webhook_id()))).hex.upper()
+        record['endpoint_id'] = uuid.UUID(strip(record.get('endpoint_id', "'%s'" %
+                                          lib.generate_endpoint_id()))).hex.upper()
+        record['event_id'] = record.get('event_id', "%s" % lib.generate_id())
         record['status'] = record.get('status', 0)
         record['payload'] = record.get('payload', "'This is text'")
         query = (
             "INSERT INTO webhook_history "
             "(history_id, webhook_id, endpoint_id, event_id, status, payload) "
-            "VALUES (UNHEX({history_id}), UNHEX({webhook_id}), UNHEX({endpoint_id}), "
+            "VALUES (UNHEX('{history_id}'), UNHEX('{webhook_id}'), UNHEX('{endpoint_id}'), "
             "{event_id}, {status}, {payload})"
         ).format(**record)
         db.execute(query)
@@ -180,7 +215,7 @@ def fill_webhook_endpoints(step):
         query = (
             "INSERT INTO webhook_endpoints "
             "(endpoint_id, url) "
-            "VALUES (UNHEX({endpoint_id}), {url})"
+            "VALUES (UNHEX('{endpoint_id}'), {url})"
         ).format(**record)
         db.execute(query)
 
@@ -249,6 +284,50 @@ def fill_client_environment_properties(step):
             "INSERT INTO client_environment_properties "
             "(env_id, name, value, `group`, cloud) "
             "VALUES ({env_id}, {name}, {value}, {group}, {cloud})"
+        ).format(**record)
+        db.execute(query)
+
+
+@step(u"Database has cloud_credentials records")
+def fill_cloud_credentials(step):
+    db = dbmanager.DB(lib.world.config['connections']['mysql'])
+    for record in step.hashes:
+        record['id'] = record.get('id', lib.generate_id())
+        record['account_id'] = record.get('account_id', lib.generate_id())
+        record['env_id'] = record.get('env_id', lib.generate_id())
+        record['cloud'] = record.get('cloud', random.choice(["'ec2'", "'gce'", "'idcf'", "'openstack'"]))
+        query = (
+            "INSERT INTO cloud_credentials "
+            "(id, account_id, env_id, cloud) "
+            "VALUES ({id}, {account_id}, {env_id}, {cloud})"
+        ).format(**record)
+        db.execute(query)
+
+
+@step(u"Database has cloud_credentials_properties records")
+def fill_cloud_credentials_properties(step):
+    db = dbmanager.DB(lib.world.config['connections']['mysql'])
+    for record in step.hashes:
+        query = (
+            "INSERT INTO cloud_credentials_properties "
+            "(cloud_credentials_id, name, value) "
+            "VALUES ({cloud_credentials_id}, {name}, {value})"
+        ).format(**record)
+        db.execute(query)
+
+
+@step(u"Database has environment_cloud_credentials records")
+def fill_environment_cloud_credentials(step):
+    db = dbmanager.DB(lib.world.config['connections']['mysql'])
+    lib.world.client_environments = {}
+    for record in step.hashes:
+        record['env_id'] = record.get('env_id', lib.generate_id())
+        record['cloud'] = record.get('cloud', random.choice(["'ec2'", "'gce'", "'idcf'", "'openstack'"]))
+        record['cloud_credentials_id'] = record.get('cloud_credentials_id', lib.generate_cloud_credentials_id())
+        query = (
+            "INSERT INTO environment_cloud_credentials "
+            "(env_id, cloud, cloud_credentials_id) "
+            "VALUES ({env_id}, {cloud}, {cloud_credentials_id})"
         ).format(**record)
         db.execute(query)
 
@@ -327,13 +406,14 @@ dtime = time.strftime("%Y-%m-%d %H:00:00", time.gmtime(time.time() - 3600))
 def fill_poller_sessions(step):
     db = dbmanager.DB(lib.world.config['connections']['analytics'])
     for record in step.hashes:
+        record['sid'] = uuid.UUID(record['sid']).hex
         record['dtime'] = record.get('dtime', "'%s'" % dtime)
         record['url'] = record.get('url', "''")
         record['cloud_account'] = record.get('cloud_account', "''")
         query = (
             "INSERT INTO poller_sessions "
             "(sid, account_id, env_id, dtime, platform, url, cloud_location, cloud_account) "
-            "VALUES (UNHEX({sid}), {account_id}, {env_id}, {dtime}, {platform}, "
+            "VALUES (UNHEX('{sid}'), {account_id}, {env_id}, {dtime}, {platform}, "
             "{url}, {cloud_location}, {cloud_account})"
         ).format(**record)
         db.execute(query)
@@ -346,15 +426,15 @@ def fill_managed(step):
         query = (
             "SELECT platform "
             "FROM poller_sessions "
-            "WHERE sid=UNHEX({sid}) "
+            "WHERE sid=UNHEX('{sid}') "
             "LIMIT 1"
         ).format(**record)
-
+        record['sid'] = uuid.UUID(record['sid']).hex
         record['server_id'] = record['server_id'].replace('-', '')
         query = (
             "INSERT INTO managed "
             "(sid, server_id, instance_type, os) "
-            "VALUES (UNHEX({sid}), UNHEX({server_id}), {instance_type}, {os})"
+            "VALUES (UNHEX('{sid}'), UNHEX({server_id}), {instance_type}, {os})"
         ).format(**record)
         db.execute(query)
 
@@ -363,10 +443,11 @@ def fill_managed(step):
 def fill_notmanaged(step):
     db = dbmanager.DB(lib.world.config['connections']['analytics'])
     for record in step.hashes:
+        record['sid'] = uuid.UUID(record['sid']).hex
         query = (
             "INSERT INTO notmanaged "
             "(sid, instance_id, instance_type, os) "
-            "VALUES (UNHEX({sid}), {instance_id}, {instance_type}, {os})"
+            "VALUES (UNHEX('{sid}'), {instance_id}, {instance_type}, {os})"
         ).format(**record)
         db.execute(query)
 
@@ -375,12 +456,13 @@ def fill_notmanaged(step):
 def fill_price_history(step):
     db = dbmanager.DB(lib.world.config['connections']['analytics'])
     for record in step.hashes:
+        record['price_id'] = uuid.UUID(record['price_id']).hex
         record['applied'] = record.get('applied', "'%s'" % dtime.split()[0])
         record['url'] = record.get('url', "''")
         query = (
             "INSERT INTO price_history "
             "(price_id, platform, url, cloud_location, account_id, applied) "
-            "VALUES (UNHEX({price_id}), {platform}, {url}, {cloud_location}, "
+            "VALUES (UNHEX('{price_id}'), {platform}, {url}, {cloud_location}, "
             "{account_id}, {applied})"
         ).format(**record)
         db.execute(query)
@@ -390,10 +472,11 @@ def fill_price_history(step):
 def fill_prices(step):
     db = dbmanager.DB(lib.world.config['connections']['analytics'])
     for record in step.hashes:
+        record['price_id'] = uuid.UUID(record['price_id']).hex
         query = (
             "INSERT INTO prices "
             "(price_id, instance_type, os, cost) "
-            "VALUES (UNHEX({price_id}), {instance_type}, {os}, {cost})"
+            "VALUES (UNHEX('{price_id}'), {instance_type}, {os}, {cost})"
         ).format(**record)
         db.execute(query)
 
@@ -402,6 +485,7 @@ def fill_prices(step):
 def fill_quarterly_budget(step):
     db = dbmanager.DB(lib.world.config['connections']['analytics'])
     for record in step.hashes:
+        record['subject_id'] = uuid.UUID(record['subject_id']).hex
         record['year'] = record.get('year', "'%s'" % dtime.split()[0].split('-')[0])
         try:
             record['cumulativespend'] = float(record['cumulativespend'])
@@ -410,7 +494,7 @@ def fill_quarterly_budget(step):
         query = (
             "INSERT INTO quarterly_budget "
             "(year, subject_type, subject_id, quarter, budget, cumulativespend, spentondate) "
-            "VALUES ({year}, {subject_type}, UNHEX({subject_id}), {quarter}, {budget}, "
+            "VALUES ({year}, {subject_type}, UNHEX('{subject_id}'), {quarter}, {budget}, "
             "{cumulativespend}, {spentondate})"
         ).format(**record)
         db.execute(query)
@@ -467,11 +551,11 @@ def check_webhook_history(step):
     result = db.execute(query)
     assert int(result[0]['count']) == len(step.hashes), result[0]['count']
     for record in step.hashes:
-        record['history_id'] = record['history_id'].replace('-', '')
+        record['history_id'] = uuid.UUID(strip(record['history_id'])).hex
         query = (
             "SELECT * "
             "FROM webhook_history "
-            "WHERE history_id=UNHEX({history_id})"
+            "WHERE history_id=UNHEX('{history_id}')"
         ).format(**record)
         res = db.execute(query)
         assert res
@@ -494,12 +578,14 @@ def check_usage_h(step):
         record['cc_id'] = uuid.UUID(strip(record['cc_id'])).hex
         record['project_id'] = uuid.UUID(strip(record['project_id'])).hex
         record['url'] = record.get('url', '')
-        for k, v in record.iteritems():
+        for k, v in record.items():
             record[k] = strip(v)
         query = (
             "SELECT HEX(ui.id) id FROM usage_items ui JOIN usage_types ut ON ut.id=ui.usage_type "
-            "WHERE ut.cost_distr_type=1 AND ut.name='BoxUsage' AND ui.name='{name}'"
-        ).format(name=record['instance_type'])
+            "WHERE ut.cost_distr_type={ut_cost_distr_type} AND ut.name='{ut_name}' AND ui.name='{ui_name}'"
+        ).format(ut_cost_distr_type=record['usage_types.cost_distr_type'],
+                 ut_name=record['usage_types.name'],
+                 ui_name=record['usage_items.name'])
         result = db.execute(query)
         record['usage_item'] = result[0]['id'].lower()
         usage_id = analytics.Usage_h(record)['usage_id']
@@ -510,8 +596,13 @@ def check_usage_h(step):
         ).format(usage_id=usage_id)
         res = db.execute(query)
         assert res, usage_id
-        assert int(record['num']) == int(res[0]['num'])
-        assert float(record['cost']) == float(res[0]['cost']), float(res[0]['cost'])
+        assert float(record['num']) == float(res[0]['num'])
+        assert float(record['cost']) == float(res[0]['cost']), '%s != %s' % (record['cost'], float(res[0]['cost']))
+        for k, v in record.items():
+            if k in ['usage_types.name', 'usage_types.cost_distr_type', 'usage_items.name',
+                     'project_id', 'cc_id', 'usage_item']:
+                continue
+            assert str(v) == str(res[0][k]), '%s, %s != %s' % (k, str(v), str(res[0][k]))
 
 
 @step(u"White Rabbit checks nm_usage_h table")

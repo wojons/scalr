@@ -29,8 +29,8 @@ Scalr.regPage('Scalr.ui.account2.billing.updateCreditCard', function (loadParams
 				name: 'ccNumber',
                 flex: 1,
                 validator: function (value) {
-                    if (!/^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{4}$/.test(value)) {
-                        return 'Valid credit card number format is XXXX-XXXX-XXXX-XXXX';
+                    if (!/^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3,4}$/.test(value)) {
+                        return 'Valid credit card number format is XXXX-XXXX-XXXX-XXX(X)';
                     }
                     return true;
                 },

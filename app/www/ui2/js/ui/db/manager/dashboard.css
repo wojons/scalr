@@ -32,7 +32,7 @@
 	width: 22px;
 	background: #72BB61;
 	float: left;
-	border-radius: 2px;
+	border-radius: 0;
 	margin-right:17px;
 }
 
@@ -43,7 +43,7 @@
 /*cluster map*/
 .x-dbmsclustermapfield-container{
 	background: #e1ebf4;
-	border-radius: 2px;
+	border-radius: 0;
 }
 
 .x-dbmsclustermapfield-container .x-panel-body-default{
@@ -53,7 +53,7 @@
 
 .x-dbmsclustermapfield-btn{
 	background: #fff;
-	border-radius: 2px;
+	border-radius: 0;
 	overflow:hidden;
 }
 
@@ -123,7 +123,7 @@
 
 .x-dbmsclustermapfield-add{
     background: #6FAB54;
-    border-radius: 2px;
+    border-radius: 0;
     margin-bottom: 5px;
 	cursor: pointer;
 }

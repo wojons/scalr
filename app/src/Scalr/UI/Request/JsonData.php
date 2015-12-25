@@ -3,6 +3,7 @@
 namespace Scalr\UI\Request;
 
 use ArrayObject;
+use Scalr\Exception\Http\BadRequestException;
 
 /**
  * JsonData
@@ -15,12 +16,24 @@ use ArrayObject;
 class JsonData extends ArrayObject implements ObjectInitializingInterface
 {
     /**
-     * @param mixed $value
-     * @return JsonData
+     * {@inheritdoc}
+     * @see     ObjectInitializingInterface::initFromRequest()
+     * @return  JsonData
+     * @throws  BadRequestException
      */
-    public static function initFromRequest($value)
+    public static function initFromRequest($value, $name = '')
     {
+        if (is_array($value)) {
+            throw new BadRequestException(sprintf('JsonData expects parameter "%s" to be string, array given', $name));
+        }
+
         $decoded = json_decode($value, true);
+
+        if (!empty($decoded) && !is_array($decoded)) {
+            // decoded could be int, string or bool
+            throw new BadRequestException(sprintf('Passed parameter "%s" is not an array or object', $name));
+        }
+
         return new self($decoded ? $decoded : []);
     }
 

@@ -3,6 +3,7 @@
 use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
 use Scalr\Service\CloudStack\DataType\ListIpAddressesData;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
 {
@@ -13,9 +14,7 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
     }
 
     public function getFarmRoleElasticIps($platform, $cloudLocation, $farmRoleId) {
-        $platformName = $platform;
-        $platform = PlatformFactory::NewPlatform($platform);
-        $cs = $this->getEnvironment()->cloudstack($platformName);
+        $cs = $this->getEnvironment()->cloudstack($platform);
 
         $map = array();
 
@@ -23,14 +22,14 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
             $dbFarmRole = DBFarmRole::LoadByID($farmRoleId);
             $this->user->getPermissions()->validate($dbFarmRole);
 
-            $maxInstances = $dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES);
+            $maxInstances = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MAX_INSTANCES);
             for ($i = 1; $i <= $maxInstances; $i++) {
                 $map[] = array('serverIndex' => $i);
             }
 
             $servers = $dbFarmRole->GetServersByFilter();
             for ($i = 0; $i < count($servers); $i++) {
-                if ($servers[$i]->status != SERVER_STATUS::TERMINATED && $servers[$i]->status != SERVER_STATUS::TROUBLESHOOTING && $servers[$i]->index) {
+                if ($servers[$i]->status != SERVER_STATUS::TERMINATED && $servers[$i]->index) {
                     $map[$servers[$i]->index - 1]['serverIndex'] = $servers[$i]->index;
                     $map[$servers[$i]->index - 1]['serverId'] = $servers[$i]->serverId;
                     $map[$servers[$i]->index - 1]['remoteIp'] = $servers[$i]->remoteIp;
@@ -44,8 +43,9 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
             }
         }
 
-        $accountName = $platform->getConfigVariable(CloudstackPlatformModule::ACCOUNT_NAME, $this->getEnvironment(), false);
-        $domainId = $platform->getConfigVariable(CloudstackPlatformModule::DOMAIN_ID, $this->getEnvironment(), false);
+        $ccProps = $this->environment->cloudCredentials($platform)->properties;
+        $accountName = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_ACCOUNT_NAME];
+        $domainId = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_DOMAIN_ID];
 
         $requestObject = new ListIpAddressesData();
         $requestObject->account = $accountName;
@@ -107,8 +107,6 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
 
     public function xGetOfferingsListAction()
     {
-        $platform = PlatformFactory::NewPlatform($this->getParam('platform'));
-
         $cs = $this->getEnvironment()->cloudstack($this->getParam('platform'));
 
         $data = array();
@@ -136,8 +134,9 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
             );
         }
 
-        $accountName = $platform->getConfigVariable(CloudstackPlatformModule::ACCOUNT_NAME, $this->getEnvironment(), false);
-        $domainId = $platform->getConfigVariable(CloudstackPlatformModule::DOMAIN_ID, $this->getEnvironment(), false);
+        $ccProps = $this->environment->cloudCredentials($this->getParam('platform'))->properties;
+        $accountName = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_ACCOUNT_NAME];
+        $domainId = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_DOMAIN_ID];
 
         $data['networks'] = $this->getNetworks($this->getParam('platform'), $this->getParam('cloudLocation'));
 
@@ -197,8 +196,6 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
 
     private function getNetworks($platformName, $cloudLocation = false, $skipScalrOptions = false)
     {
-        $platform = PlatformFactory::NewPlatform($platformName);
-
         $cs = $this->getEnvironment()->cloudstack($platformName);
 
         $data = array();
@@ -209,8 +206,9 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
             $cloudLocations = array($cloudLocation);
         }
 
-        $accountName = $platform->getConfigVariable(CloudstackPlatformModule::ACCOUNT_NAME, $this->getEnvironment(), false);
-        $domainId = $platform->getConfigVariable(CloudstackPlatformModule::DOMAIN_ID, $this->getEnvironment(), false);
+        $ccProps = $this->environment->cloudCredentials($platformName)->properties;
+        $accountName = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_ACCOUNT_NAME];
+        $domainId = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_DOMAIN_ID];
 
         foreach ($cloudLocations as $cl) {
             $networks = $cs->network->describe(

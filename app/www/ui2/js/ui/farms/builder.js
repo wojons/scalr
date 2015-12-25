@@ -291,6 +291,9 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                     }
 
                     me.setFarm(params, data);
+                },
+                failure: function() {
+                    Scalr.event.fireEvent('close');
                 }
             });
         },
@@ -505,12 +508,34 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
 
             me.down('#farmRoleEditor').addFarmRoleDefaults(role);
 
-            farmRolesStore.add(role);
-            msg = 'Role "' + role.get('alias') + '" added';
-            if (Scalr.flags['analyticsEnabled'] && !Ext.Array.contains(me.moduleParams['analytics']['unsupportedClouds'], role.get('platform'))) {
-                role.loadHourlyRate(null, function(){Scalr.message.Success(msg);});
+            cb = function() {
+                farmRolesStore.add(role);
+                msg = 'Role "' + role.get('alias') + '" added';
+                if (Scalr.flags['analyticsEnabled'] && !Ext.Array.contains(me.moduleParams['analytics']['unsupportedClouds'], role.get('platform'))) {
+                    role.loadHourlyRate(null, function(){Scalr.message.Success(msg);});
+                } else {
+                    Scalr.message.Success(msg);
+                }
+            }
+
+            if (role.hasBehavior('chef')) {
+                role.loadRoleChefSettings(function(data, status){
+                    var limits;
+                    if (status) {
+                        if (data.roleChefSettings && !data.roleChefSettings['chef.environment'] && !role.get('settings', true)['chef.environment']) {
+                            limits = Scalr.getGovernance('general', 'general.chef');
+                            if (limits !== undefined && limits['servers'][data.roleChefSettings['chef.server_id']]) {
+                                var envs = limits['servers'][data.roleChefSettings['chef.server_id']]['environments'] || [];
+                                if (envs.length === 1) {
+                                    role.get('settings', true)['chef.environment'] = envs[0];
+                                }
+                            }
+                        }
+                    }
+                    cb();
+                });
             } else {
-                Scalr.message.Success(msg);
+                cb();
             }
         },
         getFarmVariables: function() {
@@ -736,7 +761,6 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                 if (activeRole !== undefined) {
                     var farmRoles = me.down('farmrolesview');
                     farmRoles.select(activeRole);
-                    //errorTipEl = farmRoles.up().el;
                 }
             }
 
@@ -757,6 +781,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                 farmRoles.getSelectionModel().deselectAll()
                 record.set(data.role);
                 farmRoles.select(record);
+                farmDesigner.down('#maintab').down('[name="instanceType"]').refreshInvalidState();
             }
         }
     }, farmDesigner);

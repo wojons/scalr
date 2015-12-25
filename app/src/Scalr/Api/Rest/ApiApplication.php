@@ -4,16 +4,22 @@ namespace Scalr\Api\Rest;
 
 use ErrorException;
 use Exception;
+use Scalr\Api\DataType\ApiMessage;
+use Scalr\Api\Limiter;
+use Scalr\Api\Rest\Http\Response;
 use Scalr\Api\Rest\Routing\Route;
+use Scalr\DataType\ScopeInterface;
 use Scalr\Model\Entity;
 use Scalr\Api\Rest\Exception\ApiErrorException;
 use Scalr\Api\DataType\ErrorEnvelope;
 use Scalr\Api\DataType\ErrorMessage;
 use Scalr\Api\DataType\Meta;
+use Scalr\Api\DataType\Warnings;
 use Scalr\Api\Rest\Exception\ApiInsufficientPermissionsException;
 use Scalr\Model\Entity\Account\User\ApiKeyEntity;
 use Scalr\Net\Ldap\Exception\LdapException;
 use Scalr\Net\Ldap\LdapClient;
+use Scalr\AuditLogger;
 
 /**
  * ApiApplication
@@ -23,6 +29,9 @@ use Scalr\Net\Ldap\LdapClient;
  *
  * @property  \Scalr\Api\DataType\Meta $meta
  *            Gets the Meta object which is the part of the API response
+ *
+ * @property  \Scalr\Api\DataType\Warnings $warnings
+ *            Gets Warnings object which is the part of the body API response
  */
 class ApiApplication extends Application
 {
@@ -30,6 +39,8 @@ class ApiApplication extends Application
     const SETTING_SCALR_ENVIRONMENT = 'api.scalr-environment';
 
     const REGEXP_UUID = '[[:xdigit:]]{8}-([[:xdigit:]]{4}-){3}[[:xdigit:]]{12}';
+
+    const REGEXP_SHORT_UUID = '[[:xdigit:]]{12}';
 
     /**
      * Error envelope
@@ -59,12 +70,19 @@ class ApiApplication extends Application
      */
     private $env;
 
-	/**
-	 * {@inheritdoc}
-	 * @see \Scalr\Api\Rest\Application::__construct()
-	 */
-	public function __construct(array $settings = [])
-	{
+    /**
+     * API rate limiter
+     *
+     * @var Limiter
+     */
+    protected $limiter;
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Api\Rest\Application::__construct()
+     */
+    public function __construct(array $settings = [])
+    {
         parent::__construct($settings);
 
         $cont = $this->getContainer();
@@ -72,53 +90,67 @@ class ApiApplication extends Application
         $cont->api->setShared('meta', function ($cont) {
             return new Meta();
         });
-	}
 
-	/**
-	 * Sets authorized user
-	 *
-	 * @param  \Scalr\Model\Entity\Account\User   $user  The user object
-	 * @return ApiApplication
-	 */
-	public function setUser($user)
-	{
-	    $this->user = $user;
+        $cont->api->setShared('warnings', function () {
+            return new Warnings();
+        });
 
-	    return $this;
-	}
+        $this->pathPreprocessor = function ($method, $pathInfo) {
+            if (preg_match("#^/api/(user|admin|account)/#", $pathInfo)) {
+                $pathInfo = preg_replace("#/(user|admin|account)/(v\d.*?)/#", '/$2/$1/', $pathInfo);
+                $this->warnings->appendWarnings(Response::getCodeMessage(301), sprintf('Location %s', $pathInfo));
+            }
+            return [$method, $pathInfo];
+        };
 
-	/**
-	 * Gets authorized user
-	 *
-	 * @return  \Scalr\Model\Entity\Account\User  Returns user object
-	 */
-	public function getUser()
-	{
-	    return $this->user;
-	}
+        $this->limiter = new Limiter(\Scalr::getContainer()->config->{'scalr.system.api.limits'});
+    }
 
-	/**
-	 * Sets User's Environment
-	 *
-	 * @param  \Scalr\Model\Entity\Account\Environment  $environment  The Environment object
-	 * @return ApiApplication
-	 */
-	public function setEnvironment(\Scalr\Model\Entity\Account\Environment $environment)
-	{
-	    $this->env = $environment;
+    /**
+     * Sets authorized user
+     *
+     * @param  \Scalr\Model\Entity\Account\User   $user  The user object
+     * @return ApiApplication
+     */
+    public function setUser($user)
+    {
+        $this->user = $user;
 
-	    return $this;
-	}
+        return $this;
+    }
 
-	/**
-	 * Gets User's Environment
-	 *
-	 * @return \Scalr\Model\Entity\Account\Environment  Returns Environment object
-	 */
-	public function getEnvironment()
-	{
-	    return $this->env;
-	}
+    /**
+     * Gets authorized user
+     *
+     * @return  \Scalr\Model\Entity\Account\User  Returns user object
+     */
+    public function getUser()
+    {
+        return $this->user;
+    }
+
+    /**
+     * Sets User's Environment
+     *
+     * @param  \Scalr\Model\Entity\Account\Environment  $environment  The Environment object
+     * @return ApiApplication
+     */
+    public function setEnvironment(Entity\Account\Environment $environment)
+    {
+        $this->env = $environment;
+
+        return $this;
+    }
+
+    /**
+     * Gets User's Environment
+     *
+     * @return \Scalr\Model\Entity\Account\Environment  Returns Environment object
+     */
+    public function getEnvironment()
+    {
+        return $this->env;
+    }
 
     /**
      * Gets default settings
@@ -138,122 +170,269 @@ class ApiApplication extends Application
     public function setupRoutes()
     {
         $this->group('/api', [$this, 'handleApiVersion'], [$this, 'authenticationMiddleware'], function() {
-            $this->group('/admin/v:apiversion', function () {
-                //All Admin API routes are here
-                $this->get('/users/:userId', 'Admin_Users:get', ['userId' => '\d+']);
-            });
-
-            $this->group('/account/v:apiversion', function () {
-                //All Account API routes are here
-            });
-
-            $this->group('/user/v:apiversion', function () {
-                //All User API routes are here
-                $eventRequirements = ['eventId' => Entity\EventDefinition::NAME_REGEXP];
-
-                $this->get('/os', 'User_Os:get');
-                $this->get('/os/:osId', 'User_Os:fetch', ['osId' => Entity\Os::ID_REGEXP]);
-
-                //We explicitly set array of the options to exclude the Route Name as both environment and
-                //account levels have the same controllers and all registered Route Names must be unique withing the router.
-                $this->get('/events', ['controller' => 'User_Events:describe']);
-                $this->get('/events/:eventId', ['controller' => 'User_Events:fetch'], $eventRequirements);
-                $this->post('/events', ['controller' => 'User_Events:create']);
-                $this->patch('/events/:eventId', ['controller' => 'User_Events:modify'], $eventRequirements);
-                $this->delete('/events/:eventId', ['controller' => 'User_Events:delete'], $eventRequirements);
-            });
-
-            $this->group('/user/v:apiversion/:environment', [$this, 'handleEnvironment'], [$this, 'environmentAuthenticationMiddleware'], function () {
-                //All User API Environment level routes are here
+            $this->group('/v:apiversion', function () {
                 $roleRequirements = ['roleId' => '\d+'];
                 $imageRequirements = ['imageId' => ApiApplication::REGEXP_UUID];
-                $roleImageReqs = array_merge($roleRequirements, $imageRequirements);
-                $roleVariableReqs = array_merge($roleRequirements, ['variableName' => '\w+']);
-                $roleCategoryReqs = ['roleCategoryId' => '\d+'];
-                $scriptRequirements = ['scriptId' => '\d+'];
-                $scriptVersionReqs = array_merge($scriptRequirements, ['versionNumber' => '\d+']);
-                $orchestrationRuleReqs = array_merge($roleRequirements, ['ruleId' => '\d+']);
                 $eventRequirements = ['eventId' => Entity\EventDefinition::NAME_REGEXP];
+                $osRequirements = ['osId' => Entity\Os::ID_REGEXP];
+                $ccRequirements = ['ccId' => ApiApplication::REGEXP_UUID];
+                $cloudCredsRequirements = ['cloudCredentialsId' => static::REGEXP_SHORT_UUID];
+                $orchestrationRuleRequirements = ['ruleId' => '\d+'];
 
-                $this->get('/events', 'User_Events:describe');
-                $this->get('/events/:eventId', 'User_Events:fetch', $eventRequirements);
-                $this->post('/events', 'User_Events:create');
-                $this->patch('/events/:eventId', 'User_Events:modify', $eventRequirements);
-                $this->delete('/events/:eventId', 'User_Events:delete', $eventRequirements);
+                $roleImageReqs = array_merge($roleRequirements, $imageRequirements);
+                $roleCategoryReqs = ['roleCategoryId' => '\d+'];
+                $roleVariableReqs = array_merge($roleRequirements, ['variableName' => '\w+']);
+                $roleScriptReqs = array_merge($roleRequirements, $orchestrationRuleRequirements);
 
-                $this->get('/images', 'User_Images:describe');
-                $this->post('/images', 'User_Images:register');
+                $this->group('/admin', function () {
+                    //All Admin API routes are here
+                    $this->get('/users/:userId', 'Admin_Users:get', ['userId' => '\d+']);
+                });
 
-                $this->get('/images/:imageId', 'User_Images:fetch', $imageRequirements);
-                $this->patch('/images/:imageId', 'User_Images:modify', $imageRequirements);
-                $this->delete('/images/:imageId', 'User_Images:deregister', $imageRequirements);
+                $this->group('/account', function () use (
+                    $eventRequirements,
+                    $roleRequirements,
+                    $imageRequirements,
+                    $roleImageReqs,
+                    $roleCategoryReqs,
+                    $roleVariableReqs,
+                    $roleScriptReqs,
+                    $osRequirements,
+                    $ccRequirements,
+                    $cloudCredsRequirements,
+                    $orchestrationRuleRequirements
+                ) {
+                    //All Account API routes are here
 
-                $this->post('/images/:imageId/actions/:action/', 'User_Images:copy', array_merge($imageRequirements, ['action' => 'copy']));
+                    $this->get('/os', ['controller' => 'User_Os:get']);
+                    $this->get('/os/:osId', ['controller' => 'User_Os:fetch'], $osRequirements);
 
-                $this->get('/roles', 'User_Roles:describe');
-                $this->post('/roles', 'User_Roles:create');
+                    //We explicitly set array of the options to exclude the Route Name as both environment and
+                    //account levels have the same controllers and all registered Route Names must be unique withing the router.
+                    $this->get('/events', ['controller' => 'User_Events:describe']);
+                    $this->get('/events/:eventId', ['controller' => 'User_Events:fetch'], $eventRequirements);
+                    $this->post('/events', ['controller' => 'User_Events:create']);
+                    $this->patch('/events/:eventId', ['controller' => 'User_Events:modify'], $eventRequirements);
+                    $this->delete('/events/:eventId', ['controller' => 'User_Events:delete'], $eventRequirements);
 
-                $this->get('/roles/:roleId', 'User_Roles:fetch', $roleRequirements);
-                $this->patch('/roles/:roleId', 'User_Roles:modify', $roleRequirements);
-                $this->delete('/roles/:roleId', 'User_Roles:delete', $roleRequirements);
+                    $this->get('/images', ['controller' => 'User_Images:describe']);
 
-                $this->get('/roles/:roleId/images/', 'User_Roles:describeImages', $roleRequirements);
-                $this->post('/roles/:roleId/images/', 'User_Roles:registerImage', $roleRequirements);
+                    $this->get('/images/:imageId', ['controller' => 'User_Images:fetch'], $imageRequirements);
+                    $this->patch('/images/:imageId', ['controller' => 'User_Images:modify'], $imageRequirements);
+                    $this->delete('/images/:imageId', ['controller' => 'User_Images:deregister'], $imageRequirements);
 
-                $this->get('/roles/:roleId/images/:imageId', 'User_Roles:fetchImage', $roleImageReqs);
-                $this->delete('/roles/:roleId/images/:imageId', 'User_Roles:deregisterImage', $roleImageReqs);
+                    $this->post('/images/:imageId/actions/:action/', ['controller' => 'User_Images:copy'], array_merge($imageRequirements, ['action' => 'copy']));
 
-                $this->post('/roles/:roleId/images/:imageId/actions/:action/', 'User_Roles:replaceImage', array_merge($roleImageReqs, ['action' => 'replace']));
+                    $this->get('/roles', ['controller' => 'User_Roles:describe']);
+                    $this->post('/roles', ['controller' => 'User_Roles:create']);
 
-                $this->get('/role-categories', 'User_RoleCategories:describe', $roleCategoryReqs);
-                $this->get('/role-categories/:roleCategoryId', 'User_RoleCategories:fetch', $roleCategoryReqs);
+                    $this->get('/roles/:roleId', ['controller' => 'User_Roles:fetch'], $roleRequirements);
+                    $this->patch('/roles/:roleId', ['controller' => 'User_Roles:modify'], $roleRequirements);
+                    $this->delete('/roles/:roleId', ['controller' => 'User_Roles:delete'], $roleRequirements);
 
-                $this->get('/roles/:roleId/global-variables', 'User_Roles:describeVariables', $roleRequirements);
-                $this->post('/roles/:roleId/global-variables', 'User_Roles:createVariable', $roleRequirements);
+                    $this->get('/roles/:roleId/images/', ['controller' => 'User_Roles:describeImages'], $roleRequirements);
+                    $this->post('/roles/:roleId/images/', ['controller' => 'User_Roles:registerImage'], $roleRequirements);
 
-                $this->get('/roles/:roleId/global-variables/:variableName', 'User_Roles:fetchVariable', $roleVariableReqs);
-                $this->patch('/roles/:roleId/global-variables/:variableName', 'User_Roles:modifyVariable', $roleVariableReqs);
-                $this->delete('/roles/:roleId/global-variables/:variableName', 'User_Roles:deleteVariable', $roleVariableReqs);
+                    $this->get('/roles/:roleId/images/:imageId', ['controller' => 'User_Roles:fetchImage'], $roleImageReqs);
+                    $this->delete('/roles/:roleId/images/:imageId', ['controller' => 'User_Roles:deregisterImage'], $roleImageReqs);
 
-                $this->get('/roles/:roleId/orchestration-rules', 'User_OrchestrationRules:describe', $roleRequirements);
-                $this->post('/roles/:roleId/orchestration-rules', 'User_OrchestrationRules:create', $roleRequirements);
+                    $this->post('/roles/:roleId/images/:imageId/actions/:action/', ['controller' => 'User_Roles:replaceImage'], array_merge($roleImageReqs, ['action' => 'replace']));
 
-                $this->get('/roles/:roleId/orchestration-rules/:ruleId', 'User_OrchestrationRules:fetch', $orchestrationRuleReqs);
-                $this->patch('/roles/:roleId/orchestration-rules/:ruleId', 'User_OrchestrationRules:modify', $orchestrationRuleReqs);
-                $this->delete('/roles/:roleId/orchestration-rules/:ruleId', 'User_OrchestrationRules:delete', $orchestrationRuleReqs);
+                    $this->get('/role-categories', ['controller' => 'User_RoleCategories:describe'], $roleCategoryReqs);
+                    $this->get('/role-categories/:roleCategoryId', ['controller' => 'User_RoleCategories:fetch'], $roleCategoryReqs);
 
-                $this->get('/scripts', 'User_Scripts:describe');
-                $this->post('/scripts', 'User_Scripts:create');
+                    $this->get('/roles/:roleId/global-variables', ['controller' => 'User_Roles:describeVariables'], $roleRequirements);
+                    $this->post('/roles/:roleId/global-variables', ['controller' => 'User_Roles:createVariable'], $roleRequirements);
 
-                $this->get('/scripts/:scriptId', 'User_Scripts:fetch', $scriptRequirements);
-                $this->patch('/scripts/:scriptId', 'User_Scripts:modify', $scriptRequirements);
-                $this->delete('/scripts/:scriptId', 'User_Scripts:delete', $scriptRequirements);
+                    $this->get('/roles/:roleId/global-variables/:variableName', ['controller' => 'User_Roles:fetchVariable'], $roleVariableReqs);
+                    $this->patch('/roles/:roleId/global-variables/:variableName', ['controller' => 'User_Roles:modifyVariable'], $roleVariableReqs);
+                    $this->delete('/roles/:roleId/global-variables/:variableName', ['controller' => 'User_Roles:deleteVariable'], $roleVariableReqs);
 
-                $this->get('/scripts/:scriptId/script-versions', 'User_ScriptVersions:describe', $scriptRequirements);
-                $this->post('/scripts/:scriptId/script-versions', 'User_ScriptVersions:create', $scriptRequirements);
+                    $this->get('/roles/:roleId/orchestration-rules', ['controller' => 'User_RoleScripts:describe'], $roleRequirements);
+                    $this->post('/roles/:roleId/orchestration-rules', ['controller' => 'User_RoleScripts:create'], $roleRequirements);
 
-                $this->get('/scripts/:scriptId/script-versions/:versionNumber', 'User_ScriptVersions:fetch', $scriptVersionReqs);
-                $this->patch('/scripts/:scriptId/script-versions/:versionNumber', 'User_ScriptVersions:modify', $scriptVersionReqs);
-                $this->delete('/scripts/:scriptId/script-versions/:versionNumber', 'User_ScriptVersions:delete', $scriptVersionReqs);
+                    $this->get('/roles/:roleId/orchestration-rules/:ruleId', ['controller' => 'User_RoleScripts:fetch'], $roleScriptReqs);
+                    $this->patch('/roles/:roleId/orchestration-rules/:ruleId', ['controller' => 'User_RoleScripts:modify'], $roleScriptReqs);
+                    $this->delete('/roles/:roleId/orchestration-rules/:ruleId', ['controller' => 'User_RoleScripts:delete'], $roleScriptReqs);
 
-                if ($this->getContainer()->config->{"scalr.analytics.enabled"}) {
-                    $projectRequirements = ['projectId' => ApiApplication::REGEXP_UUID];
-                    $ccRequirements = ['ccId' => ApiApplication::REGEXP_UUID];
+                    $this->get('/orchestration-rules', 'User_AccountScripts:describe');
+                    $this->post('/orchestration-rules', 'User_AccountScripts:create');
 
-                    $this->get('/cost-centers/', 'User_CostCenters:describe');
-                    $this->get('/cost-centers/:ccId', 'User_CostCenters:fetch', $ccRequirements);
+                    $this->get('/orchestration-rules/:ruleId', 'User_AccountScripts:fetch', $orchestrationRuleRequirements);
+                    $this->patch('/orchestration-rules/:ruleId', 'User_AccountScripts:modify', $orchestrationRuleRequirements);
+                    $this->delete('/orchestration-rules/:ruleId', 'User_AccountScripts:delete', $orchestrationRuleRequirements);
 
-                    $this->get('/projects/', 'User_Projects:describe');
-                    $this->post('/projects/', 'User_Projects:create');
+                    $this->get("/cloud-credentials", ['controller' => 'User_CloudCredentials:describe']);
+                    $this->post("/cloud-credentials", ['controller' => 'User_CloudCredentials:create']);
 
-                    $this->get('/projects/:projectId', 'User_Projects:fetch', $projectRequirements);
-                }
+                    $this->get("/cloud-credentials/:cloudCredentialsId", ['controller' => 'User_CloudCredentials:fetch'], $cloudCredsRequirements);
+                    $this->patch("/cloud-credentials/:cloudCredentialsId", ['controller' => 'User_CloudCredentials:modify'], $cloudCredsRequirements);
+                    $this->delete("/cloud-credentials/:cloudCredentialsId", ['controller' => 'User_CloudCredentials:delete'], $cloudCredsRequirements);
+
+                    if ($this->getContainer()->config->{"scalr.analytics.enabled"}) {
+                        $this->get('/cost-centers/', ['controller' => 'User_CostCenters:describe']);
+                        $this->get('/cost-centers/:ccId', ['controller' => 'User_CostCenters:fetch'], $ccRequirements);
+                    }
+                });
+
+                $this->group('/user/:environment', [$this, 'handleEnvironment'], [$this, 'environmentAuthenticationMiddleware'], function () use (
+                    $eventRequirements,
+                    $roleRequirements,
+                    $imageRequirements,
+                    $roleImageReqs,
+                    $roleCategoryReqs,
+                    $roleVariableReqs,
+                    $roleScriptReqs,
+                    $osRequirements,
+                    $ccRequirements,
+                    $cloudCredsRequirements,
+                    $orchestrationRuleRequirements
+                ) {
+                    //All User API Environment level routes are here
+                    $scriptRequirements = ['scriptId' => '\d+'];
+                    $farmRequirements = ['farmId' => '\d+'];
+                    $farmRoleRequirements = ['farmRoleId' => '\d+'];
+
+                    $scriptVersionReqs = array_merge($scriptRequirements, ['versionNumber' => '\d+']);
+                    $farmVariableReqs = array_merge($farmRequirements, ['variableName' => '\w+']);
+                    $farmRoleVariableReqs = array_merge($farmRoleRequirements, ['variableName' => '\w+']);
+                    $farmRoleScriptReqs = array_merge($farmRoleRequirements, $orchestrationRuleRequirements);
+
+                    $this->get('/os', 'User_Os:get');
+                    $this->get('/os/:osId', 'User_Os:fetch', $osRequirements);
+
+                    $this->get('/events', 'User_Events:describe');
+                    $this->get('/events/:eventId', 'User_Events:fetch', $eventRequirements);
+                    $this->post('/events', 'User_Events:create');
+                    $this->patch('/events/:eventId', 'User_Events:modify', $eventRequirements);
+                    $this->delete('/events/:eventId', 'User_Events:delete', $eventRequirements);
+
+                    $this->get('/images', 'User_Images:describe');
+                    $this->post('/images', 'User_Images:register');
+
+                    $this->get('/images/:imageId', 'User_Images:fetch', $imageRequirements);
+                    $this->patch('/images/:imageId', 'User_Images:modify', $imageRequirements);
+                    $this->delete('/images/:imageId', 'User_Images:deregister', $imageRequirements);
+
+                    $this->post('/images/:imageId/actions/:action/', 'User_Images:copy', array_merge($imageRequirements, ['action' => 'copy']));
+
+                    $this->get('/roles', 'User_Roles:describe');
+                    $this->post('/roles', 'User_Roles:create');
+
+                    $this->get('/roles/:roleId', 'User_Roles:fetch', $roleRequirements);
+                    $this->patch('/roles/:roleId', 'User_Roles:modify', $roleRequirements);
+                    $this->delete('/roles/:roleId', 'User_Roles:delete', $roleRequirements);
+
+                    $this->get('/roles/:roleId/images/', 'User_Roles:describeImages', $roleRequirements);
+                    $this->post('/roles/:roleId/images/', 'User_Roles:registerImage', $roleRequirements);
+
+                    $this->get('/roles/:roleId/images/:imageId', 'User_Roles:fetchImage', $roleImageReqs);
+                    $this->delete('/roles/:roleId/images/:imageId', 'User_Roles:deregisterImage', $roleImageReqs);
+
+                    $this->post('/roles/:roleId/images/:imageId/actions/:action/', 'User_Roles:replaceImage', array_merge($roleImageReqs, ['action' => 'replace']));
+
+                    $this->get('/role-categories', 'User_RoleCategories:describe', $roleCategoryReqs);
+                    $this->get('/role-categories/:roleCategoryId', 'User_RoleCategories:fetch', $roleCategoryReqs);
+
+                    $this->get('/roles/:roleId/global-variables', 'User_Roles:describeVariables', $roleRequirements);
+                    $this->post('/roles/:roleId/global-variables', 'User_Roles:createVariable', $roleRequirements);
+
+                    $this->get('/roles/:roleId/global-variables/:variableName', 'User_Roles:fetchVariable', $roleVariableReqs);
+                    $this->patch('/roles/:roleId/global-variables/:variableName', 'User_Roles:modifyVariable', $roleVariableReqs);
+                    $this->delete('/roles/:roleId/global-variables/:variableName', 'User_Roles:deleteVariable', $roleVariableReqs);
+
+                    $this->get('/roles/:roleId/orchestration-rules', 'User_RoleScripts:describe', $roleRequirements);
+                    $this->post('/roles/:roleId/orchestration-rules', 'User_RoleScripts:create', $roleRequirements);
+
+                    $this->get('/roles/:roleId/orchestration-rules/:ruleId', 'User_RoleScripts:fetch', $roleScriptReqs);
+                    $this->patch('/roles/:roleId/orchestration-rules/:ruleId', 'User_RoleScripts:modify', $roleScriptReqs);
+                    $this->delete('/roles/:roleId/orchestration-rules/:ruleId', 'User_RoleScripts:delete', $roleScriptReqs);
+
+                    $this->get('/farms', 'User_Farms:describe');
+                    $this->post('/farms', 'User_Farms:create');
+
+                    $this->get('/farms/:farmId', 'User_Farms:fetch', $farmRequirements);
+                    $this->patch('/farms/:farmId', 'User_Farms:modify', $farmRequirements);
+                    $this->delete('/farms/:farmId', 'User_Farms:delete', $farmRequirements);
+
+                    $this->get('/farms/:farmId/global-variables', 'User_Farms:describeVariables', $farmRequirements);
+                    $this->post('/farms/:farmId/global-variables', 'User_Farms:createVariable', $farmRequirements);
+
+                    $this->get('/farms/:farmId/global-variables/:variableName', 'User_Farms:fetchVariable', $farmVariableReqs);
+                    $this->patch('/farms/:farmId/global-variables/:variableName', 'User_Farms:modifyVariable', $farmVariableReqs);
+                    $this->delete('/farms/:farmId/global-variables/:variableName', 'User_Farms:deleteVariable', $farmVariableReqs);
+
+                    $this->post('/farms/:farmId/actions/launch', 'User_Farms:launch', $farmRequirements);
+                    $this->post('/farms/:farmId/actions/terminate', 'User_Farms:terminate', $farmRequirements);
+
+                    $this->get('/farms/:farmId/farm-roles', 'User_FarmRoles:describe', $farmRequirements);
+                    $this->post('/farms/:farmId/farm-roles', 'User_FarmRoles:create', $farmRequirements);
+
+                    $this->get('/farm-roles/:farmRoleId', 'User_FarmRoles:fetch', $farmRoleRequirements);
+                    $this->patch('/farm-roles/:farmRoleId', 'User_FarmRoles:modify', $farmRoleRequirements);
+                    $this->delete('/farm-roles/:farmRoleId', 'User_FarmRoles:delete', $farmRoleRequirements);
+
+                    $this->get('/farm-roles/:farmRoleId/placement', 'User_FarmRoles:describePlacement', $farmRoleRequirements);
+                    $this->patch('/farm-roles/:farmRoleId/placement', 'User_FarmRoles:modifyPlacement', $farmRoleRequirements);
+
+                    $this->get('/farm-roles/:farmRoleId/instance', 'User_FarmRoles:describeInstance', $farmRoleRequirements);
+                    $this->patch('/farm-roles/:farmRoleId/instance', 'User_FarmRoles:modifyInstance', $farmRoleRequirements);
+
+                    $this->get('/farm-roles/:farmRoleId/scaling', 'User_FarmRoles:describeScaling', $farmRoleRequirements);
+                    $this->patch('/farm-roles/:farmRoleId/scaling', 'User_FarmRoles:modifyScaling', $farmRoleRequirements);
+
+                    $this->get('/farm-roles/:farmRoleId/global-variables', 'User_FarmRoles:describeVariables', $farmRoleRequirements);
+                    $this->post('/farm-roles/:farmRoleId/global-variables', 'User_FarmRoles:createVariable', $farmRoleRequirements);
+
+                    $this->get('/farm-roles/:farmRoleId/global-variables/:variableName', 'User_FarmRoles:fetchVariable', $farmRoleVariableReqs);
+                    $this->patch('/farm-roles/:farmRoleId/global-variables/:variableName', 'User_FarmRoles:modifyVariable', $farmRoleVariableReqs);
+                    $this->delete('/farm-roles/:farmRoleId/global-variables/:variableName', 'User_FarmRoles:deleteVariable', $farmRoleVariableReqs);
+
+                    $this->get('/farm-roles/:farmRoleId/orchestration-rules', 'User_FarmRoleScripts:describe', $farmRoleRequirements);
+                    $this->post('/farm-roles/:farmRoleId/orchestration-rules', 'User_FarmRoleScripts:create', $farmRoleRequirements);
+
+                    $this->get('/farm-roles/:farmRoleId/orchestration-rules/:ruleId', 'User_FarmRoleScripts:fetch', $farmRoleScriptReqs);
+                    $this->patch('/farm-roles/:farmRoleId/orchestration-rules/:ruleId', 'User_FarmRoleScripts:modify', $farmRoleScriptReqs);
+                    $this->delete('/farm-roles/:farmRoleId/orchestration-rules/:ruleId', 'User_FarmRoleScripts:delete', $farmRoleScriptReqs);
+
+                    $this->get('/scripts', 'User_Scripts:describe');
+                    $this->post('/scripts', 'User_Scripts:create');
+
+                    $this->get('/scripts/:scriptId', 'User_Scripts:fetch', $scriptRequirements);
+                    $this->patch('/scripts/:scriptId', 'User_Scripts:modify', $scriptRequirements);
+                    $this->delete('/scripts/:scriptId', 'User_Scripts:delete', $scriptRequirements);
+
+                    $this->get('/scripts/:scriptId/script-versions', 'User_ScriptVersions:describe', $scriptRequirements);
+                    $this->post('/scripts/:scriptId/script-versions', 'User_ScriptVersions:create', $scriptRequirements);
+
+                    $this->get('/scripts/:scriptId/script-versions/:versionNumber', 'User_ScriptVersions:fetch', $scriptVersionReqs);
+                    $this->patch('/scripts/:scriptId/script-versions/:versionNumber', 'User_ScriptVersions:modify', $scriptVersionReqs);
+                    $this->delete('/scripts/:scriptId/script-versions/:versionNumber', 'User_ScriptVersions:delete', $scriptVersionReqs);
+
+                    $this->get("/cloud-credentials", 'User_CloudCredentials:describe');
+                    $this->post("/cloud-credentials", 'User_CloudCredentials:create');
+
+                    $this->get("/cloud-credentials/:cloudCredentialsId", 'User_CloudCredentials:fetch', $cloudCredsRequirements);
+                    $this->patch("/cloud-credentials/:cloudCredentialsId", 'User_CloudCredentials:modify', $cloudCredsRequirements);
+                    $this->delete("/cloud-credentials/:cloudCredentialsId", 'User_CloudCredentials:delete', $cloudCredsRequirements);
+
+                    if ($this->getContainer()->config->{"scalr.analytics.enabled"}) {
+                        $projectRequirements = ['projectId' => ApiApplication::REGEXP_UUID];
+
+                        $this->get('/cost-centers/', 'User_CostCenters:describe');
+                        $this->get('/cost-centers/:ccId', 'User_CostCenters:fetch', $ccRequirements);
+
+                        $this->get('/projects/', 'User_Projects:describe');
+                        $this->post('/projects/', 'User_Projects:create');
+
+                        $this->get('/projects/:projectId', 'User_Projects:fetch', $projectRequirements);
+                    }
+                });
             });
         });
 
         return $this;
     }
-
 
     /**
      * Authentication middleware
@@ -372,6 +551,8 @@ class ApiApplication extends Application
             }
         }
 
+        $this->limiter->checkAccountRateLimit($this->apiKey->keyId);
+
         //Validates API version
         if ($this->settings[ApiApplication::SETTING_API_VERSION] != 1) {
             throw new ApiErrorException(400, ErrorMessage::ERR_BAD_REQUEST, 'Invalid API version');
@@ -382,6 +563,23 @@ class ApiApplication extends Application
         }
 
         $this->setUser($user);
+
+        $container = $this->getContainer();
+
+        //Releases auditloger to ensure it will be updated
+        $container->release('auditlogger');
+
+        //Adjusts metadata to invoke audit loger
+        $container->setShared('auditlogger.metadata', function ($cont) use ($user) {
+            return (object) [
+                'user'        => $user,
+                'envId'       => null,
+                'remoteAddr'  => $this->request->getIp(),
+                'ruid'        => null,
+                'requestType' => AuditLogger::REQUEST_TYPE_API,
+                'systemTask'  => null,
+            ];
+        });
     }
 
     /**
@@ -412,6 +610,9 @@ class ApiApplication extends Application
         }
 
         $this->setEnvironment($environment);
+
+        //Sets Environment to Audit Logger
+        $this->getContainer()->auditlogger->setEnvironmentId($environment->id);
     }
 
     /**
@@ -621,20 +822,28 @@ class ApiApplication extends Application
      *
      * @throws ApiInsufficientPermissionsException
      */
-    public function checkPermissions()
+    public function checkPermissions(...$args)
     {
-        $args = func_get_args();
-
         if (count($args) == 3) {
             $message = array_pop($args);
         } else {
             $message = null;
         }
 
-        $result = call_user_func_array([$this, 'hasPermissions'], $args);
+        $result = $this->hasPermissions(...$args);
 
         if (!$result) {
             throw new ApiInsufficientPermissionsException($message);
         }
+    }
+
+    /**
+     * Gets current API request scope
+     *
+     * @return string Returns scope
+     */
+    public function getScope()
+    {
+        return isset($this->env) ? ScopeInterface::SCOPE_ENVIRONMENT : (isset($this->user) ? ScopeInterface::SCOPE_ACCOUNT : ScopeInterface::SCOPE_SCALR);
     }
 }

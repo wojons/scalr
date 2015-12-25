@@ -3,15 +3,17 @@ Ext.define('Scalr.ui.WebhooksGrid', {
     alias: 'widget.webhooksgrid',
 
     flex: 1,
-    selModel: {
-        selType: 'selectedmodel',
-        getVisibility: function(record) {
-            return this.view ? this.view.up().scope == record.get('scope') : true;
-        }
-    },
 
     initComponent: function() {
         var me = this;
+        me.selModel =
+            !me.readOnly ? {
+                selType: 'selectedmodel',
+                getVisibility: function(record) {
+                    return this.view ? this.view.up().scope == record.get('scope') : true;
+                }
+            } : null;
+
         me.typeTitle = me.type === 'config' ? 'webhook' : me.type;
         me.viewConfig = {
             preserveScrollOnRefresh: true,
@@ -96,6 +98,7 @@ Ext.define('Scalr.ui.WebhooksGrid', {
                 text: 'New ' + me.typeTitle,
                 cls: 'x-btn-green',
                 enableToggle: true,
+                hidden: me.readOnly,
                 toggleHandler: function (button, pressed) {
                     me.fireEvent('btnnewclick', pressed);
                 }
@@ -112,6 +115,7 @@ Ext.define('Scalr.ui.WebhooksGrid', {
                 cls: 'x-btn-red',
                 disabled: true,
                 tooltip: 'Delete ' + me.typeTitle,
+                hidden: me.readOnly,
                 handler: function () {
                     var action = this.getItemId(),
                         actionMessages = {

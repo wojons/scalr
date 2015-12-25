@@ -4,7 +4,6 @@ class Client
 {
     public $ID;
     public $IsActive;
-    public $Email;
     public $Fullname;
     public $AddDate;
     public $DueDate;
@@ -25,62 +24,60 @@ class Client
      */
     private $DB;
 
-    private static $ClientsCache = array();
+    private static $ClientsCache = [];
 
-    private static $FieldPropertyMap = array(
-        'id' 			=> 'ID',
-        'isactive'		=> 'IsActive',
-        'fullname'		=> 'Fullname',
-        'dtadded'		=> 'AddDate',
-        'dtdue'			=> 'DueDate',
-        'isbilled'		=> 'IsBilled',
-        'org' => 'Organization',
-          'country' => 'Country',
-          'state' => 'State',
-          'city' => 'City',
-          'zipcode' => 'ZipCode',
-          'address1' => 'Address1',
-          'address2' => 'Address2',
-          'phone' => 'Phone',
-          'fax' => 'Fax',
+    private static $FieldPropertyMap = [
+        'id'       => 'ID',
+        'isactive' => 'IsActive',
+        'fullname' => 'Fullname',
+        'dtadded'  => 'AddDate',
+        'dtdue'    => 'DueDate',
+        'isbilled' => 'IsBilled',
+        'org'      => 'Organization',
+        'country'  => 'Country',
+        'state'    => 'State',
+        'city'     => 'City',
+        'zipcode'  => 'ZipCode',
+        'address1' => 'Address1',
+        'address2' => 'Address2',
+        'phone'    => 'Phone',
+        'fax'      => 'Fax',
         'comments' => 'Comments'
-    );
+    ];
 
     /**
      * Constructor
      */
-    public function __construct($email, $password)
+    public function __construct()
     {
-        $this->Email = $email;
-        $this->Password = $password;
-
         $this->DB = \Scalr::getDb();
     }
 
     /**
      * Load Client Object by ID
+     *
      * @param integer $id
-     * @return Client $Client
+     * @return Client
      */
     public static function Load($id)
     {
-        if (!self::$ClientsCache[$id])
-        {
+        if (!isset(self::$ClientsCache[$id])) {
             $db = \Scalr::getDb();
 
-            $clientinfo = $db->GetRow("SELECT * FROM clients WHERE id=?", array($id));
-            if (!$clientinfo)
+            $clientinfo = $db->GetRow("SELECT * FROM clients WHERE id=?", [$id]);
+            if (empty($clientinfo)) {
                 throw new Exception(sprintf(_("Client ID#%s not found in database"), $id));
-
-            $Client = new Client($clientinfo['email'], $clientinfo['password']);
-
-            foreach(self::$FieldPropertyMap as $k=>$v)
-            {
-                if (isset($clientinfo[$k]))
-                    $Client->{$v} = $clientinfo[$k];
             }
 
-            self::$ClientsCache[$id] = $Client;
+            $client = new Client();
+
+            foreach(self::$FieldPropertyMap as $k => $v) {
+                if (isset($clientinfo[$k])) {
+                    $client->{$v} = $clientinfo[$k];
+                }
+            }
+
+            self::$ClientsCache[$id] = $client;
         }
 
         return self::$ClientsCache[$id];

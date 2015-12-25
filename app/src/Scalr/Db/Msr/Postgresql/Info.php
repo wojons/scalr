@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Model\Entity;
+
 class Scalr_Db_Msr_Postgresql_Info extends Scalr_Db_Msr_Info {
 
     protected
@@ -49,7 +51,7 @@ class Scalr_Db_Msr_Postgresql_Info extends Scalr_Db_Msr_Info {
             );
 
             foreach ($roleSettings as $name=>$value)
-                $this->dbFarmRole->SetSetting($name, $value, DBFarmRole::TYPE_LCL);
+                $this->dbFarmRole->SetSetting($name, $value, Entity\FarmRoleSetting::TYPE_LCL);
         }
     }
 }

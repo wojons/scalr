@@ -26,15 +26,13 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
             case 'ec2':
                 prefix = 'aws';
             break;
-            case 'eucalyptus':
-                prefix = 'euca';
-            break;
             default:
                 if (Scalr.isOpenstack(platform)) {
                     prefix = 'openstack';
-                }
-                if (Scalr.isCloudstack(platform)) {
+                } else if (Scalr.isCloudstack(platform)) {
                     prefix = 'cloudstack';
+                } else {
+                    prefix = platform;
                 }
             break;
         }
@@ -43,16 +41,24 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
 
     //override default method
     getDefaultValues: function (record, roleDefaultSettings) {
-        var values = {};
-        if (roleDefaultSettings !== undefined && roleDefaultSettings[this.SETTING_SG_LIST]) {
-            values[this.getSettingsPrefix(record.get('platform')) + '.' + this.SETTING_SG_LIST] = roleDefaultSettings[this.SETTING_SG_LIST];
+        var values = {},
+            platform = record.get('platform');
+        //do not add Scalr groups when sg governance enabled
+        //find resetVpcId in plugins.js
+        if (roleDefaultSettings !== undefined && Scalr.getGovernance(platform, this.getSettingsPrefix(platform) + '.additional_security_groups') === undefined) {
+            if (roleDefaultSettings[this.SETTING_SG_LIST] && platform !== 'azure') {
+                values[this.getSettingsPrefix(platform) + '.' + this.SETTING_SG_LIST] = roleDefaultSettings[this.SETTING_SG_LIST];
+            }
+        } else if (platform === 'ec2') {
+            //we need this to avoid showing deprecated sg field under ec2 tab
+            values[this.getSettingsPrefix(platform) + '.' + this.SETTING_SG_LIST] = '[]';
         }
         return values;
     },
 
     isEnabled: function (record) {
         var platform = record.get('platform');
-        return this.callParent(arguments) && record.get('securityGroupsEnabled') && (Ext.Array.contains(['ec2', 'eucalyptus'], platform) ||
+        return this.callParent(arguments) && record.get('securityGroupsEnabled') && (Ext.Array.contains(['ec2', 'azure'], platform) ||
                (Scalr.isOpenstack(platform) && Scalr.getPlatformConfigValue(platform, 'ext.securitygroups_enabled') == 1) ||
                Scalr.isCloudstack(platform));
     },
@@ -66,7 +72,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
         };
         Ext.Array.each(list, function(item) {
             item = item.toString();
-            if (Scalr.isOpenstack(p) || Scalr.isCloudstack(p)) {
+            if (Scalr.isOpenstack(p) || Scalr.isCloudstack(p) || p === 'azure') {
                 if (item == 'default' || item.indexOf('ip-pool') !== -1) {
                     result['names'].push(item);
                 } else {
@@ -85,7 +91,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
 
     loadNotFoundGroups: function(list) {
         var grid = this.down('grid'),
-            store = grid.getStore();
+            store = grid.getStore(),
+            os = Scalr.utils.getOsById(this.currentRole.get('osId')) || {};
         if (this.limits === undefined || this.limits['allow_additional_sec_groups'] == 1) {
             Ext.Array.each(list['ids'], function(id) {
                 if (!store.query('id', id, false, true, false).length) {
@@ -97,8 +104,12 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
             });
         }
         if (this.limits !== undefined) {
-            if (this.limits['value']) {
-                Ext.Array.each(this.limits['value'].split(','), function(name) {
+            var governanceSGs = this.limits['value'];
+            if (os.family === 'windows' && this.limits['windows']) {
+                governanceSGs = this.limits['windows'];
+            }
+            if (governanceSGs) {
+                Ext.Array.each(governanceSGs.split(','), function(name) {
                     var res;
                     name = Ext.String.trim(name);
                     res = store.query(name.indexOf('sg-') !== 0 ? 'name' : 'id', name, false, false, true);
@@ -126,7 +137,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
             settings = record.get('settings', true),
             list,
             platform = record.get('platform'),
-            splitList;
+            splitList,
+            filters = {};
 
         //backward compatibility
         if (platform === 'ec2' && !settings['aws.' + me.SETTING_SG_LIST] && record.get('security_groups', true)) {
@@ -143,13 +155,17 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
 
         if (me.limits === undefined || me.limits['allow_additional_sec_groups'] == 1) {
             if (splitList['ids'].length) {
+                filters['sgIds'] = splitList['ids'];
+                if (me.vpc) {
+                    filters['vpcId'] = me.vpc.id;
+                }
+                if (platform === 'azure') {
+                    filters['resourceGroup'] = settings['azure.resource-group'];
+                }
                 Scalr.Request({
                     url: '/security/groups/xListGroups',
                     params: {
-                        filters: Ext.encode({
-                            sgIds: splitList['ids'],
-                            vpcId: me.vpc ? me.vpc.id : null
-                        }),
+                        filters: Ext.encode(filters),
                         platform: record.get('platform'),
                         cloudLocation: record.get('cloud_location'),
                     },
@@ -177,6 +193,16 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
         var settings = record.get('settings', true),
             list = Ext.decode(settings[this.getSettingsPrefix(record.get('platform')) + '.' + this.SETTING_SG_LIST], true);
         this.loadNotFoundGroups(this.splitGroupsList(list, record));
+        this.down('grid').getView().refresh(); // if don't refresh, showTab (on activate tab) shows only first record (from 2 records)
+
+        var rulesGridView = this.down('#rules').getView();
+        rulesGridView.refresh();
+
+        if (record.get('platform') === 'ec2' && this.vpc !== false) {
+            rulesGridView.getFeature('groupingByType').enable();
+        } else {
+            rulesGridView.getFeature('groupingByType').disable();
+        }
     },
 
     hideTab: function (record) {
@@ -195,8 +221,9 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
             settings[this.getSettingsPrefix(record.get('platform')) + '.' + this.SETTING_SG_LIST] = Ext.encode(list);
             record.set('settings', settings);
         }
-        store.removeAll();
+        grid.clearSelectedRecord();
         this.down('#liveSearch').reset();
+        store.removeAll();
     },
 
     __items: [{
@@ -212,7 +239,15 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
             }
         },
         store: {
-            model: Scalr.getModel({fields: ['id', 'name', 'description', 'addedByGovernance', 'ignoreOnSave']}),
+            model: Scalr.getModel({
+                fields: [
+                    {name: 'id', sortType: 'asUCText'}, 
+                    {name: 'name', sortType: 'asUCText'}, 
+                    {name: 'description', sortType: 'asUCText'}, 
+                    'addedByGovernance', 
+                    'ignoreOnSave'
+                ]
+            }),
             sorters: ['name']
         },
         listeners: {
@@ -275,7 +310,12 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
                 xtype: 'filterfield',
                 itemId: 'liveSearch',
                 margin: 0,
-                filterFields: ['id', 'name']
+                filterFields: ['id', 'name'],
+                listeners: {
+                    afterfilter: function(){
+                        this.up('grid').clearSelectedRecord();
+                    }
+                }
             },{
                 xtype: 'tbfill'
             },{
@@ -288,7 +328,11 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
                         role = tab.currentRole,
                         store = tab.down('grid').store,
                         tabParams = this.up('#farmDesigner').moduleParams.tabParams,
-                        excludeGroups = {names:[], ids:[]};
+                        osFamily = (Scalr.utils.getOsById(role.get('osId')) || {}).family,
+                        excludeGroups = {names:[], ids:[]},
+                        filters = {considerGovernance: true, existingGroupsOnly: true, osFamily: osFamily},
+                        sgLimit = 0,
+                        disableAddButton;
                     store.getUnfiltered().each(function (record) {
                         var id = record.get('id');
                         if (id) {
@@ -297,6 +341,24 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
                             excludeGroups['names'].push(record.get('name'));
                         }
                     });
+
+                    filters['vpcId'] = tab.vpc ? tab.vpc.id : null;
+
+                    if (role.get('platform') === 'azure') {
+                        filters['resourceGroup'] = role.get('settings', true)['azure.resource-group'];
+                    }
+
+                    if (role.get('platform') === 'azure') {
+                        sgLimit = 1;
+                    } else if (role.get('platform') === 'ec2') {
+                        sgLimit = tabParams['scalr.aws.ec2.limits.security_groups_per_instance'];
+                    }
+
+                    disableAddButton = !Scalr.isAllowed('SECURITY_SECURITY_GROUPS', 'manage');
+                    if (!disableAddButton && tab.limits !== undefined) {
+                        disableAddButton = tab.limits['allow_additional_sec_groups'] == 0 || !Ext.isEmpty(tab.limits['additional_sec_groups_list']);
+                    }
+
                     Scalr.Confirm({
                         formWidth: 950,
                         formLayout: 'fit',
@@ -310,16 +372,16 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
                              accountId: tabParams['accountId'],
                              remoteAddress: tabParams['remoteAddress'],
                              title: 'Add security groups to farm role',
-                             limit: 10,
+                             limit: sgLimit,
                              minHeight: 200,
                              excludeGroups: excludeGroups,
                              vpc: tab.vpc,
+                             resourceGroup: role.get('settings', true)['azure.resource-group'],
+                             disableAddButton: disableAddButton,
                              storeExtraParams: {
                                  platform: role.get('platform'),
                                  cloudLocation: role.get('cloud_location'),
-                                 filters: Ext.encode({
-                                     vpcId: tab.vpc ? tab.vpc.id : null
-                                 })
+                                 filters: Ext.encode(filters)
                              }
                         }],
                         ok: 'Add',
@@ -360,7 +422,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
                     rulesGrid.hide();
                     groupNotFound.hide();
                     rulesGrid.store.removeAll();
-                    tab.down('#rulesTitle').setText((record.get('name') || record.get('id')) + ' rules (<a href="#">edit</a>)', false);
+                    tab.down('#rulesTitle').setText((record.get('name') || record.get('id')) + (Scalr.isAllowed('SECURITY_SECURITY_GROUPS', 'manage') ? ' (<a href="#">edit</a>)' : ''), false);
                     Scalr.Request({
                         url: '/security/groups/xGetGroupInfo',
                         hideErrorMessage: true,
@@ -369,7 +431,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
                             cloudLocation: tab.currentRole.get('cloud_location'),
                             securityGroupId: record.get('id'),
                             securityGroupName: record.get('name'),
-                            vpcId: tab.vpc ? tab.vpc.id : null
+                            vpcId: tab.vpc ? tab.vpc.id : null,
+                            resourceGroup: tab.currentRole.get('settings', true)['azure.resource-group']
                         },
                         processBox: {
                             type: 'load',
@@ -398,12 +461,15 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
                                     }
                                 });
                                 data['cloudLocation'] = tab.currentRole.get('cloud_location');
+                                if (tab.currentRole.get('platform') === 'azure') {
+                                    data['resourceGroup'] = tab.currentRole.get('settings', true)['azure.resource-group'];
+                                }
                                 tab.down('#rulesTitle').securityGroupData = data;
                                 rulesGrid.store.loadData(allRules);
                                 rulesGrid.show();
                             } else {
                                 if (!record.get('id')) {
-                                    groupNotFound.down().setValue('The <b>' + record.get('name') + '</b> security group does not exist yet. It will be created when the first instance is launched.');
+                                    groupNotFound.down().setValue('The <b>' + record.get('name') + '</b> security group does not exist.');
                                 } else {
                                     groupNotFound.down().setValue('The <b>' + record.get('id') + '</b> security group does not exist.');
                                 }
@@ -412,12 +478,14 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
                         },
                         failure: function(data) {
                             if (data.errorMessage) {
-                                if (!record.get('id') && data.errorMessage.match(/The security group (.+) does not exist$/i)) {
-                                    groupNotFound.down().setValue('The <b>'+record.get('name')+'</b> security group does not exist yet. It will be created when the first instance is launched.');
-                                    groupNotFound.show();
-                                } else {
-                                    Scalr.message.Error(data.errorMessage);
+                                var errorMessage = data.errorMessage;
+                                if (!record.get('id') && (data.errorMessage.match(/The security group (.+) does not exist$/i) ||
+                                    data.errorMessage.match(/The Resource (.+) under resource group (.+) was not found.$/i))
+                                ) {
+                                    errorMessage = 'The <b>'+record.get('name')+'</b> security group does not exist.';
                                 }
+                                groupNotFound.down().setValue(errorMessage);
+                                groupNotFound.show();
                             }
                         }
                     });
@@ -440,25 +508,61 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
                 cls: 'x-grid-no-highlighting',
                 store: {
                     fields: ['id', 'ipProtocol', 'fromPort', 'toPort', 'sourceType', 'sourceValue', 'comment'],
-                    proxy: 'object'
+                    proxy: 'object',
+                    groupField: 'type'
                 },
                 viewConfig: {
                     focusedItemCls: 'no-focus',
                     emptyText: 'No rules defined'
                 },
+                features: [{
+                    ftype: 'grouping',
+                    id: 'groupingByType',
+                    hideGroupedHeader: true,
+                    disabled: true,
+                    groupHeaderTpl: [
+                        '<span>',
+                        '<tpl if="name === \'outbound\'">',
+                            'Outbound',
+                        '<tpl else>',
+                            'Inbound',
+                        '</tpl>',
+                        ' ({rows.length})</span>'
+                    ]
+                }],
                 columns: [{
                     text: 'Protocol',
-                    dataIndex: 'ipProtocol'
+                    dataIndex: 'ipProtocol',
+                    xtype: 'templatecolumn',
+                    tpl: '{[values.ipProtocol==\'*\'?\'ANY\':Ext.util.Format.uppercase(values.ipProtocol)]}'
                 },{
                     text: 'Ports',
                     xtype: 'templatecolumn',
                     flex: .6,
                     dataIndex: 'fromPort',
-                    tpl: '{fromPort} - {toPort}'
+                    tpl:
+                    '<tpl if="ipProtocol==\'icmp\'">' +
+                        '<tpl if="fromPort==-1&&fromPort==toPort">' +
+                            'ANY' +
+                        '<tpl else>' +
+                            '{[values.fromPort==-1?\'ANY\':values.fromPort]}<tpl if="toPort"> - {[values.toPort==-1?\'ANY\':values.toPort]}</tpl>'+
+                        '</tpl>' +
+                    '<tpl else>' +
+                        '<tpl if="!fromPort&&!toPort||fromPort==\'*\'&&toPort==\'*\'">' +
+                            'ANY' +
+                        '<tpl elseif="!toPort">' +
+                            '{fromPort}' +
+                        '<tpl else>' +
+                            '{fromPort} - {toPort}' +
+                        '</tpl>' +
+                    '</tpl>'
+
                 },{
                     text: 'Source',
                     flex: 1,
-                    dataIndex: 'sourceValue'
+                    dataIndex: 'sourceValue',
+                    xtype: 'templatecolumn',
+                    tpl: '{[values.sourceValue==\'*\'?\'ANY\':Ext.util.Format.uppercase(values.sourceValue)]}'
                 }],
                 dockedItems: [{
                     xtype: 'toolbar',
@@ -467,7 +571,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
                     items: [{
                         xtype: 'label',
                         itemId: 'rulesTitle',
-                        cls: 'x-fieldset-subheader',
+                        cls: 'x-fieldset-subheader x-fieldset-subheader-no-text-transform',
                         html: '&nbsp;',
                         margin: '0 0 8 0',
                         listeners: {
@@ -498,6 +602,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
                                                  }
                                             }],
                                             ok: 'Save',
+                                            hideOk: !Scalr.isAllowed('SECURITY_SECURITY_GROUPS', 'manage'),
                                             closeOnSuccess: true,
                                             scope: me,
                                             success: function (formValues, form) {

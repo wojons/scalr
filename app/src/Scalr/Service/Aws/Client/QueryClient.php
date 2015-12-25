@@ -1,11 +1,16 @@
 <?php
+
 namespace Scalr\Service\Aws\Client;
 
-use HttpRequest;
+use http\Header;
+use http\QueryString;
 use Scalr\Service\Aws;
 use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Event\EventType;
 use Scalr\Service\Aws\Event\ErrorResponseEvent;
+use Scalr\System\Http\Client\Request;
+use Scalr\Util\CallbackInterface;
+use Scalr\Util\CallbackTrait;
 
 /**
  * Amazon Query API client.
@@ -17,8 +22,11 @@ use Scalr\Service\Aws\Event\ErrorResponseEvent;
  * @since     21.09.2012
  */
 
-class QueryClient extends AbstractClient implements ClientInterface
+class QueryClient extends AbstractClient implements ClientInterface, CallbackInterface
 {
+
+    use CallbackTrait;
+
     /**
      * Base url for API requests
      *
@@ -48,13 +56,6 @@ class QueryClient extends AbstractClient implements ClientInterface
     protected $apiVersion;
 
     /**
-     * Useragent
-     *
-     * @var string
-     */
-    protected $useragent;
-
-    /**
      * Constructor
      *
      * @param    string    $awsAccessKeyId    AWS Access Key Id
@@ -68,9 +69,6 @@ class QueryClient extends AbstractClient implements ClientInterface
         $this->secretAccessKey = $secretAccessKey;
         $this->setApiVersion($apiVersion);
         $this->setUrl($url);
-        $this->useragent = sprintf('Scalr AWS Client (http://scalr.com) PHP/%s pecl_http/%s',
-            phpversion(), phpversion('http')
-        );
     }
 
     /**
@@ -141,7 +139,7 @@ class QueryClient extends AbstractClient implements ClientInterface
      * @param     string    $action           An Web service API action name.
      * @param     array     $options          An options array. It may contain "_host" option which overrides host.
      * @param     string    $path    optional A relative path.
-     * @return    ClientResponseInterfa
+     * @return    ClientResponseInterface
      * @throws    ClientException
      */
     public function call($action, $options, $path = '/')
@@ -187,11 +185,11 @@ class QueryClient extends AbstractClient implements ClientInterface
             'Cache-Control' => 'no-cache',
         ]);
 
-        $httpRequest->setUrl($scheme . '://' . $host . $path);
+        $httpRequest->setRequestUrl($scheme . '://' . $host . $path);
 
-        $httpRequest->setMethod(HTTP_METH_POST);
+        $httpRequest->setRequestMethod("POST");
 
-        $httpRequest->addPostFields($options);
+        $httpRequest->append($options);
 
         if (true) {
             $this->signRequestV4($httpRequest, $region);
@@ -202,9 +200,9 @@ class QueryClient extends AbstractClient implements ClientInterface
         $response = $this->tryCall($httpRequest);
 
         if ($this->getAws() && $this->getAws()->getDebug()) {
-            echo "\n";
-            echo $httpRequest->getRawRequestMessage() . "\n";
-            echo $httpRequest->getRawResponseMessage() . "\n";
+            echo "\n",
+                 "{$httpRequest}\n",
+                 "{$response->getResponse()}\n";
         }
 
         return $response;
@@ -213,22 +211,24 @@ class QueryClient extends AbstractClient implements ClientInterface
     /**
      * Signs request with signature version 4
      *
-     * @param   \HttpRequest $request     Http Request
-     * @param   string       $region      optional Overrides region as destination region for multiregional operations
+     * @param   Request      $request     Http Request
+     * @param   string       $region      optional Overrides region as destination region for multi-regional operations
+     * @param   string       $file        optional Path to the file transmitted in request for signature calculation
+     *
      * @throws  QueryClientException
      */
-    protected function signRequestV4($request, $region = null)
+    protected function signRequestV4($request, $region = null, $file = null)
     {
         $time = time();
 
         //Gets the http method name
-        $httpMethod = self::$httpMethods[$request->getMethod()];
+        $httpMethod = $request->getRequestMethod();
 
         //Region is mandatory part for this type of authentication
         $region = $region ?: $this->getAws()->getRegion();
 
         //Gets host from the url
-        $components = parse_url($request->getUrl());
+        $components = parse_url($request->getRequestUrl());
 
         $crd = gmdate('Ymd', $time) . '/' . $region . '/' . $this->getServiceName() . '/aws4_request';
 
@@ -242,44 +242,22 @@ class QueryClient extends AbstractClient implements ClientInterface
         $headers = ['X-Amz-Date' => $opt['X-Amz-Date']];
 
         //Calculating canonicalized query string
-        $canonicalizedQueryString = '';
+        $c11dQueryString = '';
         if (!empty($components['query'])) {
-            parse_str($components['query'], $pars);
+            $pars = (new QueryString($components['query']))->toArray();
 
             ksort($pars);
 
-            foreach ($pars as $k => $v) {
-                $canonicalizedQueryString .= '&' . rawurlencode($k) . '=' . rawurlencode($v);
-            }
-
-            $canonicalizedQueryString = ltrim($canonicalizedQueryString, '&');
+            $c11dQueryString = http_build_query($pars, null, '&', PHP_QUERY_RFC3986);
         }
 
         //Calculating payload
-        $payload = '';
-        if ($httpMethod == 'POST') {
-            if ($request->getBody() != '') {
-                $payload = $request->getBody();
-            } else {
-                $pars = $request->getPostFields();
-
-                foreach ($pars as $k => $v) {
-                    //We do not use rawurlencode because httpRequest does not do this, and we need to hash payload
-                    $payload .= '&' . urlencode($k) . '=' . urlencode($v);
-                }
-
-                $payload = ltrim($payload, '&');
-            }
-        } elseif ($httpMethod == 'PUT') {
-            $payload = $request->getPutData();
-
-            if (empty($payload) && $request->getPutFile()) {
-                $headers['X-Amz-Content-Sha256'] = hash_file('sha256', $request->getPutFile());
-            }
+        if ($httpMethod == 'PUT' && isset($file)) {
+            $headers['X-Amz-Content-Sha256'] = hash_file('sha256', $file);
         }
 
         if (!isset($headers['X-Amz-Content-Sha256'])) {
-            $headers['X-Amz-Content-Sha256'] = hash('sha256', $payload);
+            $headers['X-Amz-Content-Sha256'] = hash('sha256', $request->getRawBody());
         }
 
         //Adding x-amz headers
@@ -315,7 +293,7 @@ class QueryClient extends AbstractClient implements ClientInterface
         $canonicalRequest =
             $httpMethod . "\n"
           . $components['path'] . "\n"
-          . $canonicalizedQueryString . "\n"
+          . $c11dQueryString . "\n"
           . $canonicalHeaders . "\n"
           . $allHeaders['X-Amz-SignedHeaders'] . "\n"
           . $headers['X-Amz-Content-Sha256']
@@ -347,7 +325,7 @@ class QueryClient extends AbstractClient implements ClientInterface
      *
      * Only POST http method is supported
      *
-     * @param   \HttpRequest $request Http request object
+     * @param   Request $request Http request object
      * @throws  QueryClientException
      */
     protected function signRequestV2($request)
@@ -355,10 +333,10 @@ class QueryClient extends AbstractClient implements ClientInterface
         $time = time();
 
         //Gets the http method name
-        $httpMethod = self::$httpMethods[$request->getMethod()];
+        $httpMethod = $request->getRequestMethod();
 
         //Gets both host and path from the url
-        $components = parse_url($request->getUrl());
+        $components = parse_url($request->getRequestUrl());
 
         $common = [
             'AWSAccessKeyId'   => $this->awsAccessKeyId,
@@ -367,25 +345,21 @@ class QueryClient extends AbstractClient implements ClientInterface
             'Timestamp'        => gmdate('Y-m-d\TH:i:s', $time) . "Z",
         ];
 
-        $request->addPostFields($common);
+        $request->append($common);
 
         //Gets adjusted options
-        $options = $request->getPostFields();
+        $options = (new QueryString($request->getRawBody()))->toArray();
 
         //Calculating canonicalized query string
         ksort($options);
 
-        $canonicalizedQueryString = '';
-        foreach ($options as $k => $v) {
-            $canonicalizedQueryString .= '&' . rawurlencode($k) . '=' . rawurlencode($v);
-        }
-        $canonicalizedQueryString = ltrim($canonicalizedQueryString, '&');
+        $c11dQueryString = http_build_query($options, null, '&', PHP_QUERY_RFC3986);
 
         $stringToSign =
             $httpMethod . "\n"
           . strtolower($components['host']) . "\n"
           . $components['path'] . "\n"
-          . $canonicalizedQueryString
+          . $c11dQueryString
         ;
 
         switch ($common['SignatureMethod']) {
@@ -400,7 +374,7 @@ class QueryClient extends AbstractClient implements ClientInterface
                 );
         }
 
-        $request->addPostFields([
+        $request->append([
             'Signature' => base64_encode(hash_hmac($algo, $stringToSign, $this->secretAccessKey, 1))
         ]);
 
@@ -410,24 +384,21 @@ class QueryClient extends AbstractClient implements ClientInterface
     }
 
     /**
-     * Creates a new HttpRequest object.
+     * Creates a new http Request object.
      *
-     * @return \HttpRequest Returns a new HttpRequest object.
+     * @return Request Returns a new http Request object.
      */
     public function createRequest()
     {
-        $q = new HttpRequest();
-        //HttpRequest has a pitfall which persists cookies between different requests.
-        //IMPORTANT! This line causes error with old version of curl
-        //$q->resetCookies();
+        $q = new Request();
         $q->setOptions(array(
             'redirect'       => 10,
-            'useragent'      => $this->useragent,
             'verifypeer'     => false,
             'verifyhost'     => false,
             'timeout'        => 30,
-            'connecttimeout' => 30/*,
-            'ssl' => array('version' => 1)*/
+            'connecttimeout' => 30,
+            'cookiesession' => true
+            //'ssl' => array('version' => 1)
         ));
 
         $proxySettings = $this->getAws()->getProxy();
@@ -453,18 +424,19 @@ class QueryClient extends AbstractClient implements ClientInterface
     /**
      * Tries to send request on several attempts.
      *
-     * @param    \HttpRequest    $httpRequest
-     * @param    int             $attempts     Attempts count.
-     * @param    int             $interval     An sleep interval between an attempts in microseconds.
-     * @returns  QueryClientResponse  Returns response on success
-     * @throws   QueryClientException
+     * @param    Request    $httpRequest
+     * @param    int        $attempts Attempts count.
+     * @param    int        $interval An sleep interval between an attempts in microseconds.
+     *
+     * @return QueryClientResponse Returns response on success
+     * @throws ClientException
      */
-    protected function tryCall($httpRequest, $attempts = 1, $interval = 200)
+    protected function tryCall($httpRequest, $attempts = 3, $interval = 200)
     {
         try {
-            $message = $httpRequest->send();
+            $httpResponse = \Scalr::getContainer()->http->sendRequest($httpRequest);
 
-            if (preg_match('/^<html.+ Service Unavailable/', $message->getBody()) && --$attempts > 0) {
+            if (preg_match('/^<html.+ Service Unavailable/', $httpResponse->getBody()->toString()) && --$attempts > 0) {
                 usleep($interval);
                 return $this->tryCall($httpRequest, $attempts, $interval * 2);
             }
@@ -472,7 +444,7 @@ class QueryClient extends AbstractClient implements ClientInterface
             //Increments the queries quantity
             $this->_incrementQueriesQuantity();
 
-            $response = new QueryClientResponse($message);
+            $response = new QueryClientResponse($httpResponse);
             $response->setRequest($httpRequest);
             $response->setQueryNumber($this->getQueriesQuantity());
 
@@ -497,15 +469,14 @@ class QueryClient extends AbstractClient implements ClientInterface
                     }
                 }
             }
-        } catch (\HttpException $e) {
-            if (--$attempts > 0) {
-                usleep($interval);
-                return $this->tryCall($httpRequest, $attempts, $interval * 2);
-            } else {
-                $error = new ErrorData();
-                $error->message = 'Cannot establish connection to AWS server. ' . (isset($e->innerException) ? preg_replace('/(\(.*\))/', '', $e->innerException->getMessage()) : $e->getMessage());
-                throw new ClientException($error);
+
+            if (is_callable($this->callback)) {
+                call_user_func($this->callback, $httpRequest, $httpResponse);
             }
+        } catch (\http\Exception $e) {
+            $error = new ErrorData();
+            $error->message = 'Cannot establish connection to AWS server. ' . (isset($e->innerException) ? preg_replace('/(\(.*\))/', '', $e->innerException->getMessage()) : $e->getMessage());
+            throw new ClientException($error);
         }
 
         return $response;

@@ -24,6 +24,9 @@ use Scalr\System\Zmq\Cron\PidFile;
 
 set_time_limit(0);
 
+//10 KiB of emergency memory
+Scalr::$emergencyMemory = str_repeat(' ', 10240);
+
 $logger = Scalr::getContainer()->logger('cron/service.php')->setLevel(Scalr::config('scalr.crontab.log_level'));
 
 $oPid = new PidFile(CACHEPATH . '/cron.service.pid', '/service.php');
@@ -40,6 +43,8 @@ $sigHandler = function ($signo = null) use (&$interrupt, $oPid, $logger) {
     $interrupt++;
 
     if ($once++) return;
+
+    Scalr::$emergencyMemory = null;
 
     //Reporting about termination
     $logger->log("SERVICE", "Service recieved termination SIGNAL:%d", intval($signo));

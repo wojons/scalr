@@ -1,10 +1,9 @@
 <?php
 
-use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
-use Scalr\Modules\Platforms\Eucalyptus\EucalyptusPlatformModule;
-use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
-use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
+use Scalr\Exception\ScalrException;
 use Scalr\System\Config\Yaml;
+use Scalr\Model\Entity;
+use Scalr\AuditLogger;
 
 /**
  * Dependency injection container configuration
@@ -60,23 +59,23 @@ $container->user = function ($cont) {
 };
 
 $container->awsAccessKeyId = function ($cont) {
-    return $cont->environment->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY);
+    return $cont->environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCESS_KEY];
 };
 
 $container->awsSecretAccessKey = function ($cont) {
-    return $cont->environment->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY);
+    return $cont->environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_SECRET_KEY];
 };
 
 $container->awsAccountNumber = function ($cont) {
-    return $cont->environment->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID);
+    return $cont->environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID];
 };
 
 $container->awsCertificate = function ($cont) {
-    return $cont->environment->getPlatformConfigValue(Ec2PlatformModule::CERTIFICATE);
+    return $cont->environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_CERTIFICATE];
 };
 
 $container->awsPrivateKey = function ($cont) {
-    return $cont->environment->getPlatformConfigValue(Ec2PlatformModule::PRIVATE_KEY);
+    return $cont->environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_PRIVATE_KEY];
 };
 
 $container->aws = function ($cont, array $arguments = null) {
@@ -84,10 +83,13 @@ $container->aws = function ($cont, array $arguments = null) {
     $params = [];
 
     $traitFetchEnvProperties = function ($env) use (&$params) {
-        $params['accessKeyId'] = $env->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY);
-        $params['secretAccessKey'] = $env->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY);
-        $params['certificate'] = $env->getPlatformConfigValue(Ec2PlatformModule::CERTIFICATE);
-        $params['privateKey'] = $env->getPlatformConfigValue(Ec2PlatformModule::PRIVATE_KEY);
+        /* @var $env \Scalr_Environment|Entity\Account\Environment */
+        $ccProps = $env->cloudCredentials(SERVER_PLATFORMS::EC2)->properties;
+
+        $params['accessKeyId'] = $ccProps[Entity\CloudCredentialsProperty::AWS_ACCESS_KEY];
+        $params['secretAccessKey'] = $ccProps[Entity\CloudCredentialsProperty::AWS_SECRET_KEY];
+        $params['certificate'] = $ccProps[Entity\CloudCredentialsProperty::AWS_CERTIFICATE];
+        $params['privateKey'] = $ccProps[Entity\CloudCredentialsProperty::AWS_PRIVATE_KEY];
         $params['environment'] = $env;
     };
 
@@ -108,7 +110,7 @@ $container->aws = function ($cont, array $arguments = null) {
             );
         }
         $traitFetchEnvProperties($env);
-    } elseif (isset($arguments[1]) && $arguments[1] instanceof \Scalr_Environment) {
+    } elseif (isset($arguments[1]) && ($arguments[1] instanceof \Scalr_Environment || $arguments[1] instanceof \Scalr\Model\Entity\Account\Environment)) {
         $params['region'] = !empty($arguments[0]) ? (string)$arguments[0] : null;
         $env = $arguments[1];
         $traitFetchEnvProperties($env);
@@ -163,27 +165,6 @@ $container->aws = function ($cont, array $arguments = null) {
     return $cont->get($serviceid);
 };
 
-$container->setShared('auditLogStorage', function ($cont) {
-    $type = 'Mysql';
-    $storageClass = 'Scalr\\Logger\\' . $type . 'LoggerStorage';
-    return new $storageClass (array('dsn' => $cont->{'dsn.getter'}('scalr.connections.mysql')));
-});
-
-$container->auditLog = function ($cont) {
-    $cont->auditLogEnabled = $cont->config->get('scalr.auditlog.enabled') ? true : false;
-    $serviceid = 'auditLog.' . ((string)$cont->user->getId());
-    if (!$cont->initialized($serviceid)) {
-        $cont->setShared($serviceid, function ($cont) {
-            $obj = new \Scalr\Logger\AuditLog(
-                $cont->user, $cont->auditLogStorage, array('enabled' => $cont->auditLogEnabled)
-            );
-            $obj->setContainer($cont);
-            return $obj;
-        });
-    }
-    return $cont->get($serviceid);
-};
-
 $container->cloudyn = function ($cont) {
     $params = array();
     $acc = $cont->request->getUser()->getAccount();
@@ -202,6 +183,7 @@ $container->cloudyn = function ($cont) {
 };
 
 $container->openstack = function ($cont, array $arguments = null) {
+    /* @var $cont \Scalr\DependencyInjection\Container */
     $params = array();
     if (!isset($arguments[0])) {
         throw new \BadFunctionCallException('Platform value must be provided!');
@@ -227,17 +209,18 @@ $container->openstack = function ($cont, array $arguments = null) {
             $env = $cont->environment;
         }
 
-        $params['username'] = $env->getPlatformConfigValue($platform . "." . OpenstackPlatformModule::USERNAME);
-        $params['identityEndpoint'] = $env->getPlatformConfigValue($platform . "." . OpenstackPlatformModule::KEYSTONE_URL);
+        $ccProps = $env->cloudCredentials($platform)->properties;
 
-        $params['apiKey'] = $env->getPlatformConfigValue($platform . "." . OpenstackPlatformModule::API_KEY);
+        $params['username'] = $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_USERNAME];
+        $params['identityEndpoint'] = $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_KEYSTONE_URL];
+
+        $params['apiKey'] = $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_API_KEY];
         if (empty($params['apiKey'])) $params['apiKey'] = null;
 
-        $params['updateTokenCallback'] = function ($token) use ($env, $platform) {
-            if ($env && $token instanceof \Scalr\Service\OpenStack\Client\AuthToken) {
-                $env->setPlatformConfig(array(
-                    $platform . "." . OpenstackPlatformModule::AUTH_TOKEN => serialize($token),
-                ));
+        $params['updateTokenCallback'] = function ($token) use ($ccProps, $platform) {
+            if (!empty($ccProps) && $token instanceof \Scalr\Service\OpenStack\Client\AuthToken) {
+                $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_AUTH_TOKEN] = serialize($token);
+                $ccProps->save();
             }
         };
 
@@ -247,23 +230,26 @@ $container->openstack = function ($cont, array $arguments = null) {
         //$params['authToken'] = $env->getPlatformConfigValue($platform . "." . OpenstackPlatformModule::AUTH_TOKEN);
         //$params['authToken'] = empty($params['authToken']) ? null : unserialize($params['authToken']);
 
-        $params['password'] = $env->getPlatformConfigValue($platform . "." . OpenstackPlatformModule::PASSWORD);
-
-        $params['tenantName'] = $env->getPlatformConfigValue($platform. "." . OpenstackPlatformModule::TENANT_NAME);
-        if (empty($params['tenantName'])) $params['tenantName'] = null;
-
-        $params['identityVersion'] = $env->getPlatformConfigValue($platform . '.' . OpenstackPlatformModule::IDENTITY_VERSION);
+        $params['password'] = $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_PASSWORD];
+        $params['tenantName'] = $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_TENANT_NAME] ?: null;
+        $params['domainName'] = $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_DOMAIN_NAME] ?: null;
+        $params['identityVersion'] = $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_IDENTITY_VERSION];
     }
 
     //calculates unique identifier of the service
     $serviceid = 'openstack.' . hash('sha256',
-        sprintf('%s|%s|%s', $params['username'], $params['identityEndpoint'], $params['region']),
+        sprintf('%s|%s|%s|%s|%s',
+            $params['username'],
+            (string)$params['tenantName'],
+            (string)$params['domainName'],
+            $params['identityEndpoint'],
+            $params['region']
+        ),
         false
     );
 
     /* @var $config Yaml */
     $config = $cont->config;
-    $proxySettings = null;
 
     if (isset($platform) &&
         $config->defined("scalr.{$platform}.use_proxy") &&
@@ -278,7 +264,7 @@ $container->openstack = function ($cont, array $arguments = null) {
                 $params['config'] = new \Scalr\Service\OpenStack\OpenStackConfig(
                     $params['username'], $params['identityEndpoint'], $params['region'], $params['apiKey'],
                     $params['updateTokenCallback'], $params['authToken'], $params['password'], $params['tenantName'],
-                    $params['identityVersion'],
+                    $params['domainName'], $params['identityVersion'],
                     empty($params['proxySettings']) ? null : $params['proxySettings']
                 );
             }
@@ -299,9 +285,12 @@ $container->cloudstack = function($cont, array $arguments = null) {
     $params = [];
 
     $traitFetchEnvProperties = function ($platform, $env) use (&$params) {
-        $params['apiUrl'] = $env->getPlatformConfigValue($platform . "." . CloudstackPlatformModule::API_URL);
-        $params['apiKey'] = $env->getPlatformConfigValue($platform . "." . CloudstackPlatformModule::API_KEY);
-        $params['secretKey'] = $env->getPlatformConfigValue($platform . "." . CloudstackPlatformModule::SECRET_KEY);
+        /* @var $env \Scalr_Environment */
+        $ccProps = $env->cloudCredentials($platform)->properties;
+
+        $params['apiUrl'] = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_API_URL];
+        $params['apiKey'] = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_API_KEY];
+        $params['secretKey'] = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_SECRET_KEY];
         $params['platform'] = $platform;
     };
 
@@ -338,6 +327,52 @@ $container->cloudstack = function($cont, array $arguments = null) {
     return $cont->get($serviceid);
 };
 
+$container->azure = function($cont, array $arguments = null) {
+    $params = [];
+
+    $traitFetchEnvProperties = function ($env) use (&$params) {
+        /* @var $env \Scalr_Environment */
+        $ccProps = $env->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties;
+
+        $params['appClientId'] = $env->config("scalr.azure.app_client_id");
+        $params['appSecretKey'] = $env->config("scalr.azure.app_secret_key");
+        $params['tenantName'] = $ccProps[Entity\CloudCredentialsProperty::AZURE_TENANT_NAME];
+        $params['environment'] = $env;
+    };
+
+    if (!isset($arguments[0])) {
+        throw new \BadFunctionCallException('Environment value must be provided!');
+    } else {
+        if ($arguments[0] instanceof \Scalr_Environment) {
+            $env = $arguments[0];
+        } else {
+            $env = $cont->environment;
+        }
+        $traitFetchEnvProperties($env);
+    }
+
+    $serviceId = 'azure.' . hash('sha256', sprintf("%s|%s|%s",
+            $params['appClientId'], $params['appSecretKey'], $params['tenantName']
+        ), false);
+
+    if (!$cont->initialized($serviceId)) {
+        $cont->setShared($serviceId, function($cont) use ($params) {
+            if (empty($params['appClientId']) || empty($params['appSecretKey'])) {
+                throw new \Scalr\Exception\InvalidCloudCredentialsException();
+            }
+
+            $azure = new \Scalr\Service\Azure(
+                $params['appClientId'], $params['appSecretKey'], $params['tenantName']
+            );
+            $azure->setEnvironment($params['environment']);
+
+            return $azure;
+        });
+    }
+
+    return $cont->get($serviceId);
+};
+
 $container->mailer = function ($cont) {
     $mailer = new \Scalr\SimpleMailer();
     if ($cont->config->get('scalr.email.address')) {
@@ -366,6 +401,7 @@ $container->setShared('ldap.config', function ($cont) {
         isset($my['group_member_attribute']) ? $my['group_member_attribute'] : null,
         isset($my['group_member_attribute_type']) ? $my['group_member_attribute_type'] : null,
         isset($my['groupname_attribute']) ? $my['groupname_attribute'] : null,
+        isset($my['group_displayname_attribute']) ? $my['group_displayname_attribute'] : null,
         isset($my['debug']) ? $my['debug'] : false
     );
 });
@@ -389,8 +425,13 @@ $container->set('ldap', function ($cont, array $arguments = null) {
             $user = substr($user, 0, $pos + 1) . $ldapCf->getDomain();
         }
     } elseif ($ldapCf->bindType == \Scalr\Net\Ldap\LdapClient::BIND_TYPE_OPENLDAP) {
-        $uid = $user;
-        $user = "{$ldapCf->usernameAttribute}={$user},{$ldapCf->baseDn}";
+
+        if (preg_match("/^" . preg_quote($ldapCf->usernameAttribute, '/') . "=(?<uid>.+?)(?<!\\\\),/", $user, $matches)) {
+            $uid = $matches['uid'];
+        } else {
+            $uid = $user;
+            $user = "{$ldapCf->usernameAttribute}={$user},{$ldapCf->baseDn}";
+        }
     }
     return new \Scalr\Net\Ldap\LdapClient($ldapCf, $user, $pass, $uid);
 });
@@ -399,70 +440,6 @@ $container->setShared('acl', function ($cont) {
     $acl = new \Scalr\Acl\Acl();
     $acl->setDb($cont->adodb);
     return $acl;
-});
-
-$container->set('eucalyptus', function($cont, array $arguments = null) {
-    $params = array();
-    $traitFetchEnvProperties = function ($env) use (&$params) {
-        $params['accessKeyId'] = $env->getPlatformConfigValue(EucalyptusPlatformModule::ACCESS_KEY, true, $params['region']);
-        $params['secretAccessKey'] = $env->getPlatformConfigValue(EucalyptusPlatformModule::SECRET_KEY, true, $params['region']);
-        $params['certificate'] = $env->getPlatformConfigValue(EucalyptusPlatformModule::CERTIFICATE, true, $params['region']);
-        $params['privateKey'] = $env->getPlatformConfigValue(EucalyptusPlatformModule::PRIVATE_KEY, true, $params['region']);
-        $params['ec2url'] = $env->getPlatformConfigValue(EucalyptusPlatformModule::EC2_URL, true, $params['region']);
-        $params['s3url'] = $env->getPlatformConfigValue(EucalyptusPlatformModule::S3_URL, true, $params['region']);
-        $params['environment'] = $env;
-    };
-
-    if (!empty($arguments) && is_object($arguments[0])) {
-        //Makes it possible to get aws instance by dbserver object
-        if ($arguments[0] instanceof \DBServer) {
-            $env = $arguments[0]->GetEnvironmentObject();
-            $params['region'] = $arguments[0]->GetProperty(EUCA_SERVER_PROPERTIES::REGION);
-        } elseif ($arguments[0] instanceof \DBFarmRole) {
-            $env = $arguments[0]->GetFarmObject()->GetEnvironmentObject();
-            $params['region'] = $arguments[0]->CloudLocation;
-        } else {
-            throw new InvalidArgumentException(
-                'string|DBServer|DBFarmRole are only accepted. Invalid argument ' . get_class($arguments[0])
-            );
-        }
-        $traitFetchEnvProperties($env);
-    } elseif (isset($arguments[1]) && $arguments[1] instanceof \Scalr_Environment) {
-        $params['region'] = !empty($arguments[0]) ? (string)$arguments[0] : null;
-        $env = $arguments[1];
-        $traitFetchEnvProperties($env);
-    } else {
-        $params['region'] = isset($arguments[0]) ? (string)$arguments[0] : null;
-        if ($cont->environment instanceof \Scalr_Environment) {
-            $traitFetchEnvProperties($cont->environment);
-        } else {
-            throw new \Exception("Environment has not been defined for DI container.");
-        }
-    }
-
-    $serviceid = 'eucalyptus.' . hash('sha256', sprintf("%s|%s|%s|%s|%s",
-        $params['accessKeyId'], $params['secretAccessKey'], $params['region'],
-        (!empty($params['certificate']) ? crc32($params['certificate']) : '-'),
-        (!empty($params['privateKey']) ? crc32($params['privateKey']) : '-')
-    ), false);
-
-    if (!$cont->initialized($serviceid)) {
-        $cont->setShared($serviceid, function($cont) use ($params) {
-            $client = new \Scalr\Service\Eucalyptus(
-                $params['accessKeyId'], $params['secretAccessKey'], $params['region'],
-                $params['certificate'], $params['privateKey']
-            );
-            $client->setUrl('ec2', $params['ec2url']);
-            $client->setUrl('s3', $params['s3url']);
-            if (isset($params['environment']) && $params['environment'] instanceof \Scalr_Environment) {
-                $client->setEnvironment($params['environment']);
-            }
-            return $client;
-        });
-    }
-
-    return $cont->get($serviceid);
-
 });
 
 //Analytics sub container
@@ -534,27 +511,38 @@ $container->set('logger', function($cont, array $arguments = null) {
 });
 
 $container->set('warmup', function($cont, array $arguments = null) {
+    /* @var $cont \Scalr\DependencyInjection\BaseContainer */
     //Releases cloud credentials
-    foreach(['aws', 'openstack', 'cloudstack', 'eucalyptus', 'cloudyn'] as $srv) {
+    foreach(['aws', 'openstack', 'cloudstack', 'cloudyn'] as $srv) {
         $cont->release($srv);
     }
+
+    $cont->release('env_cloud_creds');
+    $cont->release('cloud_creds');
 
     //Releases platform module static cache
     \Scalr\Modules\PlatformFactory::warmup();
 
+    \Scalr_Governance::clearCache();
+
     return $cont;
 });
 
-$container->set(
-    'crypto',
-    function ($cont, array $arguments = []) {
+$container->set('crypto', function ($cont, array $arguments = []) {
         $algo = array_shift($arguments) ?: MCRYPT_RIJNDAEL_128;
         $mode = array_shift($arguments) ?: MCRYPT_MODE_CFB;
-        $cryptoKey = $cryptoKeyId = array_shift($arguments) ?: (APPPATH . "/etc/.cryptokey");
+        $cryptoKey = array_shift($arguments);
         $keySize = array_shift($arguments) ?: 32;
         $blockSize = array_shift($arguments) ?: 16;
 
-        if($cryptoKey instanceof SplFileObject) {
+        if ($cryptoKey === null) {
+            $cryptoKeyId = APPPATH . "/etc/.cryptokey";
+            $cryptoKey = @file_get_contents($cryptoKeyId);
+
+            if (empty($cryptoKey)) {
+                throw new ScalrException("Wrong crypto key!");
+            }
+        } else if ($cryptoKey instanceof SplFileObject) {
             $cryptoKeyId = $cryptoKey->getRealPath();
         } else if(is_resource($cryptoKey) && get_resource_type($cryptoKey) == 'stream') {
             $cryptoKeyId = realpath(stream_get_meta_data($cryptoKey)['uri']);
@@ -562,8 +550,8 @@ $container->set(
             $cryptoKeyId = realpath($cryptoKey);
         } else if(is_array($cryptoKey)) {
             $cryptoKeyId = implode('', $cryptoKey);
-        } else if($cryptoKey === null) {
-            $cryptoKeyId = uniqid();
+        } else {
+            $cryptoKeyId = $cryptoKey;
         }
 
         $cryptoId = hash("sha256", "crypto_{$algo}_{$mode}_{$cryptoKeyId}_{$keySize}_{$blockSize}");
@@ -580,11 +568,195 @@ $container->set(
     }
 );
 
-$container->set(
-    'srzcrypto',
-    function(\Scalr\DependencyInjection\Container $cont, array $arguments = []) {
+$container->set('srzcrypto', function ($cont, array $arguments = []) {
         $cryptoKey = array_shift($arguments);
 
         return $cont->crypto(MCRYPT_TRIPLEDES, MCRYPT_MODE_CBC, $cryptoKey, 24, 8);
     }
 );
+
+$container->set('http', function ($cont, array $arguments = []) {
+    $driver = array_shift($arguments) ?: "curl";
+    $persistent = array_shift($arguments) ?: null;
+    $options = array_shift($arguments) ?: [];
+
+    $client = new Scalr\System\Http\Client($driver, $persistent);
+
+    $uaInfo = $cont->version;
+
+    $options = array_merge([
+        'useragent' => sprintf(
+            "%s/%s (%s; %s.%s)",
+            isset($options["name"]) ? $options["name"] : "Scalr",
+            $uaInfo["version"],
+            $uaInfo["edition"],
+            $uaInfo["gitRevision"],
+            $uaInfo["id"]
+        )
+    ], $options);
+    unset($options["name"]);
+
+    $client->setOptions($options);
+
+    return $client;
+});
+
+$container->set('srzhttp', function ($cont, array $arguments = []) {
+    $driver = array_shift($arguments) ?: "curl";
+    $persistent = array_shift($arguments) ?: null;
+    $options = array_merge(array_shift($arguments) ?: [], ['protocol' => \http\Client\Curl\HTTP_VERSION_1_0]);
+
+    return $cont->http($driver, $persistent, $options);
+});
+
+$container->setShared("version.info", function ($cont, array $arguments = []) {
+    $manifest  = APPPATH . "/../manifest.json";
+
+    $uaInfo = ["short" => ["version" => SCALR_VERSION]];
+
+    $uaInfo["full"] = $uaInfo["short"];
+
+    $gitError = null;
+
+    if (is_readable($manifest)) {
+        $info = @json_decode(file_get_contents($manifest), true);
+
+        $uaInfo["full"]["edition"]     = !empty($info["edition"]) && stristr($info["edition"], "ee") ? "Enterprise" : "Community";
+        $uaInfo["full"]["gitRevision"] = $info["revision"];
+        $uaInfo["full"]["gitFullHash"] = $info["full_revision"];
+        $uaInfo["full"]["gitDate"]     = $info["date"];
+    }
+
+    if (!array_key_exists("edition", $uaInfo["full"])) {
+        @exec("git log -1 --format='%h|%ci|%H' 2>/dev/null", $output, $gitError);
+
+        if (!$gitError) {
+            $info = @explode("|", $output[0]);
+
+            $uaInfo["full"]["gitRevision"] = trim($info[0]);
+            $uaInfo["full"]["gitFullHash"] = trim($info[2]);
+            $uaInfo["full"]["gitDate"]     = trim($info[1]);
+        }
+
+        $uaInfo["full"]["edition"] = file_exists(APPPATH . '/../ui') ? "Enterprise" : "Community";
+    }
+
+    $uaInfo["full"]["edition"] .= " Edition";
+    $uaInfo["full"]["id"]       = SCALR_ID;
+
+    $uaInfo["beta"] = $uaInfo["full"];
+
+    if (isset($gitError) && !$gitError) {
+        @exec("git rev-parse --abbrev-ref HEAD 2>/dev/null", $branch);
+        $uaInfo["beta"]["branch"] = trim($branch[0]);
+    }
+
+    return $uaInfo;
+});
+
+$container->set('version', function ($cont, array $arguments = []) {
+    $part = array_shift($arguments) ?: 'full';
+
+    return $cont->{'version.info'}[$part];
+});
+
+$container->set('cloudCredentials', function ($cont, array $arguments = []) {
+    /* @var $cont \Scalr\DependencyInjection\Container */
+    $cloud = array_shift($arguments);
+
+    if (empty($cloud)) {
+        throw new BadFunctionCallException('Cloud value must be provided!');
+    }
+
+    $envId = array_shift($arguments) ?: ($cont->environment ? $cont->environment->id : null);
+
+    if (empty($envId)) {
+        throw new BadFunctionCallException('Environment value must be provided!');
+    }
+
+    $cloudCredentials = null;
+    $envCloudCredId = "env_cloud_creds.{$envId}.{$cloud}";
+
+    /* @var $cloudCredentials Entity\CloudCredentials */
+    if (!$cont->initialized($envCloudCredId)) {
+        $cont->setShared($envCloudCredId, function ($cont) use ($envId, $cloud, &$cloudCredentials) {
+            $cloudCredentials = new Entity\CloudCredentials();
+            $envCloudCredentials = new Entity\EnvironmentCloudCredentials();
+
+            /* @var $cloudCredentials Entity\CloudCredentials */
+            $cloudCredentials = Entity\CloudCredentials::findOne([
+                \Scalr\Model\AbstractEntity::STMT_FROM  => "{$cloudCredentials->table()} JOIN {$envCloudCredentials->table('cecc')} ON {$cloudCredentials->columnId()} = {$envCloudCredentials->columnCloudCredentialsId('cecc')} AND {$cloudCredentials->columnCloud()} = {$envCloudCredentials->columnCloud('cecc')}",
+                \Scalr\Model\AbstractEntity::STMT_WHERE => "{$envCloudCredentials->columnEnvId('cecc')} = {$envCloudCredentials->qstr('envId', $envId)} AND {$envCloudCredentials->columnCloud('cecc')} = {$envCloudCredentials->qstr('cloud', $cloud)}"
+            ]);
+
+            if (!empty($cloudCredentials)) {
+                $cloudCredId = $cloudCredentials->id;
+
+                $cloudCredentials->bindEnvironment($envId);
+
+                return $cloudCredId;
+            }
+
+            return null;
+        });
+    }
+
+    $cloudCredId = $cont->get($envCloudCredId);
+    $contCloudCredId = "cloud_creds.{$cloudCredId}";
+
+    if (!$cont->initialized($contCloudCredId)) {
+        $cont->setShared($contCloudCredId, function ($cont) use ($envId, $cloud, $cloudCredId, &$cloudCredentials){
+            if (!(isset($cloudCredentials) || empty($cloudCredentials = Entity\CloudCredentials::findPk($cloudCredId)))) {
+                $cloudCredentials->bindEnvironment($envId);
+            }
+
+            return $cloudCredentials ?: false;
+        });
+    }
+
+    if (empty($cloudCredentials = $cont->get($contCloudCredId))) {
+        $cloudCredentials = new Entity\CloudCredentials();
+        $cloudCredentials->accountId = (empty($cont->environment) || $cont->environment->id != $envId) ? \Scalr_Environment::init()->loadById($envId)->getAccountId() : $cont->environment;
+        $cloudCredentials->envId = $envId;
+        $cloudCredentials->cloud = $cloud;
+    }
+
+    return $cloudCredentials;
+});
+
+$container->setShared('saml.config', function ($cont) {
+    $settings = $cont->config->get('scalr.connections.saml');
+
+    // Adjust saml service provider settings based on the scalr base url
+    $baseUrl = $cont->config('scalr.endpoint.scheme') . "://" . rtrim($cont->config('scalr.endpoint.host'), '/');
+
+    $settings['sp']['entityId'] = $baseUrl . '/public/saml?metadata';
+    $settings['sp']['assertionConsumerService']['url'] = $baseUrl . '/public/saml?acs';
+    $settings['sp']['singleLogoutService']['url'] = $baseUrl . '/public/saml?sls';
+
+    return $settings;
+});
+
+$container->set('saml', function ($cont) {
+    return new OneLogin_Saml2_Auth($cont->{'saml.config'});
+});
+
+$container->setShared('auditlogger.metadata', function ($cont) {
+    $uiReq = $cont->initialized('request');
+
+    return (object) [
+        'user'        => $uiReq ? $cont->request->getUser() : null,
+        'envId'       => $uiReq && $cont->request->getEnvironment() ? $cont->request->getEnvironment()->id : null,
+        'remoteAddr'  => $uiReq ? $cont->request->getRemoteAddr() : null,
+        'ruid'        => $uiReq && $cont->request instanceof Scalr_UI_Request ? Scalr_Session::getInstance()->getRealUserId() : null,
+        'requestType' => null,
+        'systemTask'  => null,
+    ];
+});
+
+$container->setShared('auditlogger', function ($cont) {
+    $m = $cont->get('auditlogger.metadata');
+
+    return new AuditLogger($m->user, $m->envId, $m->remoteAddr, $m->ruid, $m->requestType, $m->systemTask);
+});
+

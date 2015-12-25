@@ -2,7 +2,6 @@
 
 namespace Scalr\Model;
 
-use Scalr\Exception;
 use ReflectionClass;
 
 /**
@@ -15,12 +14,18 @@ use ReflectionClass;
  */
 abstract class AbstractGetter
 {
+
+    /**
+     * Reflections static cache
+     *
+     * @var ReflectionClass
+     */
     private $reflection;
 
     /**
      * Gets reflection class
      *
-     * @return \ReflectionClass
+     * @return ReflectionClass
      */
     public function _getReflectionClass()
     {

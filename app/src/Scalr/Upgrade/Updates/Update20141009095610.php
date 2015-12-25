@@ -52,8 +52,14 @@ class Update20141009095610 extends AbstractUpdate implements SequenceInterface
             /* @var Image $imObj */
             $i['env_id'] = $i['env_id'] == 0 ? NULL : $i['env_id'];
 
-            $imObj = Image::findOne([['id' => $i['image_id']], ['$or' => [['envId' => $i['env_id']], ['envId' => NULL]]], ['platform' => $i['platform']], ['cloudLocation' => $i['cloud_location']]]);
-            if (! $imObj) {
+            $imObj = Image::findOne([
+                ['id'            => $i['image_id']],
+                ['$or'           => [['envId' => $i['env_id']], ['envId' => null]]],
+                ['platform'      => $i['platform']],
+                ['cloudLocation' => $i['cloud_location']]
+            ]);
+
+            if (!$imObj) {
                 $imObj = new Image();
                 $imObj->id = $i['image_id'];
                 $imObj->envId = $i['env_id'];

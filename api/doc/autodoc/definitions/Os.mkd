@@ -1,0 +1,131 @@
+# `Os` #
+
+
+
+
+
+
+
+## Properties ##
+
+### `version` (required) ###
+
+
+
+
+Property of type: `string`.
+
+
+
+
+### `name` (required, filterable) ###
+
+A human-readable name for this OS.
+
+
+Property of type: `string`.
+
+
+To filter on this field, use: `name=...`.
+
+
+### `id` (required, filterable) ###
+
+An ID uniquely identifying this OS in Scalr.
+
+
+Property of type: `string`.
+
+
+To filter on this field, use: `id=...`.
+
+
+### `generation` (required, filterable) ###
+
+
+
+
+Property of type: `string`.
+
+
+To filter on this field, use: `generation=...`.
+
+
+### `family` (required, filterable) ###
+
+
+
+
+Property of type: `string`.
+
+ 
+The following are valid values for the `family` property:
+  + `oel`
+  + `debian`
+  + `ubuntu`
+  + `rhel`
+  + `redhat`
+  + `centos`
+  + `amazon`
+  + `windows`
+
+To filter on this field, use: `family=...`.
+
+
+
+
+## Used in ##
+
+  + [`/os/{osId}/`](./../rest/api/v1beta0/account/os/{osId}/)
+  + [`/{envId}/os/{osId}/`](./../rest/api/v1beta0/user/{envId}/os/{osId}/)
+
+## Swagger Definition ##
+
+    {
+      "required": [
+        "id", 
+        "name", 
+        "family", 
+        "generation", 
+        "version"
+      ], 
+      "x-usedIn": [
+        "/os/{osId}/", 
+        "/{envId}/os/{osId}/"
+      ], 
+      "properties": {
+        "generation": {
+          "type": "string"
+        }, 
+        "version": {
+          "type": "string"
+        }, 
+        "id": {
+          "type": "string", 
+          "description": "An ID uniquely identifying this OS in Scalr."
+        }, 
+        "family": {
+          "enum": [
+            "oel", 
+            "debian", 
+            "ubuntu", 
+            "rhel", 
+            "redhat", 
+            "centos", 
+            "amazon", 
+            "windows"
+          ], 
+          "type": "string"
+        }, 
+        "name": {
+          "type": "string", 
+          "description": "A human-readable name for this OS."
+        }
+      }, 
+      "x-filterable": [
+        "id", 
+        "name", 
+        "family", 
+        "generation"
+      ]
+    }

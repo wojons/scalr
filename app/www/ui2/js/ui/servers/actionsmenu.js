@@ -1,6 +1,6 @@
 Ext.define('Scalr.ui.ServerMenu', {
-	extend: 'Scalr.ui.ActionsMenu',
-	alias: 'widget.servermenu',
+    extend: 'Scalr.ui.ActionsMenu',
+    alias: 'widget.servermenu',
 
     hideOptionInfo: false,
 
@@ -17,14 +17,20 @@ Ext.define('Scalr.ui.ServerMenu', {
             }
         },
         getVisibility: function(data) {
-            return Ext.Array.contains(['Importing', 'Pending launch', 'Temporary'], data['status']);
+            return  Ext.Array.contains(['Importing', 'Pending launch', 'Temporary'], data['status']) &&
+                    (
+                        !data['farm_id'] ||
+                        Scalr.isAllowed('FARMS', 'servers') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                    );
         }
     }, {
         iconCls: 'x-menu-icon-information',
         text: 'Check import status',
         href: '#/roles/import?serverId={server_id}',
         getVisibility: function(data) {
-            return data['status'] === 'Importing';
+            return Scalr.isAllowed('IMAGES_ENVIRONMENT', 'import') && data['status'] === 'Importing';
         }
     }, {
         iconCls: 'x-menu-icon-information',
@@ -39,17 +45,24 @@ Ext.define('Scalr.ui.ServerMenu', {
         text: 'Load statistics',
         href: '#/monitoring?farmId={farm_id}&farmRoleId={farm_roleid}&index={index}',
         getVisibility: function(data) {
-            return data['isScalarized'] == 1 && !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated', 'Suspended'], data['status']);
+            return  data['isScalarized'] == 1 &&
+                    !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Terminated', 'Suspended'], data['status']) && (
+                        Scalr.isAllowed('FARMS', 'statistics') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'statistics') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'statistics')
+                    );
         }
     },{
         iconCls: 'x-menu-icon-statsload',
         text: 'CloudWatch statistics',
         getVisibility: function(data) {
-            return data['platform'] === 'ec2' && data['status'] === 'Running';
+            return data['platform'] === 'ec2' && data['status'] === 'Running' && Scalr.isAllowed('AWS_CLOUDWATCH');
         },
         menuHandler: function (data) {
-            var location = data['cloud_location'].substring(0, (data['cloud_location'].length-2));
-            Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/cloudwatch?objectId=' + data['cloud_server_id'] + '&object=InstanceId&namespace=AWS/EC2&region=' + location);
+            var cloudLocation = data['cloud_location'];
+            cloudLocation = cloudLocation.split('/');
+            cloudLocation = cloudLocation[0];
+            Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/cloudwatch?objectId=' + data['cloud_server_id'] + '&object=InstanceId&namespace=AWS/EC2&region=' + cloudLocation);
         }
     }, {
         xtype: 'menuseparator'
@@ -58,15 +71,21 @@ Ext.define('Scalr.ui.ServerMenu', {
         iconCls: 'x-menu-icon-createserversnapshot',
         href: '#/servers/{server_id}/createSnapshot',
         getVisibility: function(data) {
-        	if (data['isScalarized'] != 1 || Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated'], data['status']))
-        		return false;
-        	else {
-        		if (data['status'] == 'Suspended') {
-        			return (data['os_family'] === 'windows');
-        		} else {
-        			return true;
-        		}
-        	}
+            if (!Scalr.isAllowed('IMAGES_ENVIRONMENT', 'manage')) return false;
+
+            if (data['isScalarized'] != 1 || Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Terminated'], data['status']))
+                return false;
+            else {
+                if (data['platform'] == 'azure') {
+                    return (data['status'] == 'Suspended');
+                } else {
+                    if (data['status'] == 'Suspended') {
+                        return (data['os_family'] === 'windows');
+                    } else {
+                        return true;
+                    }
+                }
+            }
 
             return true;
         }
@@ -77,7 +96,12 @@ Ext.define('Scalr.ui.ServerMenu', {
         text: 'Configure role in farm',
         href: '#/farms/designer?farmId={farm_id}&farmRoleId={farm_roleid}',
         getVisibility: function(data) {
-            return !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated'], data['status']);
+            return  !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Terminated'], data['status']) &&
+                    (
+                        Scalr.isAllowed('FARMS', 'manage') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'manage') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'manage')
+                    );
         }
     }, {
         xtype: 'menuseparator'
@@ -85,7 +109,12 @@ Ext.define('Scalr.ui.ServerMenu', {
         text: 'Exclude from DNS zone',
         iconCls: 'x-menu-icon-excludedns',
         getVisibility: function(data) {
-            return !data['excluded_from_dns'] && !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated', 'Suspended'], data['status']);
+            return  !data['excluded_from_dns'] && !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Terminated', 'Suspended'], data['status']) &&
+                    (
+                        Scalr.isAllowed('FARMS', 'servers') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                    );
         },
         request: {
             processBox: {
@@ -100,7 +129,12 @@ Ext.define('Scalr.ui.ServerMenu', {
         text: 'Include in DNS zone',
         iconCls: 'x-menu-icon-includedns',
         getVisibility: function(data) {
-            return data['excluded_from_dns'] && !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated', 'Suspended'], data['status']);
+            return  data['excluded_from_dns'] && !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Terminated', 'Suspended'], data['status']) &&
+                    (
+                        Scalr.isAllowed('FARMS', 'servers') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                    );
         },
         request: {
             processBox: {
@@ -118,7 +152,13 @@ Ext.define('Scalr.ui.ServerMenu', {
         iconCls: 'x-menu-icon-console',
         href: '#/servers/{server_id}/consoleoutput',
         getVisibility: function(data) {
-            return (data['platform'] === 'ec2' || data['platform'] === 'gce') && !Ext.Array.contains(['Terminated', 'Pending launch', 'Troubleshooting', 'Suspended'], data['status']);
+            return  (data['platform'] === 'ec2' || data['platform'] === 'gce') && !Ext.Array.contains(['Terminated', 'Pending launch', 'Suspended'], data['status']) &&
+                    (
+                        !data['farm_id'] ||
+                        Scalr.isAllowed('FARMS', 'servers') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                    );
         }
     },
     {
@@ -126,18 +166,16 @@ Ext.define('Scalr.ui.ServerMenu', {
         iconCls: 'x-menu-icon-console',
         showAsQuickAction: true,
         menuHandler: function (data) {
-            //var loadParams = this.up('servermenu').loadParams || {};
-            var userSettings = Scalr.user['settings'] || {},
-                sshLauncher = userSettings['ssh.console.launcher'] || 'applet';
-            if (sshLauncher === 'application'){
-                Scalr.cache['Scalr.ui.servers.sshconsole2'](data['server_id']);
-            } else {
-                Scalr.event.fireEvent('redirect', '#/servers/'+data['server_id']+'/sshConsole');
-            }
+            Scalr.event.fireEvent('redirect', '#/servers/' + data['server_id']+'/sshConsole');
         },
         getVisibility: function(data) {
             var moduleParams = this.up('servermenu').moduleParams || {};
-            return (Ext.Array.contains(['Running', 'Initializing', 'Pending'], data['status']) && (data['local_ip'] || data['remote_ip'])) && moduleParams['mindtermEnabled'] && data['os_family'] != 'windows';
+            return  (Ext.Array.contains(['Running', 'Initializing', 'Pending'], data['status']) && (data['local_ip'] || data['remote_ip'])) && moduleParams['mindtermEnabled'] && data['os_family'] != 'windows' &&
+                    (
+                        Scalr.isAllowed('FARMS', 'servers') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                    );
         }
     },
     {
@@ -145,7 +183,13 @@ Ext.define('Scalr.ui.ServerMenu', {
         iconCls: 'x-menu-icon-internalmessage',
         href: '#/servers/messages?serverId={server_id}',
         getVisibility: function(data) {
-            return data['isScalarized'] == 1 && !Ext.Array.contains(['Terminated', 'Troubleshooting'], data['status']);
+            return data['isScalarized'] == 1 && !Ext.Array.contains(['Terminated'], data['status']) &&
+                    (
+                        !data['farm_id'] ||
+                        Scalr.isAllowed('FARMS', 'servers') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                    );
         }
     },
     {
@@ -165,7 +209,14 @@ Ext.define('Scalr.ui.ServerMenu', {
             }));
         },
         getVisibility: function(data) {
-            return !Ext.Array.contains(['Terminated', 'Pending launch', 'Troubleshooting', 'Suspended'], data['status']) && !Ext.isWindows && data['os_family'] !== 'windows';
+            var format = Scalr.localStorage.get('system-preferred-sshkey-format') || (Ext.isWindows ? 'ppk' : 'pem');
+            return  Scalr.isAllowed('SECURITY_SSH_KEYS') && !Ext.Array.contains(['Terminated', 'Pending launch', 'Suspended'], data['status']) && format == 'pem' && data['os_family'] !== 'windows' &&
+                    (
+                        !data['farm_id'] ||
+                        Scalr.isAllowed('FARMS', 'servers') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                    );
         }
     }, {
         text: 'Download SSH Private key in PPK format',
@@ -185,14 +236,21 @@ Ext.define('Scalr.ui.ServerMenu', {
             }));
         },
         getVisibility: function(data) {
-            return !Ext.Array.contains(['Terminated', 'Pending launch', 'Troubleshooting', 'Suspended'], data['status']) && Ext.isWindows && data['os_family'] !== 'windows';
+            var format = Scalr.localStorage.get('system-preferred-sshkey-format') || (Ext.isWindows ? 'ppk' : 'pem');
+            return Scalr.isAllowed('SECURITY_SSH_KEYS') && !Ext.Array.contains(['Terminated', 'Pending launch', 'Suspended'], data['status']) && format == 'ppk' && data['os_family'] !== 'windows' &&
+                    (
+                        !data['farm_id'] ||
+                        Scalr.isAllowed('FARMS', 'servers') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                    );
         }
     }, {
         iconCls: 'x-menu-icon-key',
         text: 'Get administrator password',
         getVisibility: function(data) {
             // show get password in Pending status for development purposes
-            return data['os_family'] === 'windows' && (data['status'] === 'Running' || data['status'] === 'Initializing' || (data['status'] === 'Pending' && Scalr.flags['betaMode']));
+            return Scalr.isAllowed('SECURITY_RETRIEVE_WINDOWS_PASSWORDS') && data['os_family'] === 'windows' && (data['status'] === 'Running' || data['status'] === 'Initializing' || (data['status'] === 'Pending' && Scalr.flags['betaMode']));
         },
         request: {
             processBox: {
@@ -223,7 +281,7 @@ Ext.define('Scalr.ui.ServerMenu', {
                             }
                         } : {
                             xtype: 'displayfield',
-                			cls: 'x-form-field-warning',
+                            cls: 'x-form-field-warning',
                             value: data.encodedPassword ? 'Because you are using governance and we don\'t have the private key we can\'t decrypt the password.' : 'Empty password has been returned by AWS'
                         }]
                     }],
@@ -254,22 +312,27 @@ Ext.define('Scalr.ui.ServerMenu', {
         text: 'Execute script',
         href: '#/scripts/execute?serverId={server_id}',
         getVisibility: function(data) {
-            return data['isScalarized'] == 1 && !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated', 'Suspended'], data['status']);
+            return Scalr.isAllowed('SCRIPTS_ENVIRONMENT', 'execute') && data['isScalarized'] == 1 && !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Terminated', 'Suspended'], data['status']);
         }
     }, {
         iconCls: 'x-menu-icon-execute',
         text: 'Fire event',
         href: '#/scripts/events/fire?serverId={server_id}',
         getVisibility: function(data) {
-            return Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'fire') && !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated', 'Suspended'], data['status']);
+            return Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'fire') && !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Terminated', 'Suspended'], data['status']);
         }
     }, {
         xtype: 'menuseparator'
     }, {
         text: 'Set disableAPITermination flag',
         iconCls: 'x-menu-icon-setflag',
-        getVisibility: function(data) {
-            return data['platform'] === 'ec2' && data['is_locked'] === 0 && (data['status'] === 'Running' || data['status'] === 'Initializing');
+        getVisibility: function (data) {
+            return  data['platform'] === 'ec2' && data['is_locked'] === 0 && (data['status'] === 'Running' || data['status'] === 'Initializing' || data['status'] === 'Suspended') &&
+                    (
+                        Scalr.isAllowed('FARMS', 'servers') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                    );
         },
         request: {
             confirmBox: {
@@ -282,6 +345,31 @@ Ext.define('Scalr.ui.ServerMenu', {
             },
             url: '/servers/xLock/',
             dataHandler: function (data) {
+                return {serverId: data['server_id']};
+            }
+        }
+    }, {
+        text: 'Remove disableAPITermination flag',
+        iconCls: 'x-menu-icon-setflag',
+        getVisibility: function(data) {
+            return  data['platform'] === 'ec2' && data['is_locked'] === 1 && (data['status'] === 'Running' || data['status'] === 'Initializing' || data['status'] === 'Suspended' || data['status'] === 'Pending terminate') &&
+                    (
+                        Scalr.isAllowed('FARMS', 'servers') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                    );
+        },
+        request: {
+            confirmBox: {
+                type: 'action',
+                msg: 'Remove disableAPITermination flag on server "{server_id}" ?'
+            },
+            processBox: {
+                type: 'action',
+                msg: 'Removing disableAPITermination flag ...'
+            },
+            url: '/servers/xLock/',
+            dataHandler: function (data) {
                 return { serverId: data['server_id'] };
             }
         }
@@ -289,7 +377,12 @@ Ext.define('Scalr.ui.ServerMenu', {
         text: 'Reboot',
         iconCls: 'x-menu-icon-reboot',
         getVisibility: function(data) {
-            return !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Troubleshooting', 'Terminated', 'Suspended'], data['status']);
+            return  !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Terminated', 'Suspended'], data['status']) &&
+                    (
+                        Scalr.isAllowed('FARMS', 'servers') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                    );
         },
         menuHandler: function(data) {
             var me = this;
@@ -302,12 +395,17 @@ Ext.define('Scalr.ui.ServerMenu', {
         text: 'Terminate',
         showAsQuickAction: true,
         getVisibility: function(data) {
-            return !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Terminated'], data['status']);
+            return  !Ext.Array.contains(['Importing', 'Pending launch', 'Temporary', 'Terminated'], data['status']) &&
+                    (
+                        Scalr.isAllowed('FARMS', 'servers') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                    );
         },
         menuHandler: function(data) {
             var me = this,
                 forcefulDisabled = Scalr.isOpenstack(data['platform'], true) || data['platform'] === 'cloudstack';
-            Scalr.cache['Scalr.ui.servers.terminate']([data['server_id']], forcefulDisabled, function() {
+            Scalr.cache['Scalr.ui.servers.terminate']([data['server_id']], forcefulDisabled, data['scalingEnabled'], function() {
                 me.ownerCt.fireEvent('actioncomplete');
             });
         }
@@ -319,7 +417,13 @@ Ext.define('Scalr.ui.ServerMenu', {
             if (!osFamily && Ext.isObject(data['os'])) {
                 osFamily = data['os']['family'];
             }
-            return osFamily !== 'windows' && data['status'] === 'Suspended' && (data['platform'] === 'gce' || data['platform'] === 'ec2' || data['platform'] === 'cloudstack' || Scalr.isOpenstack(data['platform'], true));
+
+            return  data['status'] === 'Suspended' && (data['platform'] === 'gce' || data['platform'] === 'azure' || data['platform'] === 'ec2' || data['platform'] === 'cloudstack' || Scalr.isOpenstack(data['platform'], true)) &&
+                    (
+                        Scalr.isAllowed('FARMS', 'servers') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                    );
         },
         menuHandler: function(data) {
             var me = this;
@@ -335,39 +439,68 @@ Ext.define('Scalr.ui.ServerMenu', {
             if (!osFamily && Ext.isObject(data['os'])) {
                 osFamily = data['os']['family'];
             }
-            return osFamily !== 'windows' && data['status'] === 'Running' && (data['platform'] === 'gce' || data['platform'] === 'ec2' || data['platform'] === 'cloudstack' || Scalr.isOpenstack(data['platform'], true));
+            if (!(
+                Scalr.isAllowed('FARMS', 'servers') ||
+                data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+            )) {
+                return false
+            }
+            var visibility = data['status'] === 'Running' && (data['platform'] === 'gce' || data['platform'] === 'azure' || data['platform'] === 'ec2' || data['platform'] === 'cloudstack' || Scalr.isOpenstack(data['platform'], true));
+            visibility = data['suspendHidden'] ? false : visibility;
+            if (visibility) {
+                if (data['suspendEc2Locked']) {
+                    this.disable();
+                    this.setTooltip("The instance does not have an 'ebs' root device type and cannot be stopped");
+                } else {
+                    this.enable();
+                    this.setTooltip("");
+                }
+            }
+            return visibility;
         },
         menuHandler: function(data) {
             var me = this;
-            Scalr.cache['Scalr.ui.servers.suspend']([data['server_id']], function() {
-                me.ownerCt.fireEvent('actioncomplete');
-            });
+            if (! this.isDisabled()) {
+                Scalr.cache['Scalr.ui.servers.suspend']([data['server_id']], function() {
+                    me.ownerCt.fireEvent('actioncomplete');
+                });
+            }
         }
     }, {
         xtype: 'menuseparator'
     }, {
         text: 'Event Log',
         iconCls: 'x-menu-icon-events',
-        href: '#/logs/events?eventServerId={server_id}'
+        href: '#/logs/events?eventServerId={server_id}',
+        getVisibility: function(data) {
+            return Scalr.isAllowed('LOGS_EVENT_LOGS');
+        }
     }, {
         iconCls: 'x-menu-icon-logs',
         text: 'System Log',
         href: '#/logs/system?serverId={server_id}',
         getVisibility: function(data) {
-            return !Ext.Array.contains(['Troubleshooting', 'Suspended'], data['status']);
+            return Scalr.isAllowed('LOGS_SYSTEM_LOGS') && !Ext.Array.contains(['Suspended'], data['status']);
         }
     }, {
         iconCls: 'x-menu-icon-logs',
         text: 'Scripting Log',
         href: '#/logs/scripting?serverId={server_id}',
         getVisibility: function(data) {
-            return data['isScalarized'] == 1 && !Ext.Array.contains(['Troubleshooting', 'Suspended'], data['status']);
+            return Scalr.isAllowed('LOGS_SCRIPTING_LOGS') && data['isScalarized'] == 1 && !Ext.Array.contains(['Suspended'], data['status']);
         }
     }, {
         text: 'Delete server',
         iconCls: 'x-menu-icon-delete',
         getVisibility: function(data) {
-            return data['termination_error'] && (data['status'] === 'Pending terminate' || data['status'] === 'Terminated');
+            return  data['termination_error'] && (data['status'] === 'Pending terminate' || data['status'] === 'Terminated') &&
+                    (
+                        !data['farm_id'] ||
+                        Scalr.isAllowed('FARMS', 'servers') ||
+                        data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                        data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
+                    );
         },
         request: {
             confirmBox: {
@@ -387,7 +520,7 @@ Ext.define('Scalr.ui.ServerMenu', {
 });
 
 
-Scalr.regPage('Scalr.ui.servers.terminate', function (serverIds, forcefulDisabled, callback){
+Scalr.regPage('Scalr.ui.servers.terminate', function (serverIds, forcefulDisabled, scalingEnabled, callback){
     Scalr.Request({
         confirmBox: {
             type: 'terminate',
@@ -404,6 +537,7 @@ Scalr.regPage('Scalr.ui.servers.terminate', function (serverIds, forcefulDisable
                     xtype: 'checkbox',
                     boxLabel: 'Decrease \'Minimum servers\' setting',
                     inputValue: 1,
+                    hidden: !scalingEnabled,
                     name: 'descreaseMinInstancesSetting'
                 },{
                     xtype: 'checkbox',
@@ -534,52 +668,3 @@ Scalr.regPage('Scalr.ui.servers.resume', function (serverIds, callback){
         }
     });
 });
-
-Scalr.regPage('Scalr.ui.servers.sshconsole2', function (serverId){
-    Scalr.Request({
-        params: { serverId: serverId },
-        url: '/servers/getSshConsoleSettings/',
-        success: function(data) {
-            var id = Ext.id(),
-                frame = document.createElement('iframe'),
-                isSupported = false,
-                params = {
-                    host: data.settings['ip'],
-                    port: data.settings['ssh.console.port'],
-                    user: data.settings['ssh.console.username'],
-                    sshKeyName: data.settings['ssh.console.key_name'],
-                    sshPrivateKey: data.settings['ssh.console.key'],
-                    puttyPrivateKey: data.settings['ssh.console.putty_key'],
-                    ignoreHostKeys: 1,
-                    logLevel: data.settings['ssh.console.log_level'],
-                    disableKeyAuth: data.settings['ssh.console.disable_key_auth'],
-                    enableAgentForwarding: data.settings['ssh.console.enable_agent_forwarding'],
-                    preferredProvider: data.settings['ssh.console.preferred_provider'] || ''
-                };
-
-            onBlurEvent = function() {
-                isSupported = true;
-            }
-            Ext.fly(frame).set({
-                id: id,
-                name: id,
-                cls: Ext.baseCSSPrefix + 'hidden-display',
-                src: 'scalr+bar://?' + Ext.Object.toQueryString(params),
-                tabIndex: -1
-            });
-
-            Ext.fly(window).on('blur', onBlurEvent);
-            document.body.appendChild(frame);
-
-            Ext.defer(function(){
-                Ext.fly(window).un('blur', onBlurEvent);
-                Ext.defer(Ext.removeNode, 100, Ext, [frame]);
-                if (!isSupported) {
-                    Scalr.message.Warning('Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut in mauris venenatis, elementum arcu egestas, fermentum urna. Donec sit amet metus nec sem tristique egestas. Nulla sit amet commodo sapien. In consectetur ante nunc, nec interdum risus luctus at. Cras sit amet tincidunt tellus, eget venenatis tellus. Etiam sit amet erat sed enim finibus venenatis. Nunc maximus imperdiet massa in facilisis.');
-                }
-            }, 500);
-
-        }
-    });
-});
-

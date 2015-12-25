@@ -21,7 +21,7 @@ class Scalr_System_Ipc_ShmSet implements Scalr_Util_Set
      * @key array [items]
      */
     function __construct ($config) {
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
 
         $this->initialConfig = $config;
         $this->shm = new Scalr_System_Ipc_Shm($config);

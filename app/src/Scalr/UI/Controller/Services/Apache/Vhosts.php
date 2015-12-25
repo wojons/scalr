@@ -29,6 +29,8 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
 
     public function xRemoveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_APACHE, Acl::PERM_SERVICES_APACHE_MANAGE);
+
         $this->request->defineParams(array(
             'vhosts' => array('type' => 'json')
         ));
@@ -67,6 +69,8 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
 
     public function editAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_APACHE, Acl::PERM_SERVICES_APACHE_MANAGE);
+
         $params = array(
             'sslCertificates' => Entity\SslCertificate::getList($this->getEnvironmentId())
         );
@@ -111,11 +115,15 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
 
     public function createAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_APACHE, Acl::PERM_SERVICES_APACHE_MANAGE);
+
         $this->editAction();
     }
 
     public function xSaveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SERVICES_APACHE, Acl::PERM_SERVICES_APACHE_MANAGE);
+
         $validator = new Scalr_Validator();
 
         try {

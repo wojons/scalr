@@ -12,6 +12,7 @@ class FarmRoleStorageConfig
             $rebuild,
             $mount,
             $mountPoint,
+            $label,
             $status,
             $settings;
 
@@ -29,6 +30,8 @@ class FarmRoleStorageConfig
     const TYPE_CSVOL = 'csvol';
     const TYPE_CINDER = 'cinder';
     const TYPE_GCE_PD = 'gce_persistent';
+    const TYPE_EC2_EPHEMERAL = 'ec2_ephemeral';
+    const TYPE_GCE_EPHEMERAL = 'gce_ephemeral';
 
     const SETTING_RAID_LEVEL = 'raid.level';
     const SETTING_RAID_VOLUMES_COUNT = 'raid.volumes_count';
@@ -49,9 +52,16 @@ class FarmRoleStorageConfig
     const SETTING_EBS_SIZE = 'ebs.size';
     const SETTING_EBS_TYPE = 'ebs.type';
     const SETTING_EBS_IOPS = 'ebs.iops';
+    const SETTING_EBS_DEVICE_NAME = 'ebs.device_name';
     const SETTING_EBS_SNAPSHOT = 'ebs.snapshot';
     const SETTING_EBS_ENCRYPTED = 'ebs.encrypted';
     const SETTING_EBS_KMS_KEY_ID = 'ebs.kms_key_id';
+
+    const SETTING_EC2_EPHEMERAL_NAME = 'ec2_ephemeral.name';
+    const SETTING_EC2_EPHEMERAL_SIZE = 'ec2_ephemeral.size';
+
+    const SETTING_GCE_EPHEMERAL_NAME = 'gce_ephemeral.name';
+    const SETTING_GCE_EPHEMERAL_SIZE = 'gce_ephemeral.size';
 
     const STATE_PENDING_DELETE = 'Pending delete';
     const STATE_PENDING_CREATE = 'Pending create';
@@ -94,6 +104,7 @@ class FarmRoleStorageConfig
         $this->reUse = $data['re_use'];
         $this->mount = $data['mount'];
         $this->mountPoint = $data['mountpoint'];
+        $this->label = $data['label'];
         $this->rebuild = $data['rebuild'];
         $this->status = $data['status'];
         $this->settings = array();
@@ -104,72 +115,44 @@ class FarmRoleStorageConfig
         return $this;
     }
 
-    public function create(array $config)
+    /**
+     * Apply properties from config to object
+     *
+     * @param   array   $config     Storage config
+     * @return  FarmRoleStorageConfig
+     */
+    public function apply(array $config)
     {
-        $deleteFlag = false;
-
+        $settings = [];
         $type = $config['type'];
-        $settings = array();
-
-        if (! (in_array($type, array(self::TYPE_RAID_EBS, self::TYPE_RAID_CSVOL, self::TYPE_RAID_CINDER, self::TYPE_EBS, self::TYPE_CSVOL, self::TYPE_CINDER, self::TYPE_GCE_PD, self::TYPE_RAID_GCE_PD)))) {
-            throw new FarmRoleStorageException('[Storage] Invalid type');
-        }
 
         if ($type == self::TYPE_CSVOL || $type == self::TYPE_RAID_CSVOL) {
-            $volSize = intval($config['settings'][self::SETTING_CSVOL_SIZE]);
-
             $settings[self::SETTING_CSVOL_SNAPSHOT] = $config['settings'][self::SETTING_CSVOL_SNAPSHOT];
-            $settings[self::SETTING_CSVOL_SIZE] = $volSize;
+            $settings[self::SETTING_CSVOL_SIZE] = intval($config['settings'][self::SETTING_CSVOL_SIZE]);
             $settings[self::SETTING_CSVOL_DISK_OFFERING] = $config['settings'][self::SETTING_CSVOL_DISK_OFFERING];
             $settings[self::SETTING_CSVOL_DISK_OFFERING_TYPE] = $config['settings'][self::SETTING_CSVOL_DISK_OFFERING_TYPE];
+
         } elseif ($type == self::TYPE_CINDER || $type == self::TYPE_RAID_CINDER) {
-            $volSize = intval($config['settings'][self::SETTING_CINDER_SIZE]);
-
-            if ($volSize < 1 || $volSize > 1024)
-                throw new FarmRoleStorageException('Volume size should be from 1 to 1024 GB');
-
             $settings[self::SETTING_CINDER_SNAPSHOT] = $config['settings'][self::SETTING_CINDER_SNAPSHOT];
             $settings[self::SETTING_CINDER_VOLUME_TYPE] = $config['settings'][self::SETTING_CINDER_VOLUME_TYPE];
-            $settings[self::SETTING_CINDER_SIZE] = $volSize;
-        } elseif ($type == self::TYPE_GCE_PD || $type == self::TYPE_RAID_GCE_PD) {
-            $volSize = intval($config['settings'][self::SETTING_GCE_PD_SIZE]);
+            $settings[self::SETTING_CINDER_SIZE] = intval($config['settings'][self::SETTING_CINDER_SIZE]);
 
+        } elseif ($type == self::TYPE_GCE_PD || $type == self::TYPE_RAID_GCE_PD) {
             $settings[self::SETTING_GCE_PD_SNAPSHOT] = $config['settings'][self::SETTING_GCE_PD_SNAPSHOT];
-            $settings[self::SETTING_GCE_PD_SIZE] = $volSize;
+            $settings[self::SETTING_GCE_PD_SIZE] = intval($config['settings'][self::SETTING_GCE_PD_SIZE]);
 
             if (isset($config['settings'][self::SETTING_GCE_PD_TYPE])) {
-                if (!in_array($config['settings'][self::SETTING_GCE_PD_TYPE], array('pd-standard', 'pd-ssd')))
-                    throw new FarmRoleStorageException('Invalid GCE disk type');
-
                 $settings[self::SETTING_GCE_PD_TYPE] = $config['settings'][self::SETTING_GCE_PD_TYPE];
             }
 
         } elseif ($type == self::TYPE_EBS || $type == self::TYPE_RAID_EBS) {
-            $ebsSize = intval($config['settings'][self::SETTING_EBS_SIZE]);
-            $ebsType = $config['settings'][self::SETTING_EBS_TYPE];
-            $ebsIops = intval($config['settings'][self::SETTING_EBS_IOPS]);
-            $ebsSnapshot = $config['settings'][self::SETTING_EBS_SNAPSHOT];
+            $settings[self::SETTING_EBS_SIZE] = intval($config['settings'][self::SETTING_EBS_SIZE]);
+            $settings[self::SETTING_EBS_TYPE] = $config['settings'][self::SETTING_EBS_TYPE];
+            $settings[self::SETTING_EBS_SNAPSHOT] = $config['settings'][self::SETTING_EBS_SNAPSHOT];
 
-            if (! in_array($ebsType, array('standard', 'io1', 'gp2')))
-                throw new FarmRoleStorageException('EBS type should be standard, gp2 or io1');
-
-            if ($ebsSize < 1 || $ebsSize > 1024)
-                throw new FarmRoleStorageException('EBS size should be from 1 to 1024 GB');
-
-            $settings[self::SETTING_EBS_SIZE] = $ebsSize;
-            $settings[self::SETTING_EBS_TYPE] = $ebsType;
-
-            if ($ebsType == 'io1') {
-                if ($ebsIops < 100 || $ebsIops > 2000)
-                    throw new FarmRoleStorageException('EBS iops should be from 100 to 2000');
-
-                if (($ebsIops / $ebsSize) > 10)
-                    throw new FarmRoleStorageException(sprintf('Invalid ratio. You should increase volume size to %d GB or decrease volume iops to %d', (int) $ebsIops/10, $ebsSize * 10));
-
-                $settings[self::SETTING_EBS_IOPS] = $ebsIops;
+            if ($settings[self::SETTING_EBS_TYPE] == 'io1') {
+                $settings[self::SETTING_EBS_IOPS] = intval($config['settings'][self::SETTING_EBS_IOPS]);
             }
-
-            $settings[self::SETTING_EBS_SNAPSHOT] = $ebsSnapshot;
 
             if ($type == self::TYPE_EBS) {
                 $settings[self::SETTING_EBS_ENCRYPTED] = !empty($config['settings'][self::SETTING_EBS_ENCRYPTED]) ? 1 : 0;
@@ -177,38 +160,118 @@ class FarmRoleStorageConfig
                     $settings[self::SETTING_EBS_KMS_KEY_ID] = $config['settings'][self::SETTING_EBS_KMS_KEY_ID];
                 }
             }
+        } elseif ($type == self::TYPE_EC2_EPHEMERAL) {
+            $settings[self::SETTING_EC2_EPHEMERAL_NAME] = $config['settings'][self::SETTING_EC2_EPHEMERAL_NAME];
+            $settings[self::SETTING_EC2_EPHEMERAL_SIZE] = intval($config['settings'][self::SETTING_EC2_EPHEMERAL_SIZE]);
+        } elseif ($type == self::TYPE_GCE_EPHEMERAL) {
+            $settings[self::SETTING_GCE_EPHEMERAL_NAME] = $config['settings'][self::SETTING_GCE_EPHEMERAL_NAME];
+            $settings[self::SETTING_GCE_EPHEMERAL_SIZE] = intval($config['settings'][self::SETTING_GCE_EPHEMERAL_SIZE]);
         }
 
-        // TODO: validate raid, cvsol
         $settings[self::SETTING_RAID_LEVEL] = $config['settings'][self::SETTING_RAID_LEVEL];
         $settings[self::SETTING_RAID_VOLUMES_COUNT] = $config['settings'][self::SETTING_RAID_VOLUMES_COUNT];
 
-        if ($config['id']) {
-            $this->loadById($config['id']);
+        $this->id = $config['id'];
+        $this->type = $type;
+        $this->fs = $config['fs'];
+        $this->status = $config['status'];
+        $this->reUse = !empty($config['reUse']) ? 1 : NULL;
+        $this->rebuild = !empty($config['rebuild']) ? 1 : NULL;
+        $this->mount = !empty($config['mount']) ? 1 : NULL;
+        $this->mountPoint = $config['mountPoint'];
+        $this->label = $config['label'];
+        $this->settings = $settings;
+        return $this;
+    }
+
+    /**
+     * Validate current object
+     *
+     * @return  string|true  Return true if object valid or string on error
+     */
+    public function validate()
+    {
+        if (! in_array($this->type, [self::TYPE_RAID_EBS, self::TYPE_RAID_CSVOL, self::TYPE_RAID_CINDER, self::TYPE_EBS, self::TYPE_CSVOL, self::TYPE_CINDER, self::TYPE_GCE_PD, self::TYPE_RAID_GCE_PD, self::TYPE_EC2_EPHEMERAL, self::TYPE_GCE_EPHEMERAL])) {
+            return '[Storage] Invalid type';
+        }
+
+        if ($this->type == self::TYPE_CINDER || $this->type == self::TYPE_RAID_CINDER) {
+            if ($this->settings[self::SETTING_CINDER_SIZE] < 1 || $this->settings[self::SETTING_CINDER_SIZE] > 1024)
+                return 'Volume size should be from 1 to 1024 GB';
+
+        } elseif (($this->type == self::TYPE_GCE_PD || $this->type == self::TYPE_RAID_GCE_PD) && isset($this->settings[self::SETTING_GCE_PD_TYPE])) {
+            if (!in_array($this->settings[self::SETTING_GCE_PD_TYPE], ['pd-standard', 'pd-ssd']))
+                return 'Invalid GCE disk type';
+
+        } elseif ($this->type == self::TYPE_EBS || $this->type == self::TYPE_RAID_EBS) {
+            if (! in_array($this->settings[self::SETTING_EBS_TYPE], ['standard', 'io1', 'gp2']))
+                return 'EBS type should be standard, gp2 or io1';
+
+            if ($this->settings[self::SETTING_EBS_TYPE] == 'standard' && ($this->settings[self::SETTING_EBS_SIZE] < 1 || $this->settings[self::SETTING_EBS_SIZE] > 1024)) {
+                return 'EBS size should be from 1 to 1024 GB';
+            }
+
+            if ($this->settings[self::SETTING_EBS_TYPE] == 'gp2' && ($this->settings[self::SETTING_EBS_SIZE] < 1 || $this->settings[self::SETTING_EBS_SIZE] > 16384)) {
+                return 'EBS size should be from 1 to 16384 GB';
+            }
+
+            if ($this->settings[self::SETTING_EBS_TYPE] == 'io1') {
+                if ($this->settings[self::SETTING_EBS_IOPS] < 100 || $this->settings[self::SETTING_EBS_IOPS] > 20000)
+                    return 'EBS iops should be from 100 to 20000';
+
+                if (($this->settings[self::SETTING_EBS_IOPS] / $this->settings[self::SETTING_EBS_SIZE]) > 30)
+                    return sprintf(
+                        'Invalid ratio. You should increase volume size to %d GB or decrease volume iops to %d',
+                        (int) $this->settings[self::SETTING_EBS_IOPS]/30,
+                        $this->settings[self::SETTING_EBS_SIZE] * 30
+                    );
+            }
+
+            // TODO: validate KMS_KEY_ID
+        }
+
+        // TODO: validate raid, cvsol
+
+        return true;
+    }
+
+    /**
+     * Create new FarmRoleStorageConfig based on input config
+     *
+     * @param   FarmRoleStorageConfig   $config
+     */
+    public function create(FarmRoleStorageConfig $config)
+    {
+        $deleteFlag = false;
+
+        if ($config->id) {
+            $this->loadById($config->id);
 
             if ($this->status == self::STATE_PENDING_CREATE) {
-                if ($config['status'] == self::STATE_PENDING_DELETE) {
+                if ($config->status == self::STATE_PENDING_DELETE) {
                     // mark for delete on save
                     $deleteFlag = true;
                 } else {
-                    $this->type = $config['type'];
-                    $this->fs = $config['fs'];
-                    $this->reUse = !empty($config['reUse']) ? 1 : NULL;
-                    $this->rebuild = !empty($config['rebuild']) ? 1 : NULL;
-                    $this->mount = !empty($config['mount']) ? 1 : NULL;
-                    $this->mountPoint = $config['mountPoint'];
+                    $this->type = $config->type;
+                    $this->fs = $config->fs;
+                    $this->reUse = $config->reUse;
+                    $this->rebuild = $config->rebuild;
+                    $this->mount = $config->mount;
+                    $this->mountPoint = $config->mountPoint;
+                    $this->label = $config->label;
                 }
-            } elseif ($config['status'] == self::STATE_PENDING_DELETE) {
+            } elseif ($config->status == self::STATE_PENDING_DELETE) {
                 $this->status = self::STATE_PENDING_DELETE;
             }
         } else {
             $this->id = \Scalr::GenerateUID();
-            $this->type = $config['type'];
-            $this->fs = $config['fs'];
-            $this->reUse = !empty($config['reUse']) ? 1 : NULL;
-            $this->rebuild = !empty($config['rebuild']) ? 1 : NULL;
-            $this->mount = !empty($config['mount']) ? 1 : NULL;
-            $this->mountPoint = $config['mountPoint'];
+            $this->type = $config->type;
+            $this->fs = $config->fs;
+            $this->reUse = $config->reUse;
+            $this->rebuild = $config->rebuild;
+            $this->mount = $config->mount;
+            $this->mountPoint = $config->mountPoint;
+            $this->label = $config->label;
             $this->status = self::STATE_PENDING_CREATE;
         }
 
@@ -217,7 +280,7 @@ class FarmRoleStorageConfig
             return;
         }
 
-        $this->settings = $settings;
+        $this->settings = $config->settings;
         $this->save();
     }
 
@@ -233,8 +296,9 @@ class FarmRoleStorageConfig
             rebuild = ?,
             mount = ?,
             mountpoint = ?,
+            label = ?,
             status = ?
-        ON DUPLICATE KEY UPDATE `index` = ?, `type` = ?, fs = ?, re_use = ?, `rebuild` = ?, mount = ?, mountpoint = ?, status = ?
+        ON DUPLICATE KEY UPDATE `index` = ?, `type` = ?, fs = ?, re_use = ?, `rebuild` = ?, mount = ?, mountpoint = ?, label = ?, status = ?
         ", array(
             $this->id,
             $this->farmRole->ID,
@@ -245,6 +309,7 @@ class FarmRoleStorageConfig
             $this->rebuild,
             $this->mount,
             $this->mountPoint,
+            $this->label,
             $this->status,
 
             $this->index,
@@ -254,6 +319,7 @@ class FarmRoleStorageConfig
             $this->rebuild,
             $this->mount,
             $this->mountPoint,
+            $this->label,
             $this->status
         ));
 

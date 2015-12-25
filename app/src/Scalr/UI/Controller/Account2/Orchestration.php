@@ -1,4 +1,5 @@
 <?php
+use Scalr\Acl\Acl;
 use Scalr\UI\Request\JsonData;
 
 class Scalr_UI_Controller_Account2_Orchestration extends Scalr_UI_Controller
@@ -10,7 +11,8 @@ class Scalr_UI_Controller_Account2_Orchestration extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        $this->request->restrictAccess(\Scalr\Acl\Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION);
+        $this->request->restrictAccess(Acl::RESOURCE_ORCHESTRATION_ACCOUNT);
+
         $this->response->page('ui/account2/orchestration/view.js', array(
             'orchestrationRules' => $this->getOrchestrationRules(),
             'scriptData' => \Scalr\Model\Entity\Script::getScriptingData($this->user->getAccountId(), null)
@@ -22,7 +24,8 @@ class Scalr_UI_Controller_Account2_Orchestration extends Scalr_UI_Controller
      */
     public function xSaveAction(JsonData $orchestrationRules)
     {
-        $this->request->restrictAccess(\Scalr\Acl\Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION);
+        $this->request->restrictAccess(Acl::RESOURCE_ORCHESTRATION_ACCOUNT, Acl::PERM_ORCHESTRATION_ACCOUNT_MANAGE);
+
         $ids = array();
         foreach ($orchestrationRules as $rule) {
             // TODO: check permission for script_id
@@ -99,12 +102,12 @@ class Scalr_UI_Controller_Account2_Orchestration extends Scalr_UI_Controller
 
     public function xGetListAction()
     {
-        $this->response->data(array('data' => $this->getOrchestrationRules()));
+        $this->response->data(['data' => $this->getOrchestrationRules()]);
     }
 
     public function getOrchestrationRules()
     {
-        $rules = array();
+        $rules = [];
 
         $dbRules = $this->db->Execute("
             SELECT account_scripts.*, scripts.name AS script_name, scripts.os

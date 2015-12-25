@@ -38,7 +38,7 @@ class UserTest extends TestCase
 
         $this->assertInstanceOf('Scalr\Model\Entity\Account\Environment', $environment);
 
-        $entityIterator = User::result(User::RESULT_ENTITY_ITERATOR)->find(null, null, 10);
+        $entityIterator = User::result(User::RESULT_ENTITY_ITERATOR)->find(null, null, null, 10);
         $this->assertInstanceOf('Scalr\Model\Collections\EntityIterator', $entityIterator);
         $this->assertNotEmpty($entityIterator->count());
         $this->assertNotEmpty($entityIterator->getArrayCopy());
@@ -51,12 +51,12 @@ class UserTest extends TestCase
             $this->assertEquals(User::TYPE_SCALR_ADMIN, $item->type);
         }
 
-        $arrayCollection = User::result(User::RESULT_ENTITY_COLLECTION)->find(null, null, 10);
+        $arrayCollection = User::result(User::RESULT_ENTITY_COLLECTION)->find(null, null, null, 10);
         $this->assertInstanceOf('Scalr\Model\Collections\ArrayCollection', $arrayCollection);
         $this->assertNotEmpty($arrayCollection->count());
         $this->assertNotEmpty($arrayCollection->getArrayCopy());
 
-        $rs = User::result(User::RESULT_RAW)->find(null, null, 10);
+        $rs = User::result(User::RESULT_RAW)->find(null, null, null, 10);
         $this->assertInstanceOf('ADORecordSet', $rs);
         foreach ($rs as $item) {
             $this->assertNotEmpty($item);

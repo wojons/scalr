@@ -57,7 +57,7 @@ class Update20140211014306 extends AbstractUpdate implements SequenceInterface
 
     private function getOpenStackOption($platform, $name)
     {
-        return $platform . "." . constant("Scalr\\Modules\\Platforms\\Openstack\\OpenstackPlatformModule::" . $name);
+        return $platform . "." . constant("Scalr\\Model\\Entity\\CloudCredentialsProperty::OPENSTACK_{$name}");
     }
 
     /**

@@ -26,6 +26,8 @@ class Scalr_UI_Controller_Tools_Cloudstack_Ips extends Scalr_UI_Controller
 
     public function xRemoveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_CLOUDSTACK_PUBLIC_IPS, Acl::PERM_CLOUDSTACK_PUBLIC_IPS_MANAGE);
+
         $this->request->defineParams(array(
             'ipId' => array('type' => 'json'),
             'cloudLocation'
@@ -60,8 +62,10 @@ class Scalr_UI_Controller_Tools_Cloudstack_Ips extends Scalr_UI_Controller
 
         $cs = $this->environment->cloudstack($platformName);
 
-        $accountName = $platform->getConfigVariable(CloudstackPlatformModule::ACCOUNT_NAME, $this->getEnvironment(), false);
-        $domainId = $platform->getConfigVariable(CloudstackPlatformModule::DOMAIN_ID, $this->getEnvironment(), false);
+        $ccProps = $this->environment->cloudCredentials($platformName)->properties;
+
+        $accountName = $ccProps[\Scalr\Model\Entity\CloudCredentialsProperty::CLOUDSTACK_ACCOUNT_NAME];
+        $domainId = $ccProps[\Scalr\Model\Entity\CloudCredentialsProperty::CLOUDSTACK_DOMAIN_ID];
 
         $requestData = new ListIpAddressesData();
         $requestData->account = $accountName;
@@ -69,7 +73,7 @@ class Scalr_UI_Controller_Tools_Cloudstack_Ips extends Scalr_UI_Controller
         $requestData->zoneid = $this->getParam('cloudLocation');
         $ipAddresses = $cs->listPublicIpAddresses($requestData);
 
-        $systemIp = $platform->getConfigVariable(CloudstackPlatformModule::SHARED_IP.".".$this->getParam('cloudLocation'), $this->environment);
+        $systemIp = $ccProps[\Scalr\Model\Entity\CloudCredentialsProperty::CLOUDSTACK_SHARED_IP.".{$this->getParam('cloudLocation')}"];
 
         $ips = array();
         if (!empty($ipAddresses)) {

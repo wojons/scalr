@@ -7,6 +7,9 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
             {name: 'variables', title: '<span style="position:relative;top:-10px">Global<br/>variables</span>'}
         ];
     tabsConfig.push({name: 'chef', title: 'Chef', cls: 'x-btn-tab-small-dark', hidden: !Ext.Array.contains(moduleParams['role']['behaviors'], 'chef')});
+    if (Scalr.scope === 'account') {
+        tabsConfig.push({name: 'environments', title: 'Permissions', cls: 'x-btn-tab-small-dark'});
+    }
 
     if (!Ext.isArray(moduleParams['role']['images'])) {
         moduleParams['role']['images'] = [];
@@ -17,6 +20,7 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
 
     if (loadParams['image']) {
         moduleParams['role']['images'].push({
+            hash: loadParams['image']['hash'],
             imageId: loadParams['image']['id'],
             platform: loadParams['image']['platform'],
             cloudLocation: loadParams['image']['cloudLocation'],
@@ -33,23 +37,24 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
         }
     }
 
-	var panel = Ext.create('Ext.panel.Panel', {
+    var panel = Ext.create('Ext.panel.Panel', {
         scalrOptions: {
-			maximize: 'all',
+            maximize: 'all',
             menuParentStateId: 'grid-roles-manager',
-            menuHref: '#/roles',
+            menuHref: '#' + Scalr.utils.getUrlPrefix() + '/roles',
             menuTitle: 'Roles',
             menuSubTitle: 'Role Editor',
             menuFavorite: Scalr.scope === 'environment'
-		},
+        },
         layout: 'card',
         minWidth: 1200,
-		dockedItems: [{
+        dockedItems: [{
             xtype: 'container',
             itemId: 'tabs',
             dock: 'left',
             cls: 'x-docked-tabs',
-            width: 112,
+            overflowY: 'auto',
+            width: 112 + Ext.getScrollbarSize().width,
             defaults: {
                 xtype: 'button',
                 ui: 'tab',
@@ -89,16 +94,17 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
                 handler: function() {
                     var me = this,
                         valid = true,
+                        error,
                         roleParams = moduleParams['role'],
                         tabButton;
                     panel.items.each(function(item){
                         if (Ext.isFunction(item.getSubmitValues)) {
                             tabButton = panel.getDockedComponent('tabs').down('[tabId="'+item.itemId+'"]');
                             if (tabButton.isVisible()) {
-                                if (Ext.isFunction(item.isValid) && !item.isValid(roleParams)) {
+                                if (Ext.isFunction(item.isValid) && (error = item.isValid(roleParams)) !== true) {
                                     tabButton.toggle(true);
                                     Scalr.message.Flush();
-                                    Scalr.message.Error('Please fix errors on "' + tabButton.text + '" tab before saving.');
+                                    Scalr.message.Error('Please fix errors on "' + tabButton.text + '" tab before saving' + (error ? ': <br>' + error : '.'));
                                     panel.layout.setActiveItem(item);
                                     valid = false;
                                     return false;
@@ -123,10 +129,10 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
                             params: params,
                             success: function (data) {
                                 if (params.roleId == 0) {
-                                    Scalr.event.fireEvent('redirect', '#/roles?roleId=' + data.role.id);
+                                    Scalr.event.fireEvent('redirect', '#' + Scalr.utils.getUrlPrefix() + '/roles?roleId=' + data.role.id);
                                 } else {
                                     Scalr.event.fireEvent('update', '/roles/edit', data.role);
-                                    Scalr.event.fireEvent('redirect', '#/roles');
+                                    Scalr.event.fireEvent('redirect', '#' + Scalr.utils.getUrlPrefix() + '/roles');
                                 }
                             }
                         });
@@ -177,15 +183,15 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
             }
             this.layout.setActiveItem(itemId);
         },
-		listeners: {
+        listeners: {
             afterrender: {
                 fn: function() {
                     this.getDockedComponent('tabs').items.first().toggle(true);
                 },
                 single: true
             }
-		}
+        }
     });
 
-	return panel;
+    return panel;
 });

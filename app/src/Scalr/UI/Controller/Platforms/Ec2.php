@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Service\Aws;
+use Scalr\Service\Aws\Ec2\DataType\ResourceTagSetData;
 use Scalr\Service\Aws\Ec2\DataType\SecurityGroupList;
 use Scalr\Service\Aws\Ec2\DataType\SnapshotFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\AddressFilterNameType;
@@ -9,6 +11,7 @@ use Scalr\Model\Entity\CloudResource;
 use Scalr\Service\Aws\Ec2\DataType\RouteTableFilterNameType;
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 use Scalr\Modules\PlatformFactory;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
 {
@@ -26,6 +29,7 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
 
             $farmRoleService = CloudResource::findPk(
                 $elb->loadBalancerName,
+                CloudResource::TYPE_AWS_ELB,
                 $this->environment->id,
                 \SERVER_PLATFORMS::EC2,
                 $this->getParam('cloudLocation')
@@ -93,39 +97,69 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
         $this->response->data(array('data' => $retval));
     }
 
-    public function xGetSnapshotsAction()
+    /**
+     * @param string $cloudLocation
+     * @param string $query
+     * @param int    $limit
+     * @param string $nextToken
+     */
+    public function xGetSnapshotsAction($cloudLocation, $query = null, $limit = null, $nextToken = null)
     {
-        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
+        $aws = $this->getEnvironment()->aws($cloudLocation);
 
-        $response = $aws->ec2->snapshot->describe(null, null, array(array(
-            'name'  => SnapshotFilterNameType::ownerId(),
-            'value' => $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID),
-        ), array(
-            'name'  => SnapshotFilterNameType::status(),
-            'value' => SnapshotData::STATUS_COMPLETED,
-        )));
+        $filters = [
+            [
+                'name'  => SnapshotFilterNameType::status(),
+                'value' => SnapshotData::STATUS_COMPLETED,
+            ]
+        ];
 
-        $data = array();
-        /* @var $pv \Scalr\Service\Aws\Ec2\DataType\SnapshotData */
-        foreach ($response as $pv) {
-            if ($pv->status == SnapshotData::STATUS_COMPLETED) {
-                $data[] = array(
-                    // old format
-                    'snapid'        => $pv->snapshotId,
-                    'createdat'     => Scalr_Util_DateTime::convertTz($pv->startTime),
-                    'size'          => $pv->volumeSize,
-                    // new format
-                    'snapshotId'    => $pv->snapshotId,
-                    'createdDate'   => Scalr_Util_DateTime::convertTz($pv->startTime),
-                    'size'          => $pv->volumeSize,
-                    'volumeId'      => $pv->volumeId,
-                    'description'   => (string)$pv->description,
-                    'encrypted'     => $pv->encrypted
-                );
+        if ($query) {
+            if (strpos($query, 'snap-') === 0) {
+                $filters[] = [
+                    'name'  => SnapshotFilterNameType::snapshotId(),
+                    'value' => $query . '*',
+                ];
+            } elseif (strpos($query, 'vol-') === 0) {
+                $filters[] = [
+                    'name'  => SnapshotFilterNameType::volumeId(),
+                    'value' => $query . '*',
+                ];
+            } else {
+                $filters[] = [
+                    'name'  => SnapshotFilterNameType::description(),
+                    'value' => '*' . $query . '*',
+                ];
             }
+
         }
 
-        $this->response->data(array('data' => $data));
+        $response = $aws->ec2->snapshot->describe(null, [$this->getEnvironment()->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID]], $filters, null, $query ? null : $nextToken, $query ? null : $limit);
+
+        $data = array();
+        $count = 0;
+        /* @var $pv \Scalr\Service\Aws\Ec2\DataType\SnapshotData */
+        foreach ($response as $pv) {
+            $count++;
+            $data[] = array(
+                // old format
+                'snapid'        => $pv->snapshotId,
+                'createdat'     => Scalr_Util_DateTime::convertTz($pv->startTime),
+                'size'          => $pv->volumeSize,
+                // new format
+                'snapshotId'    => $pv->snapshotId,
+                'createdDate'   => Scalr_Util_DateTime::convertTz($pv->startTime),
+                'volumeSize'    => $pv->volumeSize,
+                'volumeId'      => $pv->volumeId,
+                'description'   => (string)$pv->description,
+                'encrypted'     => $pv->encrypted
+            );
+        }
+
+        $this->response->data([
+            'data' => $data,
+            'nextToken' => $response->getNextToken()
+        ]);
     }
 
     public function xGetSubnetsListAction()
@@ -158,91 +192,147 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
         ));
     }
 
-    public function xGetVpcListAction($cloudLocation = null)
+    /**
+     * xGetVpcListAction
+     *
+     * @param string $cloudLocation     Aws region
+     * @param string $serviceName       optional Service name (rds, elb ...)
+     * @throws Exception
+     */
+    public function xGetVpcListAction($cloudLocation, $serviceName = null)
     {
         $aws = $this->getEnvironment()->aws($cloudLocation);
 
-        $vpcList = $aws->ec2->vpc->describe();
-        $vpcSglist = $aws->ec2->securityGroup->describe();
+        $services = [Aws::SERVICE_INTERFACE_ELB, Aws::SERVICE_INTERFACE_RDS];
 
-        $rows = array();
+        $vpcList = $aws->ec2->vpc->describe();
+
+        if (isset($serviceName) && in_array($serviceName, $services)) {
+            $vpcSglist = $aws->ec2->securityGroup->describe();
+        }
+
+        $rows = [];
 
         foreach ($vpcList as $vpcData) {
             /* @var $vpcData Scalr\Service\Aws\Ec2\DataType\VpcData */
             $name = 'No name';
 
             foreach ($vpcData->tagSet as $tag) {
+                /* @var $tag ResourceTagSetData */
                 if ($tag->key == 'Name') {
                     $name = $tag->value;
                     break;
                 }
             }
 
-            $rows[] = array(
-                'id'                        => $vpcData->vpcId,
-                'name'                      => "{$name} - {$vpcData->vpcId} ({$vpcData->cidrBlock}, Tenancy: {$vpcData->instanceTenancy})",
-                'defaultSecurityGroups'     => $this->getDefaultSgRow($vpcSglist, $vpcData->vpcId)
-            );
+            $row = [
+                'id'     => $vpcData->vpcId,
+                'name'   => "{$name} - {$vpcData->vpcId} ({$vpcData->cidrBlock}, Tenancy: {$vpcData->instanceTenancy})",
+            ];
+
+            if (isset($vpcSglist)) {
+                $row['defaultSecurityGroups'] = $this->getDefaultSgRow($vpcSglist, $vpcData->vpcId, $serviceName);
+            }
+
+            $rows[] = $row;
         }
 
         $platform = PlatformFactory::NewPlatform(\SERVER_PLATFORMS::EC2);
         $default = $platform->getDefaultVpc($this->getEnvironment(), $cloudLocation);
 
-        $this->response->data(array(
+        $this->response->data([
             'vpc'     => $rows,
             'default' => !empty($default) ? $default : null
-        ));
+        ]);
     }
 
-    public function xGetDefaultVpcSegurityGroupsAction($cloudLocation, $vpcId)
+    /**
+     * xGetDefaultVpcSegurityGroupsAction
+     *
+     * @param string $cloudLocation     Aws region
+     * @param string $vpcId             Vpc id
+     * @param string $serviceName       optional Service name (rds, elb ...)
+     */
+    public function xGetDefaultVpcSegurityGroupsAction($cloudLocation, $vpcId, $serviceName = null)
     {
         $aws = $this->getEnvironment()->aws($cloudLocation);
         $vpcSglist = $aws->ec2->securityGroup->describe();
 
-        $this->response->data(['data' => $this->getDefaultSgRow($vpcSglist, $vpcId)]);
+        $this->response->data(['data' => $this->getDefaultSgRow($vpcSglist, $vpcId, $serviceName)]);
     }
 
     /**
      * Gets default vpc security group list
      *
-     * @param SecurityGroupList   $vpcSglist
-     * @param string    $vpcId
+     * @param SecurityGroupList   $sgList
+     * @param string              $vpcId
+     * @param string              $serviceName Service name (rds, elb ...)
      * @return array
      */
-    private function getDefaultSgRow($vpcSglist, $vpcId)
+    private function getDefaultSgRow($sgList, $vpcId, $serviceName = null)
     {
         $governance = new Scalr_Governance($this->getEnvironmentId());
-        $values = $governance->getValues(true);
+        $governanceSecurityGroups = $governance->getValue(SERVER_PLATFORMS::EC2, Scalr_Governance::getEc2SecurityGroupPolicyNameForService($serviceName), null);
 
-        if (!empty($values['ec2']['aws.additional_security_groups']->value)) {
-            $sgDefaultNames = explode(',', $values['ec2']['aws.additional_security_groups']->value);
-        }
-
+        $vpcSgList = [];
+        $sgDefaultNames = [];
+        $wildCardSgDefaultNames = [];
         $defaultSecurityGroups = [];
-        $vpcSgNames = [];
 
-        foreach ($vpcSglist as $vpcSg) {
-            /* @var $vpcSg Scalr\Service\Aws\Ec2\DataType\SecurityGroupData */
-            if (!empty($sgDefaultNames)) {
-                if ($vpcSg->vpcId == $vpcId && in_array($vpcSg->groupName, $sgDefaultNames)) {
-                    $defaultSecurityGroups[] = [
-                        'securityGroupId'   => $vpcSg->groupId,
-                        'securityGroupName' => $vpcSg->groupName
-                    ];
-                }
-                $vpcSgNames[] = $vpcSg->groupName;
-            } else if ($vpcSg->vpcId == $vpcId && $vpcSg->groupName == 'default') {
-                $defaultSecurityGroups[] = [
-                    'securityGroupId'   => $vpcSg->groupId,
-                    'securityGroupName' => $vpcSg->groupName
-                ];
-
-                break;
+        foreach ($sgList as $sg) {
+            if ($sg->vpcId == $vpcId) {
+                $vpcSgList[$sg->groupName] = $sg->groupId;
             }
         }
 
+        if (!empty($governanceSecurityGroups['value'])) {
+            $sgs = explode(',', $governanceSecurityGroups['value']);
+            foreach ($sgs as $sg) {
+                if ($sg != '') {
+                    array_push($sgDefaultNames, trim($sg));
+                    if (strpos($sg, '*') !== false) {
+                        array_push($wildCardSgDefaultNames, trim($sg));
+                    }
+                }
+            }
+            unset($sgs);
+        }
+
         if (!empty($sgDefaultNames)) {
-            $missingSgs = array_diff($sgDefaultNames, $vpcSgNames);
+            $foundVpcSgNames = [];
+            foreach ($sgDefaultNames as $groupName) {
+                if (!isset($vpcSgList[$groupName])) {
+                    if (in_array($groupName, $wildCardSgDefaultNames)) {
+                        $wildCardMatchedSgs = [];
+                        $groupNamePattern = \Scalr_Governance::convertAsteriskPatternToRegexp($groupName);
+                        foreach ($vpcSgList as $sgGroupName => $sgGroupId) {
+                            if (preg_match($groupNamePattern, $sgGroupName) === 1) {
+                                array_push($wildCardMatchedSgs, $sgGroupName);
+                            }
+                        }
+                        if (count($wildCardMatchedSgs) == 1) {
+                            $defaultSecurityGroups[] = [
+                                'securityGroupId'   => $vpcSgList[$wildCardMatchedSgs[0]],
+                                'securityGroupName' => $wildCardMatchedSgs[0]
+                            ];
+                        } else {
+                            $defaultSecurityGroups[] = [
+                                'securityGroupId'   => null,//empty($wildCardMatchedSgs) ? null : $wildCardMatchedSgs,
+                                'securityGroupName' => $groupName
+                            ];
+                        }
+                        $foundVpcSgNames[] = $groupName;
+                    }
+                } else {
+                    $defaultSecurityGroups[] = [
+                        'securityGroupId'   => $vpcSgList[$groupName],
+                        'securityGroupName' => $groupName
+                    ];
+                    $foundVpcSgNames[] = $groupName;
+                }
+            }
+
+            $missingSgs = array_diff($sgDefaultNames, $foundVpcSgNames);
 
             foreach ($missingSgs as $missingSg) {
                 $defaultSecurityGroups[] = [
@@ -250,6 +340,12 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
                     'securityGroupName' => $missingSg
                 ];
             }
+
+        } elseif (isset($vpcSgList['default']) && empty($governanceSecurityGroups)) {
+            $defaultSecurityGroups[] = [
+                'securityGroupId'   => $vpcSgList['default'],
+                'securityGroupName' => 'default'
+            ];
         }
 
         return $defaultSecurityGroups;
@@ -279,14 +375,14 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
             $dbFarmRole = DBFarmRole::LoadByID($farmRoleId);
             $this->user->getPermissions()->validate($dbFarmRole);
 
-            $maxInstances = $dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES);
+            $maxInstances = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MAX_INSTANCES);
             for ($i = 1; $i <= $maxInstances; $i++) {
                 $map[] = array('serverIndex' => $i);
             }
 
             $servers = $dbFarmRole->GetServersByFilter();
             for ($i = 0; $i < count($servers); $i++) {
-                if ($servers[$i]->status != SERVER_STATUS::TERMINATED && $servers[$i]->status != SERVER_STATUS::TROUBLESHOOTING && $servers[$i]->index) {
+                if ($servers[$i]->status != SERVER_STATUS::TERMINATED && $servers[$i]->index) {
                     $map[$servers[$i]->index - 1]['serverIndex'] = $servers[$i]->index;
                     $map[$servers[$i]->index - 1]['serverId'] = $servers[$i]->serverId;
                     $map[$servers[$i]->index - 1]['remoteIp'] = $servers[$i]->remoteIp;
@@ -297,6 +393,9 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
             $ips = $this->db->GetAll('SELECT ipaddress, instance_index FROM elastic_ips WHERE farm_roleid = ?', array($dbFarmRole->ID));
             for ($i = 0; $i < count($ips); $i++) {
                 $map[$ips[$i]['instance_index'] - 1]['elasticIp'] = $ips[$i]['ipaddress'];
+                if (!isset($map[$ips[$i]['instance_index'] - 1]['serverIndex'])) {
+                    $map[$ips[$i]['instance_index'] - 1]['serverIndex'] = (int)$ips[$i]['instance_index'];
+                }
             }
         }
 

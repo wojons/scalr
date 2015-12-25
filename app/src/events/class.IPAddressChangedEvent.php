@@ -1,6 +1,6 @@
 <?php
 
-class IPAddressChangedEvent extends Event
+class IPAddressChangedEvent extends AbstractServerEvent
 {
 
     /**

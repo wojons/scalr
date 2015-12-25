@@ -10,6 +10,8 @@ use Scalr\Stats\CostAnalytics\Entity\SettingEntity;
 use Scalr\Stats\CostAnalytics\Entity\TagEntity;
 use Scalr\Stats\CostAnalytics\Iterator\ChartPeriodIterator;
 use Scalr\Exception\AnalyticsException;
+use Scalr\Model\Entity;
+use Scalr\UI\Request\Validator;
 
 class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controller
 {
@@ -67,7 +69,7 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
     {
         $scope = $this->request->getScope();
 
-        $this->request->restrictAccess(Acl::RESOURCE_ADMINISTRATION_ANALYTICS, Acl::PERM_ADMINISTRATION_ANALYTICS_MANAGE_PROJECTS);
+        $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_ACCOUNT, Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS);
 
         if (!empty($projectId)) {
             $project = $this->getContainer()->analytics->projects->get($projectId);
@@ -145,7 +147,13 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
      */
     public function xSaveAction($projectId, $name, $description, $billingCode, $leadEmail, $ccId = null)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_ADMINISTRATION_ANALYTICS, Acl::PERM_ADMINISTRATION_ANALYTICS_MANAGE_PROJECTS);
+        $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_ACCOUNT, Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS);
+
+        $validator = new Validator();
+        $validator->validate($name, 'name', Validator::NOEMPTY);
+
+        if (!$validator->isValid($this->response))
+            return;
 
         if ($projectId) {
             $project = $this->getContainer()->analytics->projects->get($projectId);
@@ -223,7 +231,7 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
      */
     public function xRemoveAction($projectId)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_ADMINISTRATION_ANALYTICS, Acl::PERM_ADMINISTRATION_ANALYTICS_MANAGE_PROJECTS);
+        $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_ACCOUNT, Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS);
 
         $project = $this->getContainer()->analytics->projects->get($projectId);
         if ($project) {
@@ -243,7 +251,7 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
         }
 
         $this->response->data(array('removable' => $removable));
-        $this->response->success();
+        $this->response->success('Project successfully ' . ($removable ? 'removed' : 'archived'));
     }
 
     /**
@@ -281,7 +289,7 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
             JOIN farm_settings fs ON f.id = fs.farmid
             WHERE fs.name = ?
             AND f.clientid = ?
-        ", [DBFarm::SETTING_PROJECT_ID, $this->user->getAccountId()]);
+        ", [Entity\FarmSetting::PROJECT_ID, $this->user->getAccountId()]);
 
         while ($rec = $rs->fetchRow()) {
             $assignedProjects[$rec['value']] = true;

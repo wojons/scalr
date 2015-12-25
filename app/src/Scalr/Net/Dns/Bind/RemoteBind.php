@@ -13,7 +13,7 @@ class Scalr_Net_Dns_Bind_RemoteBind
 
     function __construct()
     {
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
     }
 
     function setTransport(Scalr_Net_Dns_Bind_Transport $transport)

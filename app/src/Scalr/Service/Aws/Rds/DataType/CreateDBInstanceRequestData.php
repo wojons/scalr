@@ -149,6 +149,13 @@ class CreateDBInstanceRequestData extends AbstractRdsDataType
     public $dBSubnetGroupName;
 
     /**
+     * The identifier of the DB cluster that the instance will belong to.
+     *
+     * @var string
+     */
+    public $dBClusterIdentifier;
+
+    /**
      * Provides the name of the database engine to be used for this DB Instance.
      *
      * Valid Values: MySQL | oracle-se1 | oracle-se | oracle-ee | sqlserver-ee |
@@ -177,6 +184,25 @@ class CreateDBInstanceRequestData extends AbstractRdsDataType
      * @var int
      */
     public $iops;
+
+    /**
+     * The KMS key identifier for an encrypted DB instance.
+     *
+     * The KMS key identifier is the Amazon Resoure Name (ARN) for
+     * the KMS encryption key. If you are creating a DB instance
+     * with the same AWS account that owns the KMS encryption key
+     * used to encrypt the new DB instance, then you can use
+     * the KMS key alias instead of the ARN for the KM encryption key.
+     *
+     * If the StorageEncrypted parameter is true, and you do
+     * not specify a value for the KmsKeyId parameter,
+     * then Amazon RDS will use your default encryption key.
+     * AWS KMS creates the default encryption key for your AWS account.
+     * Your AWS account has a different default encryption key for each AWS region.
+     *
+     * @var string
+     */
+    public $kmsKeyId;
 
     /**
      * License model information for this DB Instance
@@ -339,22 +365,16 @@ class CreateDBInstanceRequestData extends AbstractRdsDataType
      * Constructor
      *
      * @param   string     $dBInstanceIdentifier A user-supplied database identifier
-     * @param   int        $allocatedStorage     The allocated storage size specified in gigabytes
      * @param   string     $dBInstanceClass      The name of the compute and memory capacity class of the DB Instance
      * @param   string     $engine               The name of the database engine to be used for this DB Instance
-     * @param   string     $masterUsername       The master username
-     * @param   string     $masterUserPassword   The password
      */
-    public function __construct($dBInstanceIdentifier, $allocatedStorage, $dBInstanceClass,
-                                $engine, $masterUsername, $masterUserPassword)
+    public function __construct($dBInstanceIdentifier, $dBInstanceClass,
+                                $engine)
     {
         parent::__construct();
         $this->dBInstanceIdentifier = (string) $dBInstanceIdentifier;
-        $this->allocatedStorage = (int) $allocatedStorage;
         $this->dBInstanceClass = (string) $dBInstanceClass;
         $this->engine = (string) $engine;
-        $this->masterUsername = (string) $masterUsername;
-        $this->masterUserPassword = (string) $masterUserPassword;
     }
 
     /**

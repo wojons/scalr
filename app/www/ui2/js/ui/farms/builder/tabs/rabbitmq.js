@@ -4,7 +4,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Rabbitmq', {
     itemId: 'rabbitmq',
 
     cls: 'x-panel-column-left-with-tabs',
-    
+
     settings: {
         'rabbitmq.data_storage.engine': function(record){return record.getRabbitMQDefaultStorageEngine()},
         'rabbitmq.data_storage.ebs.size': 2,
@@ -100,7 +100,9 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Rabbitmq', {
             fieldLabel: 'Storage size (max. 1000 GB)',
             labelWidth: 210,
             width: 400,
-            name: 'rabbitmq.data_storage.ebs.size'
+            name: 'rabbitmq.data_storage.ebs.size',
+            vtype: 'num',
+            allowBlank: false
         }]
     }]
 });

@@ -33,9 +33,9 @@ class ListResultEnvelope extends AbstractDataType
     public $pagination;
 
     /**
-     * List of the warnings
+     * Warnings object
      *
-     * @var array
+     * @var Warnings
      */
     public $warnings;
 
@@ -44,7 +44,7 @@ class ListResultEnvelope extends AbstractDataType
      */
     public function __construct()
     {
-        $this->meta = \Scalr::getContainer()->api->meta;
-        $this->warnings = [];
+        $this->meta     = \Scalr::getContainer()->api->meta;
+        $this->warnings = \Scalr::getContainer()->api->warnings;
     }
 }

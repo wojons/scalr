@@ -28,13 +28,12 @@ Feature: Load statistics
           | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.api_port'  | '8010'                                                     |
           | 'a0000000-0000-0000-0000-000000000001' | 'scalarizr.key'       | '8mYTcBxiE70DtXCBRjn7AMuTQNzBJJcTa5uFok24X40ePafq1gUyyg==' |
     
+        White Rabbit starts rrdcached service
         White Rabbit starts api server on port 8010
         White Rabbit starts api server on port 80
-        White Rabbit starts rrdcached service
         White Rabbit starts script with options '-c ../../../tests/etc/config.yml -v DEBUG --poller --daemon'
         White Rabbit waits 5 seconds
         White Rabbit checks rrdcached
-        White Rabbit waits 5 seconds
         White Rabbit checks rrd files
         White Rabbit stops script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         White Rabbit stops rrdcached service

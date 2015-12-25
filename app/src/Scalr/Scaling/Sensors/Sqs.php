@@ -7,12 +7,12 @@ class Scalr_Scaling_Sensors_Sqs extends Scalr_Scaling_Sensor
 
     public function __construct()
     {
-
     }
 
     public function getValue(DBFarmRole $dbFarmRole, Scalr_Scaling_FarmRoleMetric $farmRoleMetric)
     {
         $sqs = $dbFarmRole->GetFarmObject()->GetEnvironmentObject()->aws($dbFarmRole)->sqs;
+
         try {
             $sqs->enableEntityManager();
             $queue = $sqs->queue->getAttributes($farmRoleMetric->getSetting(self::SETTING_QUEUE_NAME));
@@ -20,6 +20,7 @@ class Scalr_Scaling_Sensors_Sqs extends Scalr_Scaling_Sensor
         } catch (Exception $e) {
             throw new Exception(sprintf("SQSScalingSensor failed during SQS request: %s", $e->getMessage()));
         }
+
         return array($retval);
     }
 }

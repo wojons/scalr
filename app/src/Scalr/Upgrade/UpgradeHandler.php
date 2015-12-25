@@ -224,10 +224,15 @@ class UpgradeHandler
 
     /**
      * Loads updates from the implemented classes
+     *
+     * @retrun bool Returns TRUE if all updates loaded successful, FALSE otherwise
      */
     protected function loadUpdates()
     {
         $this->fetchStatusBefore();
+
+        $success = true;
+
         foreach (new UpdatesIterator(self::getPathToUpdates()) as $fileInfo) {
             /* @var $fileInfo \SplFileInfo */
             $updateClass = __NAMESPACE__ . '\\Updates\\' . substr($fileInfo->getFilename(), 0, 20);
@@ -236,15 +241,22 @@ class UpgradeHandler
                 $update = new $updateClass($fileInfo, $this->stateBefore);
                 $this->updates[$update->getUuidHex()] = $update;
             } catch (\Exception $e) {
-                $this->console->error("Error. Cound not load update %s. %s", $fileInfo->getPathname(), $e->getMessage());
+                $this->console->error("Error. Could not load update %s. %s", $fileInfo->getPathname(), $e->getMessage());
+                $success = false;
             }
         }
+
+        return $success;
     }
 
     /**
      * Applies update
      *
-     * @param   AbstractUpdate   $upd   Update to apply
+     * @param   AbstractUpdate $upd Update to apply
+     *
+     * @return bool Returns true if update is successful, false otherwise
+     *
+     * @throws Exception\UpgradeException
      */
     protected function applyUpdate(AbstractUpdate $upd)
     {
@@ -274,29 +286,31 @@ class UpgradeHandler
         if ($upd->getStatus() == AbstractUpgradeEntity::STATUS_OK) {
             //Upgrade file is updated.
             $upd->updateAppears();
-            //Compare checksum
-            if ($upd->getEntity()->hash == $upd->getHash()) {
-                //file modified time could be the issue
-                $upd->updateApplied();
-                $upd->getEntity()->save();
-
-                if (!empty($this->opt->verbosity) ||
-                    isset($this->opt->cmd) && $this->opt->cmd == self::CMD_RUN_SPECIFIC && $this->opt->uuid == $upd->getUuidHex()) {
-                    $this->console->warning('Ingnoring %s because of having complete status.', $upd->getName());
-                }
-
-                return true;
-            } if ($upd->getIgnoreChanges()) {
-                //We should ignore changes in the script and update hash
-                $upd->updateHash();
-                $upd->getEntity()->save();
-
-                return true;
-            } else {
-                //Update script has been changed and needs to be re-executed
+            if (isset($this->opt->cmd) && $this->opt->cmd == self::CMD_RUN_SPECIFIC && $this->opt->uuid == $upd->getUuidHex()) {
+                //User has requested re-execution of update
                 $upd->setStatus(AbstractUpgradeEntity::STATUS_PENDING);
                 $upd->updateHash();
                 $upd->getEntity()->save();
+            } else {
+                //Compare checksum
+                if ($upd->getEntity()->hash == $upd->getHash()) {
+                    //file modified time could be the issue
+                    $upd->updateApplied();
+                    $upd->getEntity()->save();
+
+                    if (!empty($this->opt->verbosity) ||
+                        isset($this->opt->cmd) && $this->opt->cmd == self::CMD_RUN_SPECIFIC && $this->opt->uuid == $upd->getUuidHex()) {
+                        $this->console->warning('Ingnoring %s because of having complete status.', $upd->getName());
+                    }
+
+                    return true;
+                } else {
+                    //We should ignore changes in the script and update hash
+                    $upd->updateHash();
+                    $upd->getEntity()->save();
+
+                    return true;
+                }
             }
         }
 
@@ -491,24 +505,26 @@ class UpgradeHandler
 
     /**
      * Runs upgrade process
+     *
+     * @return bool Returns true if all updates completed successfully, false otherwise
      */
     public function run()
     {
         if (!self::checkPid()) {
             $this->console->warning("Cannot start a new process because another one has already been started.");
-            return;
+            return false;
         }
 
         register_shutdown_function('Scalr\Upgrade\UpgradeHandler::removePid');
 
         //Loads updates
-        $this->loadUpdates();
+        $successful = $this->loadUpdates();
 
         if (isset($this->opt->cmd) && $this->opt->cmd == self::CMD_RUN_SPECIFIC) {
             $pending = [];
             if (!isset($this->updates[$this->opt->uuid])) {
                 $this->console->warning("Could not find specified update %s", $this->opt->uuid);
-                exit();
+                exit(1);
             }
             $pending[] = $this->updates[$this->opt->uuid];
         } else {
@@ -518,7 +534,7 @@ class UpgradeHandler
 
         if (count($pending) == 0) {
             $this->console->out('Scalr is up-to-date');
-            return;
+            return $successful;
         }
 
         $this->console->success('Starting Scalr upgrade');
@@ -526,9 +542,11 @@ class UpgradeHandler
         //Applies updates
         foreach ($pending as $update) {
             $update->console->interactive = $this->console->interactive;
-            $this->applyUpdate($update);
+            $successful = $this->applyUpdate($update) && $successful;
         }
 
         $this->console->success('Done');
+
+        return $successful;
     }
 }

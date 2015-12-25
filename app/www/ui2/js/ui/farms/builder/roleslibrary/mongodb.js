@@ -3,7 +3,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.mongodb', function () {
         xtype: 'fieldset',
         isExtraSettings: true,
         hidden: true,
-        
+
         title: 'Mongo over SSL',
         name: 'mongodb.ssl.enabled',
         toggleOnTitleClick: true,
@@ -11,7 +11,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.mongodb', function () {
         collapsed: true,
         collapsible: true,
         layout: 'anchor',
-        
+
         isVisibleForRole: function(record) {
             return Ext.Array.contains(record.get('behaviors'), 'mongodb');
         },
@@ -66,7 +66,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.mongodb', function () {
             plugins: [{
                 ptype: 'comboaddnew',
                 url: '/services/ssl/certificates/create',
-                disabled: !Scalr.isAllowed('SERVICES_SSL')
+                disabled: !Scalr.isAllowed('SERVICES_SSL', 'manage')
             }],
             listeners: {
                 addnew: function(item) {

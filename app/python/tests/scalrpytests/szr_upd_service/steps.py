@@ -42,7 +42,7 @@ def answer(environ, start_response):
         security = rpc.Security(cryptotool.decrypt_key(crypto_key))
         data = json.loads(security.decrypt_data(environ['wsgi.input'].readline()))
 
-        server = lib.world.servers[server_id]
+        server = lib.world.servers["'%s'" % server_id]
 
         assert 'params' in data
         assert 'method' in data
@@ -65,7 +65,7 @@ def answer(environ, start_response):
             status = {
                 'server_id': server_id,
                 'repository': 'stable',
-                'repo_url': repos['stable'][server['os_type']],
+                'repo_url': repos['stable'][server['os_type'].strip("'")],
                 'executed_at': 'Mon 22 Sep 2014 12:00:00 UTC',
                 'state': '',
                 'error': '',
@@ -91,7 +91,7 @@ def answer_branch(environ, start_response):
         security = rpc.Security(cryptotool.decrypt_key(crypto_key))
         data = json.loads(security.decrypt_data(environ['wsgi.input'].readline()))
 
-        server = lib.world.servers[server_id]
+        server = lib.world.servers["'%s'" % server_id]
 
         assert 'params' in data
         assert 'method' in data
@@ -110,7 +110,7 @@ def answer_branch(environ, start_response):
             status = {
                 'server_id': server_id,
                 'repository': 'stable',
-                'repo_url': repos['stable'][server['os_type']],
+                'repo_url': repos['stable'][server['os_type'].strip("'")],
                 'executed_at': 'Mon 22 Sep 2014 12:00:00 UTC',
                 'state': '',
                 'error': '',
@@ -136,7 +136,7 @@ def answer_error(environ, start_response):
         security = rpc.Security(cryptotool.decrypt_key(crypto_key))
         data = json.loads(security.decrypt_data(environ['wsgi.input'].readline()))
 
-        server = lib.world.servers[server_id]
+        server = lib.world.servers["'%s'" % server_id]
 
         assert 'params' in data
         assert 'method' in data
@@ -160,7 +160,7 @@ def answer_error(environ, start_response):
             status = {
                 'server_id': server_id,
                 'repository': 'stable',
-                'repo_url': repos['stable'][server['os_type']],
+                'repo_url': repos['stable'][server['os_type'].strip("'")],
                 'executed_at': utcnow.strftime('%a %d %b %Y %H:%M:%S UTC'),
                 'state': u'error',
                 'error': u'Cool error',
@@ -220,13 +220,13 @@ def stop_vpc_router(step):
 
 
 @step(u"White Rabbit checks server with server_id '(.*)' was updated$")
-def check_update(step, server_id):
+def check_update1(step, server_id):
     assert server_id in lib.update_ok
     assert lib.update_ok[server_id]
 
 
 @step(u"White Rabbit checks server with server_id '(.*)' was updated (\d+) times$")
-def check_update(step, server_id, count):
+def check_update2(step, server_id, count):
     if int(count):
         assert server_id in lib.update_count
         assert lib.update_count[server_id] == int(count)

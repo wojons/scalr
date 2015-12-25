@@ -1,6 +1,6 @@
 <?php
 
-class RebundleCompleteEvent extends Event
+class RebundleCompleteEvent extends AbstractServerEvent
 {
     public $SnapshotID;
     public $BundleTaskID;

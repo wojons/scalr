@@ -2,6 +2,7 @@
 
 use Scalr\Acl\Acl;
 use Scalr\Modules\PlatformFactory;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 {
@@ -81,13 +82,13 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
         }
 
         if ($masterDbServer) {
-            $time = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME);
+            $time = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_PMA_REQUEST_TIME);
             if (!$time || $time+3600 < time()) {
                 $msg = new Scalr_Messaging_Msg_Mysql_CreatePmaUser($dbFarmRole->ID, \Scalr::config('scalr.ui.pma.server_ip'));
                 $masterDbServer->SendMessage($msg);
 
-                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME, time(), DBFarmRole::TYPE_LCL);
-                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_ERROR, "", DBFarmRole::TYPE_LCL);
+                $dbFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_PMA_REQUEST_TIME, time(), Entity\FarmRoleSetting::TYPE_LCL);
+                $dbFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_PMA_REQUEST_ERROR, "", Entity\FarmRoleSetting::TYPE_LCL);
 
                 $this->response->success();
             }
@@ -175,13 +176,13 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
             foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $dbServer) {
                 if ($dbServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER)) {
 
-                    if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING) == 1)
+                    if ($dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_IS_BUNDLE_RUNNING) == 1)
                         throw new Exception("Data bundle already in progress");
 
                     $dbServer->SendMessage(new Scalr_Messaging_Msg_Mysql_CreateDataBundle());
 
-                    $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING, 1);
-                    $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_SERVER_ID, $dbServer->serverId);
+                    $dbFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_IS_BUNDLE_RUNNING, 1);
+                    $dbFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_BUNDLE_SERVER_ID, $dbServer->serverId);
 
                     $this->response->success('Data bundle successfully initiated');
                     return;
@@ -216,7 +217,7 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
             throw new Exception("Role not found");
 
         if ($dbFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL)) {
-            if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING) == 1)
+            if ($dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_IS_BCP_RUNNING) == 1)
                 throw new Exception("Backup already in progress");
 
             foreach ($dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING)) as $dbServer) {
@@ -230,10 +231,10 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
                 $slaveDbServer = $masterDbServer;
 
             if ($slaveDbServer) {
-                $slaveDbServer->SendMessage(new Scalr_Messaging_Msg_Mysql_CreateBackup($dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_ROOT_PASSWORD)));
+                $slaveDbServer->SendMessage(new Scalr_Messaging_Msg_Mysql_CreateBackup($dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_ROOT_PASSWORD)));
 
-                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 1);
-                $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_BCP_SERVER_ID, $slaveDbServer->serverId);
+                $dbFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_IS_BCP_RUNNING, 1);
+                $dbFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_BCP_SERVER_ID, $slaveDbServer->serverId);
 
                 $this->response->success('Backup successfully initiated');
                 return;
@@ -304,15 +305,15 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
             SERVER_PLATFORMS::IDCF
         ));
 
-        if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_USER))
+        if ($dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_PMA_USER))
             $data['pmaAccessConfigured'] = true;
         else
         {
 
-            $errmsg = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_ERROR);
+            $errmsg = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_PMA_REQUEST_ERROR);
             if (!$errmsg)
             {
-                $time = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME);
+                $time = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_PMA_REQUEST_TIME);
                 if ($time)
                 {
                     if ($time+3600 < time())
@@ -328,11 +329,11 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
         if ($dbFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL)) {
             $data['dbType'] = Scalr_Db_Msr::DB_TYPE_MYSQL;
 
-            $data['dtLastBundle'] = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_LAST_BUNDLE_TS) ? Scalr_Util_DateTime::convertTz((int)$dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_LAST_BUNDLE_TS), 'd M Y \a\\t H:i:s') : 'Never';
-            $data['dtLastBackup'] = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_LAST_BCP_TS) ? Scalr_Util_DateTime::convertTz((int)$dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_LAST_BCP_TS), 'd M Y \a\\t H:i:s') : 'Never';
+            $data['dtLastBundle'] = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_LAST_BUNDLE_TS) ? Scalr_Util_DateTime::convertTz((int)$dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_LAST_BUNDLE_TS), 'd M Y \a\\t H:i:s') : 'Never';
+            $data['dtLastBackup'] = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_LAST_BCP_TS) ? Scalr_Util_DateTime::convertTz((int)$dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_LAST_BCP_TS), 'd M Y \a\\t H:i:s') : 'Never';
 
             $data['additionalInfo']['MasterUsername'] = 'scalr';
-            $data['additionalInfo']['MasterPassword'] = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_ROOT_PASSWORD);
+            $data['additionalInfo']['MasterPassword'] = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_ROOT_PASSWORD);
 
             $slaveNumber = 0;
 
@@ -344,12 +345,12 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
 
                 if ($dbServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) == 1)
                 {
-                    $data['isBundleRunning'] = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING);
-                    $data['bundleServerId'] = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_SERVER_ID);
+                    $data['isBundleRunning'] = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_IS_BUNDLE_RUNNING);
+                    $data['bundleServerId'] = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BUNDLE_SERVER_ID);
                 }
 
-                $data['isBackupRunning'] = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING);
-                $data['backupServerId'] = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BCP_SERVER_ID);
+                $data['isBackupRunning'] = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_IS_BCP_RUNNING);
+                $data['backupServerId'] = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BCP_SERVER_ID);
 
                 try
                    {
@@ -357,7 +358,7 @@ class Scalr_UI_Controller_Dbmsr extends Scalr_UI_Controller
                        $isMaster = ($dbServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) == 1);
 
                        if (!$isCloudstack) {
-                           $rStatus = $this->getMySqlReplicationStatus($isMaster ? 'MASTER' : 'SLAVE', $dbServer->remoteIp, 'scalr_stat', $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_STAT_PASSWORD));
+                           $rStatus = $this->getMySqlReplicationStatus($isMaster ? 'MASTER' : 'SLAVE', $dbServer->remoteIp, 'scalr_stat', $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_STAT_PASSWORD));
                        }
 
                     if ($isMaster) {

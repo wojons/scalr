@@ -8,7 +8,7 @@ define("NO_SESSIONS", true);
 
 require_once __DIR__ . "/../src/prepend.inc.php";
 
-$Logger = Logger::getLogger('Application');
+$Logger = \Scalr::getContainer()->logger('Application');
 
 $fname = basename($argv[0]);
 
@@ -29,21 +29,6 @@ if ($JobLauncher->GetProcessName() != 'DBQueueEvent') {
         exit();
     }
 }
-
-/*
-if ($JobLauncher->GetProcessName() == 'EBSManager') {
-    print "SET DEBUG LEVEL\n";
-    $Logger->removeAllAppenders();
-    $Logger->resetConfiguration();
-    $Logger->addAppender(new LoggerAppenderConsole());
-    $Logger->setLevel(LoggerOptionConverter::toLevel('DEBUG', LoggerLevel::getLevelDebug()));
-
-    Logger::getRootLogger()->removeAllAppenders();
-    Logger::getRootLogger()->resetConfiguration();
-    Logger::getRootLogger()->addAppender(new LoggerAppenderConsole());
-    Logger::getRootLogger()->setLevel(LoggerOptionConverter::toLevel('DEBUG', LoggerLevel::getLevelDebug()));
-}
-*/
 
 $Logger->info(sprintf("Starting %s cronjob...", $JobLauncher->GetProcessName()));
 $JobLauncher->Launch(7, 180);

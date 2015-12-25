@@ -13,6 +13,12 @@ use Scalr\Service\Aws\Rds\DataType\DBEngineVersionList;
  * @property  \Scalr\Service\Aws\Rds\Handler\DbInstanceHandler $dbInstance
  *            DBInstance service interface handler
  *
+ * @property  \Scalr\Service\Aws\Rds\Handler\DbClusterHandler $dbCluster
+ *            DBCluster service interface handler
+ *
+ * @property  \Scalr\Service\Aws\Rds\Handler\DbClusterSnapshotHandler $dbClusterSnapshot
+ *            DBClusterSnapshot service interface handler
+ *
  * @property  \Scalr\Service\Aws\Rds\Handler\DbSecurityGroupHandler $dbSecurityGroup
  *            DBSecurityGroup service interface handler
  *
@@ -65,7 +71,7 @@ class Rds extends AbstractService implements ServiceInterface
      */
     public function getAllowedEntities()
     {
-        return array('dbInstance', 'dbSecurityGroup', 'dbParameterGroup', 'dbSnapshot', 'event', 'dbSubnetGroup', 'optionGroup', 'tag');
+        return array('dbInstance', 'dbCluster', 'dbClusterSnapshot', 'dbSecurityGroup', 'dbParameterGroup', 'dbSnapshot', 'event', 'dbSubnetGroup', 'optionGroup', 'tag');
     }
 
     /**

@@ -3,12 +3,13 @@
 use Scalr\Acl\Acl;
 use Scalr\Farm\FarmLease;
 use Scalr\Model\Entity\SettingEntity;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Core_Governance_Lease extends Scalr_UI_Controller
 {
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_GOVERNANCE);
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_GOVERNANCE_ENVIRONMENT);
     }
 
     public function historyAction()
@@ -44,7 +45,7 @@ class Scalr_UI_Controller_Core_Governance_Lease extends Scalr_UI_Controller
             LEFT JOIN farms ON farms.id = fl.farm_id
             LEFT JOIN farm_settings fs ON fl.farm_id = fs.farmid
             WHERE fl.status = ? AND fs.name = ? AND farms.env_id = ? ORDER BY fs.value',
-            array(FarmLease::STATUS_PENDING, DBFarm::SETTING_LEASE_TERMINATE_DATE, $this->getEnvironmentId()));
+            array(FarmLease::STATUS_PENDING, Entity\FarmSetting::LEASE_TERMINATE_DATE, $this->getEnvironmentId()));
 
         $this->response->data(array('data' => $data));
     }
@@ -86,11 +87,11 @@ class Scalr_UI_Controller_Core_Governance_Lease extends Scalr_UI_Controller
 
                 if ($this->getParam('decision') == FarmLease::STATUS_APPROVE) {
                     if ($req['request_days'] > 0) {
-                        $dt = $dbFarm->GetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE);
+                        $dt = $dbFarm->GetSetting(Entity\FarmSetting::LEASE_TERMINATE_DATE);
                         $dt = new DateTime($dt);
                         $dt->add(new DateInterval('P' . $req['request_days'] . 'D'));
-                        $dbFarm->SetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE, $dt->format('Y-m-d H:i:s'));
-                        $dbFarm->SetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND, null);
+                        $dbFarm->SetSetting(Entity\FarmSetting::LEASE_TERMINATE_DATE, $dt->format('Y-m-d H:i:s'));
+                        $dbFarm->SetSetting(Entity\FarmSetting::LEASE_NOTIFICATION_SEND, null);
 
                         if ($mailer)
                             $mailer->sendTemplate(
@@ -105,9 +106,9 @@ class Scalr_UI_Controller_Core_Governance_Lease extends Scalr_UI_Controller
                                 )
                             );
                     } else {
-                        $dbFarm->SetSetting(DBFarm::SETTING_LEASE_STATUS, '');
-                        $dbFarm->SetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE, '');
-                        $dbFarm->SetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND, '');
+                        $dbFarm->SetSetting(Entity\FarmSetting::LEASE_STATUS, '');
+                        $dbFarm->SetSetting(Entity\FarmSetting::LEASE_TERMINATE_DATE, '');
+                        $dbFarm->SetSetting(Entity\FarmSetting::LEASE_NOTIFICATION_SEND, '');
 
                         if ($mailer)
                             $mailer->sendTemplate(
@@ -122,7 +123,7 @@ class Scalr_UI_Controller_Core_Governance_Lease extends Scalr_UI_Controller
                             );
                     }
                 } else {
-                    $dt = new DateTime($dbFarm->GetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE));
+                    $dt = new DateTime($dbFarm->GetSetting(Entity\FarmSetting::LEASE_TERMINATE_DATE));
                     SettingEntity::increase(SettingEntity::LEASE_DECLINED_REQUEST);
 
                     if ($mailer)

@@ -41,6 +41,11 @@ class Scalr_Net_Scalarizr_Services_System extends Scalr_Net_Scalarizr_Client
     {
         return $this->request("load_average")->result;
     }
+    
+    public function netStat()
+    {
+        return $this->request("net_stats")->result;
+    }
 
     public function memInfo()
     {

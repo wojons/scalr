@@ -16,15 +16,22 @@ class Scalr_UI_Controller_Account2_Analytics_Budgets extends Scalr_UI_Controller
 
     public function hasAccess()
     {
-        return $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_ANALYTICS, Acl::PERM_ADMINISTRATION_ANALYTICS_ALLOCATE_BUDGET);
+        return $this->request->isAllowed(Acl::RESOURCE_ANALYTICS_ACCOUNT, Acl::PERM_ANALYTICS_ACCOUNT_ALLOCATE_BUDGET);
     }
 
     public function defaultAction()
     {
-        $this->response->page('ui/account2/analytics/budgets/view.js', array(
-            'quarters' => SettingEntity::getQuarters(true),
-            'quartersConfirmed' => SettingEntity::getValue(SettingEntity::ID_QUARTERS_DAYS_CONFIRMED)
-        ), array('ui/analytics/analytics.js'), array('ui/analytics/analytics.css', '/ui/admin/analytics/admin.css', '/ui/admin/analytics/budgets/budgets.css'));
+        $days = SettingEntity::getQuarters(true);
+
+        $quarters = new Quarters($days);
+
+        $period = $quarters->getPeriodForDate();
+
+        $this->response->page('ui/account2/analytics/budgets/view.js', [
+            'quarters' => $days,
+            'quartersConfirmed' => SettingEntity::getValue(SettingEntity::ID_QUARTERS_DAYS_CONFIRMED),
+            'fiscalYear' => $period->year
+        ], ['ui/analytics/analytics.js'], ['ui/analytics/analytics.css', '/ui/admin/analytics/admin.css', '/ui/admin/analytics/budgets/budgets.css']);
     }
 
     /**
@@ -101,7 +108,7 @@ class Scalr_UI_Controller_Account2_Analytics_Budgets extends Scalr_UI_Controller
             if ($entity instanceof QuarterlyBudgetEntity) {
                 $budget = [
                     'budget'           => round($entity->budget),
-                    'budgetFinalSpent' => round($entity->final),
+                    'budgetFinalSpent' => round($entity->cumulativespend),
                     'spentondate'      => $entity->spentondate instanceof DateTime ? $entity->spentondate->format('Y-m-d') : null,
                     'budgetSpent'      => round($entity->cumulativespend),
                 ];
@@ -150,12 +157,12 @@ class Scalr_UI_Controller_Account2_Analytics_Budgets extends Scalr_UI_Controller
             if ($prevEntity instanceof QuarterlyBudgetEntity) {
                 $budget['prev'] = [
                     'budget'          => $prevEntity->budget,
-                    'budgetFinalSpent'=> $prevEntity->final,
+                    'budgetFinalSpent'=> $prevEntity->cumulativespend,
                     'spentondate'     => $prevEntity->spentondate instanceof DateTime ? $prevEntity->spentondate->format('Y-m-d') : null,
                     'closed'          => $prevPeriod->end->format('Y-m-d') < gmdate('Y-m-d'),
-                    'costVariance'    => $prevEntity->final - $prevEntity->budget,
+                    'costVariance'    => $prevEntity->cumulativespend - $prevEntity->budget,
                     'costVariancePct' => $prevEntity->budget == 0 ? null :
-                                         round(abs($prevEntity->final - $prevEntity->budget) / $prevEntity->budget * 100),
+                                         round(abs($prevEntity->cumulativespend - $prevEntity->budget) / $prevEntity->budget * 100),
                 ];
             } else {
                 $budget['prev'] = [
@@ -188,10 +195,10 @@ class Scalr_UI_Controller_Account2_Analytics_Budgets extends Scalr_UI_Controller
     /**
      * xListAction
      *
-     * @param string $ccId      optional Identifier of the cost center
-     * @param int    $quarter   optional Current Quarter number
-     * @param int    $year      optional Current year
-     * @param string $query     optional Search query
+     * @param string        $ccId      optional Identifier of the cost center
+     * @param string        $quarter   optional Current Quarter number
+     * @param int           $year      optional Current year
+     * @param string        $query     optional Search query
      */
     public function xListAction($ccId = null, $quarter = null, $year = null, $query = null)
     {

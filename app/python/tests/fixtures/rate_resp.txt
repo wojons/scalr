@@ -1,0 +1,37 @@
+{
+    "Locale": "en-US",
+    "Currency": "USD",
+    "Meters": [
+        {
+            "MeterId": "0a6c7eb6-0290-4e92-a112-4de73442b6ae",
+            "MeterName": "Compute Hours",
+            "MeterCategory": "Virtual Machines",
+            "MeterSubCategory": "BASIC.A1 VM (Non-Windows)",
+            "Unit": "Hours",
+            "MeterTags": [],
+            "MeterRegion": "US East",
+            "MeterRates": {"0": 0.044},
+            "EffectiveDate": "2014-02-11T00:00:00Z",
+            "IncludedQuantity": 0.0
+        },
+        {
+            "MeterId": "d23a5753-ff85-4ddf-af28-8cc5cf2d3882",
+            "MeterName": "Standard IO - Page Blob/Disk (GB)",
+            "MeterCategory": "Storage",
+            "MeterSubCategory": "Locally Redundant",
+            "Unit": "GB",
+            "MeterTags": [],
+            "MeterRegion": "US East",
+            "MeterRates": {
+              "0": 0.142,
+              "1024": 0.142,
+              "51200": 0.142,
+              "512000": 0.142,
+              "1024000": 0.1278,
+              "5120000": 0.1051
+            },
+            "EffectiveDate": "2014-10-01T00:00:00Z",
+            "IncludedQuantity": 1000.0
+        }
+    ]
+}

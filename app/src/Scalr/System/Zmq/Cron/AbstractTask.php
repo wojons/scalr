@@ -9,7 +9,8 @@ use Scalr\System\Zmq\Mdp\AsynClient;
 use Scalr\System\Zmq\Zmsg;
 use Scalr\System\Zmq\Mdp\Client;
 use Scalr\Util\Cron\CronExpression;
-use Scalr\LoggerTrait;
+use Scalr\LoggerAwareTrait;
+use Scalr\AuditLogger;
 
 /**
  * AbstractTask class
@@ -21,7 +22,12 @@ use Scalr\LoggerTrait;
  */
 abstract class AbstractTask implements TaskInterface
 {
-    use LoggerTrait;
+    use LoggerAwareTrait;
+
+    /**
+     * The name of the default payload class
+     */
+    const DEFAULT_PAYLOAD_CLASS = 'Scalr\\System\\Zmq\\Cron\\Payload';
 
     /**
      * Task name
@@ -58,7 +64,7 @@ abstract class AbstractTask implements TaskInterface
      *
      * @var string
      */
-    private $payloadClass = 'Scalr\\System\\Zmq\\Cron\\Payload';
+    private $payloadClass = self::DEFAULT_PAYLOAD_CLASS;
 
     /**
      * Task config
@@ -92,6 +98,12 @@ abstract class AbstractTask implements TaskInterface
         if (file_exists(__DIR__ . '/Payload/' . $basename . 'Payload.php')) {
             $this->payloadClass = __NAMESPACE__ . '\\Payload\\' . $basename . 'Payload';
         }
+
+        $container = \Scalr::getContainer();
+        $container->release('auditlogger');
+        $container->setShared('auditlogger', function ($cont) {
+            return new AuditLogger(null, null, null, null, AuditLogger::REQUEST_TYPE_SYSTEM, $this->getName());
+        });
     }
 
     /**
@@ -304,13 +316,99 @@ abstract class AbstractTask implements TaskInterface
      */
     protected function launchWorkers($address = null)
     {
+        $config = $this->config();
+
+        //Wheter this service does not implement payload router interface
+        if (!in_array('Scalr\System\Zmq\Cron\PayloadRouterInterface', class_implements($this->payloadClass))) {
+            return $this->_launchWorkers($address);
+        }
+
+        //It launches different pools of workers according to replication schema defined in the config
+        foreach (array_merge((!empty($config->replicate['type']) ? $config->replicate['type'] : []), ['all']) as $type) {
+            //It is possible to provide the number of the workers for each service
+            $pool = null;
+            if (is_array($type)) {
+                @list($type, $pool) = $type;
+                $pool = $pool ?: intval($pool);
+            }
+
+            if (!empty($config->replicate['account'])) {
+                foreach ($config->replicate['account'] as $acc) {
+                    $pool2 = null;
+                    if (is_array($acc)) {
+                        @list($acc, $pool2) = $acc;
+                        $pool2 = $pool2 ?: intval($pool2);
+                    }
+
+                    $this->_launchWorkers($this->name . '.' . $type . '.' . $acc, max($pool, $pool2));
+                }
+            }
+
+            $this->_launchWorkers($this->name . '.' . $type . '.all', $pool);
+        }
+    }
+
+    /**
+     * Gets accounts to replicate a service to process its queue in the separate workers
+     *
+     * @return   array  Returns the list of the accounts to replicate
+     */
+    public function getReplicaAccounts()
+    {
+        return $this->getReplicaTypes('account', '\d+');
+    }
+
+    /**
+     * Gets types to replicate a service to process its queue in the separate workers
+     *
+     * @param    string  $name  optional The name of the replica type in the config
+     * @param    string  $regex optional Regex to validate. It should be specified without anchors and modifiers
+     * @return   array  Returns the list of the types to replicate
+     */
+    public function getReplicaTypes($name = 'type', $regex = null)
+    {
+        $config = $this->config();
+
+        $data = [];
+
+        if (!empty($config->replicate[$name])) {
+            foreach (array_reverse(array_values($config->replicate[$name])) as $n => $type) {
+                if (is_array($type)) {
+                    @list($type) = $type;
+                }
+
+                if ($regex !== null && !preg_match('/^' . $regex . '$/', $type)) {
+                    // Invalid message name
+                    $this->getLogger()->error("Invalid replica for '%s' in the config.yml: '%s'", $name, $type);
+                    continue;
+                }
+
+                $data[$n] = $type;
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * It launches pool of workers
+     *
+     * @param   string   $address  optional An address to override the service name
+     * @param   int      $workers  optional The number of workers
+     */
+    private function _launchWorkers($address = null, $workers = null)
+    {
         //Minimum number of the workers that should be
-        $workers = $this->config()->workers;
+        $workers = $workers ?: $this->config()->workers;
 
         $service = $address ?: $this->name;
 
         //Number of the workers which are working now
-        $availableWorkers = (int) $this->isServiceRegistered($service);
+        $availableWorkers = $this->isServiceRegistered($service);
+
+        if ($availableWorkers === false) {
+            throw new TaskException(sprintf("Broker did not respond. Terminating client %s", $service));
+        }
 
         $this->log("DEBUG", "%d avalilable workers for %s service", $availableWorkers, $service);
 
@@ -358,16 +456,21 @@ abstract class AbstractTask implements TaskInterface
         //Array of the messages which are sent
         $sentMessages = [];
 
-        //Sending loop
-        foreach ($this->queue as $index => $req) {
+        //Gets queue iterator in order to gracefully iterate over an ArrayObject removing each offset
+        $it = $this->queue->getIterator();
+
+        //Sending messages loop
+        while ($it->valid()) {
+            $key = $it->key();
+
             //Creates standard payload for zmq messaging
-            $payload = (new $payloadClass($req))->setId();
+            $payload = (new $payloadClass($it->current()))->setId();
             $sentMessages[$payload->getId()] = $payload;
 
             $request = new Zmsg();
             $request->setLast(serialize($payload));
 
-            //Sends a message to worker
+            //Sends the message to worker
             if ($payload instanceof PayloadRouterInterface) {
                 $session->send($payload->getAddress($this), $request);
             } else {
@@ -375,9 +478,10 @@ abstract class AbstractTask implements TaskInterface
             }
 
             $count++;
+            $it->next();
 
-            //Removing message from queue
-            unset($this->queue[$index]);
+            //Removing the message from the queue
+            $it->offsetUnset($key);
         }
 
         //Cleanup queue

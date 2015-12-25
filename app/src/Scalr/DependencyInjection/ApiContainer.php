@@ -21,6 +21,8 @@ namespace Scalr\DependencyInjection;
  * @property \Scalr\Api\DataType\Meta $meta
  *           Gets Meta object which is the part of the API response
  *
+ * @property \Scalr\Api\DataType\Warnings $warnings
+ *           Gets Warnings object which is the part of the body API response
  *
  * @property array $settings
  *           API Application settings

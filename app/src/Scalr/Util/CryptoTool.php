@@ -2,6 +2,7 @@
 
 namespace Scalr\Util;
 
+use Scalr\Exception\ScalrException;
 use SplFileObject;
 
 /**
@@ -330,6 +331,10 @@ class CryptoTool
             $this->cryptoKey = file_get_contents($cryptoKey);
         } else {
             $this->cryptoKey = $cryptoKey;
+        }
+
+        if (empty($this->cryptoKey)) {
+            throw new ScalrException("Wrong crypto key!");
         }
 
         if(is_array($cryptoKey)) {

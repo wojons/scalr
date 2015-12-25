@@ -29,10 +29,10 @@ class UserSetting extends AbstractSettingEntity
     const NAME_UI_CHANGELOG_TIME = 'ui.changelog.time';
 
     const NAME_GRAVATAR_EMAIL = 'gravatar.email';
-    
+
     const NAME_LDAP_EMAIL = 'ldap.email';
     const NAME_LDAP_USERNAME = 'ldap.username';
-    
+
     const NAME_LEAD_VERIFIED = 'lead.verified';
     const NAME_LEAD_HASH = 'lead.hash';
 

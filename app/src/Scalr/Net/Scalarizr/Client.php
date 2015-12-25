@@ -1,6 +1,7 @@
 <?php
 
-use Scalr\Util\CryptoTool;
+use Scalr\Model\Entity;
+use Scalr\System\Http\Client\Request;
 
 /**
  * Scalrizr API Client
@@ -92,7 +93,7 @@ class Scalr_Net_Scalarizr_Client
         $this->port = $port;
 
         if ($this->dbServer->farmId)
-            if (DBFarm::LoadByID($this->dbServer->farmId)->GetSetting(DBFarm::SETTING_EC2_VPC_ID))
+            if (DBFarm::LoadByID($this->dbServer->farmId)->GetSetting(Entity\FarmSetting::EC2_VPC_ID))
                 $this->isVPC = true;
 
         $this->cryptoTool = \Scalr::getContainer()->srzcrypto($this->dbServer->GetKey(true));
@@ -125,9 +126,7 @@ class Scalr_Net_Scalarizr_Client
 
         $signature = $this->cryptoTool->sign($jsonRequest, null, $timestamp, Scalr_Net_Scalarizr_Client::HASH_ALGO);
 
-
-        $request = new HttpRequest();
-        $request->setMethod(HTTP_METH_POST);
+        $request = new Request("POST");
 
         // If no VPC router communicating via local inteface (Scalr should be setup within the esame network)
         $requestHost = $this->dbServer->getSzrHost() . ":{$this->port}";
@@ -154,7 +153,7 @@ class Scalr_Net_Scalarizr_Client
             }
         }
 
-        $request->setUrl("http://{$requestHost}/{$namespace}");
+        $request->setRequestUrl("http://{$requestHost}/{$namespace}");
 
         $request->setOptions(array(
             'timeout'        => $this->timeout,
@@ -166,19 +165,18 @@ class Scalr_Net_Scalarizr_Client
             "X-Signature" => $signature,
             "X-Server-Id" => $this->dbServer->serverId
         ));
-        $request->setBody($jsonRequest);
+        $request->append($jsonRequest);
 
         try {
             // Send request
-            $request->send();
+            $response = \Scalr::getContainer()->srzhttp->sendRequest($request);
 
-            $this->debug['responseCode'] = $request->getResponseCode();
-            $this->debug['fullResponse'] = $request->getRawResponseMessage();
+            $this->debug['responseCode'] = $response->getResponseCode();
+            $this->debug['fullResponse'] = $response->toString();
 
-            if ($request->getResponseCode() == 200) {
+            if ($response->getResponseCode() == 200) {
 
-                $response = $request->getResponseData();
-                $body = $this->cryptoTool->decrypt($response['body']);
+                $body = $this->cryptoTool->decrypt($response->getBody()->toString());
 
                 $jResponse = @json_decode($body);
 
@@ -187,10 +185,9 @@ class Scalr_Net_Scalarizr_Client
 
                 return $jResponse;
             } else {
-                $response = $request->getResponseData();
-                throw new Exception(sprintf("Unable to perform request to scalarizr: %s (%s)", $response['body'], $request->getResponseCode()));
+                throw new Exception(sprintf("Unable to perform request to scalarizr: %s (%s)", $response->getBody()->toString(), $response->getResponseCode()));
             }
-        } catch(HttpException $e) {
+        } catch(\http\Exception $e) {
             if (isset($e->innerException))
                 $msg = $e->innerException->getMessage();
             else

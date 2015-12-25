@@ -1,7 +1,8 @@
 <?php
+
 namespace Scalr\Tests\Service\OpenStack\Client;
 
-use HttpMessage;
+use http\Client\Response;
 use Scalr\Service\OpenStack\Client\Auth\LoaderFactory;
 use Scalr\Service\OpenStack\Client\AuthToken;
 use Scalr\Service\OpenStack\Client\RestClientResponse;
@@ -21,7 +22,7 @@ class AuthTokenTest extends OpenStackTestCase
      */
     public function testConstruction()
     {
-        $authToken = LoaderFactory::makeToken(new RestClientResponse(new HttpMessage('HTTP/1.1 200 OK
+        $authToken = LoaderFactory::makeToken(new RestClientResponse(new Response('HTTP/1.1 200 OK
 Content-Type: application/json; charset utf-8
 
 {"access":{"token":{"expires": "2012-09-14T15:11:57.585-05:00","id": "858fb4c2-bf15-4dac-917d-8ec750ae9baa","tenant": {"id": "010101","name": "0101012"}}}}'), AppFormat::json()));

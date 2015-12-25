@@ -73,6 +73,15 @@ class CreateVolumeRequestData extends AbstractEc2DataType
     public $encrypted;
 
     /**
+     * The full ARN of the AWS Key Management Service (AWS KMS) customer master key (CMK) to use when creating the encrypted volume.
+     * This parameter is only required if you want to use a non-default CMK;
+     * if this parameter is not specified, the default CMK for EBS is used.
+     *
+     * @var string
+     */
+    public $kmsKeyId;
+
+    /**
      * Convenient constructor
      *
      * @param   string|AvailabilityZoneData $availabilityZone The Availability Zone in which the volume was created.

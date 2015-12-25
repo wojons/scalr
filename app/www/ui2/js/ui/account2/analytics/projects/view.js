@@ -251,7 +251,7 @@ Scalr.regPage('Scalr.ui.account2.analytics.projects.view', function (loadParams,
                         handler: function() {
                             Scalr.event.fireEvent('modal', '#/account/analytics/projects/add');
                         },
-                        hidden: !Scalr.isAllowed('ADMINISTRATION_ANALYTICS', 'manage-projects')
+                        hidden: !Scalr.isAllowed('ANALYTICS_ACCOUNT', 'manage-projects')
                     },{
                         itemId: 'refresh',
                         iconCls: 'x-btn-icon-refresh',
@@ -344,7 +344,7 @@ Scalr.regPage('Scalr.ui.account2.analytics.projects.view', function (loadParams,
                         itemId: 'itemEdit',
                         iconCls: 'x-btn-icon-settings',
                         margin: '0 0 0 12',
-                        hidden: !Scalr.isAllowed('ADMINISTRATION_ANALYTICS', 'manage-projects'),
+                        hidden: !Scalr.isAllowed('ANALYTICS_ACCOUNT', 'manage-projects'),
                         handler: function() {
                             Scalr.event.fireEvent('modal', this.modalUrl);
                         }

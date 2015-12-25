@@ -4,6 +4,8 @@ use Scalr\Acl\Acl;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Model\Entity\Script;
 use Scalr\Model\Entity\ScriptVersion;
+use Scalr\Model\Entity;
+use Scalr\Model\Entity\Role;
 
 class ScalrAPI_2_0_0 extends ScalrAPICore
 {
@@ -20,7 +22,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
         if (!Scalr::config('scalr.dns.global.enabled'))
             throw new Exception("DNS functionality is not enabled. Please contact your Scalr administrator.");
-        
+
         $response = $this->CreateInitialResponse();
         $response->DNSZoneSet = new stdClass();
         $response->DNSZoneSet->Item = array();
@@ -28,13 +30,13 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         $rows = $this->DB->Execute("SELECT * FROM dns_zones WHERE env_id=?", array($this->Environment->id));
         while ($row = $rows->FetchRow()) {
             $itm = new stdClass();
-            $itm->{"ZoneName"} = $row['zone_name'];
-            $itm->{"FarmID"} = $row['farm_id'];
-            $itm->{"FarmRoleID"} = $row['farm_roleid'];
-            $itm->{"Status"} = $row['status'];
-            $itm->{"LastModifiedAt"} = $row['dtlastmodified'];
-            $itm->{"IPSet"} = new stdClass();
-            $itm->{"IPSet"}->Item = array();
+            $itm->ZoneName = $row['zone_name'];
+            $itm->FarmID = $row['farm_id'];
+            $itm->FarmRoleID = $row['farm_roleid'];
+            $itm->Status = $row['status'];
+            $itm->LastModifiedAt = $row['dtlastmodified'];
+            $itm->IPSet = new stdClass();
+            $itm->IPSet->Item = array();
             if ($row['status'] == DNS_ZONE_STATUS::ACTIVE) {
                 $ips = $this->DB->GetAll("SELECT value FROM dns_zone_records WHERE zone_id=? AND `type`=? AND `name` IN ('', '@', '{$row['zone_name']}.')",
                     array($row['id'], 'A')
@@ -42,7 +44,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
                 foreach ($ips as $ip) {
                     $itm_ip = new stdClass();
                     $itm_ip->IPAddress = $ip['value'];
-                    $itm->{"IPSet"}->Item[] = $itm_ip;
+                    $itm->IPSet->Item[] = $itm_ip;
                 }
             }
 
@@ -54,11 +56,11 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function DNSZoneRecordAdd($ZoneName, $Type, $TTL, $Name, $Value, $Priority = 0, $Weight = 0, $Port = 0)
     {
-        $this->restrictAccess(Acl::RESOURCE_DNS_ZONES);
+        $this->restrictAccess(Acl::RESOURCE_DNS_ZONES, Acl::PERM_DNS_ZONES_MANAGE);
 
         if (!Scalr::config('scalr.dns.global.enabled'))
             throw new Exception("DNS functionality is not enabled. Please contact your Scalr administrator.");
-        
+
         $zoneinfo = $this->DB->GetRow("SELECT id, env_id FROM dns_zones WHERE zone_name=? LIMIT 1", array($ZoneName));
 
         if (!$zoneinfo || $zoneinfo['env_id'] != $this->Environment->id)
@@ -102,11 +104,11 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function DNSZoneRecordRemove($ZoneName, $RecordID)
     {
-        $this->restrictAccess(Acl::RESOURCE_DNS_ZONES);
+        $this->restrictAccess(Acl::RESOURCE_DNS_ZONES, Acl::PERM_DNS_ZONES_MANAGE);
 
         if (!Scalr::config('scalr.dns.global.enabled'))
             throw new Exception("DNS functionality is not enabled. Please contact your Scalr administrator.");
-        
+
         $zoneinfo = $this->DB->GetRow("SELECT id, env_id, allow_manage_system_records FROM dns_zones WHERE zone_name=? LIMIT 1", array($ZoneName));
         if (!$zoneinfo || $zoneinfo['env_id'] != $this->Environment->id)
             throw new Exception (sprintf("Zone '%s' not found in database", $ZoneName));
@@ -133,7 +135,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
         if (!Scalr::config('scalr.dns.global.enabled'))
             throw new Exception("DNS functionality is not enabled. Please contact your Scalr administrator.");
-        
+
         $zoneinfo = $this->DB->GetRow("SELECT id, env_id FROM dns_zones WHERE zone_name=? LIMIT 1", array($ZoneName));
         if (!$zoneinfo || $zoneinfo['env_id'] != $this->Environment->id)
             throw new Exception (sprintf("Zone '%s' not found in database", $ZoneName));
@@ -146,15 +148,15 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         $records = $this->DB->GetAll("SELECT * FROM dns_zone_records WHERE zone_id=?", array($zoneinfo['id']));
         foreach ($records as $record) {
             $itm = new stdClass();
-            $itm->{"ID"} = $record['id'];
-            $itm->{"Type"} = $record['type'];
-            $itm->{"TTL"} = $record['ttl'];
-            $itm->{"Priority"} = $record['priority'];
-            $itm->{"Name"} = $record['name'];
-            $itm->{"Value"} = $record['value'];
-            $itm->{"Weight"} = $record['weight'];
-            $itm->{"Port"} = $record['port'];
-            $itm->{"IsSystem"} = $record['issystem'];
+            $itm->ID = $record['id'];
+            $itm->Type = $record['type'];
+            $itm->TTL = $record['ttl'];
+            $itm->Priority = $record['priority'];
+            $itm->Name = $record['name'];
+            $itm->Value = $record['value'];
+            $itm->Weight = $record['weight'];
+            $itm->Port = $record['port'];
+            $itm->IsSystem = $record['issystem'];
 
             $response->ZoneRecordSet->Item[] = $itm;
         }
@@ -164,11 +166,14 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function DNSZoneCreate($DomainName, $FarmID = null, $FarmRoleID = null)
     {
-        $this->restrictAccess(Acl::RESOURCE_DNS_ZONES);
+        $this->restrictAccess(Acl::RESOURCE_DNS_ZONES, Acl::PERM_DNS_ZONES_MANAGE);
 
-        if (!Scalr::config('scalr.dns.global.enabled'))
+        if (!Scalr::config('scalr.dns.global.enabled')) {
             throw new Exception("DNS functionality is not enabled. Please contact your Scalr administrator.");
-        
+        }
+
+        $records = [];
+
         $DomainName = trim($DomainName);
 
         $Validator = new Scalr_Validator();
@@ -177,6 +182,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
         $domain_chunks = explode(".", $DomainName);
         $chk_dmn = '';
+
         while (count($domain_chunks) > 0) {
             $chk_dmn = trim(array_pop($domain_chunks).".{$chk_dmn}", ".");
             if ($this->DB->GetOne("SELECT id FROM dns_zones WHERE zone_name=? AND client_id != ? LIMIT 1", array(
@@ -219,6 +225,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         $DBDNSZone->envId = $this->Environment->id;
 
         $def_records = $this->DB->GetAll("SELECT * FROM default_records WHERE clientid=?", array($this->user->getAccountId()));
+
         foreach ($def_records as $record) {
             $record["name"] = str_replace(array("%hostname%", "%zonename%"), array("{$DomainName}.", "{$DomainName}."), $record["name"]);
             $record["value"] = str_replace(array("%hostname%", "%zonename%"), array("{$DomainName}.", "{$DomainName}."), $record["value"]);
@@ -226,8 +233,10 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         }
 
         $nameservers = Scalr::config('scalr.dns.global.nameservers');
-        foreach ($nameservers as $ns)
+
+        foreach ($nameservers as $ns) {
             $records[] = array("id" => "c".rand(10000, 999999), "type" => "NS", "ttl" => 14400, "value" => "{$ns}.", "name" => "{$DomainName}.", "issystem" => 0);
+        }
 
         $DBDNSZone->setRecords($records);
 
@@ -242,6 +251,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
     public function FarmTerminate($FarmID, $KeepEBS, $KeepEIP, $KeepDNSZone)
     {
         $response = $this->CreateInitialResponse();
+
         try {
             $DBFarm = DBFarm::LoadByID($FarmID);
             if ($DBFarm->EnvID != $this->Environment->id) throw new Exception("N");
@@ -252,18 +262,18 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         $this->user->getPermissions()->validate($DBFarm);
         $this->restrictFarmAccess($DBFarm, Acl::PERM_FARMS_LAUNCH_TERMINATE);
 
-        if ($DBFarm->Status != FARM_STATUS::RUNNING)
+        if ($DBFarm->Status != FARM_STATUS::RUNNING) {
             throw new Exception(sprintf("Farm already terminated", $FarmID));
+        }
 
-        $event = new FarmTerminatedEvent(
-            (($KeepDNSZone) ? 0 : 1),
-            (($KeepEIP) ? 1 : 0),
+        Scalr::FireEvent($FarmID, new FarmTerminatedEvent(
+            $KeepDNSZone ? 0 : 1,
+            $KeepEIP ? 1 : 0,
             true,
-            (($KeepEBS) ? 1 : 0),
+            $KeepEBS ? 1 : 0,
             true,
             $this->user->id
-        );
-        Scalr::FireEvent($FarmID, $event);
+        ));
 
         $response->Result = true;
 
@@ -276,16 +286,20 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
         try {
             $DBFarm = DBFarm::LoadByID($FarmID);
-            if ($DBFarm->EnvID != $this->Environment->id) throw new Exception("N");
+            if ($DBFarm->EnvID != $this->Environment->id) {
+                throw new Exception("N");
+            }
         } catch (Exception $e) {
             throw new Exception(sprintf("Farm #%s not found", $FarmID));
         }
 
         $this->user->getPermissions()->validate($DBFarm);
         $this->restrictFarmAccess($DBFarm, Acl::PERM_FARMS_LAUNCH_TERMINATE);
+        $DBFarm->isLocked();
 
-        if ($DBFarm->Status == FARM_STATUS::RUNNING)
+        if ($DBFarm->Status == FARM_STATUS::RUNNING) {
             throw new Exception(sprintf("Farm already running", $FarmID));
+        }
 
         Scalr::FireEvent($FarmID, new FarmLaunchedEvent(true, $this->user->id));
 
@@ -328,9 +342,9 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
             $itm->Month = $row['month'];
             $itm->Year = $row['year'];
             $itm->Statistics = new stdClass();
-            $itm->Statistics->{"Hours"} = round($row["usage"]/60, 2);
-            $itm->Statistics->{"InstanceType"} = str_replace(".","_", $row["instance_type"]);
-            $itm->Statistics->{"CloudLocation"} = $row["cloud_location"];
+            $itm->Statistics->Hours = round($row["usage"]/60, 2);
+            $itm->Statistics->InstanceType = str_replace(".","_", $row["instance_type"]);
+            $itm->Statistics->CloudLocation = $row["cloud_location"];
 
             $response->StatisticsSet->Item[] = $itm;
         }
@@ -372,10 +386,10 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         $farms = $this->DB->Execute($stmt, $options);
         while ($farm = $farms->FetchRow()) {
             $itm = new stdClass();
-            $itm->{"ID"} = $farm['id'];
-            $itm->{"Name"} = $farm['name'];
-            $itm->{"Status"} = $farm['status'];
-            $itm->{"Comments"} = $farm['comments'];
+            $itm->ID = $farm['id'];
+            $itm->Name = $farm['name'];
+            $itm->Status = $farm['status'];
+            $itm->Comments = $farm['comments'];
 
             $response->FarmSet->Item[] = $itm;
         }
@@ -405,84 +419,68 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
         foreach ($DBFarm->GetFarmRoles() as $DBFarmRole) {
             $itm = new stdClass();
-            $itm->{"ID"} = $DBFarmRole->ID;
-            $itm->{"RoleID"} = $DBFarmRole->RoleID;
-            $itm->{"Name"} = $DBFarmRole->GetRoleObject()->name;
-            $itm->{"Alias"} = $DBFarmRole->Alias;
-            $itm->{"Platform"} = $DBFarmRole->Platform;
-            $itm->{"Category"} = $DBFarmRole->GetRoleObject()->getCategoryName();
-            $itm->{"ScalingProperties"} = new stdClass();
-            $itm->{"ScalingProperties"}->{"MinInstances"} = $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MIN_INSTANCES);
-            $itm->{"ScalingProperties"}->{"MaxInstances"} = $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES);
+            $itm->ID = $DBFarmRole->ID;
+            $itm->RoleID = $DBFarmRole->RoleID;
+            $itm->Name = $DBFarmRole->GetRoleObject()->name;
+            $itm->Alias = $DBFarmRole->Alias;
+            $itm->Platform = $DBFarmRole->Platform;
+            $itm->Category = $DBFarmRole->GetRoleObject()->getCategoryName();
+            $itm->ScalingProperties = new stdClass();
+            $itm->ScalingProperties->MinInstances = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MIN_INSTANCES);
+            $itm->ScalingProperties->MaxInstances = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MAX_INSTANCES);
 
             if ($DBFarmRole->Platform == SERVER_PLATFORMS::EC2) {
-                $itm->{"PlatformProperties"} = new stdClass();
-                $itm->{"PlatformProperties"}->{"InstanceType"} = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_INSTANCE_TYPE);
-                $itm->{"PlatformProperties"}->{"AvailabilityZone"} = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_AVAIL_ZONE);
+                $itm->PlatformProperties = new stdClass();
+                $itm->PlatformProperties->InstanceType = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_INSTANCE_TYPE);
+                $itm->PlatformProperties->AvailabilityZone = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_AVAIL_ZONE);
             }
 
             if ($DBFarmRole->Platform == SERVER_PLATFORMS::OPENSTACK) {
-                $itm->{"PlatformProperties"} = new stdClass();
-                $itm->{"PlatformProperties"}->{"FlavorID"} = $DBFarmRole->GetSetting(DBFarmRole::SETTING_OPENSTACK_FLAVOR_ID);
-                $itm->{"PlatformProperties"}->{"FloatingIPPool"} = $DBFarmRole->GetSetting(DBFarmRole::SETTING_OPENSTACK_IP_POOL);
+                $itm->PlatformProperties = new stdClass();
+                $itm->PlatformProperties->FlavorID = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::OPENSTACK_FLAVOR_ID);
+                $itm->PlatformProperties->FloatingIPPool = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::OPENSTACK_IP_POOL);
             }
 
-            $itm->{"ServerSet"} = new stdClass();
-            $itm->{"ServerSet"}->Item = array();
+            $itm->ServerSet = new stdClass();
+            $itm->ServerSet->Item = array();
             foreach ($DBFarmRole->GetServersByFilter() as $DBServer) {
                 $iitm = new stdClass();
-                $iitm->{"ServerID"} = $DBServer->serverId;
-                $iitm->{"ExternalIP"} = $DBServer->remoteIp;
-                $iitm->{"InternalIP"} = $DBServer->localIp;
+                $iitm->ServerID = $DBServer->serverId;
+                $iitm->ExternalIP = $DBServer->remoteIp;
+                $iitm->InternalIP = $DBServer->localIp;
 
-                $iitm->{"PublicIP"} = $DBServer->remoteIp;
-                $iitm->{"PrivateIP"} = $DBServer->localIp;
-                $iitm->{"CloudLocation"} = $DBServer->cloudLocation;
-                $iitm->{"CloudLocationZone"} = $DBServer->cloudLocationZone;
+                $iitm->PublicIP = $DBServer->remoteIp;
+                $iitm->PrivateIP = $DBServer->localIp;
+                $iitm->CloudLocation = $DBServer->cloudLocation;
+                $iitm->CloudLocationZone = $DBServer->cloudLocationZone;
 
-                $iitm->{"Status"} = $DBServer->status;
+                $iitm->Status = $DBServer->status;
 
-                $iitm->{"IsInitFailed"} = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED);
-                $iitm->{"IsRebooting"} = $DBServer->GetProperty(SERVER_PROPERTIES::REBOOTING);
+                $iitm->IsInitFailed = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED);
+                $iitm->IsRebooting = $DBServer->GetProperty(SERVER_PROPERTIES::REBOOTING);
 
-                $iitm->{"Index"} = $DBServer->index;
-                $iitm->{"ScalarizrVersion"} = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_VESION);
-                $iitm->{"Uptime"} = round((time()-strtotime($DBServer->dateAdded))/60, 2); //seconds -> minutes
+                $iitm->Index = $DBServer->index;
+                $iitm->ScalarizrVersion = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_VESION);
+                $iitm->Uptime = round((time()-strtotime($DBServer->dateAdded))/60, 2); //seconds -> minutes
 
-                $iitm->{"IsDbMaster"} = ($DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) == 1 || $DBServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) == 1) ? '1' : '0';
-
-                /*
-                $info = PlatformFactory::NewPlatform($DBServer->platform)->GetServerExtendedInformation($DBServer);
-                $iitm->{"PlatformProperties"} = new stdClass();
-                if (is_array($info) && count($info)) {
-                    foreach ($info as $name => $value) {
-                        $name = str_replace(".", "_", $name);
-                        $name = preg_replace("/[^A-Za-z0-9_-]+/", "", $name);
-
-                        if ($name == 'MonitoringCloudWatch')
-                            continue;
-
-                        $iitm->{"PlatformProperties"}->{$name} = $value;
-                    }
-                }
-                */
+                $iitm->IsDbMaster = ($DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) == 1 || $DBServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER) == 1) ? '1' : '0';
 
                 if ($DBFarmRole->Platform == SERVER_PLATFORMS::EC2) {
-                    $iitm->{"PlatformProperties"} = new stdClass();
-                    $iitm->{"PlatformProperties"}->{"InstanceType"} = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_TYPE);
-                    $iitm->{"PlatformProperties"}->{"AvailabilityZone"} = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::AVAIL_ZONE);
-                    $iitm->{"PlatformProperties"}->{"AMIID"} = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::AMIID);
-                    $iitm->{"PlatformProperties"}->{"InstanceID"} = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID);
+                    $iitm->PlatformProperties = new stdClass();
+                    $iitm->PlatformProperties->InstanceType = $DBServer->getType();
+                    $iitm->PlatformProperties->AvailabilityZone = $DBServer->cloudLocationZone;
+                    $iitm->PlatformProperties->AMIID = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::AMIID);
+                    $iitm->PlatformProperties->InstanceID = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID);
                 }
 
                 if ($DBFarmRole->Platform == SERVER_PLATFORMS::OPENSTACK) {
-                    $iitm->{"PlatformProperties"} = new stdClass();
-                    $iitm->{"PlatformProperties"}->{"FlavorID"} = $DBServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::FLAVOR_ID);
-                    $iitm->{"PlatformProperties"}->{"ServerID"} = $DBServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::SERVER_ID);
-                    $iitm->{"PlatformProperties"}->{"ImageID"} = $DBServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::IMAGE_ID);
+                    $iitm->PlatformProperties = new stdClass();
+                    $iitm->PlatformProperties->FlavorID = $DBServer->getType();
+                    $iitm->PlatformProperties->ServerID = $DBServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::SERVER_ID);
+                    $iitm->PlatformProperties->ImageID = $DBServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::IMAGE_ID);
                 }
 
-                $itm->{"ServerSet"}->Item[] = $iitm;
+                $itm->ServerSet->Item[] = $iitm;
             }
 
             $response->FarmRoleSet->Item[] = $itm;
@@ -622,7 +620,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function ScriptGetDetails($ScriptID, $ShowContent = false, $Revision = false)
     {
-        $this->restrictAccess(Acl::RESOURCE_ADMINISTRATION_SCRIPTS);
+        $this->restrictAccess(Acl::RESOURCE_SCRIPTS_ENVIRONMENT);
 
         /* @var $script Script */
         $script = Script::findPk($ScriptID);
@@ -650,15 +648,15 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
                 continue;
 
             $itm = new stdClass();
-            $itm->{"Revision"} = $rev->version;
-            $itm->{"Date"} = $rev->dtCreated->format('Y-m-d H:i:s');
+            $itm->Revision = $rev->version;
+            $itm->Date = $rev->dtCreated->format('Y-m-d H:i:s');
 
             if ($ShowContent) {
-                $itm->{"Content"} = base64_encode($rev->content);
+                $itm->Content = base64_encode($rev->content);
             }
 
-            $itm->{"ConfigVariables"} = new stdClass();
-            $itm->{"ConfigVariables"}->Item = array();
+            $itm->ConfigVariables = new stdClass();
+            $itm->ConfigVariables->Item = array();
 
             $text = preg_replace('/(\\\%)/si', '$$scalr$$', $rev->content);
             preg_match_all("/\%([^\%\s]+)\%/si", $text, $matches);
@@ -668,7 +666,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
                 if (!in_array($var, array_keys(Scalr_Scripting_Manager::getScriptingBuiltinVariables()))) {
                     $ditm = new stdClass;
                     $ditm->Name = $var;
-                    $itm->{"ConfigVariables"}->Item[] = $ditm;
+                    $itm->ConfigVariables->Item[] = $ditm;
                 }
             }
 
@@ -680,7 +678,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function ScriptExecute($ScriptID, $Timeout, $Async, $FarmID, $FarmRoleID = null, $ServerID = null, $Revision = null, array $ConfigVariables = null)
     {
-        $this->restrictAccess(Acl::RESOURCE_ADMINISTRATION_SCRIPTS, Acl::PERM_ADMINISTRATION_SCRIPTS_EXECUTE);
+        $this->restrictAccess(Acl::RESOURCE_SCRIPTS_ENVIRONMENT, Acl::PERM_SCRIPTS_ENVIRONMENT_EXECUTE);
 
         $response = $this->CreateInitialResponse();
 
@@ -821,7 +819,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function RolesList($Platform = null, $ImageID = null, $Name = null, $Prefix = null)
     {
-        $this->restrictAccess(Acl::RESOURCE_FARMS_ROLES);
+        $this->restrictAccess(Acl::RESOURCE_ROLES_ENVIRONMENT);
 
         $response = $this->CreateInitialResponse();
         $response->RoleSet = new stdClass();
@@ -830,7 +828,8 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
         $sql = "SELECT roles.*, os.family as os_family, os.version as os_version, os.generation as os_generation
                   FROM roles
                   INNER JOIN os ON os.id = roles.os_id
-                  WHERE (roles.env_id IS NULL OR roles.env_id='{$this->Environment->id}')";
+                  LEFT JOIN role_environments re ON re.role_id = roles.id
+                  WHERE (roles.client_id IS NULL OR roles.client_id = '{$this->Environment->clientId}' AND roles.env_id IS NULL AND (re.env_id IS NULL OR re.env_id = '{$this->Environment->id}') OR roles.env_id='{$this->Environment->id}')";
 
         if ($ImageID)
             $sql .= " AND roles.id IN (SELECT role_id FROM role_images WHERE image_id = {$this->DB->qstr($ImageID)})";
@@ -856,28 +855,28 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
 
             $itm = new stdClass();
-            $itm->{"ID"} = $row['id'];
-            $itm->{"Name"} = $row['name'];
-            $itm->{"Owner"} = $row["client_name"];
-            $itm->{"Architecture"} = $row['architecture'];
-            $itm->{"OsFamily"} = $row['os_family'];
-            $itm->{"OsVersion"} = $row['os_version'];
-            $itm->{"OsGeneration"} = $row['os_generation'];
-            $itm->{"OsID"} = $row['os_id'];
-            $itm->{"CreatedAt"} = $row['dtadded'];
-            $itm->{"CreatedBy"} = $row['added_by_email'];
+            $itm->ID = $row['id'];
+            $itm->Name = $row['name'];
+            $itm->Owner = $row["client_name"];
+            $itm->Architecture = $row['architecture'];
+            $itm->OsFamily = $row['os_family'];
+            $itm->OsVersion = $row['os_version'];
+            $itm->OsGeneration = $row['os_generation'];
+            $itm->OsID = $row['os_id'];
+            $itm->CreatedAt = $row['dtadded'];
+            $itm->CreatedBy = $row['added_by_email'];
 
-            $itm->{"ImageSet"} = new stdClass();
-            $itm->{"ImageSet"}->Item = array();
+            $itm->ImageSet = new stdClass();
+            $itm->ImageSet->Item = array();
 
             $images = $this->DB->Execute("SELECT * FROM role_images WHERE role_id = ?", array($row['id']));
             while ($image = $images->FetchRow()) {
                 $iitm = new stdClass();
-                $iitm->{"ID"} = $image['image_id'];
-                $iitm->{"Platform"} = $image['platform'];
-                $iitm->{"CloudLocation"} = $image['cloud_location'];
+                $iitm->ID = $image['image_id'];
+                $iitm->Platform = $image['platform'];
+                $iitm->CloudLocation = $image['cloud_location'];
 
-                $itm->{"ImageSet"}->Item[] = $iitm;
+                $itm->ImageSet->Item[] = $iitm;
             }
 
             $response->RoleSet->Item[] = $itm;
@@ -888,24 +887,24 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function ScriptsList()
     {
-        $this->restrictAccess(Acl::RESOURCE_ADMINISTRATION_SCRIPTS);
+        $this->restrictAccess(Acl::RESOURCE_SCRIPTS_ENVIRONMENT);
 
         $response = $this->CreateInitialResponse();
         $response->ScriptSet = new stdClass();
         $response->ScriptSet->Item = array();
 
-        foreach (Script::find(array(
-            '$or' => array(
-                array('accountId' => NULL),
-                array('accountId' => $this->user->getAccountId())
-            )
-        )) as $script) {
+        foreach (Script::find([
+            '$or' => [
+                ['accountId' => null],
+                ['accountId' => $this->user->getAccountId()]
+            ]
+        ]) as $script) {
             /* @var $script Script */
             $itm = new stdClass();
-            $itm->{"ID"} = $script->id;
-            $itm->{"Name"} = $script->name;
-            $itm->{"Description"} = $script->description;
-            $itm->{"LatestRevision"} = $script->getLatestVersion()->version;
+            $itm->ID = $script->id;
+            $itm->Name = $script->name;
+            $itm->Description = $script->description;
+            $itm->LatestRevision = $script->getLatestVersion()->version;
 
             $response->ScriptSet->Item[] = $itm;
         }
@@ -1003,7 +1002,7 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function BundleTaskGetStatus($BundleTaskID)
     {
-        $this->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_BUNDLETASKS);
+        $this->isAllowed(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_BUNDLETASKS);
 
         $BundleTask = BundleTask::LoadById($BundleTaskID);
         if ($BundleTask->envId != $this->Environment->id)
@@ -1027,7 +1026,8 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
     public function ServerImageCreate($ServerID, $RoleName)
     {
-        $this->restrictAccess(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE);
+        $this->restrictAccess(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_MANAGE);
+        $this->restrictAccess(Acl::RESOURCE_ROLES_ENVIRONMENT, Acl::PERM_ROLES_ENVIRONMENT_MANAGE);
 
         $DBServer = DBServer::LoadByID($ServerID);
 
@@ -1054,34 +1054,30 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
                 $bDBServer = DBServer::LoadByID($chk);
                 if ($bDBServer->farmId == $DBServer->farmId)
                     throw new Exception(sprintf(_("Role '%s' is already synchonizing."), $DBServer->GetFarmRoleObject()->GetRoleObject()->name));
-            } catch (Exception $e) {
-            }
+            } catch (Exception $e) {}
         }
 
-        try {
-            $DBRole = DBRole::loadByFilter(array(
-                "name"   => $RoleName,
-                "env_id" => $DBServer->envId
-            ));
-        } catch (Exception $e) {
+        if (!Role::isValidName($RoleName)) {
+            throw new Exception(_("Role name is incorrect"));
         }
 
-        if (!$DBRole) {
-            $ServerSnapshotCreateInfo = new ServerSnapshotCreateInfo($DBServer, $RoleName, SERVER_REPLACEMENT_TYPE::NO_REPLACE, BundleTask::BUNDLETASK_OBJECT_ROLE, 'Bundled via API');
-            $BundleTask = BundleTask::Create($ServerSnapshotCreateInfo);
+        if (Role::isNameUsed($RoleName, $this->user->getAccountId(), $this->Environment->id)) {
+            throw new Exception("Specified role name is already used by another role");
+        }
 
-            $BundleTask->createdById = $this->user->id;
-            $BundleTask->createdByEmail = $this->user->getEmail();
+        $ServerSnapshotCreateInfo = new ServerSnapshotCreateInfo($DBServer, $RoleName, SERVER_REPLACEMENT_TYPE::NO_REPLACE, BundleTask::BUNDLETASK_OBJECT_ROLE, 'Bundled via API');
+        $BundleTask = BundleTask::Create($ServerSnapshotCreateInfo);
 
-            $BundleTask->save();
+        $BundleTask->createdById = $this->user->id;
+        $BundleTask->createdByEmail = $this->user->getEmail();
 
-            $response = $this->CreateInitialResponse();
+        $BundleTask->save();
 
-            $response->BundleTaskID = $BundleTask->id;
+        $response = $this->CreateInitialResponse();
 
-            return $response;
-        } else
-            throw new Exception(_("Specified role name is already used by another role"));
+        $response->BundleTaskID = $BundleTask->id;
+
+        return $response;
     }
 
     public function ServerReboot($ServerID)
@@ -1127,38 +1123,40 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
         $response = $this->CreateInitialResponse();
 
-        $max_instances = $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES);
-        $min_instances = $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MIN_INSTANCES);
+        $max_instances = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MAX_INSTANCES);
+        $min_instances = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MIN_INSTANCES);
 
         if ($IncreaseMaxInstances) {
             if ($max_instances < $min_instances+1)
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES, $max_instances+1, DBFarmRole::TYPE_CFG);
+                $DBFarmRole->SetSetting(Entity\FarmRoleSetting::SCALING_MAX_INSTANCES, $max_instances+1, Entity\FarmRoleSetting::TYPE_CFG);
         }
         if ($DBFarmRole->GetRunningInstancesCount() + $DBFarmRole->GetPendingInstancesCount() >= $max_instances) {
             if ($IncreaseMaxInstances)
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES, $max_instances+1, DBFarmRole::TYPE_CFG);
+                $DBFarmRole->SetSetting(Entity\FarmRoleSetting::SCALING_MAX_INSTANCES, $max_instances+1, Entity\FarmRoleSetting::TYPE_CFG);
             else
                 throw new Exception("Max instances limit reached. Use 'IncreaseMaxInstances' parameter or increase max isntances settings in UI");
         }
 
         if ($DBFarmRole->GetRunningInstancesCount() + $DBFarmRole->GetPendingInstancesCount() == $min_instances)
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_MIN_INSTANCES, $min_instances+1, DBFarmRole::TYPE_CFG);
+            $DBFarmRole->SetSetting(Entity\FarmRoleSetting::SCALING_MIN_INSTANCES, $min_instances+1, Entity\FarmRoleSetting::TYPE_CFG);
 
         $ServerCreateInfo = new ServerCreateInfo($DBFarmRole->Platform, $DBFarmRole);
         try {
             $DBServer = Scalr::LaunchServer($ServerCreateInfo, null, false, DBServer::LAUNCH_REASON_MANUALLY_API, $this->user);
 
-            Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage(
-                $DBFarm->ID, 
+            \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->info(new FarmLogMessage(
+                $DBFarm->ID,
                 sprintf("Starting new instance (API). ServerID = %s.", $DBServer->serverId),
                 $DBServer->serverId
             ));
-        } catch (Exception $e) {
-            Logger::getLogger(LOG_CATEGORY::API)->error($e->getMessage());
-        }
 
-        $response->ServerID = $DBServer->serverId;
-        $response->CloudServerID = $DBServer->GetCloudServerID();
+            $response->ServerID = $DBServer->serverId;
+            $response->CloudServerID = $DBServer->GetCloudServerID();
+
+        } catch (Exception $e) {
+            \Scalr::getContainer()->logger(LOG_CATEGORY::API)->error($e->getMessage());
+            throw $e;
+        }
 
         return $response;
     }
@@ -1178,9 +1176,9 @@ class ScalrAPI_2_0_0 extends ScalrAPICore
 
         if ($DecreaseMinInstancesSetting) {
             $DBFarmRole = $DBServer->GetFarmRoleObject();
-            if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MIN_INSTANCES) > 1) {
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_MIN_INSTANCES,
-                    $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MIN_INSTANCES)-1
+            if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MIN_INSTANCES) > 1) {
+                $DBFarmRole->SetSetting(Entity\FarmRoleSetting::SCALING_MIN_INSTANCES,
+                    $DBFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MIN_INSTANCES)-1
                 );
             }
         }

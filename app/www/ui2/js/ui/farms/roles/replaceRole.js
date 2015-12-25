@@ -1,13 +1,13 @@
 Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, moduleParams) {
-	return Scalr.utils.Window({
+    return Scalr.utils.Window({
         xtype: 'form',
-		scalrOptions: {
-			modalWindow: true
-		},
-		width: 800,
+        scalrOptions: {
+            modalWindow: true
+        },
+        width: 800,
         layout: 'fit',
         bodyCls: 'x-container-fieldset',
-		items: [{
+        items: [{
             xtype: 'grid',
             margin: '0 0 0 -20',
             padding: '0 0 0 20',
@@ -26,7 +26,7 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
                 deferEmptyText: false
             },
             store: {
-                fields: ['id', 'name', 'osId', 'shared', 'image', 'behaviors'],
+                fields: ['id', 'name', 'osId', 'image', 'behaviors', 'scope'],
                 proxy: 'object',
                 data: moduleParams['roles'],
                 sorters: [{
@@ -39,10 +39,9 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
                 text: 'Role',
                 dataIndex: 'name',
                 flex: 1,
-                tpl: new Ext.XTemplate('{[this.getScope(values.shared)]}&nbsp;&nbsp;{name}',
+                tpl: new Ext.XTemplate('{[this.getScope(values.scope)]}&nbsp;&nbsp;{name}',
                     {
-                        getScope: function(shared){
-                            var scope = shared ? 'scalr' : 'environment';
+                        getScope: function(scope){
                             return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qclass="x-tip-light" data-qtip="' + Scalr.utils.getScopeLegend('role') + '"/>';
                         }
                     }
@@ -96,7 +95,7 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
             },{
                 xtype: 'displayfield',
                 cls: 'x-form-field-warning',
-                value: 'Replacing this role may lead to broken functionality! Currently running instances will NOT be replaced, only NEW instances will use this replaced role.',
+                value: 'Replacing a Role does not affect existing servers, only newly launched (including replacement) ones. See <a href="https://scalr-wiki.atlassian.net/wiki/x/XyYb" target="_blank">documentation</a>.',
                 style: 'width: 100%',
                 margin: 0
             }]
@@ -118,11 +117,11 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
                         record = me.up('form').down('grid').getSelectedRecord();
                     if (record) {
                         Scalr.Request({
-							confirmBox: {
-								type: 'action',
-								msg: 'Are you sure you want to replace this role?<br>' +
-								'This change will be saved immediately!'
-							},
+                            confirmBox: {
+                                type: 'action',
+                                msg: 'Are you sure you want to replace this role?<br>' +
+                                'This change will be saved immediately!'
+                            },
                             processBox: {
                                 type: 'save'
                             },
@@ -152,5 +151,5 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
             }]
         }]
 
-	});
+    });
 });

@@ -40,17 +40,18 @@ from scalrpy.util import rpc
 from scalrpy.util import helper
 from scalrpy.util import dbmanager
 from scalrpy.util import cryptotool
-from scalrpy.util import exceptions
 from scalrpy.util import application
 from scalrpy.util import schedule_parser
 
 from scalrpy import LOG
+from scalrpy import exceptions
 
 
 helper.patch_gevent()
 
 
 app = None
+
 eol_os = ['ubuntu-10-04']
 
 
@@ -95,7 +96,7 @@ class SzrUpdService(application.ScalrIterationApplication):
         if hasattr(self.get_szr_ver_from_repo.im_func, 'devel_cache'):
             delattr(self.get_szr_ver_from_repo.im_func, 'devel_cache')
 
-    deb_pattern = re.compile('Package: scalarizr\n.*?Version:([ A-Za-z0-9.]*)-?.*\n.*?', re.DOTALL)
+    deb_pattern = re.compile(r'Package: scalarizr\n.*?Version:([ A-Za-z0-9.]*)-?.*\n.*?', re.DOTALL)
 
     def ver_from_deb_repo(self, repo, branch=None):
         out = {}
@@ -109,17 +110,19 @@ class SzrUpdService(application.ScalrIterationApplication):
             try:
                 r = requests.get(url)
                 r.raise_for_status()
+                assert r.text, 'Empty Packages file'
                 out[deb_repo_url_template] = self.deb_pattern.findall(r.text)[0].strip()
             except (requests.exceptions.HTTPError, requests.exceptions.InvalidSchema):
-                msg = 'Deb repository {0} failed, file: {1} not found'.format(repo['deb_repo_url'], url)
+                msg = 'Deb repository {0} failed, file not found: {1}'
+                msg = msg.format(repo['deb_repo_url'], url)
                 LOG.warning(msg)
         return out
 
     rpm_pattern_1 = re.compile(
-            '<package type="rpm"><name>scalarizr-base</name>.*?ver="([A-Za-z0-9.]*)-?.*".*?</package>',
+            r'<package type="rpm">[\n ]*<name>scalarizr-base</name>.*?ver="([A-Za-z0-9.]*)-?.*".*?</package>',
             re.DOTALL)
     rpm_pattern_2 = re.compile(
-            '<package type="rpm"><name>scalarizr</name>.*?ver="([ A-Za-z0-9.]*)-?.*".*?</package>',
+            r'<package type="rpm">[\n ]*<name>scalarizr</name>.*ver="([ A-Za-z0-9.]*)-?.*".*</package>',
             re.DOTALL)
 
     def ver_from_rpm_repo(self, repo, branch=None):
@@ -129,28 +132,29 @@ class SzrUpdService(application.ScalrIterationApplication):
             rpm_repo_url_template = rpm_repo_url_template.strip()
             if branch:
                 rpm_repo_url_template = rpm_repo_url_template % branch
-            for release in ['5', '6']:
+            for release in ['5', '6', '7']:
                 rpm_repo_url = rpm_repo_url_template.replace('$releasever', release)
                 rpm_repo_url = rpm_repo_url.replace('$basearch', 'x86_64')
                 url = os.path.join(rpm_repo_url, 'repodata/primary.xml.gz')
                 try:
                     r = requests.get(url)
                     r.raise_for_status()
+                    assert r.text, 'Empty primary.xml file'
+                    s = StringIO.StringIO(r.content)
+                    f = gzip.GzipFile(fileobj=s, mode='r')
+                    f.seek(0)
+                    xml = minidom.parse(f)
+                    try:
+                        out[rpm_repo_url_template] = self.rpm_pattern_1.findall(xml.toxml())[0].strip()
+                    except:
+                        out[rpm_repo_url_template] = self.rpm_pattern_2.findall(xml.toxml())[0].strip()
                 except (requests.exceptions.HTTPError, requests.exceptions.InvalidSchema):
-                    msg = 'RPM repository {0} failed, file: {1} not found'.format(repo['rpm_repo_url'], url)
+                    msg = 'RPM repository {0} failed, file not found: {1}'
+                    msg = msg.format(repo['rpm_repo_url'], url)
                     LOG.warning(msg)
-                    return out
-                s = StringIO.StringIO(r.content)
-                f = gzip.GzipFile(fileobj=s, mode='r')
-                f.seek(0)
-                xml = minidom.parse(f)
-                try:
-                    out[rpm_repo_url_template] = self.rpm_pattern_1.findall(xml.toxml())[0].strip()
-                except:
-                    out[rpm_repo_url_template] = self.rpm_pattern_2.findall(xml.toxml())[0].strip()
             return out
 
-    win_pattern = re.compile('scalarizr *scalarizr_(.*).exe*', re.DOTALL)
+    win_pattern = re.compile(r'scalarizr *scalarizr_(.*).exe*', re.DOTALL)
 
     def ver_from_win_repo(self, repo, branch=None):
         out = {}
@@ -165,11 +169,12 @@ class SzrUpdService(application.ScalrIterationApplication):
             try:
                 r = requests.get(url)
                 r.raise_for_status()
+                assert r.text, 'Empty index file'
+                out[win_repo_url] = self.win_pattern.findall(r.text)[0].split('-')[0]
             except (requests.exceptions.HTTPError, requests.exceptions.InvalidSchema):
-                msg = 'Win repository {0} failed, file: {1} not found'.format(repo['win_repo_url'], url)
+                msg = 'Win repository {0} failed, file not found: {1}'
+                msg = msg.format(repo['win_repo_url'], url)
                 LOG.warning(msg)
-                return out
-            out[win_repo_url] = self.win_pattern.findall(r.text)[0].split('-')[0]
         return out
 
     def get_szr_ver_from_repo(self, devel_branch=None, force=False):
@@ -242,7 +247,7 @@ class SzrUpdService(application.ScalrIterationApplication):
     def _get_db_servers(self):
         if eol_os:
             query = (
-                "SELECT s.server_id, s.farm_id, s.farm_roleid, s.remote_ip, s.local_ip, "
+                "SELECT s.server_id, s.farm_id, s.farm_roleid farm_role_id, s.remote_ip, s.local_ip, "
                 "s.platform, r.os_id "
                 "FROM servers s "
                 "JOIN farm_roles fr ON s.farm_roleid=fr.id "
@@ -252,7 +257,7 @@ class SzrUpdService(application.ScalrIterationApplication):
                 "ORDER BY s.server_id".format(str(eol_os)[1:-1]))
         else:
             query = (
-                "SELECT server_id, farm_id, farm_roleid, "
+                "SELECT server_id, farm_id, farm_roleid farm_role_id, "
                 "remote_ip, local_ip, platform "
                 "FROM servers "
                 "WHERE status IN ('Running') "
@@ -312,22 +317,22 @@ class SzrUpdService(application.ScalrIterationApplication):
         self._db.load_farm_settings(farms, props)
         farms_map = dict((_['id'], _) for _ in farms)
 
-        farms_roles = [{'id': __} for __ in set(_['farm_roleid'] for _ in servers)]
+        farms_roles = [{'id': __} for __ in set(_['farm_role_id'] for _ in servers)]
         props = ['base.upd.schedule', 'scheduled_on', 'user-data.scm_branch']
         self._db.load_farm_role_settings(farms_roles, props)
         farms_roles_map = dict((_['id'], _) for _ in farms_roles)
 
         for server in servers:
             schedule = farms_roles_map.get(
-                server['farm_roleid'], {}).get('base.upd.schedule', None)
+                server['farm_role_id'], {}).get('base.upd.schedule', None)
             if not schedule:
                 schedule = farms_map.get(
                     server['farm_id'], {}).get('szr.upd.schedule', '* * *')
             server['schedule'] = schedule
             server['scheduled_on'] = str(farms_roles_map.get(
-                server['farm_roleid'], {}).get('scheduled_on', None))
+                server['farm_role_id'], {}).get('scheduled_on', None))
             server['user-data.scm_branch'] = farms_roles_map.get(
-                server['farm_roleid'], {}).get('user-data.scm_branch', None)
+                server['farm_role_id'], {}).get('user-data.scm_branch', None)
         return servers
 
     def _set_next_update_dt(self, servers):
@@ -339,7 +344,7 @@ class SzrUpdService(application.ScalrIterationApplication):
                     """(farm_roleid, name, value) """
                     """VALUES ({0}, 'scheduled_on', '{1}') """
                     """ON DUPLICATE KEY UPDATE value='{1}'"""
-                ).format(server['farm_roleid'], next_update_dt)
+                ).format(server['farm_role_id'], next_update_dt)
                 msg = "Set next update datetime for server: {0} to: {1}"
                 msg = msg.format(server['server_id'], next_update_dt)
                 LOG.debug(msg)

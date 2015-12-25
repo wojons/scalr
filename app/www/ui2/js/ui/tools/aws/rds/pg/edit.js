@@ -33,8 +33,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.edit', function (loadParams, modulePara
 		},{
 			xtype: 'fieldset',
 			title: 'Engine default parameters',
-			itemId: 'engine-default',
-			items: moduleParams.params['engine-default']
+			itemId: 'engineDefault',
+			items: moduleParams.params['engineDefault']
 		},{
 			xtype: 'fieldset',
 			title: 'User parameters',

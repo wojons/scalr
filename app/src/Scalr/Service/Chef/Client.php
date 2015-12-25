@@ -1,5 +1,9 @@
 <?php
-    class Scalr_Service_Chef_Client
+
+use http\QueryString;
+use Scalr\System\Http\Client\Request;
+
+class Scalr_Service_Chef_Client
     {
         private $chefServerUrl = '';
         private $key = '';
@@ -161,27 +165,17 @@
         private function request($path, $method, $data="")
         {
             $data = trim($data);
-            $httpRequest = new HttpRequest();
-
-            $httpRequest->setOptions(array(
-                "useragent" => "Scalr (http://scalr.com)"
-            ));
+            $httpRequest = new Request();
 
             $fullUrl = "{$this->chefServerUrl}{$path}";
             $chunks = parse_url($fullUrl);
 
-            if ($method == 'POST' && $data) {
-                if (is_array($data))
-                    $httpRequest->setPostFields($data);
-                else
-                    $httpRequest->setBody($data);
+            if (in_array($method, ["POST", "PUT"]) && $data) {
+                $httpRequest->append($data);
             }
 
-            if ($method == 'PUT' && $data)
-                $httpRequest->setPutData($data);
-
-            $httpRequest->setUrl($fullUrl);
-            $httpRequest->setMethod(constant("HTTP_METH_{$method}"));
+            $httpRequest->setRequestUrl($fullUrl);
+            $httpRequest->setRequestMethod($method);
 
             $tz = @date_default_timezone_get();
             date_default_timezone_set("UTC");
@@ -213,33 +207,33 @@
               $r = array_merge($headers, $this->sign($str));
 
               $httpRequest->addHeaders($r);
-              $httpRequest->send();
+              $response = \Scalr::getContainer()->http->sendRequest($httpRequest);
 
-              if($httpRequest->getResponseCode() == 401)
+              if($response->getResponseCode() == 401)
                 throw new Exception("Failed to authenticate as {$userId}. Ensure that your node_name and client key are correct.");
-            if($httpRequest->getResponseCode() == 404)
+            if($response->getResponseCode() == 404)
                 throw new Exception("Client not found or parameters are not valid");
-            else if ($httpRequest->getResponseCode() <= 205) {
-                $data = $httpRequest->getResponseData();
-                $retval = ($data['body']) ? json_decode($data['body']) : true;
+            else if ($response->getResponseCode() <= 205) {
+                $data = $response->getBody()->toString();
+                $retval = empty($data) ? true : json_decode($data);
             }
-            else if ($httpRequest->getResponseCode() >= 300 && $httpRequest->getResponseCode() < 400) {
-                throw new Exception("Request to chef server failed. Chef server returned code {$httpRequest->getResponseCode()}. Redirect URL: {$httpRequest->getHeader("Location")}");
+            else if ($response->getResponseCode() >= 300 && $response->getResponseCode() < 400) {
+                throw new Exception("Request to chef server failed. Chef server returned code {$response->getResponseCode()}. Redirect URL: {$response->getHeader("Location")}");
             }
-            else if ($httpRequest->getResponseCode() > 400) {
-                $data = $httpRequest->getResponseData();
+            else if ($response->getResponseCode() > 400) {
+                $data = $response->getBody()->toString();
 
-                $msg = ($data['body']) ? json_decode($data['body']) : "";
+                $msg = empty($data) ? "" : json_decode($data);
                 if (is_array($msg->error))
                     $msg = $msg->error[0];
                 elseif ($msg->error)
                     $msg = $msg->error;
                 else
-                    $msg = "Unknown error. Error code: {$httpRequest->getResponseCode()}";
+                    $msg = "Unknown error. Error code: {$response->getResponseCode()}";
 
                 throw new Exception("Request to chef server failed with error: {$msg} ({$method} {$path})");
             } else {
-                throw new Exception("Unexpected situation. Response code {$httpRequest->getResponseCode()}");
+                throw new Exception("Unexpected situation. Response code {$response->getResponseCode()}");
             }
 
             return $retval;

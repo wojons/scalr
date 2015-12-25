@@ -50,6 +50,13 @@ class ResourceObject
     private $group;
 
     /**
+     * Resource Mode
+     *
+     * @var \Scalr\Acl\Resource\ModeInterface
+     */
+    private $mode;
+
+    /**
      * Constructor
      *
      * @param   int        $resourceId     The ID of the ACL resource
@@ -59,22 +66,20 @@ class ResourceObject
     public function __construct($resourceId, $definitionItem)
     {
         $this->resourceId = $resourceId;
-
         $this->name = $definitionItem[0];
-
         $this->description = $definitionItem[1];
-
         $this->group = $definitionItem[2];
-
         $this->permissions = array();
 
         if (isset($definitionItem[3])) {
+            // ACL Resource Permissions
             if (!is_array($definitionItem[3])) {
                 throw new Exception\ResourceObjectException(sprintf(
-                    "Third value of definition array must be array of the unique permissions and should look like "
+                    "Third value of the definition array must be array of the unique permissions and should look like "
                   . "array(permission_id => description), %s given", gettype($definitionItem[3])
                 ));
             }
+
             foreach ($definitionItem[3] as $permissionid => $description) {
                 if (!is_string($description)) {
                     throw new Exception\ResourceObjectException(sprintf(
@@ -83,7 +88,27 @@ class ResourceObject
                         gettype($description)
                     ));
                 }
+
                 $this->permissions[strtolower($permissionid)] = $description;
+            }
+        }
+
+        if (isset($definitionItem[4])) {
+            //ACL Resource Mode
+            if (!($definitionItem[4] instanceof ModeInterface)) {
+                throw new Exception\ResourceObjectException(sprintf(
+                    "Forth value of the definition array must be instance of Scalr\\Acl\\Resource\\ModeInterface, %s given.",
+                    (is_object($definitionItem[4]) ? get_class($definitionItem[4]) : gettype($definitionItem[4]))
+                ));
+            }
+
+            $this->mode = $definitionItem[4];
+
+            if ($this->resourceId != $this->mode->getResourceId()) {
+                throw new Exception\ResourceObjectException(sprintf(
+                    "There is a mismatch in the Resource identifiers of the %s ACL Resource and its Mode",
+                    $this->name
+                ));
             }
         }
     }
@@ -146,5 +171,15 @@ class ResourceObject
     public function hasPermission($permissionId)
     {
         return isset($this->permissions[$permissionId]);
+    }
+
+    /**
+     * Gets Mode definition
+     *
+     * @return \Scalr\Acl\Resource\ModeInterface Returns the Mode definition if it exists
+     */
+    public function getMode()
+    {
+        return $this->mode;
     }
 }

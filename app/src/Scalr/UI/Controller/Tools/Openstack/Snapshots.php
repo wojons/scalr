@@ -23,6 +23,8 @@ class Scalr_UI_Controller_Tools_Openstack_Snapshots extends Scalr_UI_Controller
 
     public function createAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_OPENSTACK_SNAPSHOTS, Acl::PERM_OPENSTACK_SNAPSHOTS_MANAGE);
+
         $this->response->page('ui/tools/openstack/snapshots/create.js', array());
     }
     
@@ -35,6 +37,8 @@ class Scalr_UI_Controller_Tools_Openstack_Snapshots extends Scalr_UI_Controller
      */
     public function xCreateAction($volumeId, $cloudLocation, $platform, $name = '', $description = '')
     {
+        $this->request->restrictAccess(Acl::RESOURCE_OPENSTACK_SNAPSHOTS, Acl::PERM_OPENSTACK_SNAPSHOTS_MANAGE);
+
         $client = $this->environment->openstack($platform, $cloudLocation);
         $snapshot = $client->volume->createSnapshot($volumeId, $name, $description, true);
 
@@ -48,6 +52,8 @@ class Scalr_UI_Controller_Tools_Openstack_Snapshots extends Scalr_UI_Controller
 
     public function xRemoveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_OPENSTACK_SNAPSHOTS, Acl::PERM_OPENSTACK_SNAPSHOTS_MANAGE);
+
         $this->request->defineParams(array(
             'snapshotId' => array('type' => 'json'),
             'cloudLocation'

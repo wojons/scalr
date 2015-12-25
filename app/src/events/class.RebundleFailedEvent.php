@@ -1,6 +1,6 @@
 <?php
 
-class RebundleFailedEvent extends Event
+class RebundleFailedEvent extends AbstractServerEvent
 {
 
     /**

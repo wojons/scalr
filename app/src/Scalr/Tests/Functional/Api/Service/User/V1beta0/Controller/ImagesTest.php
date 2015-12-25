@@ -68,24 +68,32 @@ class ImagesTest extends ApiTestCase
         $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, 'Invalid name of the Image');
 
         $create = $this->request($uri, Request::METHOD_POST, [], [
+            'scope' => ScopeInterface::SCOPE_ENVIRONMENT,
+            'name'  => $testName
+        ]);
+        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property 'architecture'");
+
+        $create = $this->request($uri, Request::METHOD_POST, [], [
             'scope'         => ScopeInterface::SCOPE_ENVIRONMENT,
             'architecture'  => 'invalid',
             'name'          => $testName
         ]);
-        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, 'Invalid architecture of the Image');
+        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, 'Invalid architecture value');
 
         $create = $this->request($uri, Request::METHOD_POST, [], [
             'scope'         => ScopeInterface::SCOPE_ENVIRONMENT,
             'name'          => $testName,
+            'architecture' => 'x86_64'
         ]);
-        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_STRUCTURE, 'OS must be provided with the request');
+        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property 'os.id'");
 
         $create = $this->request($uri, Request::METHOD_POST, [], [
             'scope'         => ScopeInterface::SCOPE_ENVIRONMENT,
             'name'          => $testName,
-            'os'            => ['id' => 'invalidOsId']
+            'os'            => ['id' => 'invalidOsId'],
+            'architecture' => 'x86_64'
         ]);
-        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, 'Specified OS does not exist');
+        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, "OS with id 'invalidOsId' not found.");
 
         $os = Os::findOne([['status' => Os::STATUS_ACTIVE]]);
         /* @var $os Os */
@@ -103,6 +111,7 @@ class ImagesTest extends ApiTestCase
             'name'          => $testName,
             'os'            => ['id' => $os->id],
             'cloudPlatform' => $platform,
+            'architecture' => 'x86_64'
         ]);
 
         $this->assertErrorMessageErrorEquals(ErrorMessage::ERR_INVALID_VALUE, $create);
@@ -114,16 +123,17 @@ class ImagesTest extends ApiTestCase
             'scope'         => ScopeInterface::SCOPE_ENVIRONMENT,
             'name'          => $testName,
             'os'            => ['invalid'],
-            'cloudPlatform' => $platform
-
+            'cloudPlatform' => $platform,
+            'architecture' => 'x86_64'
         ]);
-        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, 'Invalid identifier of the OS');
+        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property 'os.id'");
 
         $create = $this->request($uri, Request::METHOD_POST, [], [
             'scope'         => ScopeInterface::SCOPE_ENVIRONMENT,
             'name'          => $testName,
             'os'            => ['id' => $os->id],
             'cloudPlatform' => $platform,
+            'architecture' => 'x86_64'
         ]);
         $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, 'Unable to find the requested image on the cloud');
 
@@ -148,7 +158,8 @@ class ImagesTest extends ApiTestCase
             'os'            => $os->id,
             'cloudPlatform' => $platform,
             'cloudLocation' => $region,
-            'cloudImageId'  => $cloudImageId
+            'cloudImageId'  => $cloudImageId,
+            'architecture' => 'x86_64'
         ]);
 
         $this->assertFetchResponseNotEmpty($create);
@@ -173,7 +184,8 @@ class ImagesTest extends ApiTestCase
             'os'            => ['id' => $os->id],
             'cloudPlatform' => $platform,
             'cloudLocation' => $region,
-            'cloudImageId'  => $cloudImageId
+            'cloudImageId'  => $cloudImageId,
+            'architecture' => 'x86_64'
         ]);
         $this->assertErrorMessageErrorEquals(ErrorMessage::ERR_UNICITY_VIOLATION, $create);
         $this->assertErrorMessageStatusEquals(409, $create);
@@ -285,7 +297,8 @@ class ImagesTest extends ApiTestCase
             'os'            => ['id' => $entity->osId],
             'cloudPlatform' => $entity->platform,
             'cloudLocation' => $entity->cloudLocation,
-            'cloudImageId'  => $entity->id
+            'cloudImageId'  => $entity->id,
+            'architecture' => 'x86_64'
         ]);
         $this->assertErrorMessageErrorEquals(ErrorMessage::ERR_UNICITY_VIOLATION, $create);
         $this->assertErrorMessageStatusEquals(409, $create);

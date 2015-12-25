@@ -1,6 +1,6 @@
 <?php
 
-class InstanceLaunchFailedEvent extends Event
+class InstanceLaunchFailedEvent extends AbstractServerEvent
 {
 
     /**

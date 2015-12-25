@@ -31,7 +31,7 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
             items: [{
                 xtype: 'component',
                 itemId: 'nameReadonly',
-                cls: 'x-fieldset-subheader',
+                cls: 'x-fieldset-subheader x-fieldset-subheader-no-text-transform',
                 hidden: true
             },{
                 xtype: 'textfield',
@@ -84,7 +84,17 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                     allowBlank: false,
                     autoSetSingleValue: true,
                     store: {
-                        fields: ['id', {name: 'title', convert: function(v, record){return record.data.version || record.data.generation || record.data.id}}],
+                        fields: [
+                            'id',
+                            {
+                                name: 'title',
+                                convert: function(v, record){return record.data.version || record.data.generation || record.data.id},
+                                sortType: 'asFloat'
+                            }
+                        ],
+                        sorters: [{
+                            property: 'title'
+                        }],
                         proxy: 'object'
                     },
                     margin: '0 0 0 12',
@@ -110,15 +120,59 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                 },
                 fieldLabel: 'Category',
                 allowBlank: false
-            },{
+            }, {
                 xtype: 'displayfield',
                 name: 'created',
                 fieldLabel: 'Created by'
-            },{
+            }, {
                 xtype: 'textarea',
                 name: 'description',
                 fieldLabel: 'Description',
                 height: 70
+            }, {
+                xtype: 'displayfield',
+                fieldLabel: 'Permissions',
+                itemId: 'environments'
+            }, {
+                xtype: 'buttongroupfield',
+                fieldLabel: 'Quick Start',
+                maxWidth: 245,
+                name: 'isQuickStart',
+                defaults: {
+                    width: 60
+                },
+                items: [{
+                    text: 'Yes',
+                    value: 1
+                }, {
+                    text: 'No',
+                    value: 0
+                }],
+                plugins: {
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    icons: [{id: 'info', tooltip: 'Make this a Quick Start Role.'}]
+                }
+            }, {
+                xtype: 'buttongroupfield',
+                fieldLabel: 'Deprecated',
+                maxWidth: 245,
+                name: 'isDeprecated',
+                defaults: {
+                    width: 60
+                },
+                items: [{
+                    text: 'Yes',
+                    value: 1
+                }, {
+                    text: 'No',
+                    value: 0
+                }],
+                plugins: {
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    icons: [{id: 'info', tooltip: 'Deprecate this Role to prevent further use.'}]
+                }
             }]
         },{
             xtype: 'container',
@@ -151,16 +205,16 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                             var behaviors = [
                                     {name: 'mysql2', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona','mariadb'], os:[{family: 'centos', version: /^7/i}]}},
                                     {name: 'mariadb', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona','mysql2']}},
-                                    {name: 'postgresql', disable: {platform: ['gce'], behavior: ['redis', 'mongodb', 'percona', 'mysql2']}},
-                                    {name: 'percona', disable: Ext.apply({behavior: ['postgresql', 'redis', 'mongodb', 'mysql2']})},
+                                    {name: 'postgresql', disable: {platform: ['gce'], behavior: ['redis', 'mongodb', 'percona', 'mysql2', 'mariadb']}},
+                                    {name: 'percona', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'mysql2', 'mariadb']}},
                                     {name: 'app', disable: {behavior:['www', 'tomcat']}},
                                     {name: 'tomcat', disable: {behavior:['app'], os:['oel', {family: 'ubuntu', version: ['10.04']}]}},
                                     {name: 'haproxy', disable: {behavior:['www']}},
                                     {name: 'www', disable: {behavior:['app', 'haproxy']}},
                                     {name: 'memcached'},
-                                    {name: 'redis', disable: {behavior: ['postgresql', 'mongodb', 'percona', 'mysql2']}},
+                                    {name: 'redis', disable: {behavior: ['postgresql', 'mongodb', 'percona', 'mysql2', 'mariadb']}},
                                     {name: 'rabbitmq', disable: {os: ['rhel', 'oel']}},
-                                    {name: 'mongodb', disable: {platform: ['gce', 'rackspacengus', 'rackspacenguk'], behavior: ['postgresql', 'redis', 'percona', 'mysql2']}},
+                                    {name: 'mongodb', disable: {platform: ['gce', 'rackspacengus', 'rackspacenguk'], behavior: ['postgresql', 'redis', 'percona', 'mysql2', 'mariadb']}},
                                     {name: 'chef'}
                                 ],
                                 store = this.up('roleeditoverview').down('#automation').store;
@@ -250,7 +304,7 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                                             behaviors.push(btn.behavior);
                                         }
                                     });
-                                    if (behaviors.length === 1 && behaviors[0] === 'chef') {
+                                    if (behaviors.length === 0 || behaviors.length === 1 && behaviors[0] === 'chef') {
                                         behaviors.push('base');
                                     }
                                     this.up('roleeditoverview').fireEvent('behaviorschange', behaviors);
@@ -403,7 +457,7 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
 
                             res = '<img class="x-icon-platform-small x-icon-platform-small-' + platform + '" data-qtip="' + platformName + '" src="' + Ext.BLANK_IMAGE_URL + '"/>&nbsp;&nbsp;';
                             if (record.get('imageId')) {
-                                if (platform === 'gce' || platform === 'ecs') {
+                                if (platform === 'gce' || platform === 'azure') {
                                     res += 'All locations';
                                 } else if (location) {
                                     if (Scalr.platforms[platform] && Scalr.platforms[platform]['locations'] && Scalr.platforms[platform]['locations'][cloudLocation]) {
@@ -422,7 +476,7 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                         function(value, meta, record) {
                             var res = '';
                             if (record.get('imageId')) {
-                                res = '<a href="#/images?hash=' + record.get('hash') + '">' + record.get('name') + '</a>';
+                                res = '<a href="#' + Scalr.utils.getUrlPrefix() + '/images?hash=' + record.get('hash') + '">' + record.get('name') + '</a>';
                             } else {
                                 res = '<i>No image has been added for this cloud</i>';
                             }
@@ -501,13 +555,15 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                                 }
                             });
                         }
-
+                        var groupingFeature = this.view.findFeature('grouping');
+                        groupingFeature.restoreGroupsState = true;
+                        groupingFeature.disable();
                         this.store.load({data: Ext.Array.map(scripts, function(script){
                             script['event'] = script['event'] || script['event_name'];
                             script['script'] = script['script'] || script['script_name'];
                             return script;
                         })});
-
+                        groupingFeature.enable();
                     }
                 }]
             },{
@@ -658,6 +714,8 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                             name: params['role']['name'],
                             catId: params['role']['catId'],
                             description: params['role']['description'],
+                            isQuickStart: params['role']['isQuickStart'],
+                            isDeprecated: params['role']['isDeprecated'],
                             created: params['role']['addedByEmail'] ? '<i>' + params['role']['addedByEmail'] + '</i>' + (params['role']['dtadded'] ? ' on <i>' + params['role']['dtadded'] + '</i>' : '') : '-',
                             usage: '<span style="color:green;font-size:140%">' + params['roleUsage']['farms'] + '</span> farm(s) with ' + '<span style="color:green;font-size:140%">' + params['roleUsage']['instances'] + '</span> running instance(s) of this role'
                         });
@@ -667,13 +725,15 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                             this.down('#osId').setValue(params['role']['osId']);
                         }
 
+                        this.down('[name="isQuickStart"]').setValue(0);
+                        this.down('[name="isDeprecated"]').setValue(0);
                         this.down('[name="created"]').hide();
                         this.down('[name="usage"]').hide();
                     }
 
                     var fields = this.down('#roleSettings').query('[isFormField]');
                     Ext.Array.each(fields, function(item){
-                        if (item.name !== 'description') {
+                        if (item.name !== 'description' && item.name !== 'isQuickStart' && item.name !== 'isDeprecated') {
                             item.setReadOnly(!isNewRole, false);
                         }
                         if (item.name === 'catId') {
@@ -683,7 +743,8 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
 
                     this.down('#configureAutomation').setVisible(isNewRole);
                     this.down('#automation').store.loadData(isNewRole ? [['base']] : Ext.Array.map(params['role']['behaviors'], function(item){return [item];}));
-                    this.down('#scripts').getStore().loadEvents(params['scriptData']['events']);
+
+                    this.down('#scripts').getStore().loadEvents(Ext.apply({'*': {name: '*', description: 'All events', scope: ''}}, params['scriptData']['events']));
 
                     this.down('#osId').on('change', function(comp, value){
                         this.up('roleeditoverview').fireEvent('osidchange', value);
@@ -720,6 +781,16 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                     }
                     this.down('#images').store.load({data: images});
 
+                    var environments = this.down('#environments'), cnt = 0;
+                    Ext.each(params['role']['environments'], function(v) {
+                        if (v['enabled'] == 0) {
+                            cnt++;
+                        }
+                    });
+                    environments.setVisible(cnt && cnt != params['role']['environments'].length);
+                    cnt = params['role']['environments'].length - cnt;
+                    environments.setValue("Available on " + cnt + " environment" + (cnt > 1 ? 's' : ''));
+
                     this.down('#scripts').refreshScripts(params);
                     this.down('#chefPanel').refreshChefSettings(params);
                 }
@@ -744,5 +815,4 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
         }
         return valid;
     }
-
 });

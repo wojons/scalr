@@ -1279,7 +1279,15 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
         switch (mode) {
             case 'week':
             case 'custom':
-                title = startDate < realEndDate ? (Ext.Date.format(startDate, 'M j') + '&nbsp;&ndash;&nbsp;' + Ext.Date.format(endDate, 'M j')) : Ext.Date.format(startDate, 'F j');
+                if (startDate < realEndDate) {
+                    if (startDate.getFullYear() !== endDate.getFullYear()) {
+                        title = Ext.Date.format(startDate, 'M j, Y') + '&nbsp;&ndash;&nbsp;' + Ext.Date.format(endDate, 'M j, Y');
+                    } else {
+                        title = Ext.Date.format(startDate, 'M j') + '&nbsp;&ndash;&nbsp;' + Ext.Date.format(endDate, 'M j');
+                    }
+                } else {
+                    title = Ext.Date.format(startDate, 'F j');
+                }
             break;
             case 'month':
                 title = Ext.Date.format(startDate, 'F Y');
@@ -1537,7 +1545,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                     tips: me.chartViewTip,
                     listeners: {
                         itemclick: function(series, item, event) {
-                            me.onShowChartViewDetails(item.record.get('index'), item.field, '', item.record.get('label'));
+                            me.onShowChartViewDetails(item.record.get('index'), item.field, '', item.record.get('label'), item.record.get('datetime'));
                         }
                     },
 
@@ -1649,7 +1657,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                 position: 'bottom',
                 fields: ['xLabel'],
                 renderer: function(label) {
-                    return Ext.isNumeric(label) ? '' : label;
+                    return Ext.isString(label) ? label : '';
                 }
             }],
             series: series
@@ -1874,7 +1882,9 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                     listeners: {
                         selectionchange: function(grid, selected) {
                             if (selected.length > 0) {
+                                var scrollTop = grid.view.el.getScroll().top;//preserveScrollOnRefresh doesn't work for unknown reason
                                 me.showPieViewDetails(selected[0].getData());
+                                grid.view.el.scrollTo('top', scrollTop);
                             } else {
                                 pieWrapper.down('#details').hide();
                             }
@@ -1982,7 +1992,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                 dataIndex: 'name',
                 width: 200,
                 locked: true,
-                resizeable: false,
+                resizable: true,
                 sortable: false,
                 xtype: 'templatecolumn',
                 tpl: new Ext.XTemplate(
@@ -2101,7 +2111,60 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
         viewWrapper.layout.setActiveItem(gridCt);
     },
 
-    showInstanceTypeDetails: function(view, index, id, name, label, datetime, data) {
+    onShowInstanceTypeDetails: function(view, index, id, name, label, datetime, data) {
+        var me = this,
+            params = {
+                date: Ext.Date.format(datetime, 'Y-m-d H:i'),
+                mode: me.mode,
+                start: Ext.Date.format(me.startDate, 'Y-m-d'),
+                end: Ext.Date.format(me.endDate, 'Y-m-d')
+            };
+        if (Scalr.scope === 'environment') {
+            if (me.type === 'farms') {
+                params.farmId = id;
+            } else {
+                params.farmId = me.requestParams.farmId;
+            }
+
+            if (id !== 'total' && me.type === 'farmRoles') {
+                params.farmRoleId = id;
+            }
+        } else if (Scalr.scope === 'account') {
+            if (me.subject === 'projects') {
+                params.projectId = me.requestParams.projectId;
+                Ext.each(me.data.totals.farms, function(farm) {
+                    if (farm.id == id) {
+                        if (farm.environment) {
+                            params.envId = farm.environment.id;
+                        }
+                        return false;
+                    }
+                });
+            } else {
+                params.envId = me.data['envId'];
+            }
+            params.farmId = id;
+        }
+        if (params.farmId === 'everything else') {
+            params.farmId = Ext.Object.getKeys(me.data.farms);
+            Ext.Array.remove(params.farmId, 'everything else');
+            params.farmId = Ext.encode(params.farmId);
+        }
+        Scalr.Request({
+            processBox: {
+                type: 'action',
+                msg: 'Computing...'
+            },
+            url: Scalr.utils.getUrlPrefix() + '/analytics/xGetUsageItems',
+            params: params,
+            success: function (res) {
+                me.showInstanceTypeDetails(view, index, id, name, label, datetime, data, res.distributionTypes);
+            }
+        });
+
+    },
+
+    showInstanceTypeDetails: function(view, index, id, name, label, datetime, data, usageItems) {
         var me = this,
             wrapper = me.down('#' + view + 'Wrapper'),
             details = wrapper.down('#details'),
@@ -2114,10 +2177,10 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                 //id: id,
                 name: me.data['name']
             };
-            resources = me.data['timeline'][index]['distributionTypes'];
+            resources = usageItems || me.data['timeline'][index]['distributionTypes'];
 
         } else {
-            resources = data['distributionTypes'];
+            resources = usageItems || data['distributionTypes'];
             titleData = {label: label || me.down('#title').data.title};
             title2Data = {
                 id: id,
@@ -2137,7 +2200,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                 id: dType.id,
                 name: Scalr.constants.distributionTypes[dType.id] || dType.id,
                 cost: dType.cost,
-                growth: dType.growth,
+                growth: 0,
                 growthPct: dType.growthPct,
                 usageItems: []
             };
@@ -2326,7 +2389,7 @@ Ext.define('Scalr.ui.AnalyticsBoxes', {
             case 'week':
             case 'custom':
                 if (startDate.getFullYear() !== endDate.getFullYear()) {
-                    me.dateFormat = 'M j, Y';
+                    dateFormat = 'M j, Y';
                     me.dateFormatPrev = 'M j\'y';
                 }
                 me.title = startDate < realEndDate ? (Ext.Date.format(startDate, dateFormat) + '&nbsp;&ndash;&nbsp;' + Ext.Date.format(endDate, dateFormat)) : Ext.Date.format(startDate, dateFormat);
@@ -2700,7 +2763,7 @@ Ext.define('Scalr.ui.CostAnalyticsChartSummary', {
         position: 'bottom',
         fields: ['xLabel'],
         renderer: function(label) {
-            return Ext.isNumeric(label) ? '' : label;
+            return Ext.isString(label) ? label : '';
         }
 
     }],
@@ -4114,7 +4177,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsFarms', {
                 listeners: {
                     itemclick: function (view, record, item, index, e) {
                         if (e.getTarget('.scalr-ui-analytics-link')) {
-                            me.showInstanceTypeDetails('chart', 0, record.get('id'), record.get('name'), null, null, record.getData());
+                            me.onShowInstanceTypeDetails('chart', 0, record.get('id'), record.get('name'), null, null, record.getData());
                             e.preventDefault();
                             return false;
                         }
@@ -4187,11 +4250,11 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsFarms', {
     },
 
     onShowChartViewDetails: function(index, id, name, label, datetime, data) {
-        this.showInstanceTypeDetails('chart', index, id, name, label, datetime, data);
+        this.onShowInstanceTypeDetails('chart', index, id, name, label, datetime, data);
     },
 
     showPieViewDetails: function(data) {
-        this.showInstanceTypeDetails('pie', 0, data.id, data.name, null, null, data);
+        this.onShowInstanceTypeDetails('pie', 0, data.id, data.name, null, null, data);
     }
 
 });
@@ -4360,7 +4423,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsEnv', {
 
     onShowChartViewDetails: function(index, id, name, label, datetime, data) {
         if (this.type === 'farms') {
-            this.showInstanceTypeDetails('chart', index, id, name, label, datetime, data);
+            this.onShowInstanceTypeDetails('chart', index, id, name, label, datetime, data);
         }
     },
 
@@ -4733,7 +4796,13 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
                 projectId: data['projectId']
             });
             noBudgetCt.down('#finalSpent').setVisible(!!totals['budget']['closed']).update({budgetFinalSpent: totals['budget']['budgetFinalSpent']});
-            noBudgetCt.down('#button').setVisible(!totals['budget']['closed']);
+            var btn = noBudgetCt.down('#button');
+            btn.setVisible(!totals['budget']['closed']);
+            if (Scalr.isAllowed('ANALYTICS_ACCOUNT', 'allocate-budget')) {
+                btn.enable().setTooltip('');
+            } else {
+                btn.disable().setTooltip('Insufficient permissions to define a budget');
+            }
             budgetCt.hide();
             noBudgetCt.show();
         }
@@ -4948,6 +5017,7 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
             cls: 'x-btn-green',
             height: 52,
             text: 'Define a budget',
+            disabled: true,
             handler: function(){
                 var data = this.up('analyticsboxesenvproject').data;
                 Scalr.event.fireEvent('redirect', '#/account/analytics/budgets?ccId=' + data['ccId'] + (data['projectId'] ? '&projectId=' + data['projectId'] : ''));

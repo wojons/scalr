@@ -5,15 +5,13 @@ use Scalr\Stats\CostAnalytics\Entity\SettingEntity;
 
 class Scalr_UI_Controller_Analytics_Dashboard extends Scalr_UI_Controller
 {
-    use Scalr\Stats\CostAnalytics\Forecast;
-
     /**
      * {@inheritdoc}
      * @see Scalr_UI_Controller::hasAccess()
      */
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_ANALYTICS);
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_ANALYTICS_ENVIRONMENT);
     }
 
     /**

@@ -1,5 +1,8 @@
 <?php
 
+use Scalr\Model\Entity;
+use Scalr\DataType\ScopeInterface;
+
 class ScalrEnvironment20120701 extends ScalrEnvironment20120417
 {
     public function GetGlobalConfig()
@@ -31,8 +34,8 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
         $paramValue = $this->GetArg("param-value");
         $final = (int)$this->GetArg("flag-final");
 
-        if ($scope != Scalr_Scripting_GlobalVariables::SCOPE_SERVER && $scope != Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE)
-        	throw new Exception("query-env allows you to set global variables only on server/farmrole scopes");
+        if ($scope != ScopeInterface::SCOPE_SERVER && $scope != ScopeInterface::SCOPE_FARMROLE && $scope != ScopeInterface::SCOPE_FARM)
+        	throw new Exception("query-env allows you to set global variables only on server/farmrole/farm scopes");
 
         $globalVariables = new Scalr_Scripting_GlobalVariables($this->DBServer->clientId, $this->DBServer->envId, $scope);
         $globalVariables->setValues(
@@ -64,7 +67,7 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
         $ResponseDOMDocument = $this->CreateResponse();
         $configNode = $ResponseDOMDocument->createElement("variables");
 
-        $globalVariables = new Scalr_Scripting_GlobalVariables($this->DBServer->clientId, $this->DBServer->envId, Scalr_Scripting_GlobalVariables::SCOPE_SERVER);
+        $globalVariables = new Scalr_Scripting_GlobalVariables($this->DBServer->clientId, $this->DBServer->envId, ScopeInterface::SCOPE_SERVER);
         $vars = $globalVariables->listVariables($this->DBServer->GetFarmRoleObject()->RoleID, $this->DBServer->farmId, $this->DBServer->farmRoleId, $this->DBServer->serverId);
         foreach ($vars as $key => $value) {
             $settingNode = $ResponseDOMDocument->createElement("variable");
@@ -120,7 +123,7 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
         // Base configuration
         if ($this->DBServer->farmRoleId == $farmRoleId) {
             $data = Scalr_Role_Behavior::loadByName(ROLE_BEHAVIORS::BASE)->getBaseConfiguration($this->DBServer);
-            
+
             foreach ((array)$data as $k => $v) {
                 $bodyEl = $this->serialize($v, $k, $ResponseDOMDocument);
                 $ResponseDOMDocument->documentElement->appendChild($bodyEl);
@@ -145,11 +148,11 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
                 }
                 else if ($behavior == ROLE_BEHAVIORS::MYSQL) {
                     $data = new stdClass();
-                    $data->logFile = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_LOG_FILE);
-                    $data->logPos = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_LOG_POS);
-                    $data->rootPassword = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_ROOT_PASSWORD);
-                    $data->replPassword = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_REPL_PASSWORD);
-                    $data->statPassword = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_STAT_PASSWORD);
+                    $data->logFile = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_LOG_FILE);
+                    $data->logPos = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_LOG_POS);
+                    $data->rootPassword = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_ROOT_PASSWORD);
+                    $data->replPassword = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_REPL_PASSWORD);
+                    $data->statPassword = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_STAT_PASSWORD);
                     $data->replicationMaster = (int)$this->DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER);
                     //TODO: Storage
 
@@ -173,8 +176,8 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
 
     private function serialize($object, $behavior, $doc)
     {
-        $this->debugObject->{$behavior} = $object;      
-        
+        $this->debugObject->{$behavior} = $object;
+
         $bodyEl = $doc->createElement($behavior);
         $body = array();
         if (is_object($object)) {
@@ -224,7 +227,7 @@ class ScalrEnvironment20120701 extends ScalrEnvironment20120417
     {
         if (preg_match("/^[A-Z]+$/", $name))
             return $name;
-        
+
         $parts = preg_split("/[A-Z]/", $name, -1, PREG_SPLIT_OFFSET_CAPTURE | PREG_SPLIT_NO_EMPTY);
         $ret = "";
         foreach ($parts as $part) {

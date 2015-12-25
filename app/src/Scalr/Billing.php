@@ -230,7 +230,7 @@ class Scalr_Billing
         $retval = 0;
         foreach ($servers as $s) {
             $dbServer = DBServer::LoadByID($s['server_id']);
-            $retval += self::getSCUByInstanceType($dbServer->GetFlavor(), $dbServer->platform);
+            $retval += self::getSCUByInstanceType($dbServer->getType(), $dbServer->platform);
         }
 
         return $retval;
@@ -330,14 +330,14 @@ class Scalr_Billing
             'io1-90' => 24,
             'io1-120' => 48,
             
-            'performance1-1' => 3.25,
-            'performance1-2' => 6.5,
-            'performance1-4' => 13,
-            'performance1-8' => 26,
+            'performance1-1' => 0.5,
+            'performance1-2' => 1,
+            'performance1-4' => 2,
+            'performance1-8' => 4,
             
-            'performance2-15' => 6,
-            'performance2-30' => 12,
-            'performance2-60' => 24,
+            'performance2-15' => 8,
+            'performance2-30' => 16,
+            'performance2-60' => 32,
             'performance2-90' => 48,
             'performance2-120' => 64
           );
@@ -362,14 +362,14 @@ class Scalr_Billing
                 'io1-90' => 24,
                 'io1-120' => 48,
                 
-                'performance1-1' => 3.25,
-                'performance1-2' => 6.5,
-                'performance1-4' => 13,
-                'performance1-8' => 26,
+                'performance1-1' => 0.5,
+                'performance1-2' => 1,
+                'performance1-4' => 2,
+                'performance1-8' => 4,
                 
-                'performance2-15' => 6,
-                'performance2-30' => 12,
-                'performance2-60' => 24,
+                'performance2-15' => 8,
+                'performance2-30' => 16,
+                'performance2-60' => 32,
                 'performance2-90' => 48,
                 'performance2-120' => 64
         );

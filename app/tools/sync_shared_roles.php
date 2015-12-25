@@ -40,18 +40,19 @@ try {
 				`description` = ?,
 				`behaviors` = ?,
 				`generation` = ?,
-				`os_id` = ?
+				`os_id` = ?,
+			    `is_quick_start` = ?
 			", array(
 				$role['id'], $role['name'], $role['origin'], $role['client_id'], $role['cat_id'], $role['env_id'], $role['description'],
 				$role['behaviors'],
-				$role['generation'], $role['os_id']
+				$role['generation'], $role['os_id'],
+			    $role['is_quick_start']
 			));
 		} else {
 			$role['id'] = $chk;
 			$db->Execute("DELETE FROM role_images WHERE role_id = ?", array($role['id']));
 			$db->Execute("DELETE FROM role_security_rules WHERE role_id =?", array($role['id']));
 			$db->Execute("DELETE FROM role_properties WHERE role_id =?", array($role['id']));
-			$db->Execute("DELETE FROM role_parameters WHERE role_id = ?", array($role['id']));
 			$db->Execute("DELETE FROM role_behaviors WHERE role_id =?", array($role['id']));
 		}
 		
@@ -72,20 +73,6 @@ try {
 					`value` = ?
 				", array($r5['role_id'], $r5['name'], $r5['value']));
             } catch (Exception $e) {}
-		}
-
-		foreach ($role['role_parameters'] as $r6) {
-			$db->Execute("INSERT INTO role_parameters SET
-				`role_id` = ?,
-				`name` = ?,
-				`type` = ?,
-				`isrequired` = ?,
-				`defval` = ?,
-				`allow_multiple_choice` = ?,
-				`options` = ?,
-				`hash` = ?,
-				`issystem` = ?
-			", array($r6['role_id'], $r6['name'], $r6['type'], $r6['isrequired'], $r6['defval'], $r6['allow_multiple_choice'], $r6['options'], $r6['hash'], $r6['issystem']));
 		}
 
         foreach ($role['role_images'] as $r7) {

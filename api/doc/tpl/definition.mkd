@@ -1,0 +1,95 @@
+# `{{ name }}` #
+
+{{ definition.get("description", "") }}
+
+{% if "x-abstractType" in definition %}
+## Polymorphism ##
+
+`{{ name}}` is a type that implements the {{ definition["x-abstractType"]|link_to_ref }} type.
+
+When an object of type {{ definition["x-abstractType"]|link_to_ref }} is expected, you can use one of type `{{ name }}`
+(or use any other implementation).
+{% endif %}
+
+{% if "x-concreteTypes" in definition %}
+## Abstract Type ##
+
+`{{ name }}` is an abstract type. When an object of type `{{ name }}` is expected, you must pass an object of
+one of the following types:
+
+{% for type in definition["x-concreteTypes"] %}
+  + {{ type|link_to_ref }}
+{% endfor %}
+
+{% endif %}
+
+{% if "x-references" in definition %}
+## Reference ##
+
+`{{ name }}` is used when a reference to an object of type {{ definition["x-references"]|link_to_ref }} is expected.
+Note that you can pass a complete {{ definition["x-references"]|link_to_ref }} object as well.
+{% endif %}
+
+
+## Properties ##
+
+{% for prop in prioritized_properties(definition) %}
+{% set prop_name, prop_def = prop %}
+### `{{ prop_name }}` ({{ ", ".join(property_attributes(definition, prop)) }}) ###
+
+{{ prop_def.get("description", "") }}
+
+{% if "$ref" in prop_def %}
+
+An object of type {{ prop_def|link_to_ref }}.
+
+{% if is_filterable(definition, prop) %}
+To filter on this field, pass the `id` property of the {{ prop_def|link_to_ref }} object you are referencing,
+e.g.: `{{ prop_name }}=...`.
+{% endif %}
+
+{% elif definition.get("x-discriminator") == prop_name %}
+
+This `{{ prop_def["type"] }}` property is used for polymorphism. It **must** be set to: `"{{ name }}"`
+
+{% elif prop_def["type"] == "array" %}
+
+An array of 
+{% if "$ref" in prop_def["items"] %}
+objects of type {{ prop_def["items"]|link_to_ref }}.
+{% else %}
+`{{ prop_def["items"]["type"] }}` objects.
+{% endif %}
+
+{% else %}
+
+Property of type: `{{ prop_def["type"] }}`.
+
+{% if "enum" in prop_def %} 
+The following are valid values for the `{{ prop_name }}` property:
+{% for value in prop_def["enum"] %}
+  + `{{ value }}`
+{% endfor %}
+{% endif %}
+
+{% if is_filterable(definition, prop) %}
+To filter on this field, use: `{{ prop_name }}=...`.
+{% endif %}
+
+{% endif %}
+
+{% endfor %}
+
+
+{% if "x-usedIn" in definition %}
+## Used in ##
+
+{% for path in definition["x-usedIn"]|sort %}
+  + {{ path|link_to_path }}
+{% endfor %}
+{% endif %}
+
+## Swagger Definition ##
+
+    {{ json.dumps(definition, indent=2).replace("\n", "\n    ") }}
+

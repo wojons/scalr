@@ -14,7 +14,7 @@
     position: absolute;
     right: 32px;
     top: 16px;
-    border-radius: 4px;
+    border-radius: 0;
     width: 52px;
     height: 52px;
 }
@@ -32,7 +32,7 @@
     height: 24px;
     width: 48px;
     background: #dee9f3;
-    border-radius: 2px;
+    border-radius: 0;
 }
 
 .scalr-ui-panel-account-users .x-grid-item-over .x-grid-row-options,
@@ -60,7 +60,7 @@
 .scalr-ui-panel-account-users .user-teams-edit{
     padding: 2px 10px;
     background: #96b1cd;
-    border-radius: 3px;
+    border-radius: 0;
     color: #fff!important;
 
     position: absolute;
@@ -79,6 +79,6 @@
 
 .scalr-ui-users-account-admin{
     background: #fefde0;
-    border-radius: 3px;
+    border-radius: 0;
     padding: 18px 18px 12px;
 }

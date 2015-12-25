@@ -7,7 +7,7 @@
 }
 
 .scalr-ui-services-mongodb-status-add {
-	border-radius: 3px;
+	border-radius: 0;
 	background-color: #D8E3F1;
 	width: 42px;
 	background-image: url('/ui2/images/ui/services/mongodb/add_cross.png');
@@ -21,7 +21,7 @@
 }
 
 .scalr-ui-services-mongodb-status-add-disable {
-    border-radius: 3px;
+    border-radius: 0;
     background-color: #D8E3F1;
     width: 42px;
     background-image: url('/ui2/images/ui/services/mongodb/add_cross_disable.png');
@@ -59,7 +59,7 @@
 .scalr-ui-services-mongodb-status-replica {
 	height: 50px;
 	width: 50px;
-	background: #F0F4FB; 
+	background: #F0F4FB;
 	border: 1px solid #89A9C9;
 	border-radius: 4px;
 	box-shadow: 0 1px #ffffff inset, 0 1px 1px #E2EBF4;

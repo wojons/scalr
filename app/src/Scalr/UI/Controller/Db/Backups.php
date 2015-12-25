@@ -1,10 +1,7 @@
 <?php
 
 use Scalr\Acl\Acl;
-use Scalr\Modules\PlatformFactory;
-use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
-use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
-use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
 {
@@ -148,8 +145,8 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
         $resource = substr($path, strpos($path, '/') + 1, strlen($path));
         $expires = time() + 3600;
 
-        $AWSAccessKey = $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY);
-        $AWSSecretKey = $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY);
+        $AWSAccessKey = $this->getEnvironment()->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCESS_KEY];
+        $AWSSecretKey = $this->getEnvironment()->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_SECRET_KEY];
 
         $stringToSign = "GET\n\n\n{$expires}\n/" . str_replace(".s3.amazonaws.com", "", $bucket) . "/{$resource}";
 
@@ -164,10 +161,10 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
     {
         $expires = time() + 3600;
 
-        $platform = PlatformFactory::NewPlatform($platform);
+        $ccProps = $this->environment->cloudCredentials("{$location}." . $platform)->properties;
 
-        $user = $platform->getConfigVariable(RackspacePlatformModule::USERNAME, $this->environment, true, $location);
-        $key = $platform->getConfigVariable(RackspacePlatformModule::API_KEY, $this->environment, true, $location);
+        $user = $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_USERNAME];
+        $key = $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_API_KEY];
 
         $cs = Scalr_Service_Cloud_Rackspace::newRackspaceCS($user, $key, $location);
 
@@ -188,9 +185,12 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
         $expires = time() + 3600;
         $stringToSign = "GET\n\n\n{$expires}\n/{$path}";
         $link = "http://storage.googleapis.com/{$path}";
-        $googleAccessId = str_replace('.apps.googleusercontent.com', '@developer.gserviceaccount.com', $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::CLIENT_ID));
+        $googleAccessId = str_replace('.apps.googleusercontent.com', '@developer.gserviceaccount.com', $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_CLIENT_ID]);
 
-        $signer = new Google_Signer_P12(base64_decode($this->environment->getPlatformConfigValue(GoogleCEPlatformModule::KEY)), $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::JSON_KEY) ? null : 'notasecret');
+        $signer = new Google_Signer_P12(
+            base64_decode($this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_KEY]),
+            $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_JSON_KEY] ? null : 'notasecret'
+        );
         $signature = $signer->sign($stringToSign);
         $signature = urlencode(base64_encode($signature));
 

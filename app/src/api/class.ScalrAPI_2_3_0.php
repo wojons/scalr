@@ -2,6 +2,10 @@
 
 use Scalr\Acl\Acl;
 use Scalr\Modules\PlatformFactory;
+use Scalr\Model\Entity;
+use Scalr\DataType\ScopeInterface;
+use Scalr\Model\Entity\Account\User;
+use Scalr\Model\Entity\Account\Environment;
 
 class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 {
@@ -32,40 +36,44 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
         try {
             $DBFarm = DBFarm::LoadByID($FarmID);
-            if ($DBFarm->EnvID != $this->Environment->id)
+            if ($DBFarm->EnvID != $this->Environment->id) {
                 throw new Exception("N");
+            }
         } catch (Exception $e) {
             throw new Exception(sprintf("Farm #%s not found", $FarmID));
         }
 
         $response->ID = $DBFarm->ID;
         $response->Name = $DBFarm->Name;
-        $response->IsLocked = $DBFarm->GetSetting(DBFarm::SETTING_LOCK);
+        $response->IsLocked = $DBFarm->GetSetting(Entity\FarmSetting::LOCK);
         if ($response->IsLocked == 1) {
-            $response->LockComment = $DBFarm->GetSetting(DBFarm::SETTING_LOCK_COMMENT);
+            $response->LockComment = $DBFarm->GetSetting(Entity\FarmSetting::LOCK_COMMENT);
             try {
-                $response->LockedBy = Scalr_Account_User::init()->loadById($DBFarm->GetSetting(DBFarm::SETTING_LOCK_BY))->fullname;
+                $response->LockedBy = Scalr_Account_User::init()->loadById($DBFarm->GetSetting(Entity\FarmSetting::LOCK_BY))->fullname;
             } catch (Exception $e) {}
         }
 
         foreach ($response->FarmRoleSet->Item as &$item) {
             $dbFarmRole = DBFarmRole::LoadByID($item->ID);
 
-            $item->IsScalingEnabled = $dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_ENABLED);
-            $item->{"ScalingAlgorithmSet"} = new stdClass();
-            $item->{"ScalingAlgorithmSet"}->Item = array();
+            $item->IsScalingEnabled = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_ENABLED);
+            $item->ScalingAlgorithmSet = new stdClass();
+            $item->ScalingAlgorithmSet->Item = array();
 
-            $metrics = $this->DB->GetAll("SELECT metric_id, name, dtlastpolled FROM `farm_role_scaling_metrics`
-                    INNER JOIN scaling_metrics ON scaling_metrics.id = farm_role_scaling_metrics.metric_id WHERE farm_roleid = ?", array(
+            $metrics = $this->DB->GetAll("
+                SELECT metric_id, name, dtlastpolled FROM `farm_role_scaling_metrics`
+                INNER JOIN scaling_metrics ON scaling_metrics.id = farm_role_scaling_metrics.metric_id WHERE farm_roleid = ?
+            ", [
                 $item->ID
-            ));
+            ]);
+
             foreach ($metrics as $metric) {
                 $itm = new stdClass();
-                $itm->MetricID =  $metric['id'];
+                $itm->MetricID =  $metric['metric_id'];
                 $itm->MetricName =  $metric['name'];
                 $itm->DateLastPolled = $metric['dtlastpolled'];
 
-                $item->{"ScalingAlgorithmSet"}->Item[] = $itm;
+                $item->ScalingAlgorithmSet->Item[] = $itm;
             }
         }
 
@@ -166,13 +174,13 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         $this->validateFarmRoleConfiguration($Configuration);
 
         if ($DBFarmRole->Platform == SERVER_PLATFORMS::EC2) {
-            $vpcId = $dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID);
+            $vpcId = $dbFarm->GetSetting(Entity\FarmSetting::EC2_VPC_ID);
             if ($vpcId) {
-                if (!$Configuration['aws.vpc_subnet_id'] && !$DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_VPC_SUBNET_ID))
+                if (!$Configuration['aws.vpc_subnet_id'] && !$DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_VPC_SUBNET_ID))
                     throw new Exception("Farm configured to run inside VPC. 'aws.vpc_subnet_id' is required");
 
-                if (isset($Configuration['aws.vpc_subnet_id']) && $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_VPC_SUBNET_ID) != $Configuration['aws.vpc_subnet_id']) {
-                    $vpcRegion = $dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_REGION);
+                if (isset($Configuration['aws.vpc_subnet_id']) && $DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_VPC_SUBNET_ID) != $Configuration['aws.vpc_subnet_id']) {
+                    $vpcRegion = $dbFarm->GetSetting(Entity\FarmSetting::EC2_VPC_REGION);
                     $vpcGovernance = $governance->getValue('ec2', 'aws.vpc');
                     $vpcGovernanceIds = $governance->getValue('ec2', 'aws.vpc', 'ids');
 
@@ -223,7 +231,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
             $Configuration[Scalr_Role_Behavior_Chef::ROLE_CHEF_ENVIRONMENT] = '_default';
 
         foreach ($Configuration as $k => $v)
-            $DBFarmRole->SetSetting($k, trim($v), DBFarmRole::TYPE_CFG);
+            $DBFarmRole->SetSetting($k, trim($v), Entity\FarmRoleSetting::TYPE_CFG);
 
 
         $response = $this->CreateInitialResponse();
@@ -314,8 +322,15 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         $governance = new Scalr_Governance($this->Environment->id);
 
         $dbRole = DBRole::loadById($RoleID);
-        if ($dbRole->envId != 0)
-            $this->user->getPermissions()->validate($dbRole);
+        if (!$dbRole->__getNewRoleObject()->hasAccessPermissions(User::findPk($this->user->getId()), Environment::findPk($this->Environment->id))) {
+            throw new Exception(sprintf("Role #%s not found", $RoleID));
+        }
+
+        if (!empty(($envs = $dbRole->__getNewRoleObject()->getAllowedEnvironments()))) {
+            if (!in_array($this->Environment->id, $envs)) {
+                throw new Exception(sprintf("Role #%s not found", $RoleID));
+            }
+        }
 
         foreach ($dbRole->getBehaviors() as $behavior) {
             if ($behavior != ROLE_BEHAVIORS::BASE && $behavior != ROLE_BEHAVIORS::CHEF)
@@ -337,12 +352,12 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         if ($Platform == SERVER_PLATFORMS::EC2) {
             $config['aws.security_groups.list'] = json_encode(array('default', \Scalr::config('scalr.aws.security_group_name')));
 
-            $vpcId = $dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID);
+            $vpcId = $dbFarm->GetSetting(Entity\FarmSetting::EC2_VPC_ID);
             if ($vpcId) {
                 if (!$Configuration['aws.vpc_subnet_id'])
                     throw new Exception("Farm configured to run inside VPC. 'aws.vpc_subnet_id' is required");
 
-                $vpcRegion = $dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_REGION);
+                $vpcRegion = $dbFarm->GetSetting(Entity\FarmSetting::EC2_VPC_REGION);
                 if ($CloudLocation != $vpcRegion)
                     throw new Exception(sprintf("Farm configured to run inside VPC in %s region. Only roles in this region are allowed.", $vpcRegion));
 
@@ -435,7 +450,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         $dbFarmRole->Alias = $Alias ? $Alias : $dbRole->name;
 
         foreach ($config as $k => $v)
-            $dbFarmRole->SetSetting($k, trim($v), DBFarmRole::TYPE_CFG);
+            $dbFarmRole->SetSetting($k, trim($v), Entity\FarmRoleSetting::TYPE_CFG);
 
         foreach (Scalr_Role_Behavior::getListForFarmRole($dbFarmRole) as $behavior)
             $behavior->onFarmSave($dbFarm, $dbFarmRole);
@@ -470,7 +485,9 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
         $this->user->getPermissions()->validate($DBFarm);
 
-        $DBFarmRole->Delete();
+        $farmRole = new Entity\FarmRole();
+        $farmRole->id = $FarmRoleID;
+        $farmRole->delete();
 
         $response = $this->CreateInitialResponse();
         $response->Result = true;
@@ -482,26 +499,32 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
     {
         try {
             $dbFarm = DBFarm::LoadByID($FarmID);
-            if ($dbFarm->EnvID != $this->Environment->id) throw new Exception("N");
+
+            if ($dbFarm->EnvID != $this->Environment->id) {
+                throw new Exception("N");
+            }
         } catch (Exception $e) {
             throw new Exception(sprintf("Farm #%s not found", $FarmID));
         }
+
         $this->user->getPermissions()->validate($dbFarm);
         $this->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_MANAGE);
 
         $dbFarm->isLocked(true);
 
-        if ($dbFarm->Status != FARM_STATUS::TERMINATED)
+        if ($dbFarm->Status != FARM_STATUS::TERMINATED) {
             throw new Exception(_("Cannot delete a running farm. Please terminate a farm before deleting it."));
+        }
 
         $servers = $this->DB->GetOne("SELECT COUNT(*) FROM servers WHERE farm_id=? AND status!=?", array($dbFarm->ID, SERVER_STATUS::TERMINATED));
-        if ($servers != 0)
+
+        if ($servers != 0) {
             throw new Exception(sprintf(_("Cannot delete a running farm. %s server are still running on this farm."), $servers));
+        }
 
         $this->DB->BeginTrans();
 
-        try
-        {
+        try {
             foreach ($this->DB->GetAll("SELECT * FROM farm_roles WHERE farmid = ?", array($dbFarm->ID)) as $value) {
                 $this->DB->Execute("DELETE FROM scheduler WHERE target_id = ? AND target_type IN(?,?)", array(
                     $value['id'],
@@ -525,13 +548,11 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
             $this->DB->Execute("DELETE FROM elastic_ips WHERE farmid=?", array($dbFarm->ID));
             $this->DB->Execute("DELETE FROM events WHERE farmid=?", array($dbFarm->ID));
             $this->DB->Execute("DELETE FROM ec2_ebs WHERE farm_id=?", array($dbFarm->ID));
-
-            $this->DB->Execute("DELETE FROM farm_role_options WHERE farmid=?", array($dbFarm->ID));
             $this->DB->Execute("DELETE FROM farm_lease_requests WHERE farm_id=?", array($dbFarm->ID));
-
 
             //TODO: Remove servers
             $servers = $this->DB->Execute("SELECT server_id FROM servers WHERE farm_id=?", array($dbFarm->ID));
+
             while ($server = $servers->FetchRow()) {
                 $dbServer = DBServer::LoadByID($server['server_id']);
                 $dbServer->Remove();
@@ -539,7 +560,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
             $this->DB->Execute("UPDATE dns_zones SET farm_id='0', farm_roleid='0' WHERE farm_id=?", array($dbFarm->ID));
             $this->DB->Execute("UPDATE apache_vhosts SET farm_id='0', farm_roleid='0' WHERE farm_id=?", array($dbFarm->ID));
-        } catch(Exception $e) {
+        } catch (Exception $e) {
             $this->DB->RollbackTrans();
             throw new Exception(_("Cannot delete farm at the moment ({$e->getMessage()}). Please try again later."));
         }
@@ -611,17 +632,17 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         $dbFarm->setProject(!empty($ProjectID) ? $ProjectID : null);
 
         if ($governance->isEnabled(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE)) {
-            $dbFarm->SetSetting(DBFarm::SETTING_LEASE_STATUS, 'Active'); // for created farm
+            $dbFarm->SetSetting(Entity\FarmSetting::LEASE_STATUS, 'Active'); // for created farm
         }
 
         if (!$Configuration['timezone'])
             $Configuration['timezone'] = date_default_timezone_get();
 
-        $dbFarm->SetSetting(DBFarm::SETTING_TIMEZONE, $Configuration['timezone']);
+        $dbFarm->SetSetting(Entity\FarmSetting::TIMEZONE, $Configuration['timezone']);
 
         if ($Configuration['vpc_region']) {
-            $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_ID, $Configuration['vpc_id']);
-            $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_REGION, $Configuration['vpc_region']);
+            $dbFarm->SetSetting(Entity\FarmSetting::EC2_VPC_ID, $Configuration['vpc_id']);
+            $dbFarm->SetSetting(Entity\FarmSetting::EC2_VPC_REGION, $Configuration['vpc_region']);
         }
 
         $response->FarmID = $dbFarm->ID;
@@ -708,89 +729,20 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
     public function FarmRoleParametersList($FarmRoleID)
     {
-        $this->restrictAccess(Acl::RESOURCE_FARMS_ROLES);
-
-        try {
-            $DBFarmRole = DBFarmRole::LoadByID($FarmRoleID);
-            $DBFarm = DBFarm::LoadByID($DBFarmRole->FarmID);
-            if ($DBFarm->EnvID != $this->Environment->id) throw new Exception("N");
-        } catch (Exception $e) {
-            throw new Exception(sprintf("FarmRole ID #%s not found", $FarmRoleID));
-        }
-
-        $this->user->getPermissions()->validate($DBFarm);
+        $this->restrictAccess(Acl::RESOURCE_ROLES_ENVIRONMENT);
 
         $response = $this->CreateInitialResponse();
-        $response->ParamSet = new stdClass();
-        $response->ParamSet->Item = array();
 
-        $rParams = $DBFarmRole->GetRoleObject()->getParameters();
-        foreach ($rParams as $p) {
-            $val = $this->DB->GetOne("SELECT value FROM farm_role_options WHERE farm_roleid = ? AND hash = ? LIMIT 1", array($DBFarmRole->ID, $p['hash']));
-            if (!$val)
-                $val = $p['defval'];
-
-            $itm = new stdClass();
-            $itm->{"Name"} = $p['hash'];
-            $itm->{"Value"} = $val;
-            $itm->{"FullName"} = $p['name'];
-
-            $response->ParamSet->Item[] = $itm;
-        }
+        //consider exception
 
         return $response;
     }
 
     public function FarmRoleUpdateParameterValue($FarmRoleID, $ParamName, $ParamValue)
     {
-        $this->restrictAccess(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_MANAGE);
+        $this->restrictAccess(Acl::RESOURCE_ROLES_ENVIRONMENT, Acl::PERM_ROLES_ENVIRONMENT_MANAGE);
 
         throw new Exception("FarmRole parameters are deprected. Please use GlobalVariables instead.");
-
-        /*
-        try {
-            $DBFarmRole = DBFarmRole::LoadByID($FarmRoleID);
-            $DBFarm = DBFarm::LoadByID($DBFarmRole->FarmID);
-            if ($DBFarm->EnvID != $this->Environment->id)
-                throw new Exception("N");
-        } catch (Exception $e) {
-            throw new Exception(sprintf("FarmRole ID #%s not found", $FarmRoleID));
-        }
-
-        $this->user->getPermissions()->validate($DBFarm);
-
-        $updated = false;
-        $rParams = $DBFarmRole->GetRoleObject()->getParameters();
-        foreach ($rParams as $p) {
-            if ($p['hash'] == $ParamName) {
-                $id = $this->DB->GetOne("SELECT id FROM farm_role_options WHERE farm_roleid = ? AND hash = ? LIMIT 1", array($DBFarmRole->ID, $p['hash']));
-                if ($id) {
-                    $updated = true;
-                    $this->DB->Execute("UPDATE farm_role_options SET
-                        value       = ? WHERE id = ?
-                    ", array($ParamValue, $id));
-                } else {
-                    $updated = true;
-                    $this->DB->Execute("INSERT INTO farm_role_options SET
-                        farmid      = ?,
-                        farm_roleid = ?,
-                        name        = ?,
-                        value       = ?,
-                        hash        = ?
-                        ON DUPLICATE KEY UPDATE name = ?
-                    ", array($DBFarm->ID, $DBFarmRole->ID, $p['name'], $ParamValue, $p['hash'], $p['name']));
-                }
-            }
-        }
-
-        if (!$updated)
-            throw new Exception(sprintf("Parameter '%s' not defined for specified role", array($ParamName)));
-
-        $response = $this->CreateInitialResponse();
-        $response->Result = true;
-
-        return $response;
-        */
     }
 
     public function EnvironmentsList()
@@ -802,8 +754,8 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         $envs = $this->user->getEnvironments();
         foreach ($envs as $env) {
             $itm = new stdClass();
-            $itm->{"ID"} = $env['id'];
-            $itm->{"Name"} = $env['name'];
+            $itm->ID = $env['id'];
+            $itm->Name = $env['name'];
 
             $response->EnvironmentSet->Item[] = $itm;
         }
@@ -821,8 +773,6 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         $this->user->getPermissions()->validate($DBServer);
 
         $response = $this->CreateInitialResponse();
-
-        $info = PlatformFactory::NewPlatform($DBServer->platform)->GetServerExtendedInformation($DBServer, false);
 
         $response->FarmInfo = new stdClass();
         $response->FarmInfo->ID = $DBServer->GetFarmObject()->ID;
@@ -845,7 +795,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
             'AddedAt' => $DBServer->dateAdded,
             'CloudLocation' => $DBServer->cloudLocation,
             'CloudLocationZone' => $DBServer->cloudLocationZone,
-            'Type' => $DBServer->GetFlavor(),
+            'Type' => $DBServer->getType(),
             'IsInitFailed' => $DBServer->GetProperty(SERVER_PROPERTIES::SZR_IS_INIT_FAILED),
             'IsRebooting' => $DBServer->GetProperty(SERVER_PROPERTIES::REBOOTING)
         );
@@ -854,16 +804,22 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         }
 
         $response->PlatformProperties = new stdClass();
-        if (is_array($info) && count($info)) {
-            foreach ($info as $name => $value) {
-                $name = str_replace(".", "_", $name);
-                $name = preg_replace("/[^A-Za-z0-9_-]+/", "", $name);
 
-                if ($name == 'MonitoringCloudWatch')
-                    continue;
+        try {
+            $info = PlatformFactory::NewPlatform($DBServer->platform)->GetServerExtendedInformation($DBServer, false);
+            if (is_array($info) && count($info)) {
+                foreach ($info as $name => $value) {
+                    $name = str_replace(".", "_", $name);
+                    $name = preg_replace("/[^A-Za-z0-9_-]+/", "", $name);
 
-                $response->PlatformProperties->{$name} = $value;
+                    if ($name == 'MonitoringCloudWatch')
+                        continue;
+
+                    $response->PlatformProperties->{$name} = $value;
+                }
             }
+        } catch (Exception $e) {
+            // just ignoring
         }
 
         $response->ScalrProperties = new stdClass();
@@ -881,7 +837,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
     public function GlobalVariableSet($ParamName, $ParamValue, $FarmRoleID = 0, $FarmID = 0, $ServerID = '', $RoleID = 0)
     {
         if (empty($FarmID) && empty($FarmRoleID) && empty($ServerID)) {
-            $this->restrictAccess(Acl::RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES);
+            $this->restrictAccess(Acl::RESOURCE_GLOBAL_VARIABLES_ENVIRONMENT);
         }
 
         try {
@@ -889,42 +845,43 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
                 $DBServer = DBServer::LoadByID($ServerID);
                 $DBFarmRole = $DBServer->GetFarmRoleObject();
                 $DBFarm = $DBFarmRole->GetFarmObject();
-                $scope = Scalr_Scripting_GlobalVariables::SCOPE_SERVER;
+                $scope = ScopeInterface::SCOPE_SERVER;
                 $FarmRoleID = $DBFarmRole->ID;
 
             } else if ($FarmRoleID != 0) {
                 $DBFarmRole = DBFarmRole::LoadByID($FarmRoleID);
                 $DBFarm = DBFarm::LoadByID($DBFarmRole->FarmID);
-                $scope = Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE;
+                $scope = ScopeInterface::SCOPE_FARMROLE;
                 $ServerID = '';
             } elseif ($FarmID != 0) {
                 $DBFarm = DBFarm::LoadByID($FarmID);
-                $scope = Scalr_Scripting_GlobalVariables::SCOPE_FARM;
+                $scope = ScopeInterface::SCOPE_FARM;
                 $FarmRoleID = 0;
                 $ServerID = '';
             } elseif ($RoleID != 0) {
                 $DBRole = DBRole::loadById($RoleID);
-                $scope = Scalr_Scripting_GlobalVariables::SCOPE_ROLE;
+                $scope = ScopeInterface::SCOPE_ROLE;
                 $FarmRoleID = 0;
                 $FarmID = 0;
                 $ServerID = '';
-            } else
-                throw new Exception ("FarmID or FarmRoleID should be specified");
+            } else {
+                throw new Exception("You must specify al least one of the following arguments: FarmID, FarmRoleID, RoleID or ServerID.");
+            }
 
             if ($DBFarm) {
-                if ($DBFarm->EnvID != $this->Environment->id)
-                    throw new Exception("N");
-
+                if ($DBFarm->EnvID != $this->Environment->id) {
+                    throw new Exception(sprintf("Farm ID #%s is not found.", $FarmID));
+                }
                 $this->user->getPermissions()->validate($DBFarm);
             } elseif ($DBRole) {
-                if ($DBRole->envId != $this->Environment->id)
-                    throw new Exception("N");
-
+                if ($DBRole->envId != $this->Environment->id) {
+                    throw new Exception(sprintf("Role ID #%s is not found.", $RoleID));
+                }
                 $this->user->getPermissions()->validate($DBRole);
             }
 
         } catch (Exception $e) {
-            throw new Exception(sprintf("FarmRole ID #%s not found", $FarmRoleID));
+            throw new Exception($e->getMessage());
         }
 
         $ParamName = $this->stripValue($ParamName);
@@ -932,6 +889,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
             throw new Exception("Param name is required");
 
         $globalVariables = new Scalr_Scripting_GlobalVariables($this->Environment->clientId, $this->Environment->id, $scope);
+        $globalVariables->doNotValidateNameCaseSensitivity = true;
         $globalVariables->setValues(
             array(array(
                 'name' 	=> $ParamName,
@@ -952,7 +910,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
     public function GlobalVariablesList($ServerID = null, $FarmID = null, $FarmRoleID = null, $RoleID = null)
     {
         if (empty($FarmID) && empty($FarmRoleID) && empty($RoleID) && empty($ServerID)) {
-            $this->restrictAccess(Acl::RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES);
+            $this->restrictAccess(Acl::RESOURCE_GLOBAL_VARIABLES_ENVIRONMENT);
         }
 
         $response = $this->CreateInitialResponse();
@@ -966,7 +924,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
             $this->user->getPermissions()->validate($DBServer);
 
-            $globalVariables = new Scalr_Scripting_GlobalVariables($this->Environment->clientId, $this->Environment->id, Scalr_Scripting_GlobalVariables::SCOPE_SERVER);
+            $globalVariables = new Scalr_Scripting_GlobalVariables($this->Environment->clientId, $this->Environment->id, ScopeInterface::SCOPE_SERVER);
             $vars = $globalVariables->listVariables($DBServer->GetFarmRoleObject()->RoleID, $DBServer->farmId, $DBServer->farmRoleId, $ServerID);
         } elseif ($FarmID) {
             $DBFarm = DBFarm::LoadByID($FarmID);
@@ -975,14 +933,14 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
             $this->user->getPermissions()->validate($DBFarm);
 
-            $globalVariables = new Scalr_Scripting_GlobalVariables($this->Environment->clientId, $this->Environment->id, Scalr_Scripting_GlobalVariables::SCOPE_FARM);
+            $globalVariables = new Scalr_Scripting_GlobalVariables($this->Environment->clientId, $this->Environment->id, ScopeInterface::SCOPE_FARM);
             $vars = $globalVariables->listVariables(null, $DBFarm->ID, null);
         } elseif ($RoleID) {
             $DBRole = DBRole::LoadByID($RoleID);
             if ($DBRole->envId != $this->Environment->id)
                 throw new Exception(sprintf("Role ID #%s not found", $RoleID));
 
-            $globalVariables = new Scalr_Scripting_GlobalVariables($this->Environment->clientId, $this->Environment->id, Scalr_Scripting_GlobalVariables::SCOPE_ROLE);
+            $globalVariables = new Scalr_Scripting_GlobalVariables($this->Environment->clientId, $this->Environment->id, ScopeInterface::SCOPE_ROLE);
             $vars = $globalVariables->listVariables($RoleID, null, null);
         } elseif ($FarmRoleID) {
             $DBFarmRole = DBFarmRole::LoadByID($FarmRoleID);
@@ -991,18 +949,18 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
             $this->user->getPermissions()->validate($DBFarmRole);
 
-            $globalVariables = new Scalr_Scripting_GlobalVariables($this->Environment->clientId, $this->Environment->id, Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE);
+            $globalVariables = new Scalr_Scripting_GlobalVariables($this->Environment->clientId, $this->Environment->id, ScopeInterface::SCOPE_FARMROLE);
             $vars = $globalVariables->listVariables($DBFarmRole->RoleID, $DBFarmRole->FarmID, $DBFarmRole->ID);
         } else {
-            $globalVariables = new Scalr_Scripting_GlobalVariables($this->Environment->clientId, $this->Environment->id, Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT);
+            $globalVariables = new Scalr_Scripting_GlobalVariables($this->Environment->clientId, $this->Environment->id, ScopeInterface::SCOPE_ENVIRONMENT);
             $vars = $globalVariables->listVariables();
         }
 
         foreach ($vars as $v) {
             $itm = new stdClass();
-            $itm->{"Name"} = $v['name'];
-            $itm->{"Value"} = $v['value'];
-            $itm->{"Private"} = $v['private'];
+            $itm->Name = $v['name'];
+            $itm->Value = $v['value'];
+            $itm->Private = $v['private'];
 
             $response->VariableSet->Item[] = $itm;
         }
@@ -1021,10 +979,10 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         $rows = $this->DB->Execute("SELECT * FROM dm_sources WHERE env_id=?", array($this->Environment->id));
         while ($row = $rows->FetchRow()) {
             $itm = new stdClass();
-            $itm->{"ID"} = $row['id'];
-            $itm->{"Type"} = $row['type'];
-            $itm->{"URL"} = $row['url'];
-            $itm->{"AuthType"} = $row['auth_type'];
+            $itm->ID = $row['id'];
+            $itm->Type = $row['type'];
+            $itm->URL = $row['url'];
+            $itm->AuthType = $row['auth_type'];
 
             $response->SourceSet->Item[] = $itm;
         }
@@ -1099,9 +1057,9 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         $rows = $this->DB->Execute("SELECT * FROM dm_applications WHERE env_id=?", array($this->Environment->id));
         while ($row = $rows->FetchRow()) {
             $itm = new stdClass();
-            $itm->{"ID"} = $row['id'];
-            $itm->{"SourceID"} = $row['dm_source_id'];
-            $itm->{"Name"} = $row['name'];
+            $itm->ID = $row['id'];
+            $itm->SourceID = $row['dm_source_id'];
+            $itm->Name = $row['name'];
 
             $response->ApplicationSet->Item[] = $itm;
         }

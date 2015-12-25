@@ -33,6 +33,7 @@ Ext.define('Scalr.ui.RoleDesignerTabScripting', {
                 });
 
                 params['role']['scripts'] = scripting;
+                this.down('#rolescripting').down('grid').clearSelectedRecord();
             }
         });
         this.addListener({

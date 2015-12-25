@@ -1,12 +1,12 @@
-ENVADMINISTRATION_GOVERNANCE:
+GOVERNANCE_ENVIRONMENT:
 - [/core/governance, ~, all]
 - [/core/governance/lease, ~, all]
 
-ENVADMINISTRATION_ENV_CLOUDS:
+ENV_CLOUDS_ENVIRONMENT:
 # all action methods of platform controller
 - [/account2/environments/clouds, {"envId":"%ENV_ID%"}, all]
 
-ENVADMINISTRATION_GLOBAL_VARIABLES:
+GLOBAL_VARIABLES_ENVIRONMENT:
 - /core/variables
 - /core/xSaveVariables?variables=
 

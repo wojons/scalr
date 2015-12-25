@@ -76,8 +76,8 @@ class LoadStatisticsScript(lib.Script):
             farm_path = os.path.join(path, 'FARM')
             role_path = os.path.join(path, 'FR_%s' % server['farm_roleid'])
             server_path = os.path.join(path, 'INSTANCE_%s_%s' % (server['farm_roleid'], server['index']))
-            if server['status'] != 'Running':
-                assert not os.path.isdir(server_path)
+            if server['status'] != "'Running'":
+                assert not os.path.isdir(server_path), server_path
                 continue
             assert os.path.isdir(farm_path), farm_path
             assert os.path.isdir(os.path.join(farm_path, 'SERVERS'))
@@ -249,8 +249,9 @@ def after_scenario(scenario):
     if hasattr(lib.world, 'api_servers'):
         for api_server in lib.world.api_servers.values():
             api_server.stop()
-    if lib.world.script:
+    if hasattr(lib.world, 'script') and lib.world.script:
         lib.world.script.stop()
+    lib.stop_system_service('rrdcached')
 
 
 before.each_scenario(before_scenario)

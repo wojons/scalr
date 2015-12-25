@@ -6,10 +6,8 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
     });
 
     var storeUserResources = Ext.create('Ext.data.Store', {
-        filterOnLoad: true,
-        sortOnLoad: true,
-        fields: ['id', 'name', 'granted', 'group', 'groupOrder', 'permissions'],
-        groupField: 'group'
+        fields: ['id', 'name', 'granted', 'group', 'groupOrder', 'permissions', 'mode'],
+        groupField: 'groupOrder'
     });
 
 	var form = Ext.create('Ext.form.Panel', {
@@ -17,6 +15,7 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
 			'modal': true
 		},
 		width: 900,
+        cls: 'scalr-ui-panel-account-roles',
         bodyCls: 'x-container-fieldset',
 		title: 'Environments &raquo; ' + moduleParams['env']['name'] + '&raquo; User permissions summary',
 		fieldDefaults: {
@@ -53,7 +52,7 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
                         success: function(data){
                             var grantedFilterField = form.down('#grantedfilter');
                             storeUserResources.loadData(data['resources']);
-                            grantedFilterField.setValue(grantedFilterField.getValue() || 'allowed');
+                            grantedFilterField.setValue(grantedFilterField.getValue() || 1);
                             form.down('#resources').show();
                         }
                     });
@@ -71,6 +70,7 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
             flex: 1,
             hideHeaders: true,
             store: storeUserResources,
+            scrollable: 'y',
             features: [{
                 id:'grouping',
                 ftype:'grouping',
@@ -93,116 +93,126 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
                 }
             },
             columns: [{
-                xtype: 'multicheckboxcolumn',
+                xtype: 'aclresourcecolumn',
                 flex: 1,
-                dataIndex: 'permissions',
                 readOnly: true,
-                labelRenderer: function(key) {
-                    return key === 'ssh-console' ? 'SSH Launcher' : key;
-                },
-                cellRenderer: function(value, record) {
-                    var id = record.get('id'),
-                        resource = moduleParams['definitions'][id],
-                        prefix;
-                    prefix = '<div style="float:left;min-width:200px"><div class="x-semibold">' + (resource ? resource[0] : id) + '</div><div style="font-size:85%;color:#999;line-height:1.6em">' + (resource ? resource[1] : '') + '</div></div>';
-                    return prefix + value;
-                }
-            },{
-                xtype: 'templatecolumn',
-                width: 130,
-                tpl: new Ext.XTemplate(
-                    '{[this.getAccess(values)]}',
-                    {
-                        getAccess: function(values){
-                            var access = '<span class="x-semibold" style="color:#c00000">No access</span>';
-                            if (values.granted == 1) {
-                                access = '<span class="x-semibold" style="color:#008000">Full access</span>';
-                                Ext.Object.each(values.permissions, function(key, value){
-                                    if (value == 0) {
-                                        access = '<span class="x-semibold" style="color:#337dce">Limited access</span>';
-                                        return false;
-                                    }
-                                });
-                            }
-                            return access;
-                        }
-                    }
-               )
+                definitions: moduleParams['definitions']
             }],
             dockedItems: [{
                 xtype: 'toolbar',
-                ui: 'inline',
                 dock: 'top',
+                ui: 'inline',
                 items: [{
                     xtype: 'filterfield',
-                    filterFields: ['name', 'group'],
+                    filterFields: ['name', 'group', function(record){
+                        var permissions = record.get('permissions');
+                        if (permissions) {
+                            permissions = Ext.Object.getKeys(permissions).join(' ');
+                        }
+                        return permissions;
+                    }],
                     store: storeUserResources,
                     submitValue: false,
-                    doNotReset: true,
-                    listeners: {
-                        afterfilter: function(){
-                            //workaround of the extjs grouped store/grid bug
-                            var grid = form.down('#resources'),
-                                grouping = grid.getView().getFeature('grouping');
-                            if (grid.headerCt.rendered) {
-                                grid.suspendLayouts();
-                                grouping.disable();
-                                grouping.enable();
-                                grid.resumeLayouts(true);
-                            }
-                        }
-                    }
+                    excludeForm: true
                 },{
                     xtype: 'buttongroupfield',
+                    cls: 'scalr-ui-panel-account-roles-btngroup',
                     itemId: 'grantedfilter',
-                    doNotReset: true,
                     margin: '0 0 0 18',
+                    maxWidth: 600,
+                    isFormField: false,
+                    value: 'all',
+                    layout: 'hbox',
+                    flex: 1,
                     defaults: {
-                        width: 140
+                        flex: 1
                     },
                     items: [{
-                       text: 'All permissions',
-                       value: 'all'
+                        text: 'All',
+                        value: 'all'
                     },{
-                        text: 'Allowed',
-                        cls: 'x-btn-green',
-                        value: 'allowed'
+                        text: 'Full access',
+                        cls: 'scalr-ui-panel-account-roles-btn-full',
+                        value: 1
                     },{
                         text: 'Limited',
-                        cls: 'x-btn-blue',
-                        value: 'limited'
+                        cls: 'scalr-ui-panel-account-roles-btn-limited',
+                        value: 2
                     },{
-                        text: 'Forbidden',
-                        cls: 'x-btn-pink',
-                        value: 'forbidden'
+                        text: 'Read only',
+                        cls: 'scalr-ui-panel-account-roles-btn-readonly',
+                        value: 3
+                    },{
+                        text: 'No access',
+                        cls: 'scalr-ui-panel-account-roles-btn-no',
+                        value: 0
                     }],
                     listeners: {
                         change: function(comp, value) {
                             var filterId = 'granted',
                                 filters = [];
                             storeUserResources.removeFilter(filterId);
-                            if (value === 'limited') {
+                            if (value === 1) {
                                 filters.push({
                                     id: filterId,
                                     filterFn: function(record) {
                                         var res = false;
                                         if (record.get('granted') == 1) {
-                                            Ext.Object.each(record.get('permissions'), function(key, value){
-                                                if (value == 0) {
-                                                    res = true;
-                                                    return false;
-                                                }
-                                            });
+                                            var permissions = record.get('permissions');
+                                            res = true;
+                                            if (!Ext.isEmpty(permissions)) {
+                                                Ext.Object.each(permissions, function(key, value){
+                                                    if (value == 0) {
+                                                        return res = false;
+                                                    }
+                                                });
+                                            }
                                         }
                                         return res;
                                     }
                                 });
-                            } else if (value !== 'all') {
+                            } else if (value === 2) {
+                                filters.push({
+                                    id: filterId,
+                                    filterFn: function(record) {
+                                        var res = false;
+                                        if (record.get('granted') == 1) {
+                                            var permissions = record.get('permissions'),
+                                                hasEnabled, hasDisabled;
+                                            if (!Ext.isEmpty(permissions) && (Ext.Object.getSize(permissions) > 1 || permissions['manage'] === undefined)) {
+                                                Ext.Object.each(permissions, function(key, value){
+                                                    hasEnabled = hasEnabled || value == 1;
+                                                    hasDisabled = hasDisabled || value == 0;
+                                                });
+                                                res = hasEnabled && hasDisabled;
+                                            }
+                                        }
+                                        return res;
+                                    }
+                                });
+                            } else if (value === 3) {
+                                filters.push({
+                                    id: filterId,
+                                    filterFn: function(record) {
+                                        var res = false;
+                                        if (record.get('granted') == 1) {
+                                            var permissions = record.get('permissions');
+                                            if (!Ext.isEmpty(permissions)) {
+                                                res = true;
+                                                Ext.Object.each(permissions, function(key, value){
+                                                    return (res = value == 0);
+                                                });
+                                            }
+                                        }
+                                        return res;
+                                    }
+                                });
+                            } else if (value === 0) {
                                 filters.push({
                                     id: filterId,
                                     exactMatch: true,
                                     property: 'granted',
-                                    value: value === 'allowed' ? 1 : 0
+                                    value: value
                                 });
                             }
                             storeUserResources.addFilter(filters);

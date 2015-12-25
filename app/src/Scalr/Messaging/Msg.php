@@ -47,7 +47,7 @@ class Scalr_Messaging_Msg
         $this->farmRoleId = $dbServer->farmRoleId;
     }
 
-    public function setGlobalVariables(DBServer $dbServer, $includeSystem = false, Event $event = null)
+    public function setGlobalVariables(DBServer $dbServer, $includeSystem = false, AbstractServerEvent $event = null)
     {
         $this->globalVariables = Scalr_Scripting_GlobalVariables::listServerGlobalVariables(
             $dbServer,

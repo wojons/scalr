@@ -1,18 +1,18 @@
 <?php
 
-use Scalr\Modules\PlatformFactory;
-use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Tools_Rackspace extends Scalr_UI_Controller
 {
     public function xListLimitsAction()
     {
-        $cloudLocation = $this->getParam('cloudLocation');
+        //TODO: check correct platform name
+        $ccProps = $this->environment->cloudCredentials($this->getParam('cloudLocation') . SERVER_PLATFORMS::RACKSPACE)->properties;
 
         $cs = Scalr_Service_Cloud_Rackspace::newRackspaceCS(
-            $this->environment->getPlatformConfigValue(RackspacePlatformModule::USERNAME, true, $cloudLocation),
-            $this->environment->getPlatformConfigValue(RackspacePlatformModule::API_KEY, true, $cloudLocation),
-            $cloudLocation
+            $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_USERNAME],
+            $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_API_KEY],
+            $this->getParam('cloudLocation')
         );
 
         $limits = $cs->limits();

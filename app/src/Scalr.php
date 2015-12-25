@@ -13,13 +13,28 @@ use Scalr\Modules\Platforms\Ec2\Observers\ElbObserver;
 use Scalr\Modules\Platforms\Openstack\Observers\OpenstackObserver;
 use Scalr\Modules\Platforms\Verizon\Observers\VerizonObserver;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
+use Scalr\Model\Entity;
+use Scalr\Observer\AbstractEventObserver;
+use Scalr\Observer\DBEventObserver;
+use Scalr\Observer\DNSEventObserver;
+use Scalr\Observer\BehaviorEventObserver;
+use Scalr\Observer\MessagingEventObserver;
+use Scalr\Observer\ScalarizrEventObserver;
 
 class Scalr
 {
     private static $observersSetuped = false;
-    private static $EventObservers = array();
-    private static $ConfigsCache = array();
+    private static $EventObservers = [];
+    private static $ConfigsCache = [];
     private static $InternalObservable;
+
+    /**
+     * Emergency memory that is used in the case of the
+     * memory limit error to handle error safely
+     *
+     * @var string
+     */
+    public static $emergencyMemory;
 
     /**
      * Gets DI container
@@ -71,22 +86,22 @@ class Scalr
 
     private static function setupObservers()
     {
-        Scalr::AttachObserver(new DBEventObserver());
-        Scalr::AttachObserver(new DNSEventObserver());
+        self::AttachObserver(new DBEventObserver());
+        self::AttachObserver(new DNSEventObserver());
 
-        Scalr::AttachObserver(new EbsObserver());
-        Scalr::AttachObserver(new CloudstackObserver());
+        self::AttachObserver(new EbsObserver());
+        self::AttachObserver(new CloudstackObserver());
 
-        Scalr::AttachObserver(new ScalarizrEventObserver());
-        Scalr::AttachObserver(new MessagingEventObserver());
-        Scalr::AttachObserver(new BehaviorEventObserver());
+        self::AttachObserver(new ScalarizrEventObserver());
+        self::AttachObserver(new MessagingEventObserver());
+        self::AttachObserver(new BehaviorEventObserver());
 
-        Scalr::AttachObserver(new Ec2Observer());
-        Scalr::AttachObserver(new EipObserver());
-        Scalr::AttachObserver(new ElbObserver());
+        self::AttachObserver(new Ec2Observer());
+        self::AttachObserver(new EipObserver());
+        self::AttachObserver(new ElbObserver());
 
-        Scalr::AttachObserver(new OpenstackObserver());
-        Scalr::AttachObserver(new VerizonObserver());
+        self::AttachObserver(new OpenstackObserver());
+        self::AttachObserver(new VerizonObserver());
 
         self::$observersSetuped = true;
     }
@@ -94,7 +109,7 @@ class Scalr
     /**
      * Attach observer
      *
-     * @param EventObserver $observer
+     * @param AbstractEventObserver $observer
      */
     public static function AttachObserver ($observer)
     {
@@ -126,7 +141,7 @@ class Scalr
      * @param  integer $farmid
      * @param  string  $event_name
      */
-    public static function FireEvent($farmid, Event $event)
+    public static function FireEvent($farmid, AbstractServerEvent $event)
     {
         if (!self::$observersSetuped) {
             self::setupObservers();
@@ -149,10 +164,13 @@ class Scalr
                     call_user_func(array($observer, "On{$event->GetName()}"), $event);
                 }
 
-                $handledObservers[substr(strrchr(get_class($observer), "\\"), 1)] = microtime(true) - $observerStartTime;
+                $handledObservers[substr(strrchr(get_class($observer), "\\"), 1)] = round(microtime(true) - $observerStartTime, 5);
+                if (isset($event->messageLongestInsert)) {
+                    $handledObservers['MessageLongestInsert'] = $event->messageLongestInsert;
+                }
             }
         } catch (Exception $e) {
-            Logger::getLogger(__CLASS__)->fatal(
+            self::getContainer()->logger(__CLASS__)->fatal(
                 sprintf("Exception thrown in Scalr::FireEvent(%s:%s, %s:%s): %s",
                     @get_class($observer),
                     $event->GetName(),
@@ -174,10 +192,9 @@ class Scalr
      * @param integer $farmid
      * @param string $event_name
      */
-    public static function StoreEvent($farmid, Event $event, $eventTime = null)
+    public static function StoreEvent($farmid, AbstractServerEvent $event, $eventTime = null)
     {
-        if ($event->DBServer)
-            $eventServerId = $event->DBServer->serverId;
+        $eventServerId = isset($event->DBServer->serverId) ? $event->DBServer->serverId : null;
 
         try {
             $DB = self::getDb();
@@ -185,14 +202,20 @@ class Scalr
             // Generate event message
             $message = $event->getTextDetails();
 
-            //short_message temporary used for time tracking
+            $suspend = 0;
+            if ($event instanceof HostDownEvent)
+                $suspend = $event->isSuspended;
+            elseif ($event instanceof BeforeHostTerminateEvent)
+                $suspend = $event->suspend;
+
+            // short_message temporary used for time tracking
             // Store event in database
             $DB->Execute("INSERT INTO events SET
                 farmid	= ?,
                 type	= ?,
                 dtadded	= NOW(),
                 message	= ?,
-                event_object = '',
+                event_object = ?,
                 event_id	 = ?,
                 event_server_id = ?,
                 short_message = ?,
@@ -200,20 +223,20 @@ class Scalr
                 msg_created = ?,
                 scripts_total = ?,
                 is_suspend = ?",
-                array($farmid, $event->GetName(), $message, $event->GetEventID(), $eventServerId, $eventTime,
+                array($farmid, $event->GetName(), $message, json_encode($event->handledObservers), $event->GetEventID(), $eventServerId, $eventTime,
                     $event->msgExpected,
                     $event->msgCreated,
                     $event->scriptsCount,
-                    $event->isSuspended ? 1 : 0
+                    $suspend
                 )
             );
         }
         catch(Exception $e) {
-            Logger::getLogger(__CLASS__)->fatal(sprintf(_("Cannot store event in database: %s"), $e->getMessage()));
+            self::getContainer()->logger(__CLASS__)->fatal(sprintf(_("Cannot store event in database: %s"), $e->getMessage()));
         }
 
         try {
-            if ($eventServerId) {
+            if (isset($eventServerId)) {
                 $dbServer = DBServer::LoadByID($eventServerId);
 
                 if (!$dbServer->farmRoleId)
@@ -297,7 +320,7 @@ class Scalr
                     $DB->Execute("UPDATE events SET wh_total = ? WHERE event_id = ?", array($count, $event->GetEventID()));
             }
         } catch (Exception $e) {
-            Logger::getLogger(__CLASS__)->fatal(sprintf(_("WebHooks: %s"), $e->getMessage()));
+            self::getContainer()->logger(__CLASS__)->fatal(sprintf(_("WebHooks: %s"), $e->getMessage()));
         }
     }
 
@@ -328,6 +351,15 @@ class Scalr
         return !empty($accounts) && is_array($accounts) && in_array($accountId, $accounts) ? true : false;
     }
 
+    public static function processHostDown(\DBServer $dbServer)
+    {
+        /*
+         * 1. Check that we don't have unprocessed HostDown event
+         * 2. Check was this reboot / suspend or terminate based on different rules
+         * 3. Fire appropriate event
+         */
+    }
+
     /**
      * Launches server
      *
@@ -354,15 +386,17 @@ class Scalr
 
         if (!$DBServer && $ServerCreateInfo) {
             $ServerCreateInfo->SetProperties(array(
-                SERVER_PROPERTIES::SZR_KEY => Scalr::GenerateRandomKey(40),
+                SERVER_PROPERTIES::SZR_KEY => self::GenerateRandomKey(40),
                 SERVER_PROPERTIES::SZR_KEY_TYPE => SZR_KEY_TYPE::ONE_TIME
             ));
 
             $DBServer = DBServer::Create($ServerCreateInfo, false, true);
         } elseif (!$DBServer && !$ServerCreateInfo) {
             // incorrect arguments
-            Logger::getLogger(LOG_CATEGORY::FARM)->error(sprintf("Cannot create server"));
+            self::getContainer()->logger(LOG_CATEGORY::FARM)->error(sprintf("Cannot create server"));
             return null;
+        } else if ($DBServer && empty($DBServer->cloudLocation)) {
+            trigger_error('Cloud location is missing in DBServer', E_USER_WARNING);
         }
 
         $propsToSet = array();
@@ -392,7 +426,7 @@ class Scalr
             if ($farm instanceof DBFarm) {
                 $propsToSet[SERVER_PROPERTIES::FARM_CREATED_BY_ID] = $farm->createdByUserId;
                 $propsToSet[SERVER_PROPERTIES::FARM_CREATED_BY_EMAIL] = $farm->createdByUserEmail;
-                $projectId = $farm->GetSetting(DBFarm::SETTING_PROJECT_ID);
+                $projectId = $farm->GetSetting(Entity\FarmSetting::PROJECT_ID);
 
                 if (!empty($projectId)) {
                     try {
@@ -412,17 +446,13 @@ class Scalr
                 $propsToSet[SERVER_PROPERTIES::FARM_PROJECT_ID] = $projectId;
             }
 
-            if ($farmRole instanceof DBFarmRole) {
-                $propsToSet[SERVER_PROPERTIES::INFO_INSTANCE_TYPE_NAME] = $farmRole->GetSetting(DBFarmRole::SETTING_INFO_INSTANCE_TYPE_NAME);
-            }
-
             if (!empty($ccId)) {
                 $propsToSet[SERVER_PROPERTIES::ENV_CC_ID] = $ccId;
             } elseif ($DBServer->envId && (($environment = $DBServer->GetEnvironmentObject()) instanceof Scalr_Environment)) {
                 $propsToSet[SERVER_PROPERTIES::ENV_CC_ID] = $environment->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID);
             }
         } catch (Exception $e) {
-            Logger::getLogger(LOG_CATEGORY::FARM)->error(sprintf(
+            self::getContainer()->logger(LOG_CATEGORY::FARM)->error(sprintf(
                 "Could not load related object for recently created server %s. It says: %s",
                 $DBServer->serverId, $e->getMessage()
             ));
@@ -439,21 +469,22 @@ class Scalr
         };
 
         if ($delayed) {
-            $DBServer->status = SERVER_STATUS::PENDING_LAUNCH;
             list($reasonMsg, $reasonId) = is_array($reason) ? call_user_func_array($fnGetReason, $reason) : $fnGetReason($reason);
+
             $DBServer->SetProperties([
                 SERVER_PROPERTIES::LAUNCH_REASON    => $reasonMsg,
                 SERVER_PROPERTIES::LAUNCH_REASON_ID => $reasonId
             ]);
-            $DBServer->Save();
+
+            $DBServer->updateStatus(SERVER_STATUS::PENDING_LAUNCH);
+
             return $DBServer;
         }
 
         if ($ServerCreateInfo && $ServerCreateInfo->roleId) {
             $dbRole = DBRole::loadById($ServerCreateInfo->roleId);
             if ($dbRole->generation == 1) {
-                $DBServer->status = SERVER_STATUS::PENDING_LAUNCH;
-                $DBServer->Save();
+                $DBServer->updateStatus(SERVER_STATUS::PENDING_LAUNCH);
 
                 $DBServer->SetProperties([
                     SERVER_PROPERTIES::LAUNCH_ERROR => "ami-scripts servers no longer supported",
@@ -467,17 +498,18 @@ class Scalr
 
         // Limit amount of pending servers
         if ($DBServer->isOpenstack()) {
-            $config = \Scalr::getContainer()->config;
+            $config = self::getContainer()->config;
             if ($config->defined("scalr.{$DBServer->platform}.pending_servers_limit")) {
                 $pendingServersLimit = $config->get("scalr.{$DBServer->platform}.pending_servers_limit");
+
                 $pendingServers = $db->GetOne("SELECT COUNT(*) FROM servers WHERE platform=? AND status=? AND server_id != ?", array(
                     $DBServer->platform, SERVER_STATUS::PENDING, $DBServer->serverId
                 ));
-                if ($pendingServers >= $pendingServersLimit) {
-                    Logger::getLogger("SERVER_LAUNCH")->warn("{$pendingServers} servers in PENDING state on {$DBServer->platform}. Limit is: {$pendingServersLimit}. Waiting.");
 
-                    $DBServer->status = SERVER_STATUS::PENDING_LAUNCH;
-                    $DBServer->Save();
+                if ($pendingServers >= $pendingServersLimit) {
+                    self::getContainer()->logger("SERVER_LAUNCH")->warn("{$pendingServers} servers in PENDING state on {$DBServer->platform}. Limit is: {$pendingServersLimit}. Waiting.");
+
+                    $DBServer->updateStatus(SERVER_STATUS::PENDING_LAUNCH);
 
                     $DBServer->SetProperties([
                         SERVER_PROPERTIES::LAUNCH_ATTEMPT => $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_ATTEMPT) + 1,
@@ -486,7 +518,7 @@ class Scalr
 
                     return $DBServer;
                 } else {
-                    Logger::getLogger("SERVER_LAUNCH")->warn("{$pendingServers} servers in PENDING state on {$DBServer->platform}. Limit is: {$pendingServersLimit}. Launching server.");
+                    self::getContainer()->logger("SERVER_LAUNCH")->warn("{$pendingServers} servers in PENDING state on {$DBServer->platform}. Limit is: {$pendingServersLimit}. Launching server.");
                 }
             }
         }
@@ -513,9 +545,20 @@ class Scalr
 
                 if ($DBServer->imageId) {
                     //Update Image last used date
-                    $image = Image::findOne([['id' => $DBServer->imageId], ['envId' => $DBServer->envId], ['platform' => $DBServer->platform], ['cloudLocation' => $DBServer->cloudLocation]]);
+                    $image = Image::findOne([
+                        ['id'            => $DBServer->imageId],
+                        ['envId'         => $DBServer->envId],
+                        ['platform'      => $DBServer->platform],
+                        ['cloudLocation' => $DBServer->cloudLocation]
+                    ]);
+
                     if (!$image)
-                        $image = Image::findOne([['id' => $DBServer->imageId], ['envId' => NULL], ['platform' => $DBServer->platform], ['cloudLocation' => $DBServer->cloudLocation]]);
+                        $image = Image::findOne([
+                            ['id'            => $DBServer->imageId],
+                            ['envId'         => null],
+                            ['platform'      => $DBServer->platform],
+                            ['cloudLocation' => $DBServer->cloudLocation]
+                        ]);
 
                     if ($image) {
                         $image->dtLastUsed = new DateTime();
@@ -531,10 +574,11 @@ class Scalr
                 }
 
             } catch (Exception $e) {
-                Logger::getLogger('SERVER_HISTORY')->error(sprintf("Cannot update servers history: {$e->getMessage()}"));
+                self::getContainer()->logger('SERVER_HISTORY')->error(sprintf("Cannot update servers history: {$e->getMessage()}"));
             }
         } catch (Exception $e) {
-            Logger::getLogger(LOG_CATEGORY::FARM)->error(new FarmLogMessage($DBServer->farmId,
+            self::getContainer()->logger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
+                $DBServer->farmId,
                 sprintf("Cannot launch server on '%s' platform: %s",
                     $DBServer->platform,
                     $e->getMessage()
@@ -544,21 +588,20 @@ class Scalr
 
             $existingLaunchError = $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_ERROR);
 
-            $DBServer->status = SERVER_STATUS::PENDING_LAUNCH;
             $DBServer->SetProperties([
                 SERVER_PROPERTIES::LAUNCH_ERROR => $e->getMessage(),
                 SERVER_PROPERTIES::LAUNCH_ATTEMPT => $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_ATTEMPT) + 1,
                 SERVER_PROPERTIES::LAUNCH_LAST_TRY => (new DateTime())->format('Y-m-d H:i:s')
             ]);
 
-            $DBServer->Save();
+            $DBServer->updateStatus(SERVER_STATUS::PENDING_LAUNCH);
 
             if ($DBServer->farmId && !$existingLaunchError)
-                Scalr::FireEvent($DBServer->farmId, new InstanceLaunchFailedEvent($DBServer, $e->getMessage()));
+                self::FireEvent($DBServer->farmId, new InstanceLaunchFailedEvent($DBServer, $e->getMessage()));
         }
 
         if ($DBServer->status == SERVER_STATUS::PENDING) {
-            Scalr::FireEvent($DBServer->farmId, new BeforeInstanceLaunchEvent($DBServer));
+            self::FireEvent($DBServer->farmId, new BeforeInstanceLaunchEvent($DBServer));
             $DBServer->SetProperty(SERVER_PROPERTIES::LAUNCH_ERROR, "");
         }
 
@@ -567,7 +610,7 @@ class Scalr
 
     public static function GenerateAPIKeys()
     {
-        $key = Scalr::GenerateRandomKey();
+        $key = self::GenerateRandomKey();
 
         $sault = abs(crc32($key));
         $keyid = dechex($sault).dechex(time());
@@ -602,6 +645,50 @@ class Scalr
         $key = substr(base64_encode($rnd), 0, $length);
 
         return $key;
+    }
+
+    /**
+     * Generates password that includes at least one symbols from each set:
+     *  l - lower case characters
+     *  u - upper case characters
+     *  d - digits
+     *  s - special characters
+     *
+     * @param   int     $length         optional Password length
+     * @param   array   $sets           optional User (re-)defined characters sets
+     * @param   array   $enabledSets    optional Names of enabled sets, if null — all sets are enabled
+     *
+     * @return  string  Returns generated password
+     */
+    public static function GenerateSecurePassword($length = 16, array $sets = null, array $enabledSets = null)
+    {
+        static $predefinedSets = [
+            'l' => 'abcdefghjkmnpqrstuvwxyz',
+            'u' => 'ABCDEFGHJKMNPQRSTUVWXYZ',
+            'd' => '1234567890',
+            's' => '!@#$%&*?',
+        ];
+
+        $sets = empty($sets) ? $predefinedSets : array_merge($predefinedSets, $sets);
+
+        if (!empty($enabledSets)) {
+            $sets = array_intersect_key($sets, array_flip($enabledSets));
+        }
+
+        $password = '';
+        foreach ($sets as $set) {
+            $password .= $set[mt_rand(0, strlen($set) - 1)];
+        }
+
+        $all = implode($sets);
+        $setLength = strlen($all) - 1;
+        $length -= count($sets);
+
+        for ($i = 0; $i < $length; $i++) {
+            $password .= $all[mt_rand(0, $setLength)];
+        }
+
+        return str_shuffle($password);
     }
 
     public static function GenerateUID($short = false, $startWithLetter = false)
@@ -725,11 +812,6 @@ class Scalr
         $message = "Error {$errname} {$errstr}, in {$errfile}:{$errline}\n";
 
         switch ($errno) {
-            case E_USER_NOTICE:
-            case E_NOTICE:
-                //Ignore for a while.
-                break;
-
             case E_CORE_ERROR:
             case E_ERROR:
             case E_USER_ERROR:
@@ -739,13 +821,18 @@ class Scalr
                 @error_log($message);
                 throw $exception;
                 break;
+
+            case E_USER_NOTICE:
+            case E_NOTICE:
+                //Ignore for a while.
+                break;
+
             case E_WARNING:
             case E_USER_WARNING:
                 $exception = new \ErrorException($errname, $errno, 0, $errfile, $errline);
                 $message = $message . "Stack trace:\n  " . str_replace("\n#", "\n  #", $exception->getTraceAsString());
             default:
                 @error_log($message);
-                break;
         }
     }
 
@@ -789,5 +876,21 @@ class Scalr
         return strtolower(preg_replace_callback('/([a-z])([A-Z]+)/', function ($m) {
             return $m[1] . '_' . $m[2];
         }, $str));
+    }
+
+    /**
+     * Get all http headers in camel-case form
+     *
+     * @return  array
+     */
+    public static function getAllHeaders()
+    {
+        $headers = [];
+        foreach ($_SERVER as $header => $value) {
+            if (($http = strpos($header, "HTTP_") === 0) || strpos($header, "CONTENT_") === 0) {
+                $headers[str_replace(' ', '-', ucwords(str_replace('_', ' ', strtolower($http === true ? substr($header, 5) : $header))))] = $value;
+            }
+        }
+        return $headers;
     }
 }

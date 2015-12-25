@@ -15,7 +15,7 @@ use Scalr\Model\Entity\ScriptVersion;
  *
  * @author N.V.
  *
- * @method  ScriptVersion toEntity($data) Converts data to entity
+ * @method  \Scalr\Model\Entity\ScriptVersion toEntity($data) Converts data to entity
  */
 class ScriptVersionAdapter extends ApiEntityAdapter {
 
@@ -34,7 +34,7 @@ class ScriptVersionAdapter extends ApiEntityAdapter {
         //The alterable properties
         self::RULE_TYPE_ALTERABLE   => [ 'body' ],
 
-        self::RULE_TYPE_FILTERABLE  => [],
+        self::RULE_TYPE_FILTERABLE  => [ 'script' ],
         self::RULE_TYPE_SORTING     => [self::RULE_TYPE_PROP_DEFAULT => ['dtCreated' => true]],
     ];
 
@@ -59,7 +59,7 @@ class ScriptVersionAdapter extends ApiEntityAdapter {
                 break;
 
             case static::ACT_GET_FILTER_CRITERIA:
-                break;
+                return [[ 'scriptId' => ApiController::getBareId($from, 'script') ]];
         }
     }
 

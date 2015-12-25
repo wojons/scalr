@@ -1,0 +1,2139 @@
+# This is ignored by Swagger, but we use it for DRY YAML definitions
+x-dry-yaml-definitions:
+  scopeProperty: &scopeProperty
+        type: string
+        enum:
+          - scalr
+          - account
+          - environment
+          - farm
+          - farmrole
+          - server
+  architecture: &architectureProperty
+    type: string
+    enum:
+      - i386
+      - x86_64
+  cloudLocationProperties: &cloudLocationProperties
+    cloudPlatform:
+      description: "Cloud Platform this resources resides in."
+      type: string
+      enum:
+        - ec2
+        - gce
+        - azure
+        # cloudstack based
+        - cloudstack
+        - idcf
+        # openstack based
+        - openstack
+        - ocs
+        - rackspacenguk
+        - rackspacengus
+        - hpcloud
+        - mirantis
+        - vio
+        - cisco
+    cloudLocation:
+      description: "More precise Cloud Location (within a given Cloud Platform) for this resource. May be null if this resource does not have a location (and is global to the platform). Note that if you'd like to filter on this property, you **must** also filter on `cloudPlatform`."
+      type: string
+  openstackProvider: &openstackProvider
+    description: Cloud provider that should be specified for OpenStack based clouds.
+    type: string
+    enum:
+      - openstack
+      - ocs
+      - hpcloud
+      - mirantis
+      - vio
+      - cisco
+  cloudstackProvider: &cloudstackProvider
+    description: Cloud provider that should be specified for CloudStack based clouds.
+    type: string
+    enum:
+      - cloudstack
+      - idcf
+
+swagger: '2.0'
+
+info:
+  version: '1.0.0'
+  title: Scalr User API
+  description: 'Manage Roles, Images, Farms, Farm Roles, and Servers'
+
+basePath: '/api/v1beta0/user'
+
+produces:
+  - application/json
+
+parameters:
+  envId:
+    name: envId
+    description: The ID of the Environment scoping this request
+    in: path
+    type: integer
+    required: true
+
+  # TODO - automate generation of those
+  globalVariableName:
+    name: globalVariableName
+    description: The name of the Global Variable being accessed.
+    in: path
+    type: string
+    required: true
+
+  scriptVersionNumber:
+    name: scriptVersionNumber
+    description: The version number of the Script Version being accessed
+    in: path
+    type: integer
+    required: true
+
+  cloudCredentialsId:
+    name: cloudCredentialsId
+    description: The name of the Cloud Credentials being accessed
+    in: path
+    type: string
+    required: true
+
+  #scriptParameterName:
+  #  name: scriptParameterName
+  #  description: The name of the Script Parameter being accessed
+  #  in: path
+  #  type: string
+  #  required: true
+
+responses:
+  clientError:
+    description: A client-side error was made
+    schema:
+      $ref: '#/definitions/ApiErrorResponse'
+    x-errorCodes:
+      # InvalidStructure is when the request was missing a required parameter, etc.
+      - name: InvalidStructure
+        description: "Your request is structurally incorrect, and was not understood by the API."
+
+      # InvalidValue is when we found the data we expected, but it didn't pass validation (FK didn't exist,
+      # field didn't match regex).
+      - name: InvalidValue  # Consider renaming BadValue
+        description: "Your request was understood by the API, but included data that is not acceptable."
+
+      # BadRequest is when the request didn't make any sense (i.e. last option).
+      - name: BadRequest
+        description: "Your request wasn't understood by the API."
+
+  authenticationError:
+    description: Request was not authenticated
+    schema:
+      $ref: '#/definitions/ApiErrorResponse'
+    x-errorCodes:
+      # BadAuthentication is when authentication failed.
+      - name: BadAuthentication
+        description: "Your request authentication failed to validate."
+
+
+  permissionsError:
+    description: Insufficient permissions
+    schema:
+      $ref: '#/definitions/ApiErrorResponse'
+    x-errorCodes:
+      - name: ScopeViolation
+        description: "Your request should be made in a different Scope."
+
+      - name: PermissionViolation
+        description: "Your request requires permissions you do not have."
+
+  notFoundError:
+    description: Resource not found
+    schema:
+      $ref: '#/definitions/ApiErrorResponse'
+    x-errorCodes:
+      # EndpointNotFound is when the request is for a URL that doesn't exist to begin with.
+      - name: EndpointNotFound
+        description: "The route you are trying to access does not exist"
+        noDoc: true
+
+      # ObjectNotFound is when the request is for a URL that exists, but points to an object that doesn't
+      # (e.g. bad ID)
+      - name: ObjectNotFound
+        description: "The URL you are trying to access does not exist"
+
+  conflictError:
+    description: Conflict with current state
+    schema:
+      $ref: '#/definitions/ApiErrorResponse'
+    x-errorCodes:
+      # ObjectInUse is when e.g. trying to delete an Image that is being used.
+      - name: ObjectInUse
+        description: "The changes you are trying to make aren't possible while this object is in use."
+
+      # UnicityViolation is when e.g. trying to create an object whose name duplicates one.
+      - name: UnicityViolation
+        description: "The changes you are trying to make violate a unicity constraint."
+
+  serverError:
+    description: A server-side error occured
+    schema:
+      $ref: '#/definitions/ApiErrorResponse'
+
+   # TODO - Add NotImplemented
+
+paths:
+
+
+  ############
+  # Projects #
+  ############
+
+  /{envId}/projects/:
+    # TODO - Actual endpoints to manipulate those
+    parameters:
+      - $ref: '#/parameters/envId'
+    get:
+      description: List Projects available in this Environment
+      responses:
+        200:
+          $ref: '#/responses/projectList'
+    post:
+      description: Creates a new Project in this Environment
+      parameters:
+        - $ref: '#/parameters/projectObject'
+      responses:
+        201:
+          $ref: '#/responses/projectDetail'
+
+  /{envId}/projects/{projectId}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/projectId'
+    get:
+      description: Return a JSON representation of a Project
+      responses:
+        200:
+          $ref: '#/responses/projectDetail'
+
+  #################
+  # Const Centers #
+  #################
+
+  /{envId}/cost-centers/:
+    parameters:
+      - $ref: '#/parameters/envId'
+    get:
+      description: List Cost Centers available in this Environment
+      responses:
+        200:
+          $ref: '#/responses/costCenterList'
+
+  /{envId}/cost-centers/{costCenterId}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/costCenterId'
+    get:
+      description: Return a JSON representation of a Cost-Center
+      responses:
+        200:
+          $ref: '#/responses/costCenterDetail'
+
+  ###################
+  # Role Categories #
+  ###################
+
+  /{envId}/role-categories/:
+    # TODO - Decide whether we want different endpoints for other scopes.
+    # TODO - Decide how POST works regarding categories.
+    parameters:
+      - $ref: '#/parameters/envId'
+    get:
+      description: List Role Categories available in this Environment
+      responses:
+        200:
+          $ref: '#/responses/roleCategoryList'
+
+  /{envId}/role-categories/{roleCategoryId}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/roleCategoryId'
+    get:
+      description: Return a JSON representation of a Role Category
+      responses:
+        200:
+          $ref: '#/responses/roleCategoryDetail'
+
+  #########
+  # Roles #
+  #########
+
+  /{envId}/roles/:
+    parameters:
+      - $ref: '#/parameters/envId'
+    get:
+      description: List Roles available in this Environment
+      responses:
+        200:
+          $ref: '#/responses/roleList'
+    post:
+      description: Create a new Role in this Environment
+      parameters:
+        - $ref: '#/parameters/roleObject'
+      responses:
+        201:
+          $ref: '#/responses/roleDetail'
+
+  /{envId}/roles/{roleId}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/roleId'
+    get:
+      description: Retrieve a Role.
+      responses:
+        200:
+          $ref: '#/responses/roleDetail'
+    patch:
+      description: Change Role attributes.
+      parameters:
+        - $ref: '#/parameters/roleObject'
+      responses:
+        200:
+          $ref: '#/responses/roleDetail'
+    delete:
+      description: Delete this Role from this Environment.
+      responses:
+        200:
+          $ref: '#/responses/deleteSuccessResponse'
+
+
+  /{envId}/roles/{roleId}/images/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/roleId'
+    get:
+      description: List Images associated with this Role
+      responses:
+        200:
+          $ref: '#/responses/roleImageList'
+    post:
+      description: Associate a new Image with this Role. This may fail if an existing Image conflicts with the Image you are trying to add (i.e. they are in the same location)
+      parameters:
+        - $ref: '#/parameters/roleImageObject'
+      responses:
+        201:
+          $ref: '#/responses/roleImageDetail'
+
+  /{envId}/roles/{roleId}/images/{imageId}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/roleId'
+      - $ref: '#/parameters/imageId'
+    get:
+      description: Redirects to the Image
+      responses:
+        302:
+          description: Redirects to the Image.
+    delete:
+      # NOTE - Using a body in a DELETE request could be possible, but it's discouraged (and some webservers / proxies
+      # will reject it), so we stick to IDs in the URI.
+      description: Dis-associate this Image from this Role
+      responses:
+        200:
+          $ref: '#/responses/deleteSuccessResponse'
+
+  /{envId}/roles/{roleId}/images/{imageId}/actions/replace/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/roleId'
+      - $ref: '#/parameters/imageId'
+    post:
+      description: 'Replace an Image in-place. This allows you to replace an Image without having to dis-associate it and then associate a new one, which may not be possible if a Farm Role is currently using this Image.'
+      parameters:
+        - $ref: '#/parameters/roleImageObject'
+      responses:
+        200:
+          $ref: '#/responses/roleImageDetail'
+      # Should we instead transparently replace when someone POSTs /roles/role-123/images?
+      # Explicit is better than implicit, so probably not.
+
+  /{envId}/roles/{roleId}/global-variables/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/roleId'
+    get:
+      description: List Global Variables associated with this Role
+      responses:
+        200:
+          $ref: '#/responses/globalVariableList'
+    post:
+      description: Declare a new Global Variable for this Role
+      parameters:
+        # See above for an explanation of the decision to manage those using specific calls.
+        # TODO - Batch API calls may be supported using a 'special' POST endpoint
+        # {
+        #   "requests": [
+        #     {
+        #       "method": "POST",
+        #       "uri": "/.../.../.../",
+        #       "body": ...
+        #     },
+        #     {...}
+        #   ]
+        # }
+        - $ref: '#/parameters/globalVariableObject'
+      responses:
+        # NOTE: We should throw an error if someone uses this endpoint to overwrite an existing variable
+        # (i.e. one that is declared within this scope)
+        201:
+          $ref: '#/responses/globalVariableDetail'
+
+  /{envId}/roles/{roleId}/global-variables/{globalVariableName}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/roleId'
+      - $ref: '#/parameters/globalVariableName'
+    get:
+      description: Retrieve a Global Variable's value in this Role's scope
+      responses:
+        200:
+          $ref: '#/responses/globalVariableDetail'
+    patch:
+      description: Update a Global Variable's value in this Role's scope
+      parameters:
+        - $ref: '#/parameters/globalVariableObject'
+      responses:
+        202:
+          $ref: '#/responses/globalVariableDetail'
+    delete:
+      description: Delete a Global Variable from this Role's scope
+      responses:
+        200:
+          $ref: '#/responses/deleteSuccessResponse'
+        # TODO - 404?
+
+  /{envId}/roles/{roleId}/orchestration-rules/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/roleId'
+    get:
+      # Note: This returns all the Rules associated with this Role, including those that
+      #       are coming from other Scopes. Naturally, Account-Scope Rules are read-only in this Scope.
+      description: List Orchestration Rules associated with this Role, including Rules from other Scopes (those are read-only).
+      responses:
+        200:
+          $ref: '#/responses/orchestrationRuleList'
+    post:
+      description: Associate a new Orchestration Rule with this Role
+      parameters:
+        - $ref: '#/parameters/orchestrationRuleObject'
+      responses:
+        201:
+          $ref: '#/responses/orchestrationRuleDetail'
+
+  /{envId}/roles/{roleId}/orchestration-rules/{orchestrationRuleId}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/roleId'
+      - $ref: '#/parameters/orchestrationRuleId'
+    get:
+      description: Retrieve an Orchestration Rule
+      responses:
+        200:
+          $ref: '#/responses/orchestrationRuleDetail'
+    patch:
+      description: Update an Orchestration rule
+      parameters:
+        - $ref: '#/parameters/orchestrationRuleObject'
+      responses:
+        202:
+          $ref: '#/responses/orchestrationRuleDetail'
+    delete:
+      description: Delete an Orchestration Rule associated with this Role
+      responses:
+        200:
+          $ref: '#/responses/deleteSuccessResponse'
+
+  #/{envId}/roles/{roleId}/orchestration-rules/{orchestrationRuleId}/script-parameters/:
+  #  parameters:
+  #    - $ref: '#/parameters/envId'
+  #    - $ref: '#/parameters/roleId'
+  #    - $ref: '#/parameters/orchestrationRuleId'
+  #  get:
+  #    description: List Script Parameters associated with this Orchestration Rule
+  #    responses:
+  #      200:
+  #        $ref: '#/responses/orchestrationRuleScriptParameterList'
+  #  post:
+  #    description: Associate a new Script Parameter with this Orchestration Rule
+  #    parameters:
+  #      - $ref: '#/parameters/orchestrationRuleScriptParameterObject'
+  #    responses:
+  #      201:
+  #        $ref: '#/responses/orchestrationRuleScriptParameterDetail'
+
+  #/{envId}/roles/{roleId}/orchestration-rules/{orchestrationRuleId}/script-parameters/{scriptParameterName}:
+  #  parameters:
+  #    - $ref: '#/parameters/envId'
+  #    - $ref: '#/parameters/roleId'
+  #    - $ref: '#/parameters/orchestrationRuleId'
+  #    - $ref: '#/parameters/scriptParameterName'
+  #  get:
+  #    description: Retrieve a Script Parameter's value for this Orchestration Rule
+  #    responses:
+  #      200:
+  #        $ref: '#/responses/orchestrationRuleScriptParameterDetail'
+  #  patch:
+  #    description: Update a Script Parameter's value in this Orchestration Rule
+  #    parameters:
+  #      - $ref: '#/parameters/orchestrationRuleScriptParameterObject'
+  #    responses:
+  #      202:
+  #        $ref: '#/responses/orchestrationRuleScriptParameterDetail'
+  #  delete:
+  #    description: Delete a Script Parameter for this Orchestration Rule
+  #    responses:
+  #      200:
+  #        $ref: '#/responses/deleteSuccessResponse'
+
+  ##########
+  # Images #
+  ##########
+
+  /{envId}/images/:
+    parameters:
+      - $ref: '#/parameters/envId'
+    get:
+      description: List Images available in this Environment
+      responses:
+        200:
+          $ref: '#/responses/imageList'
+    post:
+      description: Register a new Image in this Environment
+      parameters:
+        - $ref: '#/parameters/imageObject'
+      responses:
+        201:
+          $ref: '#/responses/imageDetail'
+
+  /{envId}/images/{imageId}/:
+    parameters:
+        - $ref: '#/parameters/envId'
+        - $ref: '#/parameters/imageId'
+    get:
+      description: Retrieve an Image.
+      responses:
+        200:
+          $ref: '#/responses/imageDetail'
+    patch:
+      #TODO - Can we somehow define which attributes can be changed?
+      description: Change image attributes. Only the name be can changed!
+      parameters:
+        - name: image
+          in: body
+          description: The updated definition
+          required: true
+          schema:
+            $ref: '#/definitions/Image'
+      responses:
+        200:
+          $ref: '#/responses/imageDetail'
+    delete:
+      description: De-register an Image from this Environment
+      parameters:
+        - name: cloudDelete
+          # TODO - Consider making the request body a 'DeleteRequest' instead.
+          description: Attempt to delete this Image in your Cloud
+          in: query
+          type: boolean
+          required: false
+      responses:
+        200:
+          $ref: '#/responses/deleteSuccessResponse'
+        202:
+          description: Image scheduled for de-registration and deletion
+
+  /{envId}/images/{imageId}/actions/copy/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/imageId'
+    post:
+      description: Copy an image from one EC2 region to another
+      parameters:
+        - name: copyTo
+          description: The EC2 region to copy this Image to
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/CloudLocation'
+      responses:
+        202:
+          $ref: '#/responses/imageDetail'
+
+
+  ###########
+  # Scripts #
+  ###########
+
+  /{envId}/scripts/:
+    parameters:
+      - $ref: '#/parameters/envId'
+    get:
+      description: List Scripts available in this Environment
+      responses:
+        200:
+          $ref: '#/responses/scriptList'
+    post:
+      description: Create a new Script in this Environment.
+      parameters:
+        - $ref: '#/parameters/scriptObject'
+      responses:
+        201:
+          $ref: '#/responses/scriptDetail'
+
+  /{envId}/scripts/{scriptId}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/scriptId'
+    get:
+      description: Retrieve a Script.
+      responses:
+        200:
+          $ref: '#/responses/scriptDetail'
+    patch:
+      description: Change Script attributes.
+      parameters:
+        - $ref: '#/parameters/scriptObject'
+      responses:
+        200:
+          $ref: '#/responses/scriptDetail'
+    delete:
+      description: Delete this Script from this Environment.
+      responses:
+        200:
+          $ref: '#/responses/deleteSuccessResponse'
+
+  /{envId}/scripts/{scriptId}/script-versions/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/scriptId'
+    get:
+      description: List versions for this Script.
+      responses:
+        200:
+          $ref: '#/responses/scriptVersionList'
+    post:
+      description: Create a new Script Version for this Script.
+      parameters:
+        - $ref: '#/parameters/scriptVersionObject'
+      responses:
+        201:
+          $ref: '#/responses/scriptVersionDetail'
+    delete:
+      description: Delete this Script Version from this Script.
+      responses:
+        200:
+          $ref: '#/responses/deleteSuccessResponse'
+
+  /{envId}/scripts/{scriptId}/script-versions/{scriptVersionNumber}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/scriptId'
+      - $ref: '#/parameters/scriptVersionNumber'
+    get:
+      description: Retrieve a Script Version.
+      responses:
+        200:
+          $ref: '#/responses/scriptVersionDetail'
+    patch:
+      description: Change Script Version attributes.
+      parameters:
+        - $ref: '#/parameters/scriptVersionObject'
+      responses:
+        200:
+          $ref: '#/responses/scriptVersionDetail'
+
+  ######
+  # OS #
+  ######
+
+  /{envId}/os/:
+    parameters:
+      - $ref: '#/parameters/envId'
+    get:
+      description: Retrieve a list of Operating Systems available in this Scalr Account.
+      responses:
+        200:
+          $ref: '#/responses/osList'
+
+  /{envId}/os/{osId}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/osId'
+    get:
+      description: Retrieve an OS.
+      responses:
+        200:
+          $ref: '#/responses/osDetail'
+          
+  ##########
+  # Events #
+  ##########
+
+  /{envId}/events/:
+    parameters:
+      - $ref: '#/parameters/envId'
+    get:
+      description: Retrieve a list of Events available in this Scalr Environment.
+      responses:
+        200:
+          $ref: '#/responses/eventList'
+    post:
+      description: Create a new Custom Event in this Environment.
+      parameters:
+        - $ref: '#/parameters/eventObject'
+      responses:
+        201:
+          $ref: '#/responses/eventDetail'
+
+  /{envId}/events/{eventId}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/eventId'
+    get:
+      description: Retrieve an Event.
+      responses:
+        200:
+          $ref: '#/responses/eventDetail'
+    patch:
+      description: Change Event attributes.
+      parameters:
+        - $ref: '#/parameters/eventObject'
+      responses:
+        200:
+          $ref: '#/responses/eventDetail'
+    delete:
+      description: Delete this Event from this Environment.
+      responses:
+        200:
+          $ref: '#/responses/deleteSuccessResponse'
+
+  #########
+  # Farms #
+  #########
+
+  /{envId}/farms/:
+    parameters:
+      - $ref: '#/parameters/envId'
+    get:
+      responses:
+        200:
+          $ref: '#/responses/farmList'
+    post:
+      parameters:
+        - $ref: '#/parameters/farmObject'
+      responses:
+        201:
+          $ref: '#/responses/farmDetail'
+
+  /{envId}/farms/{farmId}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/farmId'
+    get:
+      responses:
+        200:
+          $ref: '#/responses/farmDetail'
+    patch:
+      parameters:
+        - $ref: '#/parameters/farmObject'
+      responses:
+        200:
+          $ref: '#/responses/farmDetail'
+    delete:
+      responses:
+        200:
+          description: Farm deleted
+
+  /{envId}/farms/{farmId}/actions/launch/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/farmId'
+
+    post:
+      description: Appoints farm launch
+
+      responses:
+        200:
+          $ref: '#/responses/farmDetail'
+
+
+  /{envId}/farms/{farmId}/actions/terminate/:
+     parameters:
+       - $ref: '#/parameters/envId'
+       - $ref: '#/parameters/farmId'
+
+     post:
+       description: Appoints farm termination
+
+       parameters:
+         - name: force
+           in: query
+           description: Skip all shutdown routines (Do not process the BeforeHostTerminate event)
+           type: boolean
+           required: false
+
+       responses:
+         200:
+           $ref: '#/responses/farmDetail'
+
+  /{envId}/farms/{farmId}/global-variables/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/farmId'
+    get:
+      description: List Global Variables associated with this Farm
+      responses:
+        200:
+          $ref: '#/responses/globalVariableList'
+    post:
+      description: Declare a new Global Variable for this Farm
+      parameters:
+        - $ref: '#/parameters/globalVariableObject'
+      responses:
+        201:
+          $ref: '#/responses/globalVariableDetail'
+
+  /{envId}/farms/{farmId}/global-variables/{globalVariableName}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/farmId'
+      - $ref: '#/parameters/globalVariableName'
+    get:
+      description: Retrieve a Global Variable's value in this Farm's scope
+      responses:
+        200:
+          $ref: '#/responses/globalVariableDetail'
+    patch:
+      description: Update a Global Variable's value in this Farm's scope
+      parameters:
+        - $ref: '#/parameters/globalVariableObject'
+      responses:
+        202:
+          $ref: '#/responses/globalVariableDetail'
+    delete:
+      description: Delete a Global Variable from this Farm's scope
+      responses:
+        200:
+          description: Global Variable deleted
+
+  ##############
+  # Farm Roles #
+  ##############
+
+  /{envId}/farms/{farmId}/farm-roles/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/farmId'
+    get:
+      description: List Farm Roles available in this Enviromnent.
+      responses:
+        200:
+          $ref: '#/responses/farmRoleList'
+    post:
+      parameters:
+        - $ref: '#/parameters/farmRoleObject'
+      responses:
+        201:
+          $ref: '#/responses/farmRoleDetail'
+
+
+  /{envId}/farm-roles/{farmRoleId}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/farmRoleId'
+    get:
+      responses:
+        200:
+          $ref: '#/responses/farmRoleDetail'
+    patch:
+      parameters:
+        - $ref: '#/parameters/farmRoleObject'
+      responses:
+        200:
+          $ref: '#/responses/farmRoleDetail'
+    delete:
+      responses:
+        200:
+          description: Farm Role deleted
+
+
+  /{envId}/farm-roles/{farmRoleId}/placement/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/farmRoleId'
+    get:
+      responses:
+        200:
+          $ref: '#/responses/placementConfigurationDetail'
+    patch:
+      parameters:
+        - $ref: '#/parameters/placementConfigurationObject'
+      responses:
+        200:
+          $ref: '#/responses/placementConfigurationDetail'
+
+  /{envId}/farm-roles/{farmRoleId}/instance/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/farmRoleId'
+    get:
+      responses:
+        200:
+          $ref: '#/responses/instanceConfigurationDetail'
+    patch:
+      parameters:
+        - $ref: '#/parameters/instanceConfigurationObject'
+      responses:
+        200:
+          $ref: '#/responses/instanceConfigurationDetail'
+
+  /{envId}/farm-roles/{farmRoleId}/scaling/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/farmRoleId'
+    get:
+      responses:
+        200:
+          $ref: '#/responses/scalingConfigurationDetail'
+    patch:
+      parameters:
+        - $ref: '#/parameters/scalingConfigurationObject'
+      responses:
+        200:
+          $ref: '#/responses/scalingConfigurationDetail'
+
+  /{envId}/farm-roles/{farmRoleId}/global-variables/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/farmRoleId'
+    get:
+      description: List Global Variables associated with this Farm role
+      responses:
+        200:
+          $ref: '#/responses/globalVariableList'
+    post:
+      description: Declare a new Global Variable for this Farm role
+      parameters:
+        - $ref: '#/parameters/globalVariableObject'
+      responses:
+        201:
+          $ref: '#/responses/globalVariableDetail'
+
+  /{envId}/farm-roles/{farmRoleId}/global-variables/{globalVariableName}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/farmRoleId'
+      - $ref: '#/parameters/globalVariableName'
+    get:
+      description: Retrieve a Global Variable's value in this Farm role's scope
+      responses:
+        200:
+          $ref: '#/responses/globalVariableDetail'
+    patch:
+      description: Update a Global Variable's value in this Farm role's scope
+      parameters:
+        - $ref: '#/parameters/globalVariableObject'
+      responses:
+        202:
+          $ref: '#/responses/globalVariableDetail'
+    delete:
+      description: Delete a Global Variable from this Farm role's scope
+      responses:
+        200:
+          description: Global Variable deleted
+
+  /{envId}/farm-roles/{farmRoleId}/orchestration-rules/:
+      parameters:
+        - $ref: '#/parameters/envId'
+        - $ref: '#/parameters/farmRoleId'
+      get:
+        # Note: This returns all the Rules associated with this Farm Role, including those that
+        #       are coming from other Scopes. Naturally, Account-Scope and Role-Scope Rules are read-only in this Scope.
+        description: List Orchestration Rules associated with this Farm Role, including Rules from other Scopes (those are read-only).
+        responses:
+          200:
+            $ref: '#/responses/orchestrationRuleList'
+      post:
+        description: Associate a new Orchestration Rule with this Farm Role
+        parameters:
+          - $ref: '#/parameters/orchestrationRuleObject'
+        responses:
+          201:
+            $ref: '#/responses/orchestrationRuleDetail'
+
+  /{envId}/farm-roles/{farmRoleId}/orchestration-rules/{orchestrationRuleId}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/farmRoleId'
+      - $ref: '#/parameters/orchestrationRuleId'
+    get:
+      description: Retrieve an Orchestration Rule
+      responses:
+        200:
+          $ref: '#/responses/orchestrationRuleDetail'
+    patch:
+      description: Update an Orchestration rule
+      parameters:
+        - $ref: '#/parameters/orchestrationRuleObject'
+      responses:
+        202:
+          $ref: '#/responses/orchestrationRuleDetail'
+    delete:
+      description: Delete an Orchestration Rule associated with this Farm Role
+      responses:
+        200:
+          $ref: '#/responses/deleteSuccessResponse'
+
+  #####################
+  # Cloud Credentials #
+  #####################
+
+  /{envId}/cloud-credentials/:
+    parameters:
+      - $ref: '#/parameters/envId'
+    get:
+      description: List available Cloud Credentials
+      responses:
+        200:
+          $ref: '#/responses/cloudCredentialsSummaryList'
+    post:
+      description: Create Cloud Credentials for Environment scope
+      parameters:
+        - $ref: '#/parameters/cloudCredentialsObject'
+      responses:
+        201:
+          $ref: '#/responses/cloudCredentialsDetail'
+
+  /{envId}/cloud-credentials/{cloudCredentialsId}/:
+    parameters:
+      - $ref: '#/parameters/envId'
+      - $ref: '#/parameters/cloudCredentialsId'
+    get:
+      description: <
+        Gets detailed information about specified Cloud Credentials.
+        You can only obtain information about Cloud Credentials from current scope.
+
+      responses:
+        200:
+          $ref: '#/responses/cloudCredentialsDetail'
+    patch:
+      description: Modify Cloud Credentials object.
+      parameters:
+        - $ref: '#/parameters/cloudCredentialsObject'
+      responses:
+        200:
+          $ref: '#/responses/cloudCredentialsDetail'
+    delete:
+      description: Removes Cloud Credentials.
+      responses:
+        200:
+          description: Cloud Credentials delete
+
+definitions:
+
+  CloudCredentialsSummary:
+    properties:
+      id:
+        type: string
+        readOnly: true
+        description: Unique identifier of Cloud Credentials object.
+      name:
+        type: string
+        description: Unique name of the Cloud Credentials.
+      description:
+        type: string
+      cloudCredentialsType:
+        type: string
+        enum:
+          - AwsCloudCredentials
+          - GceCloudCredentials
+          - AzureCloudCredentials
+          - CloudstackCloudCredentials
+          - OpenstackCloudCredentials
+          - RackspaceCloudCredentials
+        description: "Cloud Platform this resources resides in."
+      status:
+        type: string
+        enum:
+          - disabled
+          - enabled
+          - suspended
+        readOnly: true
+        description: The status of Cloud Credentials.
+      scope:
+        <<: *scopeProperty
+        readOnly: true
+        type: string
+        description: The scope in which the Cloud Credentials are added.
+      provider:
+        type: string
+        description: Cloud provider for Openstack or Cloudstack based clouds
+
+    required:
+      - name
+      - cloudCredentialsType
+
+    x-createOnly:
+      - name
+      - cloudCredentialsType
+
+    x-filterable:
+      - name
+      - cloud
+      - status
+      - scope
+      - provider
+
+
+  CloudCredentials:
+    discriminator: cloudCredentialsType
+
+    allOf:
+      - $ref: '#/definitions/CloudCredentialsSummary'
+
+
+  AwsDetailedBilling:
+    properties:
+      payerAccount:
+        type: string
+        description: Payer AWS account number.
+      cloudLocation:
+        type: string
+        description: Billing bucket region.
+      bucket:
+        type: string
+        description: Billing bucket name.
+
+
+  AwsCloudCredentials:
+    allOf:
+      - $ref: '#/definitions/CloudCredentials'
+      - properties:
+          accountType:
+            type: string
+            enum:
+              - regular
+              - govcloud
+              - china
+            default: regular
+            description: AWS Account type.
+          accessKey:
+            type: string
+            description: Acces key ID.
+          secretKey:
+            type: string
+            description: The secret key.
+          accountId:
+            type: string
+            readOnly: true
+            description: AWS Account ID.
+          billing:
+            $ref: "#/definitions/AwsDetailedBilling"
+
+    required:
+      - accountType
+      - accessKey
+      - secretKey
+
+    x-filterable:
+      - accountType
+
+
+  GceCloudCredentials:
+    allOf:
+      - $ref: '#/definitions/CloudCredentials'
+      - properties:
+          projectId:
+            type: string
+            description: GCE project ID.
+          clientId:
+            type: string
+            description: GCE client ID.
+          accountName:
+            type: string
+            description: The service account name.
+          privateKey:
+            type: string
+            format: byte
+            description: Private key with boundary.
+
+    required:
+      - projectId
+      - clientId
+      - accountName
+      - privateKey
+
+  OpenstackCloudCredentials:
+    allOf:
+      - $ref: '#/definitions/CloudCredentials'
+      - properties:
+          keystoneUrl:
+            type: string
+            description: Keystone URL.
+          userName:
+            type: string
+            description: The user name.
+          password:
+            type: string
+            description: The password for the user.
+          tenantName:
+            type: string
+            descriptions: The tenant name.
+          domainName:
+            type: string
+            description: Domain name. It must be provided for the Identity API v3
+          sslVerification:
+            type: boolean
+            description: Specifies whether it should verify SSL Certificate.
+          provider:
+            <<: *openstackProvider
+
+    required:
+      - provider
+      - keystoneUrl
+      - userName
+      - password
+      - tenantName
+
+    x-createOnly:
+      - provider
+
+  CloudstackCloudCredentials:
+    allOf:
+      - $ref: '#/definitions/CloudCredentials'
+      - properties:
+          apiUrl:
+            type: string
+            description: "The URL like: http(s)://<cloudstack_ip>:<cloudstack_port>/client/api"
+          apiKey:
+            type: string
+            description: The API key.
+          secretKey:
+            type: string
+            description: The secret key.
+          provider:
+            <<: *cloudstackProvider
+
+    required:
+      - provider
+      - apiUrl
+      - apiKey
+      - secretKey
+
+    x-createOnly:
+      - provider
+
+  RackspaceCloudCredentials:
+    allOf:
+      - $ref: '#/definitions/CloudCredentials'
+      - properties:
+          userName:
+            type: string
+            description: The user name.
+          apiKey:
+            type: string
+            description: The API access key.
+          isUk:
+            type: boolean
+            description: Indicates is Rackspace UK.
+
+    required:
+      - username
+      - apiKey
+
+    x-createOnly:
+      - isUk
+
+  AzureCloudCredentials:
+    allOf:
+      - $ref: '#/definitions/CloudCredentials'
+      - properties:
+          tenantName:
+            type: string
+            description: The Azure Active Directory name.
+          subscription:
+            type: string
+            description: The Azure Subscription ID.
+
+    required:
+      - tenantName
+      - subscription
+
+  GlobalVariable:
+    required:
+      - name
+    # No filtering is available on Global Variables fo performance reasons.
+    x-createOnly:
+      - name
+    properties:
+      name:
+        type: string
+      value:
+        description: 'The value declared in the current scope for this variable.  null allows inheritance. Any other value overrides inheritance.  This is ignored if `declaredIn` is not the current scope.'
+        type: string
+      category:
+        description: Category of the variable
+        type: string
+      declaredIn:
+        description: "Whether this variable is declared in the current scope."
+        <<: *scopeProperty
+        readOnly: true
+      locked:
+        description: 'Whether this variable is locked in inner scopes. This is read-only if `declaredIn` is not the current scope.'
+        type: boolean
+      hidden:
+        description: 'Whether this variable is hidden in inner scopes. This is read-only if `declaredIn` is not the current scope.'
+        type: boolean
+      requiredIn:
+        description: 'The scope where this variable is required. This is read-only if `declaredIn` is not the current scope.'
+        <<: *scopeProperty
+      outputFormat:
+        description: 'The formatting to apply when formatting this variable. This is read-only if `declaredIn` is not the current scope.'
+        type: string
+      validationPattern:
+        description: 'A validation pattern to apply in inner scopes. This is read-only if `declaredIn` is not the current scope.'
+        type: string
+      description:
+        description: 'A description that explains what this Global Variable is used for.'
+        type: string
+      computedValue:
+        description: 'The value computed by Scalr for this variable.'
+        type: string
+        readOnly: true
+      computedCategory:
+        description: 'The category computed by Scalr for this variable.'
+        type: string
+        readOnly: true
+
+  RoleForeignKey:
+    properties:
+      id:
+        type: integer
+        readOnly: true
+    required:
+      - id
+
+  Role:
+    required:
+      - name
+      - category
+      - os
+    x-filterable:
+      - id
+      - name
+      - os
+      - category
+      - scope
+      - quickStart
+      - deprecated
+    properties:
+      id:
+        type: integer
+        readOnly: true
+      name:
+        type: string
+      description:
+        type: string
+      os:
+        $ref: '#/definitions/OsForeignKey'
+      category:
+        $ref: '#/definitions/RoleCategoryForeignKey'
+      scope:
+        <<: *scopeProperty
+        readOnly: true
+      quickStart:
+        type: boolean
+        description: Whether it is QuickStart Role
+      deprecated:
+        type: boolean
+        description: Whether the role is deprecated
+
+  RoleCategory:
+    required:
+      - name
+    x-filterable:
+      - id
+      - name
+      - scope
+    x-createOnly:
+      - name
+    properties:
+      id:
+        type: integer
+        readOnly: true
+      name:
+        type: string
+      scope:
+        <<: *scopeProperty
+        readOnly: true
+
+  Image:
+    required:
+      - name
+      - cloudPlatform
+      - cloudImageId
+      - architecture
+      - os
+    x-filterable:
+      - id
+      - name
+      - scope
+      - cloudPlatform
+      - cloudLocation
+      - cloudImageId
+      - architecture
+      - source
+      - status
+      - deprecated
+      - os
+    properties:
+      id:
+        type: string
+        readOnly: true
+      name:
+        type: string
+      scope:
+        <<: *scopeProperty
+        readOnly: true
+
+      cloudImageId:
+        type: string
+      size:
+        type: integer
+        readOnly: true
+      type:
+        description: "(Only used on EC2 currently) Whether this Image is HVM or EBS."
+        type: string
+        readOnly: true
+      <<: *cloudLocationProperties
+
+      source:
+        description: "Indicates how this Image was created"
+        type: string
+        enum:
+          - Manual
+          - BundleTask
+        readOnly: true
+      # bundleTask: pending on an API for Bundle Tasks
+      # createdBy pending on an API for users
+
+      os:
+        $ref: '#/definitions/OsForeignKey'
+      architecture:
+        <<: *architectureProperty
+
+      added:
+        description: "Date and time when this Image was created"
+        type: string
+        format: date-time
+        readOnly: true
+      lastUsed:
+        description: "Date and time when this Image was last used"
+        type: string
+        format: date-time
+        readOnly: true
+
+      status:
+        description: "Current status for this Image. Not that `delete` means deletion is underway, and `failed` means deletion failed"
+        type: string
+        enum:
+          - active
+          - delete
+          - failed
+        readOnly: true
+      statusError:
+        description: "If the Image is in a failed state, this indicates why."
+        type: string
+        readOnly: true
+
+      deprecated:
+        description: "Whether this Image is deprecated"
+        type: boolean
+        readOnly: true
+
+  RoleImage:
+    description: "A Representation of a Role Image. Note that the `role` property is optional when POST-ing to a URL that already includes `{roleId}`."
+    required:
+      - role
+      - image
+    x-filterable:
+      - role
+      - image
+    properties:
+      role:
+        $ref: '#/definitions/RoleForeignKey'
+      image:
+        $ref: '#/definitions/ImageForeignKey'
+
+
+  Script:
+    x-filterable:
+      - id
+      - name
+      - osType
+      - blockingDefault
+      - scope
+    required:
+      - id
+      - name
+      - scope
+      - osType
+    x-createOnly:
+      - osType
+    properties:
+      id:
+        type: integer
+        readOnly: true
+
+      name:
+        type: string
+
+      scope:
+        <<: *scopeProperty
+        readOnly: true
+
+      description:
+        type: string
+
+      added:
+        type: string
+        format: date-time
+        readOnly: true
+
+      lastChanged:
+        type: string
+        format: date-time
+        readOnly: true
+
+      osType:
+        # Ideally this would be a FK of sorts, but there is no object to point to.
+        # The user is expected to tell us whether this script should execute.
+        type: string
+        enum:
+          - linux
+          - windows
+        description: "Type of OS this Script should execute on. This will influence Orchestration Rules, an will trigger validation on individual ScriptVersion's you upload."
+
+      blockingDefault:
+        # No filtering available here because there is largely no use case for it (and a big performance cost)
+        type: boolean
+
+      timeoutDefault:
+        type: integer
+
+      #useScriptParameters:
+      #  type: boolean
+      #  default: false
+      #  desciption: "Whether Script Parameters (%param%) should be used for this Script."
+
+      ## createdBy - We'll add when we have an API for users
+
+  ScriptVersionForeignKey:
+    required:
+      - script
+    x-createOnly:
+      - script
+    x-filterable:
+      - script
+    properties:
+      script:
+        $ref: '#/definitions/ScriptForeignKey'
+        description: "The Script this ScriptVersion is a version of"
+
+      version:
+        type: integer
+        readOnly: true
+        description: "The Script version number. NULL is interpreted as the Latest Version."
+
+  ScriptVersion:
+    allOf:
+      - $ref: '#/definitions/ScriptVersionForeignKey'
+      - required:
+        - body
+      - properties:
+          added:
+            type: string
+            format: date-time
+            readOnly: true
+
+          body:
+            type: string
+            description: "The contents of this ScriptVersion, those will be validated as per the Script's OS Type."
+
+          # changedBy - We'll add when we have an API for it
+
+  Event:
+    required:
+      - id
+    x-filterable:
+      - id
+      - scope
+    x-createOnly:
+      - id
+    properties:
+      # For the purposes of the API, we'll expose the Event name as its ID,
+      # since internally Scalr never references IDs.
+      id:
+        type: string
+        description: "The name of this custom event"
+
+      scope:
+        #TODO - Reduce duplication on readOnly
+        <<: *scopeProperty
+        readOnly: true
+
+      description:
+        type: string
+
+
+  CloudLocation:
+    required:
+      - cloudPlatform
+    x-filterable:
+      - cloudPlatform
+      - cloudLocation
+    properties:
+      <<: *cloudLocationProperties
+
+  Os:
+    required:
+      - id
+      - name
+      - family
+      - generation
+      - version
+    x-filterable:
+      - id
+      - name
+      - family
+      - generation
+    properties:
+      id:
+        type: string
+        description: An ID uniquely identifying this OS in Scalr.
+      name:
+        type: string
+        description: A human-readable name for this OS.
+      family:
+        type: string
+        enum:
+          - oel
+          - debian
+          - ubuntu
+          - rhel
+          - redhat
+          - centos
+          - amazon
+          - windows
+      generation:
+        type: string
+      # Note: there will need to be some validation that family and generation match!
+      version:
+        type: string
+
+
+  OrchestrationRule:
+    required:
+      - trigger
+      - action
+      - target
+    x-filterable:
+      - id
+      - blocking
+      - order
+      - runAs
+    properties:
+      id:
+        type: integer
+        readOnly: true
+
+      scope:
+        <<: *scopeProperty
+        readOnly: true
+
+      # When?
+      trigger:
+        $ref: '#/definitions/Trigger'
+
+      # What?
+      action:
+        $ref: '#/definitions/Action'
+
+      # Where?
+      target:
+        $ref: '#/definitions/Target'
+
+      # Execution options
+      blocking:
+        type: boolean
+        description: "Should this Orchestration Rule's execution delay the execution of further Orchestration Rules and triggering of further Events? Defaults to the action's default when null."
+
+      timeout:
+        type: integer
+        description: "How long should Scalr wait before aborting the execution of this Orchestration Rule? Defaults to the action's default when null."
+
+      order:
+        type: integer
+        description: "When should this Orchestration Rule execute relative to other Orchestration Rules that use the same triggeringEvent? Default is relative to existing Rules."
+
+      runAs:
+        type: string
+        descrition: "User the Orchestration Rule should execute as. Defaults to root / Administrator when null."
+
+
+  Trigger:
+    discriminator: triggerType
+    properties:
+      triggerType:
+        type: string
+        enum:
+          - AllEventsTrigger
+          - SpecificEventTrigger
+    required:
+      - triggerType
+
+  AllEventsTrigger:
+    allOf:
+      - $ref: "#/definitions/Trigger"
+      - description: "Triggers when any Event fires"
+
+  SpecificEventTrigger:
+    allOf:
+      - $ref: "#/definitions/Trigger"
+      - description: "Triggers when a specific Event fires"
+      - properties:
+          event:
+            $ref: '#/definitions/Event'
+
+
+  Action:
+    discriminator: actionType
+    properties:
+      actionType:
+        type: string
+        enum:
+          - ScriptAction
+          - UriAction
+          - ChefAction
+    required:
+      - actionType
+
+  ScriptAction:
+    allOf:
+      - $ref: "#/definitions/Action"
+      - properties:
+          scriptVersion:
+            $ref: '#/definitions/ScriptVersionForeignKey'
+            description: "ScriptVersion to execute."
+        required:
+          - scriptVersion
+
+  UriAction:
+    allOf:
+      - $ref: "#/definitions/Action"
+      - properties:
+          path:
+            type: string
+            description: "Path or URL to the script to execute."
+        required:
+          - path
+
+  # TODO: design ChefAction
+  ChefAction:
+    allOf:
+      - $ref: "#/definitions/Action"
+
+
+  Target:
+    discriminator: targetType
+    properties:
+      targetType:
+        type: string
+        enum:
+          - NullTarget
+          - TriggeringServerTarget
+          - TriggeringFarmRoleTarget
+          - SelectedFarmRolesTarget
+          - FarmTarget
+    required:
+      - targetType
+
+
+  NullTarget:
+    allOf:
+      - $ref: "#/definitions/Target"
+      - description: "Selects no Server at all"
+
+  TriggeringServerTarget:
+    allOf:
+      - $ref: "#/definitions/Target"
+      - description: "Selects the Server that triggered the Event"
+
+  TriggeringFarmRoleTarget:
+    allOf:
+      - $ref: "#/definitions/Target"
+      - description: "Selects all Servers of the triggering Server's Farm Role"
+
+  SelectedFarmRolesTarget:
+    allOf:
+      - $ref: "#/definitions/Target"
+      - properties:
+          roles:
+            type: array
+            items:
+              $ref: "#/definitions/FarmRoleForeignKey"
+      - description: "Selects all Servers with specified Roles"
+
+  FarmTarget:
+    allOf:
+      - $ref: "#/definitions/Target"
+      - description: "Selects all Servers of the triggering Server's Farm"
+
+
+  #OrchestrationRuleScriptParameter:
+  #  properties:
+  #    orchestrationRule:
+  #      $ref: "#/definitions/OrchestrationRuleForeignKey"
+
+  #    name:
+  #      type: string
+  #      description: "Name of the Scripting Parameter"
+
+  #    value:
+  #      type: string
+  #      description: "Value of the Scripting Parameter"
+
+  #  required:
+  #    - orchestrationRule
+  #    - name
+  #    - value
+
+
+  # TODO - Add extra properties here
+
+  CostCenter:
+    x-filterable:
+      - id
+      - name
+      - billingCode
+
+    properties:
+      id:
+        type: string
+        readOnly: true
+
+      billingCode:
+        type: string
+        readOnly: true
+
+      name:
+        type: string
+
+    required:
+      - name
+
+
+  Project:
+    required:
+      - costCenter
+      - billingCode
+      - leadEmail
+      - name
+    x-filterable:
+      - id
+      - name
+      - costCenter
+      - billingCode
+    x-createOnly:
+      - costCenter
+      - billingCode
+      - leadEmail
+    properties:
+      id:
+        type: string
+        readOnly: true
+
+      costCenter:
+        $ref: "#/definitions/CostCenterForeignKey"
+
+      name:
+        type: string
+
+      billingCode:
+        type: string
+
+      leadEmail:
+        type: string
+
+      description:
+        type: string
+
+  Farm:
+    properties:
+      id:
+        type: integer
+        readOnly: true
+
+      name:
+        type: string
+
+      project:
+        $ref: "#/definitions/ProjectForeignKey"
+
+      vpc:
+        # VPCs may, at some point, be exposed in the Scalr API.
+        # For now, the user should wrap the VPC ID into a {"id": ...} structure.
+        $ref: "#/definitions/CloudAwsVpcForeignKey"
+
+      timezone:
+        type: string
+
+      launchOrder:
+        type: string
+        enum:
+          - simulatenous
+          - sequential
+
+      description:
+        type: string
+
+      owner:
+        description: Identifier of the User who owns the Farm
+        $ref: "#/definitions/UserForeignKey"
+
+      teamOwner:
+        description: Identifier of the Team who owns the Farm
+        $ref: "#/definitions/TeamForeignKey"
+
+      # TODO - Agent Repository should be exposed in the API
+
+    required:
+      - name
+      - project
+
+    x-filterable:
+      - id
+      - name
+      - vpc
+      - project
+      - launchOrder
+      - owner
+      - teamOwner
+
+
+  FarmRoleForeignKey:
+    properties:
+      id:
+        type: integer
+        readOnly: true
+
+  UserForeignKey:
+    properties:
+      id:
+        type: integer
+
+  TeamForeignKey:
+     properties:
+      id:
+        type: integer
+
+  FarmRole:
+    x-filterable:
+      - id
+      - farm
+      - role
+      - platform
+
+    properties:
+      id:
+        type: integer
+        readOnly: true
+
+      # Overall settings #
+
+      farm:
+        $ref: "#/definitions/FarmForeignKey"
+        readOnly: true
+        description: "Farm this Farm Role should be added to"
+
+      role:
+        # TODO - Image replace should be made consistent here.
+        $ref: "#/definitions/RoleForeignKey"
+
+      alias:
+        type: string
+        description: "The Alias for this Farm Role. If this isn't provided, it will default to the Role's name (possibly with '-n' appended if the Role name is already taken)"
+
+      platform:
+        type: string
+        description: "Farm role platform"
+
+      placement:
+        $ref: "#/definitions/PlacementConfiguration"
+
+      instance:
+        $ref: "#/definitions/InstanceConfiguration"
+
+      scaling:
+        $ref: "#/definitions/ScalingConfiguration"
+
+    required:
+      - role
+      - platform
+      - placement
+      - instance
+
+#  FarmRole:
+#    # High-level idea is:
+#    # - Expose all *required* settings in the Farm Role object
+#    # - Move all the rest to separate APIs.
+#    allOf:
+#      - $ref: '#/definitions/FarmRoleSummary'
+#      - properties:
+#          placement:
+#            $ref: "#/definitions/PlacementConfiguration"
+#
+#          instance:
+#            $ref: "#/definitions/InstanceConfiguration"
+#
+#          scaling:
+#            $ref: "#/definitions/ScalingConfiguration"
+#
+#        required:
+#          - placementConfiguration
+#          - instanceConfiguration
+
+
+  PlacementConfiguration:
+    discriminator: placementConfigurationType
+
+    properties:
+      placementConfigurationType:
+        type: string
+        enum:
+          - AwsClassicPlacementConfiguration
+          - AwsVpcPlacementConfiguration
+          - OpenStackPlacementConfiguration
+          - CloudStackPlacementConfiguration
+          - GcePlacementConfiguration
+      region:
+        type: string
+
+    required:
+      - placementConfigurationType
+      - region
+
+  AwsClassicPlacementConfiguration:
+    allOf:
+      - $ref: "#/definitions/PlacementConfiguration"
+      - properties:
+          availabilityZones:
+            description: The list of available zones. If it's empty array — will be distributed equally, if availabilityZone property is not present or it's NULL — means will be chosen by AWS
+            type: array
+            items:
+              type: string
+
+
+  AwsVpcPlacementConfiguration:
+    allOf:
+      - $ref: "#/definitions/PlacementConfiguration"
+      - properties:
+          subnets:
+            type: array
+            items:
+              $ref: '#/definitions/CloudAwsVpcSubnetForeignKey'
+
+          router:
+            $ref: "#/definitions/FarmRoleForeignKey"
+    required:
+      - subnets
+  # TODO - Implement other placements
+
+
+  InstanceConfiguration:
+    discriminator: instanceConfigurationType
+
+    properties:
+      instanceConfigurationType:
+        type: string
+        enum:
+          - AwsInstanceConfiguration
+
+      instanceType:
+        $ref: "#/definitions/CloudInstanceType"
+
+    required:
+      - instanceConfigurationType
+      - instanceType
+
+  AwsInstanceConfiguration:
+    allOf:
+      - $ref: "#/definitions/InstanceConfiguration"
+      - properties:
+          ebsOptimized:
+            type: boolean
+
+
+  ScalingConfiguration:
+    properties:
+      enabled:
+        type: boolean
+      minInstances:
+        type: integer
+      maxInstances:
+        type: integer
+
+
+  CloudAwsVpcForeignKey:
+    properties:
+      id:
+        type: string
+        readOnly: true
+
+      region:
+        type: string
+
+  CloudAwsVpcSubnetForeignKey:
+    properties:
+      id:
+        type: string
+        readOnly: true
+
+      region:
+        type: string
+
+  CloudInstanceType:
+    properties:
+      id:
+        type: string
+
+  ApiMetaContainer:
+    properties:
+      sample:
+        type: string
+        description: Actual properties TBD
+
+  ApiMessage:
+    properties:
+      code:
+        type: string
+        description: A machine-readable representation of the message
+      message:
+        type: string
+        description: A human-readable representation of the message
+
+  ApiErrorResponse:
+    properties:
+      errors:
+        type: array
+        items:
+          $ref: '#/definitions/ApiMessage'
+        readOnly: true
+

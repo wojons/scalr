@@ -49,7 +49,7 @@ class Scalr_System_Cronjob_MultiProcess extends Scalr_System_Cronjob implements 
 
     function __construct ($config=array()) {
         parent::__construct($config);
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
         if (!$this->jobName) {
             $this->jobName = strtolower(get_class($this->worker ? $this->worker : $this));
         }
@@ -134,11 +134,16 @@ class Scalr_System_Cronjob_MultiProcess extends Scalr_System_Cronjob implements 
         $poolConfig = $this->config["processPool"];
         $poolConfig["worker"] = $this;
         $poolConfig["name"] = $this->jobName;
+
+        if (!isset($poolConfig["workQueue"])) {
+            $poolConfig["workQueue"] = [];
+        }
+
         if (!is_object($poolConfig["workQueue"])) {
-            if (!$poolConfig["workQueue"]) {
-                $poolConfig["workQueue"] = array();
+            if (!is_array($poolConfig["workQueue"])) {
+                $poolConfig["workQueue"] = [];
             }
-            if ($poolConfig["daemonize"]) {
+            if (!empty($poolConfig["daemonize"])) {
                 $poolConfig["workQueue"]["blocking"] = true;
             }
             $poolConfig["workQueue"]["name"] = "scalr.workQueue-{$this->jobName}";

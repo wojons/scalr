@@ -1,5 +1,6 @@
 <?php
 use Scalr\Acl\Acl;
+use Scalr\DataType\AccessPermissionsInterface;
 
 class Scalr_Permissions
 {
@@ -69,14 +70,12 @@ class Scalr_Permissions
             case 'Scalr\Model\Entity\ScalingMetric':
             case 'Scalr_ServiceConfiguration':
             case 'Scalr_Service_Apache_Vhost':
-            case 'Scalr_SshKey':
             case 'Scalr_SchedulerTask':
             case 'Scalr\Model\Entity\SslCertificate':
             case 'Scalr_Db_Backup':
             case 'DBEBSVolume':
             case 'Scalr\Model\Entity\Role':
             case 'Scalr\Model\Entity\Image':
-            case 'Scalr\Model\Entity\SshKey':
                 return $this->hasAccessEnvironment($object->envId) &&
                        (method_exists($object, 'getFarmObject') ? $this->hasAccessFarm($object->getFarmObject()) : true);
 
@@ -86,6 +85,11 @@ class Scalr_Permissions
             case 'Scalr\Acl\Role\AccountRoleObject':
                 return $this->user->canManageAcl() &&
                        $object->getAccountId() == $this->user->getAccountId();
+
+            default:
+                if ($object instanceof AccessPermissionsInterface) {
+                    return $object->hasAccessPermissions($this->user, Scalr_UI_Request::getInstance()->getEnvironment());
+                }
         }
     }
 
@@ -122,7 +126,31 @@ class Scalr_Permissions
                     $access = $this->hasAccessFarm($dbFarm, Acl::PERM_FARMS_SERVERS);
                 }
             } else {
-                $access = $this->user->getAclRolesByEnvironment($this->envId)->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE);
+                $access = $this->user->getAclRolesByEnvironment($this->envId)->isAllowed(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_MANAGE);
+            }
+        }
+
+        return $access;
+    }
+
+    /**
+     * Checks whether user read only access to specified server
+     *
+     * @param   \DBServer $dbServer The DBServer object
+     * @return  boolean   Returns true if specified server can be accessed by the user
+     * @throws  \Scalr_Exception_Core
+     */
+    public function hasReadOnlyAccessServer(\DBServer $dbServer)
+    {
+        $access = $this->hasAccessEnvironment($dbServer->envId);
+
+        if ($access) {
+            if (!empty($dbServer->farmId)) {
+                if (($dbFarm = $dbServer->GetFarmObject()) instanceof \DBFarm) {
+                    $access = $this->hasAccessFarm($dbFarm);
+                }
+            } else {
+                $access = $this->user->getAclRolesByEnvironment($this->envId)->isAllowed(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_MANAGE);
             }
         }
 

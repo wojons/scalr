@@ -1,6 +1,8 @@
 <?php
 
 namespace Scalr\Service\Aws\Client;
+use http\Client\Request;
+use http\Client\Response;
 
 
 /**
@@ -76,14 +78,14 @@ interface ClientResponseInterface
     /**
      * Gets raw request message
      *
-     * @return  \HttpRequest  Returns request object
+     * @return  Request  Returns request object
      */
     public function getRequest();
 
     /**
      * Sets raw request message
      *
-     * @param   \HttpRequest|\SoapRequest   $request Request object
+     * @param   Request|\SoapRequest   $request Request object
      * @return  ClientResponseInterface
      */
     public function setRequest($request);
@@ -95,4 +97,11 @@ interface ClientResponseInterface
      * @return   ClientResponseInterface
      */
     public function setQueryNumber($number);
+
+    /**
+     * Gets raw http response
+     *
+     * @return Response
+     */
+    public function getResponse();
 }

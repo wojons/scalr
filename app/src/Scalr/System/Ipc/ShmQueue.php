@@ -43,14 +43,14 @@ class Scalr_System_Ipc_ShmQueue implements Scalr_Util_Queue
     private $logger;
 
     /**
-     * @param $config
-     * @key int $key
+     * @param array $config
+     * @key int    $key
      * @key string $name
-     * @key int $perms
-     * @key int $maxMsgSize
-     * @key bool $blocking
-     * @key int $blockingTimeout
-     * @key bool $autoInit Initialize all component resources immediately in constructor (default false)
+     * @key int    $perms
+     * @key int    $maxMsgSize
+     * @key bool   $blocking
+     * @key int    $blockingTimeout
+     * @key bool   $autoInit Initialize all component resources immediately in constructor (default false)
      * @return Scalr_System_Ipc_ShmQueue
      */
     function __construct ($config) {
@@ -63,14 +63,14 @@ class Scalr_System_Ipc_ShmQueue implements Scalr_Util_Queue
                 $this->{$k} = $v;
             }
         }
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
 
         if (!isset($this->key) && $config["name"]) {
             $this->key = Scalr_System_OS::getInstance()->tok($config["name"]);
             $this->logger->debug(sprintf("Queue key 0x%08x from name '%s' is generated", $this->key, $config["name"]));
         }
 
-        if ($config["autoInit"]) {
+        if (!empty($config["autoInit"])) {
             $this->init();
         }
     }

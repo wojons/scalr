@@ -1,0 +1,4 @@
+# ignore path in ApiV2Test::testGetEndpoint
+# example
+paths:
+# - ^/os/$

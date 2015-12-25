@@ -146,7 +146,6 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
         flex: 1.2,
         cls: 'x-panel-column-left',
         store: zonesStore,
-        padding: '12 0 12 0',
         minWidth: 565,
 
         plugins: [{
@@ -164,50 +163,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             loadingText: 'Loading hosted zones...'
         },
 
-        selModel: {
-            selType: 'selectedmodel',
-
-            listeners: {
-                focuschange: function (selectionModel, oldFocused, newFocused) {
-                    return;
-                    //console.log('oldFocused', oldFocused, 'newFocused', newFocused);
-
-                    if (newFocused) {
-                        var zoneData = newFocused.data;
-
-                        var domainName = recordsGrid.down('[name=zoneName]');
-                        domainName.setValue(zoneData.name).disable();
-
-                        var comment = zonesForm.down('[name=comment]');
-                        comment.setValue(zoneData['comment']).disable();
-
-                        recordsGrid.down('[name=zoneId]').setValue(zoneData.zoneId).show();
-
-                        recordsGrid.down('#refresh').enable();
-                        recordsGrid.down('[name=addRecordButton]').enable();
-
-                        var zoneId = zoneData.zoneId;
-                        var cache = recordsGrid.recordsCache[zoneId];
-
-                        recordsStore.getProxy().extraParams = {
-                            cloudLocation: zonesGrid.down('#cloudLocation').getValue(),
-                            zoneId: zoneId
-                        };
-
-                        if (!cache) {
-                            recordsStore.load();
-                        } else {
-                            recordsStore.loadData(cache);
-                        }
-
-                        recordsGrid.show();
-                    } else if (!oldFocused) {
-                        recordsGrid.hide();
-                        recordsGrid.getSelectionModel().clearSelections();
-                    }
-                }
-            }
-        },
+        selModel: Scalr.isAllowed('AWS_ROUTE53', 'manage') ? 'selectedmodel' : null,
 
         listeners: {
             selectionchange: function (selModel, selections) {
@@ -293,10 +249,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
         dockedItems: [{
             xtype: 'toolbar',
             dock: 'top',
-            padding: '0 12 12 12',
-            style: 'background-color: inherit',
-            layout: 'hbox',
-            width: 160,
+            ui: 'simple',
             defaults: {
                 margin: '0 0 0 12'
             },
@@ -321,7 +274,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 text: 'New zone',
                 name: 'addZoneButton',
                 cls: 'x-btn-green',
-                margin: '0 12 0 0',
+                hidden: !Scalr.isAllowed('AWS_ROUTE53', 'manage'),
                 handler: function() {
                     zonesGrid.clearSelectedRecord();
 
@@ -346,7 +299,6 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             }, {
                 itemId: 'refresh',
                 iconCls: 'x-btn-icon-refresh',
-                margin: '0 12 0 0',
                 tooltip: 'Refresh',
                 handler: function() {
                     zonesStore.load();
@@ -355,9 +307,9 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 itemId: 'delete',
                 iconCls: 'x-btn-icon-delete',
                 cls: 'x-btn-red',
-                margin: '0 12 0 0',
                 tooltip: 'Select one or more hosted zone(s) to delete them',
                 disabled: true,
+                hidden: !Scalr.isAllowed('AWS_ROUTE53', 'manage'),
                 handler: function () {
                     var params = zonesGrid.getSelectedZonesIds();
                     zonesGrid.removeHostedZones(params);
@@ -474,13 +426,15 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             loadingText: 'Loading record sets...'
         },
 
-        selModel: {
-            selType: 'selectedmodel',
+        selModel:
+            Scalr.isAllowed('AWS_ROUTE53', 'manage') ?
+            {
+                selType: 'selectedmodel',
 
-            getVisibility: function (record) {
-                return recordsGrid.isRecordSetRemovable(record.get('type'), record.get('name'));
-            }
-        },
+                getVisibility: function (record) {
+                    return recordsGrid.isRecordSetRemovable(record.get('type'), record.get('name'));
+                }
+            } : null,
 
         recordsCache: {},
         recordsSnapshot: {},
@@ -674,6 +628,8 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                             recordsGrid.saveRecordSet(Ext.clone(record.data));
                         });
                     } else {
+                        recordsStore.load();
+
                         zonesGrid.clearSelectedRecord();
                         recordsGrid.hide();
                         recordsForm.hide();
@@ -686,7 +642,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
         columns: [
             { header: "Record set", flex: 1, dataIndex: 'name', sortable: true },
             { header: "Type", width: 75, dataIndex: 'type', sortable: true },
-            { header: "Alias", width: 75, align: 'center', xtype: 'templatecolumn',
+            { header: "Alias", width: 75, dataIndex: 'alias', align: 'center', xtype: 'templatecolumn',
                 tpl: [
                     '<tpl if="alias">',
                         '<div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div>',
@@ -709,10 +665,8 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             },
             items: [{
                 xtype: 'toolbar',
-                style: 'box-shadow: none; background-color: inherit',
+                ui: 'simple',
                 padding: '0 0 12 0',
-                layout: 'hbox',
-                width: '100%',
                 defaults: {
                     margin: '0 0 0 12'
                 },
@@ -728,7 +682,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                     text: 'Add record',
                     name: 'addRecordButton',
                     cls: 'x-btn-green',
-                    margin: '0 12 0 0',
+                    hidden: !Scalr.isAllowed('AWS_ROUTE53', 'manage'),
                     handler: function() {
                         var zoneNameField = zonesForm.down('[name=name]');
 
@@ -751,7 +705,6 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 }, {
                     itemId: 'refresh',
                     iconCls: 'x-btn-icon-refresh',
-                    margin: '0 12 0 0',
                     tooltip: 'Refresh',
                     handler: function() {
                         recordsGrid.getSelectionModel().clearSelections();
@@ -766,9 +719,9 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                     itemId: 'delete',
                     iconCls: 'x-btn-icon-delete',
                     cls: 'x-btn-red',
-                    margin: '0 12 0 0',
                     tooltip: 'Select one or more record set(s) to delete them',
                     disabled: true,
+                    hidden: !Scalr.isAllowed('AWS_ROUTE53', 'manage'),
                     handler: function () {
                         recordsForm.hide();
                         recordsForm.getForm().reset(true);
@@ -805,6 +758,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                     xtype: 'button',
                     name: 'saveZoneButton',
                     text: 'Save',
+                    hidden: !Scalr.isAllowed('AWS_ROUTE53', 'manage'),
                     handler: function () {
                         var zoneCommentField = zonesForm.down('[name=comment]');
 
@@ -835,6 +789,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 {
                     xtype: 'button',
                     text: 'Cancel',
+                    hidden: !Scalr.isAllowed('AWS_ROUTE53', 'manage'),
                     handler: function () {
                         zonesGrid.clearSelectedRecord();
                         recordsGrid.hide();
@@ -852,7 +807,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
         store: healthChecksStore,
         padding: '0 0 12 0',
 
-        selModel: 'selectedmodel',
+        selModel: Scalr.isAllowed('AWS_ROUTE53', 'manage') ? 'selectedmodel' : null,
 
         plugins: [{
             ptype: 'gridstore'
@@ -1008,6 +963,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 flex: 0.01
             }, {
                 text: 'New health check',
+                hidden: !Scalr.isAllowed('AWS_ROUTE53', 'manage'),
                 cls: 'x-btn-green',
                 handler: function() {
                     healthChecksGrid.clearSelectedRecord();
@@ -1029,6 +985,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 cls: 'x-btn-red',
                 tooltip: 'Select one or more health check(s) to delete them',
                 disabled: true,
+                hidden: !Scalr.isAllowed('AWS_ROUTE53', 'manage'),
                 handler: function () {
                     healthChecksForm.hide();
                     healthChecksForm.getForm().reset(true);
@@ -1360,6 +1317,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             xtype: 'container',
             dock: 'bottom',
             cls: 'x-docked-buttons',
+            hidden: !Scalr.isAllowed('AWS_ROUTE53', 'manage'),
             layout: {
                 type: 'hbox',
                 pack: 'center'
@@ -1740,6 +1698,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 step: 60,
                 value: 300,
                 name: 'ttl',
+                readOnly: !Scalr.isAllowed('AWS_ROUTE53', 'manage'),
                 plugins: [{
                     ptype: 'fieldicons',
                     align: 'right',
@@ -1755,6 +1714,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 cls: 'x-grid-editor',
                 allowBlank: false,
                 name: 'resourceRecord',
+                readOnly: !Scalr.isAllowed('AWS_ROUTE53', 'manage'),
                 getSubmitValue: function () {
                     var me = this;
 
@@ -1854,6 +1814,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 fieldLabel: 'Routing policy',
                 xtype: 'buttongroupfield',
                 value: 'simple',
+                readOnly: !Scalr.isAllowed('AWS_ROUTE53', 'manage'),
                 defaults: {
                     width: '25%'
                 },
@@ -2057,6 +2018,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             cls: 'x-docked-buttons',
             //style: 'background-color: #f9fafb;',
             style: 'background-color: white',
+            hidden: !Scalr.isAllowed('AWS_ROUTE53', 'manage'),
             layout: {
                 type: 'hbox',
                 pack: 'center'

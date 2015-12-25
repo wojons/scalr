@@ -1,8 +1,10 @@
 <?php
+
 namespace Scalr\Upgrade\Updates;
 
 use Scalr\Upgrade\SequenceInterface;
 use Scalr\Upgrade\AbstractUpdate;
+use Scalr\Model\Entity;
 
 /**
  * Initializes farms derived properties for running servers.
@@ -55,7 +57,7 @@ class Update20140130171328 extends AbstractUpdate implements SequenceInterface
                 $dbServer->SetProperties(array(
                     \SERVER_PROPERTIES::FARM_CREATED_BY_ID    => $farm->createdByUserId,
                     \SERVER_PROPERTIES::FARM_CREATED_BY_EMAIL => $farm->createdByUserEmail,
-                    \SERVER_PROPERTIES::FARM_PROJECT_ID       => $farm->GetSetting(\DBFarm::SETTING_PROJECT_ID),
+                    \SERVER_PROPERTIES::FARM_PROJECT_ID       => $farm->GetSetting(Entity\FarmSetting::PROJECT_ID),
                     \SERVER_PROPERTIES::ENV_CC_ID             => $environment->getPlatformConfigValue(\Scalr_Environment::SETTING_CC_ID),
                 ));
             } catch (\Exception $e) {

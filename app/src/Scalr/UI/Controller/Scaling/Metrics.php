@@ -40,19 +40,20 @@ class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
     /**
      * Save metric.
      *
-     * @param string $name
-     * @param string $retrieveMethod
-     * @param string $calcFunction
-     * @param int    $metricId       optional
-     * @param string $filePath       optional
+     * @param  string $name
+     * @param  string $retrieveMethod
+     * @param  string $calcFunction
+     * @param  int    $metricId       optional
+     * @param  string $filePath       optional
+     * @param  bool   $isInvert       optional
      * @throws Exception
      * @throws Scalr_Exception_Core
      * @throws Scalr_Exception_InsufficientPermissions
      * @throws \Scalr\Exception\ModelException
      */
-    public function xSaveAction($name, $retrieveMethod, $calcFunction, $metricId = null, $filePath = null)
+    public function xSaveAction($name, $retrieveMethod, $calcFunction, $metricId = null, $filePath = null, $isInvert = false)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS, Acl::PERM_GENERAL_CUSTOM_SCALING_METRICS_MANAGE);
 
         $validator = new Validator;
 
@@ -74,7 +75,7 @@ class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
         }
 
         if (!preg_match('/^[A-Za-z0-9]{5,}$/', $name)) {
-            $validator->addError('name', 'Metric name should be alphanumeric and greater than 5 chars');
+            $validator->addError('name', 'Metric name should be both alphanumeric and greater than 5 chars');
         }
 
         $criteria = [];
@@ -84,7 +85,7 @@ class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
         }
 
         if (Entity\ScalingMetric::findOne($criteria)) {
-            $validator->addError('name', 'Metric with the same name already exist');
+            $validator->addError('name', 'Metric with the same name already exists');
         }
 
         if ($validator->isValid($this->response)) {
@@ -92,10 +93,11 @@ class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
             $metric->filePath = $filePath;
             $metric->retrieveMethod = $retrieveMethod;
             $metric->calcFunction = $calcFunction;
+            $metric->isInvert = $isInvert;
 
             $metric->save();
 
-            $this->response->success('Scaling metric successfully saved');
+            $this->response->success('Scaling metric has been successfully saved.');
             $this->response->data(['metric' => get_object_vars($metric)]);
         }
     }
@@ -110,7 +112,8 @@ class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
      */
     public function xRemoveAction(JsonData $metrics)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS);
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS, Acl::PERM_GENERAL_CUSTOM_SCALING_METRICS_MANAGE);
+
         $processed = [];
         $err = [];
 
@@ -162,7 +165,7 @@ class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
 
         $criteria = [['$or' => [['envId' => $this->getEnvironmentId()],['envId' => null]]]];
         $metrics = (array) Entity\ScalingMetric::result(Entity\ScalingMetric::RESULT_ENTITY_COLLECTION)
-            ->find($criteria, ['id' => true, 'name' => true, 'filePath' => true]);
+            ->find($criteria, null, ['id' => true, 'name' => true, 'filePath' => true]);
 
         $this->response->data(['data' => $metrics, 'total' => count($metrics)]);
     }

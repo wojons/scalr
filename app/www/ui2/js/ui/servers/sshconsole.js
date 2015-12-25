@@ -1,12 +1,12 @@
 Scalr.regPage('Scalr.ui.servers.sshconsole', function (loadParams, moduleParams) {
     var panel = Ext.create('Ext.form.Panel', {
-		scalrOptions: {
-			maximize: 'all',
+        scalrOptions: {
+            maximize: 'all',
             reload: false,
             menuTitle: 'Servers',
             menuHref: '#/servers',
             menuParentStateId: 'grid-servers-view'
-		},
+        },
         listeners: {
             hide: function() {
                 this.close();
@@ -19,12 +19,12 @@ Scalr.regPage('Scalr.ui.servers.sshconsole', function (loadParams, moduleParams)
             }
         },
 
-		layout: {
-			type: 'vbox',
-			align: 'stretch',
-			pack: 'start'
-		},
-		items: [{
+        layout: {
+            type: 'vbox',
+            align: 'stretch',
+            pack: 'start'
+        },
+        items: [{
             xtype: 'container',
             layout: 'anchor',
             margin: '6 0 0 12',
@@ -65,13 +65,13 @@ Scalr.regPage('Scalr.ui.servers.sshconsole', function (loadParams, moduleParams)
                        '</b>, and logging in as <b>' + moduleParams['ssh.console.username'] + '</b>.' +
                        ' Access <a href="#/core/settings?ssh"> SSH Launcher Settings</a> to use another IP or username.'
             }]
-		}, {
+        }, {
             xtype: 'component',
             itemId: 'sshConsoleWrap',
-			flex: 1,
-			layout: 'fit',
+            flex: 1,
+            layout: 'fit',
             margin: '12 0 0 0',
-			html: '<span style="margin:12px">Loading, please wait ...</span>',
+            html: '<span style="margin:12px">Loading, please wait ...</span>',
             refreshApplet: function(params) {
                 this.show();
                 this.el.update(
@@ -96,20 +96,20 @@ Scalr.regPage('Scalr.ui.servers.sshconsole', function (loadParams, moduleParams)
                     '</object>'
                 );
             },
-			listeners: {
-				boxready: function() {
+            listeners: {
+                boxready: function() {
                     this.el.setVisibilityMode(Ext.Element.OFFSETS);
                     this.refreshApplet(moduleParams);
-				}
-			}
+                }
+            }
 
         }],
-		dockedItems: [{
+        dockedItems: [{
             dock: 'top',
-			xtype: 'displayfield',
+            xtype: 'displayfield',
             hidden: !Ext.isSafari,
-			cls: 'x-form-field-info x-form-field-info-fit',
-			value: 'Safari users need to allow applet to work with filesystem. <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/WYB1">More information</a>'
+            cls: 'x-form-field-info x-form-field-info-fit',
+            value: 'Safari users need to allow applet to work with filesystem. <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/WYB1">More information</a>'
         }, {
             dock: 'top',
             xtype: 'displayfield',
@@ -117,7 +117,7 @@ Scalr.regPage('Scalr.ui.servers.sshconsole', function (loadParams, moduleParams)
             cls: 'x-form-field-info x-form-field-info-fit',
             value: 'Chrome 42 (and greater) users need to enable NPAPI Plugins for the SSH Launcher to function. <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/G4BPAQ">More information</a>'
         }]
-	});
+    });
 
     return panel;
 });

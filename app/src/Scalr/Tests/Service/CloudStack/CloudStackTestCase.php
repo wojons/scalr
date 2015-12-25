@@ -230,7 +230,7 @@ class CloudStackTestCase extends TestCase
                 'getResponseCode',
             ),
             array(
-                $this->getMock('HttpMessage'),
+                $this->getMock('\http\Client\Response'),
                 $command
             )
         );

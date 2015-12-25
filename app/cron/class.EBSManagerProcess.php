@@ -1,6 +1,7 @@
 <?php
 
 use \Scalr\Service\Aws\Ec2\DataType\CreateVolumeRequestData;
+use Scalr\Model\Entity;
 
 class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
 {
@@ -12,7 +13,7 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
     public function __construct()
     {
         // Get Logger instance
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
     }
 
     /**
@@ -57,7 +58,7 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
     {
         $db = \Scalr::getDb();
 
-        Logger::getLogger(__CLASS__)->warn("OnEndForking: start");
+        \Scalr::getContainer()->logger(__CLASS__)->warn("OnEndForking: start");
 
         $list = $db->GetAll("
             SELECT farm_roleid
@@ -117,14 +118,14 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
             }
         }
 
-        Logger::getLogger(__CLASS__)->warn("OnEndForking: rotate mysql snapshots");
+        \Scalr::getContainer()->logger(__CLASS__)->warn("OnEndForking: rotate mysql snapshots");
 
         // Rotate MySQL master snapshots.
         $list = $db->GetAll("
             SELECT farm_roleid
             FROM farm_role_settings
             WHERE name=? AND value='1'
-        ", [DBFarmRole::SETTING_MYSQL_EBS_SNAPS_ROTATION_ENABLED]);
+        ", [Entity\FarmRoleSetting::MYSQL_EBS_SNAPS_ROTATION_ENABLED]);
         foreach ($list as $list_item) {
             try {
                 $DBFarmRole = DBFarmRole::LoadByID($list_item['farm_roleid']);
@@ -148,11 +149,11 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                     ORDER BY dtcreated ASC
                 ", [$DBFarmRole->ID]);
 
-                if (count($old_snapshots) > $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_EBS_SNAPS_ROTATE)) {
+                if (count($old_snapshots) > $DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_EBS_SNAPS_ROTATE)) {
                     try {
                         $aws = $DBFarm->GetEnvironmentObject()->aws($DBFarmRole);
 
-                        while (count($old_snapshots) > $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_EBS_SNAPS_ROTATE)) {
+                        while (count($old_snapshots) > $DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_EBS_SNAPS_ROTATE)) {
                             $snapinfo = array_shift($old_snapshots);
                             try {
                                 $aws->ec2->snapshot->delete($snapinfo['id']);
@@ -180,7 +181,7 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
             }
         }
 
-        Logger::getLogger(__CLASS__)->warn("OnEndForking: auto-snapshot volumes");
+        \Scalr::getContainer()->logger(__CLASS__)->warn("OnEndForking: auto-snapshot volumes");
 
         // Auto - snapshotting
         $snapshots_settings = $db->Execute("
@@ -190,7 +191,7 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
             array(AUTOSNAPSHOT_TYPE::EBSSnap)
         );
 
-        Logger::getLogger(__CLASS__)->warn(sprintf("OnEndForking: found %s volumes", $snapshots_settings->RecordCount()));
+        \Scalr::getContainer()->logger(__CLASS__)->warn(sprintf("OnEndForking: found %s volumes", $snapshots_settings->RecordCount()));
 
         while ($snapshot_settings = $snapshots_settings->FetchRow()) {
             try {
@@ -435,7 +436,9 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                         }
                         if ($DBEBSVolume->farmId) {
                             $this->logger->error(new FarmLogMessage(
-                                $DBEBSVolume->farmId, "Cannot create volume: {$e->getMessage()}"
+                                $DBEBSVolume->farmId,
+                                "Cannot create volume: {$e->getMessage()}",
+                                !empty($DBEBSVolume->serverId) ? $DBEBSVolume->serverId : null
                             ));
                         } else {
                             $this->logger->error(

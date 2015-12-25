@@ -1,6 +1,8 @@
 <?php
 namespace Scalr\Service\Aws\Client;
 
+use http\Client\Request;
+use http\Client\Response;
 use Scalr\Service\Aws\Exception\AwsResponseErrorFactory;
 use Scalr\Service\Aws\Plugin\EventObserver;
 use Scalr\Service\Aws\DataType\ErrorData;
@@ -16,11 +18,11 @@ class QueryClientResponse implements ClientResponseInterface
 {
 
     /**
-     * HttpMessage instance
+     * Http Response instance
      *
-     * @var \HttpMessage
+     * @var Response
      */
-    private $message;
+    private $response;
 
     /**
      * Information about error if it's occured.
@@ -39,7 +41,7 @@ class QueryClientResponse implements ClientResponseInterface
     /**
      * Http request
      *
-     * @var \HttpRequest
+     * @var Request
      */
     private $request;
 
@@ -60,15 +62,15 @@ class QueryClientResponse implements ClientResponseInterface
     /**
      * Constructor
      *
-     * @param   \HttpMessage $message  HTTP Message object
+     * @param   Response $response  HTTP Message object
      */
-    public function __construct(\HttpMessage $message)
+    public function __construct(Response $response)
     {
-        $this->message = $message;
+        $this->response = $response;
     }
 
     /**
-     * Invokes HttpMessage object methods
+     * Invokes http Response object methods
      *
      * @param    string    $method
      * @param    array     $args
@@ -76,8 +78,8 @@ class QueryClientResponse implements ClientResponseInterface
      */
     public function __call($method, $args)
     {
-        if (method_exists($this->message, $method)) {
-            return call_user_method_array($method, $this->message, $args);
+        if (method_exists($this->response, $method)) {
+            return call_user_method_array($method, $this->response, $args);
         }
         throw new \BadMethodCallException(sprintf('Method "%s" does not exist for class "%s".', $method, get_class($this)));
     }
@@ -88,7 +90,7 @@ class QueryClientResponse implements ClientResponseInterface
      */
     public function getHeaders()
     {
-        return $this->message->getHeaders();
+        return $this->response->getHeaders();
     }
 
     /**
@@ -97,16 +99,16 @@ class QueryClientResponse implements ClientResponseInterface
      */
     public function getHeader($headername)
     {
-        return $this->message->getHeader($headername);
+        return $this->response->getHeader($headername);
     }
 
     /**
      * {@inheritdoc}
-     * @see Scalr\Service\Aws\Client.ClientResponseInterface::getRawContent()
+     * @see \Scalr\Service\Aws\Client\ClientResponseInterface::getRawContent()
      */
     public function getRawContent()
     {
-        return $this->message->getBody();
+        return $this->response->getBody()->toString();
     }
 
     /**
@@ -136,13 +138,20 @@ class QueryClientResponse implements ClientResponseInterface
             if ($code < 200 || $code > 299) {
                 if ($code == 404) {
                     //Workaround for the Amazon S3 response with Delete Marker object
-                    if ($this->getHeader('x-amz-delete-marker') !== null) {
+                    if ($this->getHeader('x-amz-delete-marker') !== null &&
+                        $this->getHeader('x-amz-delete-marker') != '') {
                         return $this->errorData;
                     }
                 }
 
                 $loader = new ErrorLoader();
-                $this->errorData = $loader->load($this->getRawContent());
+                $xml = $this->getRawContent();
+
+                if (empty($xml) && $code == 403) {
+                    throw new \Exception('AWS Error. Permission denied.');
+                }
+
+                $this->errorData = $loader->load($xml);
                 $this->errorData->request = $this->getRequest();
                 $this->errorData->queryNumber = $this->queryNumber;
 
@@ -168,7 +177,7 @@ class QueryClientResponse implements ClientResponseInterface
      */
     public function getResponseCode()
     {
-        return $this->message->getResponseCode();
+        return $this->response->getResponseCode();
     }
 
     /**
@@ -188,12 +197,12 @@ class QueryClientResponse implements ClientResponseInterface
      */
     public function getResponseStatus()
     {
-        return $this->message->getResponseStatus();
+        return $this->response->getResponseStatus();
     }
 
     /**
      * {@inheritdoc}
-     * @see Scalr\Service\Aws\Client.ClientResponseInterface::getRequest()
+     * @see \Scalr\Service\Aws\Client\ClientResponseInterface::getRequest()
      */
     public function getRequest()
     {
@@ -202,7 +211,7 @@ class QueryClientResponse implements ClientResponseInterface
 
     /**
      * {@inheritdoc}
-     * @see Scalr\Service\Aws\Client.ClientResponseInterface::setRequest()
+     * @see \Scalr\Service\Aws\Client\ClientResponseInterface::setRequest()
      * @return QueryClientResponse
      */
     public function setRequest($request)
@@ -220,5 +229,13 @@ class QueryClientResponse implements ClientResponseInterface
     {
         $this->queryNumber = $number;
         return $this;
+    }
+
+    /**
+     * @return Response
+     */
+    public function getResponse()
+    {
+        return $this->response;
     }
 }

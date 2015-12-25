@@ -29,10 +29,10 @@ import pymysql.err
 
 from scalrpy.util import helper
 from scalrpy.util import dbmanager
-from scalrpy.util import exceptions
 from scalrpy.util import application
 
 from scalrpy import LOG
+from scalrpy import exceptions
 
 
 helper.patch_gevent()

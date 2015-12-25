@@ -99,8 +99,22 @@ Scalr.ui.getFarmRoleModel = function() {
             });
         },
 
-        getInstanceType: function(availableInstanceTypes, limits, vpcSettings) {
+        getInstanceTypeLimits: function() {
+            var limits = Scalr.getGovernance(this.get('platform'), this.getInstanceTypeParamName());
+
+            if (this.get('platform') === 'azure') {
+                if (limits !== undefined && limits.value[this.get('cloud_location')]) {//azure has location based instance type limits
+                    limits = limits.value[this.get('cloud_location')];
+                } else {
+                    limits = undefined;
+                }
+            }
+            return limits;
+        },
+
+        getInstanceType: function(availableInstanceTypes, vpcEnabled) {
             var me = this,
+                limits = me.getInstanceTypeLimits(),
                 settings = me.get('settings', true),
                 image = me.get('image', true),
                 typeString = image['type'] || '',
@@ -109,11 +123,11 @@ Scalr.ui.getFarmRoleModel = function() {
                         ebs: typeString.indexOf('ebs') !== -1,
                         hvm: typeString.indexOf('hvm') !== -1,
                         x64: image['architecture'] !== 'i386',
-                        vpc: vpcSettings !== false
+                        vpc: vpcEnabled
                     }
                 },
                 platform = me.get('platform'),
-                instanceType = settings[this.getInstanceTypeParamName()],
+                instanceType = settings[me.getInstanceTypeParamName()],
                 defaultInstanceType,
                 defaultInstanceTypeAllowed,
                 firstAllowedInstanceType,
@@ -222,14 +236,14 @@ Scalr.ui.getFarmRoleModel = function() {
                 case 'ec2':
                     name = 'aws.instance_type';
                 break;
-                case 'eucalyptus':
-                    name = 'euca.instance_type';
-                break;
                 case 'gce':
                     name = 'gce.machine-type';
                 break;
                 case 'rackspace':
                     name = 'rs.flavor-id';
+                break;
+                case 'azure':
+                    name = 'azure.vm-size';
                 break;
                 default:
                     if (Scalr.isOpenstack(platform)) {
@@ -246,7 +260,7 @@ Scalr.ui.getFarmRoleModel = function() {
             var engine = '',
                 platform = this.get('platform', true);
 
-            if (platform === 'ec2' || platform === 'eucalyptus') {
+            if (platform === 'ec2') {
                 engine = 'ebs';
             } else if (platform === 'rackspace') {
                 engine = 'eph';
@@ -397,9 +411,6 @@ Scalr.ui.getFarmRoleModel = function() {
                 } else {
                     storages.push({name:'eph', description:'Ephemeral device'});
                 }
-            } else if (platform === 'eucalyptus') {
-                storages.push({name:'ebs', description:'Single EBS Volume'});
-                storages.push({name:'raid.ebs', description:'RAID array on EBS volumes'});
             } else if (platform === 'rackspace') {
                 storages.push({name:'eph', description:'Ephemeral device'});
             } else if (platform === 'gce') {
@@ -506,9 +517,10 @@ Scalr.ui.getFarmRoleModel = function() {
                     }
                 },
                 function(data, status) {
-                    var roleChefEnabled = Ext.isObject(data['chef']) && data['chef']['chef.bootstrap'] == 1,
+                    var roleChefEnabled,
                         farmRoleChefSettings = {};
                     if (status) {
+                        roleChefEnabled = Ext.isObject(data['chef']) && data['chef']['chef.bootstrap'] == 1
                         Ext.Object.each(record.get('settings', true) || {}, function(key, value){
                             if (key.indexOf('chef.') === 0) {
                                 farmRoleChefSettings[key] = value;
@@ -534,21 +546,20 @@ Scalr.ui.getFarmRoleModel = function() {
 
         },
 
-        loadEBSEncryptionSupport: function(cb, instType) {
+        loadInstanceTypeInfo: function(cb, instType) {
             var platform = this.get('platform'),
                 cloudLocation = this.get('cloud_location'),
-                encryption = false;
+                instanceTypeInfo;
             instType = instType || this.get('settings', true)['aws.instance_type'];
             Scalr.loadInstanceTypes(platform, cloudLocation, function(data, status){
                 Ext.each(data, function(i){
                     if (i.id === instType) {
-                        encryption = i.ebsencryption;
+                        instanceTypeInfo = Ext.clone(i);
                         return false;
                     }
                 });
-                cb(encryption);
+                cb(instanceTypeInfo);
             });
-
         },
 
         loadEBSOptimizedSupport: function(cb, instType) {
@@ -632,6 +643,11 @@ Ext.define('Scalr.ui.FarmDesignerFarmRoles', {
         ptype: 'viewdragdrop',
         pluginId: 'viewdragdrop',
         offsetY: 50
+    },{
+        ptype: 'dynemptytext',
+        showArrow: false,
+        emptyText: 'No Farm Roles were found to match your search',
+        emptyTextNoItems: ' '
     }],
     deferInitialRefresh: false,
     allowDeselect: true,
@@ -690,6 +706,7 @@ Ext.define('Scalr.ui.FarmDesignerFarmRoles', {
             farmDesigner.down('farmcostmetering').refresh();
         },
         itemadd: function(record, index, node) {
+            this.refresh();//flying button "Add farm role" overlaps newly added farm role if we don't refresh view
             this.scrollBy(0, 9000);
         },
         drop: function(node, data, record, position) {
@@ -793,9 +810,13 @@ Ext.define('Scalr.ui.FarmRolesFlyingButton', {
 	updatePosition: function() {
         var buttonTop = '';
         if (this.button) {
-            var el = this.client.el.down('div');
-            buttonTop = (this.client.el.getHeight() < el.getHeight() ? this.client.el.getHeight() : el.getHeight())+'px';
-
+            var el;
+            if (this.client.store.getUnfiltered().length && this.client.store.getCount() === 0) {
+                buttonTop = '64px';//emptytext height
+            } else {
+                el = this.client.el.down('div');
+                buttonTop = (this.client.el.getHeight() < el.getHeight() ? this.client.el.getHeight() : el.getHeight())+'px';
+            }
             if (buttonTop !== this.buttonTop) {
                 this.button.setStyle('top', buttonTop);
                 this.buttonTop = buttonTop;
@@ -901,63 +922,6 @@ Ext.define('Scalr.ui.FarmRolesDragDrop', {
 				offsetY: me.offsetY
             });
         }
-    }
-});
-
-Ext.define('Scalr.ui.FormInstanceTypeField', {
-	extend: 'Ext.form.field.ComboBox',
-	alias: 'widget.instancetypefield',
-
-    editable: true,
-    hideInputOnReadOnly: true,
-    queryMode: 'local',
-    fieldLabel: 'Instance type',
-    anyMatch: true,
-    autoSearch: false,
-    selectOnFocus: true,
-    restoreValueOnBlur: true,
-    store: {
-        fields: [ 'id', 'name', 'note', 'ram', 'type', 'vcpus', 'disk', 'ebsencryption', 'ebsoptimized', 'placementgroups', {name: 'disabled', defaultValue: false}, 'disabledReason' ],
-        proxy: 'object',
-        sorters: {
-            property: 'disabled'
-        }
-    },
-    valueField: 'id',
-    displayField: 'name',
-    listConfig: {
-        emptyText: 'No instance type matching query',
-        emptyTextTpl: new Ext.XTemplate(
-            '<div style="margin:8px 8px 0">' +
-                '<span class="x-semibold">No instance type matching query</span>' +
-                '<div style="line-height:24px">Instance types unavailable in <i>{cloudLocation}</i><tpl if="limits"> or restricted by Governance</tpl> are not listed</div>' +
-            '</div>'
-        ),
-        cls: 'x-boundlist-alt',
-        tpl:
-            '<tpl for="."><div class="x-boundlist-item" style="white-space:nowrap;height: auto; width: auto;<tpl if="disabled">color:#999</tpl>">' +
-                '<div><span class="x-semibold">{name}</span> &nbsp;<tpl if="disabled"><span style="font-size:12px;font-style:italic">({[values.disabledReason||\'Not compatible with the selected image\']})</span></tpl></div>' +
-                '<div style="line-height: 26px;white-space:nowrap;">{[this.instanceTypeInfo(values)]}</div>' +
-            '</div></tpl>'
-    },
-    updateListEmptyText: function(data) {
-        var picker = this.getPicker();
-        if (picker) {
-            picker.emptyText = picker.emptyTextTpl.apply(data);
-        }
-    },
-    initComponent: function() {
-        this.plugins = {
-            ptype: 'fieldicons',
-            position: this.iconsPosition || 'inner',
-            icons: [{id: 'governance', tooltip: 'The account owner has limited which instance types can be used in this Environment'}]
-        };
-        this.callParent(arguments);
-        this.on('beforeselect', function(comp, record){
-            if (record.get('disabled')) {
-                return false;
-            }
-        }, this, {priority: 1});
     }
 });
 
@@ -1507,11 +1471,13 @@ Ext.define('Scalr.ui.FarmSettings', {
                         editable: false,
                         queryMode: 'local',
                         store: {
-                            fields: ['id', 'name'],
+                            fields: ['id', 'name', {name: 'displayField', convert: function(v, record){
+                                return record.data.name ? (record.data.name + (record.data.description ? ' (' + record.data.description + ')' : '')) : v;
+                            }}],
                             proxy: 'object'
                         },
                         valueField: 'id',
-                        displayField: 'name',
+                        displayField: 'displayField',
                         showWarning: true,
                         setTooltip: function (text) {
                             if (this.rendered) {
@@ -1666,7 +1632,8 @@ Ext.define('Scalr.ui.FarmSettings', {
                             delete settings['aws.vpc_subnet_id'];
                             delete settings['router.vpc.networkInterfaceId'];
                             delete settings['router.scalr.farm_role_id'];
-                            settings['aws.security_groups.list'] = moduleParams['roleDefaultSettings']['security_groups.list'];
+                            //do not add Scalr groups when sg governance enabled
+                            settings['aws.security_groups.list'] = Scalr.getGovernance('ec2', 'aws.additional_security_groups') === undefined ? moduleParams['roleDefaultSettings']['security_groups.list'] : '[]';
                         }
                     });
                 },
@@ -1806,6 +1773,8 @@ Ext.define('Scalr.ui.FarmSettings', {
             return me;
         },*/
         updateFarmRoleVariable: function (variable, farmCurrent, scopes, farmDefault, farmLocked) {
+            farmLocked = farmLocked || {};
+
             variable.scopes = scopes;
             variable.category = farmCurrent.category;
 
@@ -2249,14 +2218,6 @@ Ext.define('Scalr.ui.FarmSettings', {
             return false;
         }
         tabValues = tab.getFieldValues(true);
-
-        if (moduleParams.tabParams.farm['status'] == 1 &&
-            moduleParams.tabParams.farm['szr.upd.repository'] === 'latest' &&
-            tabValues['szr.upd.repository'] === 'stable') {
-            tab.down('#updRepo').markInvalid('Switching from \'latest\' repository to \'stable\' is not supported for running farms');
-            this.layout.setActiveItem('advanced');
-            return false;
-        }
 
         values['szr.upd.repository'] = tabValues['szr.upd.repository'];
         values['szr.upd.schedule'] = ([
@@ -2767,16 +2728,21 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Main', {
     setupInstanceTypeField: function(data, status, record, callback) {
         var me = this,
             field = me.down('[name="instanceType"]'),
-            limits = Scalr.getGovernance(record.get('platform'), record.getInstanceTypeParamName()),
-            instanceType = record.getInstanceType(data, limits, me.up('#farmDesigner').getVpcSettings());
+            limits = record.getInstanceTypeLimits(),
+            instanceType,
+            instanceTypeList;
+
+        instanceType = record.getInstanceType(data, me.up('#farmDesigner').getVpcSettings() !== false)
+        instanceTypeList = instanceType['list'] || [];
 
         field.setDisabled(!status);
-        field.store.load({ data: instanceType['list'] || [] });
+        field.store.load({ data: instanceTypeList });
         me.isLoading = true;
         field.setValue(instanceType['value']);
         field.resetOriginalValue();
+        field.refreshInvalidState();
         me.isLoading = false;
-        field.setReadOnly(instanceType.list.length === 0 || (instanceType.list.length === 1 && instanceType.list[0].id === instanceType.value));
+        field.setReadOnly(instanceTypeList.length === 0 || (instanceTypeList.length === 1 && instanceTypeList[0].id === instanceType['value']));
         field.toggleIcon('governance', !!limits);
         field.updateListEmptyText({cloudLocation:record.get('cloud_location'), limits: !!limits});
 
@@ -3000,86 +2966,15 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Main', {
         }
     },
 
-    eucalyptus: {
-        beforeShowTab: function(record, handler) {
-            this.cache = null;
-            if (this.up('#farmDesigner').getVpcSettings() !== false || Ext.Array.contains(record.get('behaviors').split(','), 'router')) {
-                this.down('[name="euca.availability_zone"]').hide();
-                this.down('[name="euca.cloud_location"]').setValue(record.get('cloud_location')).show();
-                handler();
-            } else {
-                Scalr.cachedRequest.load(
-                    {
-                        url: '/platforms/eucalyptus/xGetAvailZones',
-                        params: {cloudLocation: record.get('cloud_location')}
-                    },
-                    function(data, status, cacheId){
-                        this.cache = data;
-                        this.down('[name="euca.availability_zone"]').show().setDisabled(!status);
-                        this.down('[name="euca.cloud_location"]').hide();
-                        handler();
-                    },
-                    this
-                );
-            }
-        },
+    azure: {
         showTab: function(record) {
-            var settings = record.get('settings', true),
-                field;
-
-            //availability zone
-            field = this.down('[name="euca.availability_zone"]');
-            var zones = Ext.Array.map(this.cache || [], function(item){ item.disabled = item.state != 'available'; return item;}),
-                data = [{
-                    zoneId: 'x-scalr-diff',
-                    name: 'Distribute equally'
-                },{
-                    zoneId: '',
-                    name: 'Euca-chosen'
-                },{
-                    zoneId: 'x-scalr-custom',
-                    name: 'Selected by me',
-                    items: zones
-                }],
-                zone = settings['euca.availability_zone'] || '',
-                disableAvailZone =  record.get('behaviors').match('mysql') && settings['mysql.data_storage_engine'] == 'ebs' &&
-                                    settings['mysql.master_ebs_volume_id'] != '' && settings['mysql.master_ebs_volume_id'] != undefined &&
-                                    record.get('generation') != 2 && this.down('[name="aws.availability_zone"]').getValue() != '' &&
-                                    this.down('[name="euca.availability_zone"]').getValue() != 'x-scalr-diff';
-
-            field.store.loadData(data);
-            if (zone.match(/x-scalr-custom/)) {
-                zone = {zoneId: 'x-scalr-custom', items: zone.replace('x-scalr-custom=', '').split(':')};
-            } else if (!Ext.isEmpty(zone) && zone !== 'x-scalr-diff' && zone != 'x-scalr-custom') {
-                zone = {zoneId: 'x-scalr-custom', items: [zone]};
-            }
-
-            field.setValue(zone);
-            if (!field.disabled) {
-                field.setDisabled(disableAvailZone);
-            }
-            this.down('#euca_availability_zone_warn').setVisible(disableAvailZone && field.isVisible());
+            this.down('[name="azure.cloud_location"]').setValue(record.get('cloud_location'));
         },
         saveParam: function(name, value) {
             var record = this.currentRole,
                 settings = record.get('settings');
-            switch (name) {
-                case 'euca.availability_zone':
-                    if (Ext.isObject(value)) {
-                        if (value.items) {
-                            if (value.items.length === 1) {
-                                settings[name] = value.items[0];
-                            } else if (value.items.length > 1) {
-                                settings[name] = value.zoneId + '=' + value.items.join(':');
-                            }
-                        }
-                    } else {
-                        settings[name] = value;
-                    }
-                break;
-            }
+            settings[name] = value;
             record.set('settings', settings);
-
         }
     },
 
@@ -3350,6 +3245,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Main', {
             name: 'instanceType',
             margin: '0 0 6 0',
             labelWidth: 110,
+            markInvalidInstaceType: true,
             listeners: {
                 beforeselect: function(comp, record) {
 
@@ -3544,52 +3440,11 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Main', {
                     hidden: true
                 }]
             },{
-                xtype: 'container',
-                platform: ['eucalyptus'],
-                layout: {
-                    type: 'hbox',
-                    align: 'stretch'
-                },
-                items:[{
-                    xtype: 'comboradio',
-                    fieldLabel: 'Avail zone',
-                    flex: 1,
-                    name: 'euca.availability_zone',
-                    valueField: 'zoneId',
-                    displayField: 'name',
-                    listConfig: {
-                        cls: 'x-menu-light'
-                    },
-                    store: {
-                        fields: [ 'zoneId', 'name', 'state', 'disabled', 'items' ],
-                        proxy: 'object'
-                    },
-                    margin: 0,
-                    labelWidth: 70,
-                    listeners: {
-                        collapse: function() {
-                            var value = this.getValue();
-                            if (Ext.isObject(value) && value.items.length === 0) {
-                                this.setValue('');
-                            }
-                        },
-                        change: function(comp, value) {
-                            comp.up('#maintab').onParamChange(comp.name, value);
-                        }
-                    }
-                },{
-                    xtype: 'displayinfofield',
-                    itemId: 'euca_availability_zone_warn',
-                    hidden: true,
-                    margin: '0 0 0 10',
-                    info: 'If you want to change placement, you need to remove Master EBS volume first.'
-                },{
-                    xtype: 'displayfield',
-                    fieldLabel: 'Cloud location',
-                    labelWidth: 110,
-                    name: 'euca.cloud_location',
-                    hidden: true
-                }]
+                xtype: 'displayfield',
+                platform: ['azure'],
+                fieldLabel: 'Cloud location',
+                labelWidth: 110,
+                name: 'azure.cloud_location'
             },{
                 xtype: 'displayfield',
                 platform: ['rackspace'],

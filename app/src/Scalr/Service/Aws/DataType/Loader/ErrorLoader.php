@@ -84,11 +84,17 @@ class ErrorLoader implements LoaderInterface
         }
         /* @var $error \SimpleXmlElement */
         $this->result->type = isset($error->Type) ? (string)$error->Type : null;
-        $this->result->code = (string)$error->Code;
         $this->result->message = (string)$error->Message;
-        if (isset($simpleXmlElement->RequestId)) {
-            $this->result->requestId = (string)$simpleXmlElement->RequestId;
+
+        $code = (string)$error->Code;
+        $this->result->code = preg_match('/^(?<code>.+?)Fault$/', $code, $matches) ? $matches['code'] : $code;
+
+        $dataSet = array_change_key_case((array) $simpleXmlElement);
+
+        if (isset($dataSet['requestid'])) {
+            $this->result->requestId = $dataSet['requestid'];
         }
+
         return $this->result;
     }
 }

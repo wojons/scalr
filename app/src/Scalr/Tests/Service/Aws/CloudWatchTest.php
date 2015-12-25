@@ -48,8 +48,8 @@ class CloudWatchTest extends CloudWatchTestCase
      */
     public function testCommon()
     {
-        if (!class_exists('HttpRequest')) {
-            $this->assertTrue(false, 'HttpRequest class does not exist! Please install php dependencies.');
+        if (!class_exists('\http\Client\Request')) {
+            $this->assertTrue(false, '\http\Client\Request class does not exist! Please install php dependencies.');
         }
         $cw = $this->getCloudWatchMock();
         $this->assertInstanceOf(self::CLASS_CLOUD_WATCH, $cw);

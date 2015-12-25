@@ -1,12 +1,22 @@
 <?php
 
+use http\Client\Request;
 
 class Chargify
 {
+    /**
+     * PECL http 2.x client
+     *
+     * @var http\Client
+     */
+    private $httpClient;
+
   	public function __construct($api_key, $domain)
   	{
     	$this->apiKey = $api_key;
     	$this->domain  = $domain;
+
+        $this->httpClient = new http\Client();
   	}
 
 
@@ -20,15 +30,15 @@ class Chargify
         $r = $this->sendRequest("/subscriptions/{$subscriptionId}/components/{$componentId}/usages.json", 'POST', json_encode($rObject));
 
         if ($r->getResponseCode() == 200) {
-            return json_decode($r->getResponseBody(), true);
+            return json_decode($r->getBody()->toString(), true);
         }
         else {
             if ($r->getResponseCode() == 422) {
-                $response = json_decode($r->getResponseBody(), true);
+                $response = json_decode($r->getBody()->toString(), true);
                 throw new Exception($response['errors'][0]);
             }
 
-            throw new Exception("Cannot create component usage. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+            throw new Exception("Cannot create component usage. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
         }
     }
 
@@ -41,15 +51,15 @@ class Chargify
   		$r = $this->sendRequest("/subscriptions/{$subscriptionId}/components/{$componentId}.json", 'PUT', json_encode($rObject));
 
 	  	if ($r->getResponseCode() == 200) {
-	    	return json_decode($r->getResponseBody(), true);
+	    	return json_decode($r->getBody()->toString(), true);
 	  	}
 	  	else {
 	  		if ($r->getResponseCode() == 422) {
-		  		$response = json_decode($r->getResponseBody(), true);
+		  		$response = json_decode($r->getBody()->toString(), true);
 		  		throw new Exception($response['errors'][0]);
 	  		}
 
-	  		throw new Exception("Cannot set component value. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+	  		throw new Exception("Cannot set component value. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
 	  	}
   	}
 
@@ -58,11 +68,11 @@ class Chargify
   		$r = $this->sendRequest("/subscriptions/{$subscriptionId}/reactivate.json", 'PUT');
 
 	  	if ($r->getResponseCode() == 200) {
-	    	return json_decode($r->getResponseBody(), true);
+	    	return json_decode($r->getBody()->toString(), true);
 	  	}
 	  	else {
 	  		if ($r->getResponseCode() == 422) {
-		  		$response = json_decode($r->getResponseBody(), true);
+		  		$response = json_decode($r->getBody()->toString(), true);
 
 				if ($response[0][1])
 					throw new Exception($response[0][1]);
@@ -70,7 +80,7 @@ class Chargify
 		  			throw new Exception($response['errors'][0]);
 	  		}
 
-	  		throw new Exception("Cannot reactivate subscription. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+	  		throw new Exception("Cannot reactivate subscription. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
 	  	}
 	}
 
@@ -87,11 +97,11 @@ class Chargify
 	  	}
 	  	else {
 	  		if ($r->getResponseCode() == 422) {
-		  		$response = json_decode($r->getResponseBody(), true);
+		  		$response = json_decode($r->getBody()->toString(), true);
 		  		throw new Exception($response['errors'][0]);
 	  		}
 
-	  		throw new Exception("Cannot cancel subscription. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+	  		throw new Exception("Cannot cancel subscription. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
 	  	}
   	}
 
@@ -108,12 +118,12 @@ class Chargify
 	  	else {
 	  		if ($r->getResponseCode() == 422)
 	  		{
-		  		$response = json_decode($r->getResponseBody(), true);
+		  		$response = json_decode($r->getBody()->toString(), true);
 		  		throw new Exception($response[0][1]);
 		  		exit();
 	  		}
 
-	  		throw new Exception("Cannot apply coupon to subscription. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+	  		throw new Exception("Cannot apply coupon to subscription. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
 	  	}
   	}
 
@@ -123,17 +133,17 @@ class Chargify
 
   		if ($r->getResponseCode() == 200)
 	  	{
-	    	return json_decode($r->getResponseBody(), true);
+	    	return json_decode($r->getBody()->toString(), true);
 	  	}
 	  	else
 	  	{
 	  		if ($r->getResponseCode() == 422)
 	  		{
-		  		$response = json_decode($r->getResponseBody(), true);
+		  		$response = json_decode($r->getBody()->toString(), true);
 		  		throw new Exception($response['errors'][0]);
 	  		}
 
-	  		throw new Exception("Cannot get statements. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+	  		throw new Exception("Cannot get statements. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
 	  	}
   	}
 
@@ -143,17 +153,17 @@ class Chargify
 
 	  	if ($r->getResponseCode() == 200)
 	  	{
-	    	return json_decode($r->getResponseBody(), true);
+	    	return json_decode($r->getBody()->toString(), true);
 	  	}
 	  	else
 	  	{
 	  		if ($r->getResponseCode() == 422)
 	  		{
-		  		$response = json_decode($r->getResponseBody(), true);
+		  		$response = json_decode($r->getBody()->toString(), true);
 		  		throw new Exception($response['errors'][0]);
 	  		}
 
-	  		throw new Exception("Cannot get statements. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+	  		throw new Exception("Cannot get statements. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
 	  	}
   	}
 
@@ -188,16 +198,16 @@ class Chargify
 	  	$r = $this->sendRequest('/subscriptions.json', 'POST', json_encode($rObject));
 
 	  	if ($r->getResponseCode() == 201) {
-	    	return json_decode($r->getResponseBody(), true);
+	    	return json_decode($r->getBody()->toString(), true);
 	  	}
 	  	else {
 	  		if ($r->getResponseCode() == 422)
 	  		{
-		  		$response = json_decode($r->getResponseBody(), true);
+		  		$response = json_decode($r->getBody()->toString(), true);
 		  		throw new Exception($response['errors'][0]);
 	  		}
 
-	  		throw new Exception("Cannot create subscription. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+	  		throw new Exception("Cannot create subscription. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
 	  	}
 	}
 
@@ -207,17 +217,17 @@ class Chargify
 
 	  	if ($r->getResponseCode() == 200)
 	  	{
-	    	return json_decode($r->getResponseBody(), true);
+	    	return json_decode($r->getBody()->toString(), true);
 	  	}
 	  	else
 	  	{
 	  		if ($r->getResponseCode() == 422)
 	  		{
-		  		$response = json_decode($r->getResponseBody(), true);
+		  		$response = json_decode($r->getBody()->toString(), true);
 		  		throw new Exception($response['errors'][0]);
 	  		}
 
-	  		throw new Exception("Cannot get statements. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+	  		throw new Exception("Cannot get statements. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
 	  	}
   	}
 
@@ -244,17 +254,17 @@ class Chargify
   		if ($r->getResponseCode() == 200)
 	  	{
 
-	  		return json_decode($r->getResponseBody(), true);
+	  		return json_decode($r->getBody()->toString(), true);
 	  	}
 	  	else
 	  	{
 	  		if ($r->getResponseCode() == 422)
 	  		{
-		  		$response = json_decode($r->getResponseBody(), true);
+		  		$response = json_decode($r->getBody()->toString(), true);
 		  		throw new Exception($response['errors'][0]);
 	  		}
 
-	  		throw new Exception("Cannot get update subscription. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+	  		throw new Exception("Cannot get update subscription. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
 	  	}
   	}
 
@@ -263,17 +273,17 @@ class Chargify
   		$r = $this->sendRequest("/coupons/find.json?code={$couponCode}", 'GET');
   		if ($r->getResponseCode() == 200)
 	  	{
-	    	return json_decode($r->getResponseBody(), true);
+	    	return json_decode($r->getBody()->toString(), true);
 	  	}
 	  	else
 	  	{
 	  		if ($r->getResponseCode() == 422)
 	  		{
-		  		$response = json_decode($r->getResponseBody(), true);
+		  		$response = json_decode($r->getBody()->toString(), true);
 		  		throw new Exception($response['errors'][0]);
 	  		}
 
-	  		throw new Exception("Cannot get coupon info. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+	  		throw new Exception("Cannot get coupon info. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
 	  	}
   	}
 
@@ -283,17 +293,17 @@ class Chargify
 
 	  	if ($r->getResponseCode() == 200)
 	  	{
-	    	return json_decode($r->getResponseBody(), true);
+	    	return json_decode($r->getBody()->toString(), true);
 	  	}
 	  	else
 	  	{
 	  		if ($r->getResponseCode() == 422)
 	  		{
-		  		$response = json_decode($r->getResponseBody(), true);
+		  		$response = json_decode($r->getBody()->toString(), true);
 		  		throw new Exception($response['errors'][0]);
 	  		}
 
-	  		throw new Exception("Cannot get subscription info. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+	  		throw new Exception("Cannot get subscription info. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
 	  	}
   	}
 
@@ -303,7 +313,7 @@ class Chargify
 
 	  	if ($r->getResponseCode() == 200)
 	  	{
-	  		$result = json_decode($r->getResponseBody(), true);
+	  		$result = json_decode($r->getBody()->toString(), true);
 	  		$retval = array();
 	  		foreach ($result as $r) {
 	  			$retval[$r['component']['component_id']] = $r['component'];
@@ -315,11 +325,11 @@ class Chargify
 	  	{
 	  		if ($r->getResponseCode() == 422)
 	  		{
-		  		$response = json_decode($r->getResponseBody(), true);
+		  		$response = json_decode($r->getBody()->toString(), true);
 		  		throw new Exception($response['errors'][0]);
 	  		}
 
-	  		throw new Exception("Cannot get subscription info. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+	  		throw new Exception("Cannot get subscription info. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
 	  	}
   	}
 
@@ -343,17 +353,17 @@ class Chargify
 
 		if ($r->getResponseCode() == 200)
 	  	{
-	    	return json_decode($r->getResponseBody(), true);
+	    	return json_decode($r->getBody()->toString(), true);
 	  	}
 	  	else
 	  	{
 	  		if ($r->getResponseCode() == 422)
 	  		{
-		  		$response = json_decode($r->getResponseBody(), true);
+		  		$response = json_decode($r->getBody()->toString(), true);
 		  		throw new Exception($response['errors'][0]);
 	  		}
 
-	  		throw new Exception("Cannot upgrade subscription. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+	  		throw new Exception("Cannot upgrade subscription. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
 	  	}
 	}
 
@@ -483,7 +493,7 @@ class Chargify
 
 	  	if ($r->getResponseCode() == 200)
 	  	{
-	  		$xml_node = new SimpleXMLElement($r->getResponseBody());
+	  		$xml_node = new SimpleXMLElement($r->getBody()->toString());
 	    	$subscription = new ChargifySubscription($xml_node);
 	    	return $subscription;
 	  	}
@@ -491,12 +501,12 @@ class Chargify
 	  	{
 	  		if ($r->getResponseCode() == 422)
 	  		{
-		  		$xml_node = new SimpleXMLElement($r->getResponseBody());
+		  		$xml_node = new SimpleXMLElement($r->getBody()->toString());
 		  		if ($xml_node->error)
 		  			return (string)$xml_node->error;
 	  		}
 
-	  		throw new Exception("Cannot get subscription info. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+	  		throw new Exception("Cannot get subscription info. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
 	  	}
   	}
 
@@ -507,7 +517,7 @@ class Chargify
 
   	if ($r->getResponseCode() == 200)
   	{
-    	var_dump($r->getResponseBody());
+    	var_dump($r->getBody()->toString());
 
   		return true;
   	}
@@ -515,14 +525,14 @@ class Chargify
   	{
   		if ($r->getResponseCode() == 422)
   		{
-	  		$xml_node = new SimpleXMLElement($r->getResponseBody());
+	  		$xml_node = new SimpleXMLElement($r->getBody()->toString());
 	  		if ($xml_node->error)
 	  			return (string)$xml_node->error;
   		}
 
-  		var_dump($r->getResponseBody());
+  		var_dump($r->getBody()->toString());
 
-  		throw new Exception("Cannot create usage. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+  		throw new Exception("Cannot create usage. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
   	}
 
   }
@@ -543,7 +553,7 @@ class Chargify
 
   	if ($r->getResponseCode() == 200)
   	{
-    	var_dump($r->getResponseBody());
+    	var_dump($r->getBody()->toString());
 
   		return true;
   	}
@@ -551,14 +561,14 @@ class Chargify
   	{
   		if ($r->getResponseCode() == 422)
   		{
-	  		$xml_node = new SimpleXMLElement($r->getResponseBody());
+	  		$xml_node = new SimpleXMLElement($r->getBody()->toString());
 	  		if ($xml_node->error)
 	  			return (string)$xml_node->error;
   		}
 
-  		var_dump($r->getResponseBody());
+  		var_dump($r->getBody()->toString());
 
-  		throw new Exception("Cannot create usage. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+  		throw new Exception("Cannot create usage. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
   	}
 
   }
@@ -592,7 +602,7 @@ class Chargify
 
   	if ($r->getResponseCode() == 201)
   	{
-    	$xml_node = new SimpleXMLElement($r->getResponseBody());
+    	$xml_node = new SimpleXMLElement($r->getBody()->toString());
     	$customer = new ChargifyCustomer($xml_node);
     	return $customer;
   	}
@@ -600,12 +610,12 @@ class Chargify
   	{
   		if ($r->getResponseCode() == 422)
   		{
-	  		$xml_node = new SimpleXMLElement($r->getResponseBody());
+	  		$xml_node = new SimpleXMLElement($r->getBody()->toString());
 	  		if ($xml_node->error)
 	  			return (string)$xml_node->error;
   		}
 
-  		throw new Exception("Cannot add new client. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
+  		throw new Exception("Cannot add new client. Response code: ".$r->getResponseCode().". Response body: ".$r->getBody()->toString());
   	}
   }
 
@@ -613,7 +623,8 @@ class Chargify
 	{
 	  	try
 	  	{
-		  	$request = new HttpRequest("https://{$this->domain}.chargify.com{$uri}");
+		  	$url = new \http\Url("https://{$this->domain}.chargify.com{$uri}", null, \http\Url::PARSE_MBLOC | \http\Url::PARSE_MBUTF8 | \http\Url::PARSE_TOPCT);
+		  	$request = new Request($method, $url);
 		  	$request->setHeaders(array(
 		  	    'Content-Type' => 'application/json',
 		  	    'Authorization' => 'Basic '. base64_encode("{$this->apiKey}:x")
@@ -625,14 +636,7 @@ class Chargify
 		  		'ssl' => array('version' => 1)
 		  	));
 
-		  	$request->setMethod(constant("HTTP_METH_{$method}"));
-		  	
-		  	if ($method == 'POST' && $data)
-		  		$request->setBody($data);
-
-		  	if ($method == 'PUT') {
-		  		$request->addPutData($data);
-		  	}
+            $request->getBody()->append($data);
 	  	}
 	  	catch(Exception $e)
 	  	{
@@ -640,15 +644,15 @@ class Chargify
 	  		throw $e;
 	  	}
 
-	  	$request->send();
+        $response = (new \http\Client())->enqueue($request)->send()->getResponse($request);
 
-	  	if ($request->getResponseCode() == 500)
+	  	if ($response->getResponseCode() == 500)
 	  		throw new Exception("Unable to proceed your request at the moment. Please try again later.");
 
-	  	if ($request->getResponseCode() == 404)
+	  	if ($response->getResponseCode() == 404)
 	  		throw new Exception("Unable to proceed your request. Please contact billing@scalr.net to get help.");
 
-	  	return $request;
+	  	return $response;
 	}
 }
 ?>

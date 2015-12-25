@@ -1,0 +1,28 @@
+{
+    "name": "scalr/scalr",
+    "description": "Scalr is open source cloud management platform",
+    "keywords": ["aws", "ec2", "gce", "openstack", "cloudstack", "azure", "scalr"],
+    "homepage": "http://www.scalr.com/",
+    "license": "Apache License Version 2.0",
+    "support": {
+        "wiki": "https://scalr-wiki.atlassian.net/"
+    },
+    "require": {
+        "php": "~5.6.13",
+        "google/apiclient" : "1.1.6",
+        "onelogin/php-saml": "2.6.1"
+    },
+    "require-dev": {
+    },
+    "minimum-stability" : "stable",
+    "scripts": {
+    },
+    "autoload": {
+        "files": ["app/src/prepend.inc.php"]
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-master": "5.10.x-dev"
+        }
+    }
+}

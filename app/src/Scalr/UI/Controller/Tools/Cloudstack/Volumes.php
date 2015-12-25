@@ -24,6 +24,8 @@ class Scalr_UI_Controller_Tools_Cloudstack_Volumes extends Scalr_UI_Controller
 
     public function xRemoveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_CLOUDSTACK_VOLUMES, Acl::PERM_CLOUDSTACK_VOLUMES_MANAGE);
+
         $this->request->defineParams(array(
             'volumeId' => array('type' => 'json'),
             'cloudLocation'

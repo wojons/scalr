@@ -1,4 +1,10 @@
 Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, moduleParams) {
+    var isChefReadOnly = false;
+    if (Scalr.scope === 'environment') {
+        isChefReadOnly = !Scalr.isAllowed('SERVICES_CHEF_ENVIRONMENT', 'manage');
+    } else if (Scalr.scope === 'account') {
+        isChefReadOnly = !Scalr.isAllowed('SERVICES_CHEF_ACCOUNT', 'manage');
+    }
     var store = Ext.create('store.store', {
         fields: [
             'id',
@@ -11,21 +17,21 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
             'status'
         ],
         data: moduleParams['servers'],
-		proxy: {
-			type: 'ajax',
-			url: '/services/chef/servers/xList/',
+        proxy: {
+            type: 'ajax',
+            url: '/services/chef/servers/xList/',
             reader: {
                 type: 'json',
                 rootProperty: 'servers',
                 successProperty: 'success'
             }
-		},
-		sorters: [{
-			property: 'id'
-		}]
-	});
+        },
+        sorters: [{
+            property: 'id'
+        }]
+    });
 
-	var reconfigurePage = function(params) {
+    var reconfigurePage = function(params) {
         if (params.chefServerId) {
             cb = function() {
                 if (params.chefServerId === 'new') {
@@ -50,12 +56,13 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
         cls: 'x-panel-column-left x-panel-column-left-with-tabs',
         store: store,
         flex: 1,
-        selModel: {
-            selType: 'selectedmodel',
-            getVisibility: function(record) {
-                return Scalr.scope == record.get('scope');
-            }
-        },
+        selModel:
+            !isChefReadOnly ? {
+                selType: 'selectedmodel',
+                getVisibility: function(record) {
+                    return Scalr.scope == record.get('scope');
+                }
+            } : null,
         plugins: ['focusedrowpointer', {ptype: 'selectedrecord', disableSelection: false, clearOnRefresh: true}],
         columns: [{
             text: 'URL',
@@ -128,6 +135,7 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
                 text: 'New chef server',
                 cls: 'x-btn-green',
                 enableToggle: true,
+                hidden: isChefReadOnly,
                 toggleHandler: function (button, state) {
                     if (state) {
                         grid.clearSelectedRecord();
@@ -153,6 +161,7 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
                 cls: 'x-btn-red',
                 disabled: true,
                 tooltip: 'Delete chef server',
+                hidden: isChefReadOnly,
                 handler: function() {
                     var action = this.getItemId(),
                         actionMessages = {
@@ -186,7 +195,7 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
                                             selModel.deselect(recordsToDelete[i]);
                                         }
                                         grid.store.remove(recordsToDelete);
-                                    break;
+                                        break;
                                 }
                             }
                         }
@@ -200,9 +209,9 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
         }]
     });
 
-	var form = 	Ext.create('Ext.form.Panel', {
-		hidden: true,
-		layout: {
+    var form = 	Ext.create('Ext.form.Panel', {
+        hidden: true,
+        layout: {
             type: 'vbox',
             align: 'stretch'
         },
@@ -217,7 +226,7 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
                         .setTooltip(disabled && !Ext.isEmpty(scope)
                             ? Scalr.utils.getForbiddenActionTip('chef server', scope)
                             : ''
-                        )
+                    )
                         .setDisabled(disabled);
                 }
             );
@@ -236,65 +245,70 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
             }
             return me;
         },
-		listeners: {
-			hide: function() {
-    			//grid.down('#add').setDisabled(false);
-			},
-			beforeloadrecord: function(record) {
-				var frm = this.getForm(),
-					isNewRecord = !record.store;
+        listeners: {
+            hide: function() {
+                //grid.down('#add').setDisabled(false);
+            },
+            beforeloadrecord: function(record) {
+                var frm = this.getForm(),
+                    isNewRecord = !record.store;
 
                 if (Scalr.scope == record.get('scope')) {
                     this.down('#clientAuth').show();
                     this.down('#clientVAuth').show();
                     this.disableButtons(false);
-                    frm.findField('url').setReadOnly(false);
-                    this.down('#formtitle').setTitle(isNewRecord ? 'New chef server' : 'Edit chef server');
+                    frm.findField('url').setReadOnly(isChefReadOnly || false);
+                    this.down('#formtitle').setTitle((isChefReadOnly ? 'View' :(isNewRecord ? 'New' : 'Edit')) + ' chef server');
                     this.down('#save').setText(isNewRecord ? 'Create' : 'Save');
                 } else {
-                    //warning.down('displayfield').setValue('You don\'t have permission to view authorization settings for a <b>Chef Server</b> defined in the ' + Ext.String.capitalize(record.get('scope')) + ' Scope.');
                     this.down('#clientAuth').hide();
                     this.down('#clientVAuth').hide();
                     this.disableButtons(true, record.get('scope'));
                     frm.findField('url').setReadOnly(true);
-                    this.down('#formtitle').setTitle('Edit chef server');
+                    this.down('#formtitle').setTitle((isChefReadOnly ? 'View' : 'Edit') + ' chef server');
                     this.down('#save').setText('Save');
                 }
 
+                frm.getFields().each(function(field){
+                    if (field.name !== 'url') {
+                        field.setReadOnly(isChefReadOnly);
+                    }
+                });
 
-				var c = this.query('component[cls~=hideoncreate], #delete');
-				for (var i=0, len=c.length; i<len; i++) {
-					c[i].setVisible(!isNewRecord);
-				}
+                var c = this.query('component[cls~=hideoncreate], #delete');
+                for (var i=0, len=c.length; i<len; i++) {
+                    c[i].setVisible(!isNewRecord);
+                }
                 grid.down('#add').toggle(isNewRecord, true);
                 this.toggleScopeInfo(record);
             }
-		},
-		fieldDefaults: {
-			anchor: '100%',
+        },
+        fieldDefaults: {
+            anchor: '100%',
             labelWidth: 70,
             allowBlank: false
-		},
-		items: [{
+        },
+        autoScroll: true,
+        items: [{
             xtype: 'displayfield',
             itemId: 'scopeInfo',
             cls: 'x-form-field-info x-form-field-info-fit',
             width: '100%',
             hidden: true
         },{
-			xtype: 'fieldset',
+            xtype: 'fieldset',
             itemId: 'formtitle',
             margin: '0 0 24',//fieldset layout bug fix
-			items: [{
+            items: [{
                 xtype: 'displayfield',
                 submitValue: true,
                 fieldLabel: 'ID',
                 cls: 'hideoncreate',
                 name: 'id'
             },{
-				xtype: 'textfield',
-				name: 'url',
-				fieldLabel: 'URL',
+                xtype: 'textfield',
+                name: 'url',
+                fieldLabel: 'URL',
                 hideInputOnReadOnly: true
             },{
                 xtype: 'displayfield',
@@ -326,153 +340,156 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
                 }
             }]
         },{
-			xtype: 'fieldset',
-			title: 'Client authorization',
+            xtype: 'fieldset',
+            title: 'Client authorization',
             itemId: 'clientAuth',
             layout: {
                 type: 'vbox',
                 align: 'stretch'
             },
             flex: 1,
-			items: [{
-				xtype: 'textfield',
-				name: 'username',
-				fieldLabel: 'Username'
-			},{
-				xtype: 'textarea',
-				flex: 1,
-				name: 'authKey',
-				fieldLabel: 'Key'
+            minHeight: 200,
+            items: [{
+                xtype: 'textfield',
+                name: 'username',
+                fieldLabel: 'Username'
+            },{
+                xtype: 'textarea',
+                flex: 1,
+                name: 'authKey',
+                fieldLabel: 'Key'
 
-			}]
-		},{
-			xtype: 'fieldset',
-			title: 'Client validator authorization',
+            }]
+        },{
+            xtype: 'fieldset',
+            title: 'Client validator authorization',
             cls: 'x-fieldset-separator-none',
             itemId: 'clientVAuth',
             layout: {
                 type: 'vbox',
                 align: 'stretch'
             },
+            minHeight: 200,
             flex: 1,
-			items: [{
-				xtype: 'textfield',
-				name: 'vUsername',
-				fieldLabel: 'Username'
-			},{
-				xtype: 'textarea',
-				flex: 1,
-				name: 'vAuthKey',
-				fieldLabel: 'Key'
+            items: [{
+                xtype: 'textfield',
+                name: 'vUsername',
+                fieldLabel: 'Username'
+            },{
+                xtype: 'textarea',
+                flex: 1,
+                name: 'vAuthKey',
+                fieldLabel: 'Key'
 
-			}]
-		}],
-		dockedItems: [{
-			xtype: 'container',
+            }]
+        }],
+        dockedItems: [{
+            xtype: 'container',
             itemId: 'buttons',
-			dock: 'bottom',
-			cls: 'x-docked-buttons',
-			layout: {
-				type: 'hbox',
-				pack: 'center'
-			},
+            dock: 'bottom',
+            cls: 'x-docked-buttons',
+            hidden: isChefReadOnly,
+            layout: {
+                type: 'hbox',
+                pack: 'center'
+            },
             maxWidth: 1100,
             defaults: {
                 flex: 1,
                 maxWidth: 140
             },
-			items: [{
-				itemId: 'save',
-				xtype: 'button',
-				text: 'Save',
-				handler: function() {
-					var frm = form.getForm(),
+            items: [{
+                itemId: 'save',
+                xtype: 'button',
+                text: 'Save',
+                handler: function() {
+                    var frm = form.getForm(),
                         record = frm.getRecord();
-					if (frm.isValid()) {
-						Scalr.Request({
-							processBox: {
-								type: 'save'
-							},
-							url: '/services/chef/servers/xSave',
+                    if (frm.isValid()) {
+                        Scalr.Request({
+                            processBox: {
+                                type: 'save'
+                            },
+                            url: '/services/chef/servers/xSave',
                             form: frm,
-							success: function (data) {
-								if (!record.store) {
-									record = store.add(data.server)[0];
-								} else {
-									record.set(data.server);
-								}
+                            success: function (data) {
+                                if (!record.store) {
+                                    record = store.add(data.server)[0];
+                                } else {
+                                    record.set(data.server);
+                                }
                                 grid.clearSelectedRecord();
                                 grid.setSelectedRecord(record);
                                 Scalr.CachedRequestManager.get().setExpired({url: '/services/chef/servers/xListServers/'});
-							}
-						});
-					}
-				}
-			}, {
-				itemId: 'cancel',
-				xtype: 'button',
-				text: 'Cancel',
-				handler: function() {
+                            }
+                        });
+                    }
+                }
+            }, {
+                itemId: 'cancel',
+                xtype: 'button',
+                text: 'Cancel',
+                handler: function() {
                     grid.clearSelectedRecord();
                     grid.down('#add').toggle(false, true);
-				}
-			}, {
-				itemId: 'delete',
-				xtype: 'button',
-				cls: 'x-btn-red',
-				text: 'Delete',
-				handler: function() {
-					var record = form.getForm().getRecord();
-					Scalr.Request({
-						confirmBox: {
-							msg: 'Delete chef server?',
-							type: 'delete'
-						},
-						processBox: {
-							msg: 'Deleting...',
-							type: 'delete'
-						},
-						scope: this,
-						url: '/services/chef/servers/xRemove',
-						params: {id: record.get('id')},
-						success: function (data) {
-							record.store.remove(record);
-						}
-					});
-				}
-			}]
-		}]
-	});
+                }
+            }, {
+                itemId: 'delete',
+                xtype: 'button',
+                cls: 'x-btn-red',
+                text: 'Delete',
+                handler: function() {
+                    var record = form.getForm().getRecord();
+                    Scalr.Request({
+                        confirmBox: {
+                            msg: 'Delete chef server?',
+                            type: 'delete'
+                        },
+                        processBox: {
+                            msg: 'Deleting...',
+                            type: 'delete'
+                        },
+                        scope: this,
+                        url: '/services/chef/servers/xRemove',
+                        params: {id: record.get('id')},
+                        success: function (data) {
+                            record.store.remove(record);
+                        }
+                    });
+                }
+            }]
+        }]
+    });
 
 
-	var panel = Ext.create('Ext.panel.Panel', {
-		layout: {
-			type: 'hbox',
-			align: 'stretch'
-		},
-		scalrOptions: {
-			maximize: 'all',
+    var panel = Ext.create('Ext.panel.Panel', {
+        layout: {
+            type: 'hbox',
+            align: 'stretch'
+        },
+        scalrOptions: {
+            maximize: 'all',
             menuTitle: 'Chef servers',
             menuHref: '#' + Scalr.utils.getUrlPrefix() + '/services/chef/servers',
             menuFavorite: Ext.Array.contains(['account', 'environment'], Scalr.scope),
-		},
+        },
         stateId: 'grid-chef-servers',
         listeners: {
             applyparams: reconfigurePage
         },
         items: [
             grid
-        ,{
-            xtype: 'container',
-            itemId: 'rightcol',
-            flex: .8,
-            maxWidth: 640,
-            minWidth: 400,
-            layout: 'fit',
-            items: form
-        }]
-	});
+            ,{
+                xtype: 'container',
+                itemId: 'rightcol',
+                flex: .8,
+                maxWidth: 640,
+                minWidth: 400,
+                layout: 'fit',
+                items: form
+            }]
+    });
 
-	return panel;
+    return panel;
 
 });

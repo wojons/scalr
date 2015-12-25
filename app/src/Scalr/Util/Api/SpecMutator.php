@@ -17,7 +17,7 @@ abstract class SpecMutator
      *
      * @var array
      */
-    private $spec;
+    protected $spec;
 
     /**
      * Sets api spec

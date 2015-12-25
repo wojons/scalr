@@ -32,17 +32,14 @@ namespace Scalr\DependencyInjection;
  * @property \Scalr\Service\CloudStack\CloudStack $cloudstack
  *           The Cloudstack instance for the last instantiated user's environment.
  *
+ * @property \Scalr\Service\Azure $azure
+ *           The Azure instance for the last instantiated user's environment.
+ *
  * @property \Scalr_UI_Request $request
  *           The Scalr_UI_Request instance.
  *
  * @property \Scalr_Account_User $user
  *           The Scalr_Account_User instance which is property for the request.
- *
- * @property \Scalr\Logger\AuditLog $auditLog
- *           The AuditLog.
- *
- * @property \Scalr\Logger\LoggerStorageInterface $auditLogStorage
- *           The AuditLogStorage
  *
  * @property \Scalr\SimpleMailer $mailer
  *           Returns the new instance of the SimpleMailer class.
@@ -78,6 +75,21 @@ namespace Scalr\DependencyInjection;
  * @property \Scalr\Util\CryptoTool $srzcrypto
  *           Gets Scalarizr cryptotool
  *
+ * @property \Scalr\System\Http\Client $http
+ *           Gets PECL http 2.x client
+ *
+ * @property \Scalr\System\Http\Client $srzhttp
+ *           Gets PECL http 2.x client configured for scalarizr
+ *
+ * @property array $version
+ *           Gets information about Scalr version
+ *
+ * @property \OneLogin_Saml2_Auth $saml
+ *           Gets SAML 2.0 Auth
+ *
+ * @property \Scalr\AuditLogger $auditlogger
+ *           Gets AuditLogger instance
+ *
  *
  * @method   mixed config()
  *           config(string $name)
@@ -91,16 +103,16 @@ namespace Scalr\DependencyInjection;
  *               string $privateKey = null)
  *           Gets an Aws instance.
  *
- * @method   \Scalr\Service\Eucalyptus eucalyptus()
- *           eucalyptus(string|\DBServer|\DBFarmRole $cloudLocation, \Scalr_Environment $env = null)
- *           Gets an Eucalyptus instance
- *
  * @method   \Scalr\Service\CloudStack\CloudStack cloudstack()
  *           cloudstack(string $platform = null,
  *                      string|\Scalr_Environment $apiUrl = null,
  *                      string $apiKey = null,
  *                      string $secretKey = null)
  *           Gets an CloudStack instance.
+ *
+ * @method   \Scalr\Service\Azure azure()
+ *           azure()
+ *           Gets an Azure instance.
  *
  * @method   \Scalr\Service\OpenStack\OpenStack openstack()
  *           openstack(string|\Scalr\Service\OpenStack\OpenStackConfig $platform, string $region, \Scalr_Environment $env = null)
@@ -129,6 +141,20 @@ namespace Scalr\DependencyInjection;
  * @method   \Scalr\Util\CryptoTool srzcrypto(mixed $cryptoKey = null)
  *           srzcrypto(string|resource|SplFileObject|array $cryptoKey = null)
  *           Gets Scalarizr cryptographic tool
+ *
+ * @method   \Scalr\System\Http\Client http()
+ *           Gets PECL http 2.x client
+ *
+ * @method   \Scalr\System\Http\Client srzhttp()
+ *           Gets PECL http 2.x client configured for scalarizr
+ *
+ * @method   array version()
+ *           version(string $part = 'full')
+ *           Gets information about Scalr version
+ *
+ * @method   \Scalr\Model\Entity\CloudCredentials cloudCredentials(string $cloud, int $envId = null)
+ *           cloudCredential(string $cloud, int $envId = null)
+ *           Gets specified cloud credentials for specified environment
  */
 class Container extends BaseContainer
 {

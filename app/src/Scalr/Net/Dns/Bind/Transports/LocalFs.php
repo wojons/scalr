@@ -12,7 +12,7 @@ class Scalr_Net_Dns_Bind_Transports_LocalFs implements Scalr_Net_Dns_Bind_Transp
 
     public function __construct($rndcPath, $zonesPath)
     {
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
 
         $this->shell = new Scalr_System_Shell();
 

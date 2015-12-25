@@ -1,6 +1,7 @@
 <?php
 namespace Scalr\Service\Aws\Elb\Handler;
 
+use Scalr\Service\Aws\Elb\DataType\AttributesData;
 use Scalr\Service\Aws\Elb\DataType\BackendServerDescriptionData;
 use Scalr\Service\Aws\Elb\DataType\ListenerDescriptionData;
 use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionList;
@@ -12,6 +13,7 @@ use Scalr\Service\Aws\Elb\DataType\ListenerList;
 use Scalr\Service\Aws\Elb\DataType\ListenerData;
 use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionData;
+use Scalr\Service\Aws\Elb\DataType\ModifyLoadBalancerAttributes;
 use Scalr\Service\Aws\Elb\DataType\TagDescriptionList;
 use Scalr\Service\Aws\Elb\DataType\TagsList;
 use Scalr\Service\Aws\ElbException;
@@ -94,6 +96,19 @@ class LoadBalancerHandler extends AbstractElbHandler
     public function describe($loadBalancerNamesList = null, $marker = null)
     {
         return $this->getElb()->describeLoadBalancers($loadBalancerNamesList, $marker);
+    }
+
+    /**
+     * ModifyLoadBalancerAttributes action
+     *
+     * @param  ModifyLoadBalancerAttributes $attributes           Load Balancer attributes data to modify
+     * @return AttributesData Returns load balancer attributes data.
+     * @throws ElbException
+     * @throws ClientException
+     */
+    public function modifyAttributes(ModifyLoadBalancerAttributes $attributes)
+    {
+        return $this->getElb()->getApiHandler()->modifyLoadBalancerAttributes($attributes);
     }
 
     /**
@@ -571,4 +586,5 @@ class LoadBalancerHandler extends AbstractElbHandler
     {
         return $this->getElb()->getEntityManager()->getRepository('Elb:LoadBalancerDescription')->find($loadBalancerName);
     }
+
 }

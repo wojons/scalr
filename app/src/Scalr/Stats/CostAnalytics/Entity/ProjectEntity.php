@@ -7,6 +7,7 @@ use Scalr\Exception\AnalyticsException;
 use Scalr\Stats\CostAnalytics\Usage;
 use DateTime, DateTimeZone;
 use Scalr\Model\Collections\ArrayCollection;
+use Scalr\Model\Entity;
 
 /**
  * ProjectEntity
@@ -272,14 +273,13 @@ class ProjectEntity extends \Scalr\Model\AbstractEntity implements AccessPermiss
     public function save()
     {
         //Checks data integrity.
-
-        $criteria = [['name' => $this->name]];
+        $criteria = [['name' => $this->name], ['ccId' => $this->ccId]];
 
         if ($this->projectId) {
             $criteria[] = ['projectId' => ['$ne' => $this->projectId]];
         }
 
-        //The name of the project should be unique withing the global
+        //The name of the project should be unique withing the current cost center
         $item = ProjectEntity::findOne($criteria);
 
         if ($item) {
@@ -309,7 +309,6 @@ class ProjectEntity extends \Scalr\Model\AbstractEntity implements AccessPermiss
     public function checkRemoval()
     {
         //Checks data integrity
-
         if ($this->projectId == Usage::DEFAULT_PROJECT_ID) {
             throw new AnalyticsException(sprintf(
                 "'%s' is default automatically created Project and it can not be archived.",
@@ -323,7 +322,7 @@ class ProjectEntity extends \Scalr\Model\AbstractEntity implements AccessPermiss
             WHERE fs.name = ? AND fs.value = ?
             LIMIT 1
         ", [
-            \DBFarm::SETTING_PROJECT_ID,
+            Entity\FarmSetting::PROJECT_ID,
             strtolower($this->projectId)
         ]);
 
@@ -413,7 +412,6 @@ class ProjectEntity extends \Scalr\Model\AbstractEntity implements AccessPermiss
         if ($user->isFinAdmin() || $user->isScalrAdmin()) {
             return true;
         } else if ($modify) {
-            //FIXME CostCentreEntity::hasAccessPermissions() should be corrected according to logic
             return false;
         }
 

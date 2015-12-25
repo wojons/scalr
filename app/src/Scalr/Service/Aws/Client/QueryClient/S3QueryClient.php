@@ -1,9 +1,14 @@
 <?php
 namespace Scalr\Service\Aws\Client\QueryClient;
 
+use finfo;
+use http\QueryString;
 use Scalr\Service\Aws;
+use Scalr\Service\Aws\Client\ClientException;
+use Scalr\Service\Aws\Client\ClientResponseInterface;
 use Scalr\Service\Aws\Client\QueryClient;
 use Scalr\Service\Aws\Event\EventType;
+use Scalr\System\Http\Request;
 
 /**
  * Amazon S3 Query API client.
@@ -93,41 +98,23 @@ class S3QueryClient extends QueryClient
         }
 
         if ($httpMethod === 'PUT' || $httpMethod === 'POST') {
-            if (array_key_exists('putData', $extraOptions)) {
-                if ($httpMethod === 'PUT') {
-                    $httpRequest->setPutData($extraOptions['putData']);
-                } else {
-                    $httpRequest->setBody($extraOptions['putData']);
-                }
-                if (!isset($options['Content-Length'])) {
-                    $options['Content-Length'] = strlen($extraOptions['putData']);
-                }
-                if (!isset($options['Content-Md5']) && !empty($options['Content-Length'])) {
-                    $options['Content-Md5'] = Aws::getMd5Base64Digest($extraOptions['putData']);
-                }
-            } elseif (array_key_exists('putFile', $extraOptions)) {
-                if ($httpMethod === 'PUT') {
-                    $httpRequest->setPutFile($extraOptions['putFile']);
-                } else {
-                    $httpRequest->setBody(file_get_contents($extraOptions['putFile']));
-                }
-                if (!isset($options['Content-Length'])) {
-                    $options['Content-Length'] = filesize($extraOptions['putFile']);
-                }
-                if (!isset($options['Content-Md5']) && !empty($options['Content-Length'])) {
-                    $options['Content-Md5'] = Aws::getMd5Base64DigestFile($extraOptions['putFile']);
-                }
+            if (!empty($extraOptions['putData'])) {
+                $httpRequest->append($extraOptions['putData']);
+                $options['Content-Md5'] = Aws::getMd5Base64Digest($extraOptions['putData']);
+            } elseif (!empty($extraOptions['putFile'])) {
+                $httpRequest->addFiles([ $extraOptions['putFile'] ]);
+                $options['Content-Md5'] = Aws::getMd5Base64DigestFile($extraOptions['putFile']);
             }
         }
 
-        $httpRequest->setUrl($scheme . '://' . $options['Host'] . $path);
+        $httpRequest->setRequestUrl($scheme . '://' . $options['Host'] . $path);
 
-        $httpRequest->setMethod(constant('HTTP_METH_' . $httpMethod));
+        $httpRequest->setRequestMethod($httpMethod);
 
         $httpRequest->addHeaders($options);
 
         if (true) {
-            $this->signRequestV4($httpRequest, (!empty($extraOptions['region']) ? $extraOptions['region'] : null));
+            $this->signRequestV4($httpRequest, (!empty($extraOptions['region']) ? $extraOptions['region'] : null), empty($extraOptions['putFile']) ? null : $extraOptions['putFile']);
         } else {
             $this->signRequestV3($httpRequest, (isset($extraOptions['subdomain']) ? $extraOptions['subdomain'] : null));
         }
@@ -135,9 +122,9 @@ class S3QueryClient extends QueryClient
         $response = $this->tryCall($httpRequest);
 
         if ($this->getAws() && $this->getAws()->getDebug()) {
-            echo "\n";
-            echo $httpRequest->getRawRequestMessage() . "\n";
-            echo $httpRequest->getRawResponseMessage() . "\n";
+            echo "\n",
+                 "{$httpRequest}\n",
+                 "{$response->getResponse()}\n";
         }
 
         return $response;
@@ -146,7 +133,7 @@ class S3QueryClient extends QueryClient
     /**
      * Signs request with signature v3
      *
-     * @param   \HttpRequest   $request    Http request
+     * @param   Request        $request    Http request
      * @param   string         $subdomain  optional A subdomain
      */
     protected function signRequestV3($request, $subdomain = null)
@@ -154,9 +141,9 @@ class S3QueryClient extends QueryClient
         $time = time();
 
         //Gets the http method name
-        $httpMethod = self::$httpMethods[$request->getMethod()];
+        $httpMethod = $request->getRequestMethod();
 
-        $components = parse_url($request->getUrl());
+        $components = parse_url($request->getRequestUrl());
 
         //Retrieves headers from request
         $options = $request->getHeaders();
@@ -193,21 +180,11 @@ class S3QueryClient extends QueryClient
             //Note that in case of multiple sub-resources, sub-resources must be lexicographically sorted
             //by sub-resource name and separated by '&'. e.g. ?acl&versionId=value.
             if (!empty($components['query'])) {
-                $canonPath = $components['path'] . '?';
+                $pars = (new QueryString($components['query']))->toArray();
 
-                parse_str($components['query'], $subresources);
+                $pars = array_intersect_key($pars, $this->getAllowedSubResources());
 
-                ksort($subresources);
-
-                $allowed = $this->getAllowedSubResources();
-
-                foreach($subresources as $k => $v) {
-                    if (in_array($k, $allowed)) {
-                        $canonPath .= $k . ($v !== '' ? '=' . $v : '' ) . '&';
-                    }
-                }
-
-                $canonPath = substr($canonPath, 0, -1);
+                $canonPath = "{$components['path']}?" . http_build_query($pars);
             }
 
             $canonicalizedResource =

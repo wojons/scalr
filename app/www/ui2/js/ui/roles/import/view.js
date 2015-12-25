@@ -50,6 +50,8 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 },{
                     xtype: 'checkbox',
                     boxLabel: 'Only create an Image, do not create a Role using that Image',
+                    readOnly: !Scalr.isAllowed('ROLES_ENVIRONMENT', 'manage'),
+                    checked: !Scalr.isAllowed('ROLES_ENVIRONMENT', 'manage'),
                     name: 'roleImage',
                     listeners: {
                         afterrender: function() {
@@ -171,18 +173,28 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     xtype: 'container',
                     itemId: 'continue',
                     cls: 'x-docked-buttons',
-                    hidden: true,
                     layout: {
                         type: 'hbox',
                         pack: 'center'
                     },
-                    items: {
+                    defaults: {
+                        width: 140
+                    },
+                    items: [{
                         xtype: 'button',
+                        itemId: 'start',
                         text: 'Start building',
+                        disabled: true,
                         handler: function() {
                             panel.startImport();
                         }
-                    }
+                    },{
+                        xtype: 'button',
+                        text: 'Cancel',
+                        handler: function() {
+                            Scalr.event.fireEvent('close');
+                        }
+                    }]
                 }]
             },{
                 xtype: 'container',
@@ -197,12 +209,45 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 items: [{
                     xtype: 'component',
                     cls: 'x-fieldset-subheader',
-                    html: 'Setup Scalarizr',
+                    html: 'Install Scalarizr <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/1w8b"><img src=' + Ext.BLANK_IMAGE_URL + ' class="x-icon-info" data-qtip="More information"></a>',
                     margin: '-6 0 12 0'
-                },{
-                    xtype: 'displayfield',
-                    cls: 'x-form-field-info',
-                    value: '<a style="white-space:nowrap" class="x-semibold" target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/1w8b">Please follow instructions to install scalarizr on your server.</a><br/><i>Make sure to open TCP port 8013 in your firewall (IPtables,&nbsp;security&nbsp;groups&nbsp;etc.)</i>'
+                }, {
+                    xtype: 'label',
+                    itemId: 'installCmdLabel',
+                    hidden: true,
+                    html: 'Use this command to install Scalarizr on your server. Make sure to open TCP port 8013 in your firewall (IPtables, security groups etc.)'
+                }, {
+                    xtype: 'buttongroupfield',
+                    margin: '6 0 0 0',
+                    hidden: true,
+                    itemId: 'installCmdOs',
+                    defaults: {
+                        width: 170
+                    },
+                    items: [{
+                        text: 'For Linux',
+                        value: 'linux'
+                    }, {
+                        text: 'For Windows',
+                        value: 'windows'
+                    }],
+                    listeners: {
+                        change: function (comp, value) {
+                            if (value) {
+                                this.next().show().setValue(this.commands[value]);
+                            } else {
+                                this.next().hide();
+                            }
+                        }
+                    }
+                }, {
+                    xtype:'textarea',
+                    itemId: 'installCmd',
+                    margin: '6 0 0 0',
+                    readOnly: true,
+                    hidden: true,
+                    height: 60,
+                    selectOnFocus: true
                 },{
                     xtype: 'component',
                     cls: 'x-fieldset-subheader',
@@ -416,7 +461,14 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     var rightcol = this.up('#rightcol');
                     this.bundleTaskId = bundleTaskId;
                     rightcol.down('#progress').updateProgress('in-progress');
-                    this.down('#fullLog').update('<a target="_blank" href="#/bundletasks/'+bundleTaskId+'/logs">View full log in new tab</a>');
+                    this.down('#fullLog').update('<a href="#">View full log</a>', [], function() {
+                        this.el.down('a').on('click', function(e) {
+                            var logPanel = Scalr.getPage('Scalr.ui.bundletasks.view.logs');
+                            logPanel.bundleTaskId = bundleTaskId;
+                            Scalr.utils.Window(logPanel);
+                            e.preventDefault();
+                        });
+                    });
                     this.loadBundleTaskData();
                 },
                 loadBundleTaskData: function() {
@@ -554,7 +606,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                                     xtype: 'component',
                                     style: 'text-align: center',
                                     margin: '36 0 0',
-                                    html: '<span class="x-fieldset-subheader">Are you sure want to cancel ' + moduleParams['server']['object'] + ' creation?</span>'
+                                    html: '<span class="x-fieldset-subheader x-fieldset-subheader-no-text-transform">Are you sure want to cancel ' + moduleParams['server']['object'] + ' creation?</span>'
                                 },
                                 success: function() {
                                     panel.cancelImport(true);
@@ -637,8 +689,10 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
         onServerInfoChange: function(){
             var leftcol = this.getComponent('leftcol'),
                 serverIdField = leftcol.down('[name="cloudServerId"]'),
-                server = serverIdField.findRecordByValue(serverIdField.getValue());
-            leftcol.down('#continue').setVisible(server && !server.get('isImporting') && !server.get('isManaged') && leftcol.down('[name="roleName"]').isValid());
+                server = serverIdField.findRecordByValue(serverIdField.getValue()),
+                readyToStartImport = server && !server.get('isImporting') && !server.get('isManaged') && leftcol.down('[name="roleName"]').isValid();
+            leftcol.down('#continue').setVisible(!server || !server.get('isImporting'));
+            leftcol.down('#start').setDisabled(!readyToStartImport);
         },
         startImport: function(){
             var me = this,
@@ -668,6 +722,10 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
             this.down('#confirmLaunch').show();
             leftcol.down('#continue').hide();
             leftcol.down('#cmd').setValue(data['command']);
+            leftcol.down('#installCmdLabel').show();
+            leftcol.down('#installCmdOs')['commands'] = data['installCommand'];
+            leftcol.down('#installCmdOs').setValue(data['osType'] || 'linux');
+            leftcol.down('#installCmdOs')[data['osType'] ? 'hide' : 'show']();
             leftcol.down('[name="cloudServerId"]').setDisabled(true);
             leftcol.down('[name="cloudLocation"]').setDisabled(true);
             leftcol.down('[name="roleName"]').setDisabled(true);
@@ -701,19 +759,19 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
             }
 
             leftcol.down('#installinfo').hide();
-            leftcol.down('#continue').hide();
+            leftcol.down('#continue').show();
+            leftcol.down('#start').setDisabled(true);
             leftcol.down('#cmd').setValue('');
+
+            leftcol.down('#installCmdOs').show().reset();
 
             leftcol.down('[name="cloudServerId"]').setValue(null);
             leftcol.down('[name="cloudServerId"]').setDisabled(false);
             leftcol.down('[name="cloudLocation"]').setDisabled(false);
 
-            if (leftcol.down('[name="roleImage"]').getValue()) {
-                leftcol.down('[name="roleImage"]').setDisabled(false);
-            } else {
-                leftcol.down('[name="roleName"]').setDisabled(false);
-                leftcol.down('[name="roleImage"]').setDisabled(false);
-            }
+            leftcol.down('[name="roleName"]').setDisabled(false);
+            leftcol.down('[name="roleImage"]').setDisabled(false);
+
             this.getDockedComponent('tabs').items.each(function(){
                 this.enable();
             });
@@ -908,6 +966,29 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
 
             this.startCommunicationCheck();
         },
+        loadOrphanServer: function () {
+            var me = this;
+
+            var orphanServerParams = moduleParams.orphan;
+            var leftColumn = me.getComponent('leftcol');
+
+            leftColumn.down('[name="cloudLocation"]')
+                .setValue(orphanServerParams.cloudLocation);
+
+            var cloudServerField = leftColumn.down('[name="cloudServerId"]');
+            var roleNameField = me.down('[name="roleName"]');
+
+            cloudServerField.getStore()
+                .on('load', function () {
+                    this.setValue(orphanServerParams.cloudServerId);
+                    roleNameField.clearInvalid();
+                }, cloudServerField, {
+                    single: true
+                })
+                .load();
+
+            roleNameField.focus();
+        },
 
         listeners: {
 			boxready: function () {
@@ -957,6 +1038,8 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                         me.onServerInfoChange();
                         if (moduleParams['step'] && moduleParams['server']) {
                             me.loadServer();
+                        } else if (!Ext.isEmpty(moduleParams.orphan)) {
+                            me.loadOrphanServer();
                         }
                         me.isLoading = false;
                     };
@@ -969,13 +1052,32 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                             url: '/platforms/gce/xGetOptions',
                             params: {}
                         },
-                        function(data, status){
+                        function (data, status) {
                             var locations = {};
                             if (status) {
-                                Ext.Array.each(data['zones'], function(zone){
+                                Ext.Array.each(data['zones'], function (zone) {
                                     if (zone.state === 'UP') {
                                         locations[zone.name] = zone.name;
                                     }
+                                });
+                            }
+                            callback(locations);
+                            leftcol.el.unmask();
+                        },
+                        me
+                    );
+                } else if (platform === 'azure') {
+                    leftcol.el.mask();
+                    Scalr.cachedRequest.load(
+                        {
+                            url: '/platforms/azure/xGetResourceGroups',
+                            params: {}
+                        },
+                        function(data, status){
+                            var locations = {};
+                            if (status) {
+                                Ext.Array.each(data['resourceGroups'], function(group){
+                                    locations[group['id']] = group['name'];
                                 });
                             }
                             callback(locations);

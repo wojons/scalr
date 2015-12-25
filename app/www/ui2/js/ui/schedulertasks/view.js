@@ -1,9 +1,9 @@
 Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams) {
 
-	var store = Ext.create('store.store', {
+    var store = Ext.create('Scalr.ui.ContinuousStore', {
 
-		fields: [
-			'id',
+        fields: [
+            'id',
             'name',
             'type',
             'comments',
@@ -11,7 +11,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
             'targetType',
             'startTime',
             'config',
-			'endTime',
+            'endTime',
             'lastStartTime',
             'timezone',
             'restartEvery',
@@ -21,7 +21,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
             'targetRoleId',
             'targetRoleName',
             'targetId'
-		],
+        ],
 
         proxy: {
             type: 'ajax',
@@ -30,6 +30,15 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                 type: 'json',
                 rootProperty: 'data',
                 successProperty: 'success'
+            }
+        },
+
+        listeners: {
+            beforeload: function () {
+                grid.down('#add').toggle(false, true);
+            },
+            filterchange: function () {
+                grid.down('#add').toggle(false, true);
             }
         },
 
@@ -48,17 +57,17 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
 
             return me;
         }
-	});
+    });
 
-	var grid = Ext.create('Ext.grid.Panel', {
+    var grid = Ext.create('Ext.grid.Panel', {
 
         cls: 'x-panel-column-left',
         flex: 1,
         scrollable: true,
 
-		store: store,
+        store: store,
 
-        plugins: [ 'applyparams', 'focusedrowpointer', {
+        plugins: [ 'applyparams', 'focusedrowpointer', 'continuousrenderer', {
             ptype: 'selectedrecord',
             disableSelection: false,
             clearOnRefresh: true
@@ -76,7 +85,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
             deferEmptyText: false
         },
 
-        selType: 'selectedmodel',
+        selModel: Scalr.isAllowed('GENERAL_SCHEDULERTASKS', 'manage') ? 'selectedmodel' : null,
 
         listeners: {
             selectionchange: function(selModel, selections) {
@@ -107,7 +116,6 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
         },
 
         deleteTask: function (id, name) {
-
             var isDeleteMultiple = Ext.typeOf(id) === 'array';
 
             Scalr.Request({
@@ -133,7 +141,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                 success: function (response) {
                     var deletedTasksIds = response.processed;
 
-                    if (!Ext.isEmpty(deletedTasksIds)) {
+                    if (Ext.isArray(deletedTasksIds)) {
                         store.removeByTaskId(deletedTasksIds);
                     }
                 }
@@ -184,6 +192,30 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
             return me;
         },
 
+        afterActionComplete: function (tasksIds, status) {
+            var me = this;
+
+            var store = me.getStore();
+            var records = [];
+
+            if (Ext.isString(status)) {
+                Ext.Array.each(tasksIds, function (taskId) {
+                    var record = store.getById(taskId);
+                    record.set('status', status);
+
+                    records.push(record);
+                });
+            } else {
+                records = Ext.Array.map(tasksIds, function (taskId) {
+                    return store.getById(taskId);
+                });
+            }
+
+            me.getSelectionModel().deselect(records);
+
+            return me;
+        },
+
         activateSelectedTasks: function () {
             var me = this;
 
@@ -200,12 +232,13 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                     type: 'action'
                 },
                 params: {
-                    tasks: Ext.encode(params.ids)
+                    tasksIds: Ext.encode(params.ids)
                 },
                 url: '/schedulertasks/xActivate/',
-                success: function () {
-                    store.load();
-                    grid.down('#add').toggle(false, true);
+                success: function (response) {
+                    if (Ext.isArray(response.processed)) {
+                        me.afterActionComplete(response.processed, 'Active');
+                    }
                 }
             });
 
@@ -228,12 +261,13 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                     type: 'action'
                 },
                 params: {
-                    tasks: Ext.encode(params.ids)
+                    tasksIds: Ext.encode(params.ids)
                 },
                 url: '/schedulertasks/xSuspend/',
-                success: function () {
-                    store.load();
-                    grid.down('#add').toggle(false, true);
+                success: function (response) {
+                    if (Ext.isArray(response.processed)) {
+                        me.afterActionComplete(response.processed, 'Suspended');
+                    }
                 }
             });
 
@@ -256,21 +290,22 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                     type: 'action'
                 },
                 params: {
-                    tasks: Ext.encode(params.ids)
+                    tasksIds: Ext.encode(params.ids)
                 },
                 url: '/schedulertasks/xExecute/',
-                success: function () {
-                    store.load();
-                    grid.down('#add').toggle(false, true);
+                success: function (response) {
+                    if (Ext.isArray(response.processed)) {
+                        me.afterActionComplete(response.processed);
+                    }
                 }
             });
 
             return me;
         },
 
-		columns: [
-			{ text: 'ID', width: 80, dataIndex: 'id', sortable: true },
-			{ text: 'Task', flex: 1, dataIndex: 'name', sortable: true },
+        columns: [
+            { text: 'ID', width: 80, dataIndex: 'id', sortable: true },
+            { text: 'Task', flex: 1, dataIndex: 'name', sortable: true },
             { text: 'Type', width: 70, dataIndex: 'type', sortable: true, xtype: 'templatecolumn', align: 'center', tpl: [
                 '<img ',
                     'style="cursor: default" class="x-grid-icon x-grid-icon-',
@@ -282,48 +317,53 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                     'data-qtip=\'',
                         '<tpl if="type == &quot;script_exec&quot;">Execute script: <a href="#/scripts/{config.scriptId}/view?version={config.scriptVersion}">{config.scriptName}</a> (<tpl if="config.scriptVersion == -1">latest<tpl else>{config.scriptVersion}</tpl>)</tpl>',
                         '<tpl if="type == &quot;fire_event&quot;">Fire event: {config.eventName}</tpl>',
+                        '<tpl if="type == &quot;launch_farm&quot;">Launch farm</tpl>',
+                        '<tpl if="type == &quot;terminate_farm&quot;">Terminate farm</tpl>',
                     '\' ',
                     'src="' + Ext.BLANK_IMAGE_URL +
                 '"/>'
             ]},
-			/*{ text: 'Target', flex: 3, dataIndex: 'target', sortable: false, xtype: 'templatecolumn', tpl:
-				'<tpl if="targetType == &quot;farm&quot;">Farm: <a href="#/farms?farmId={targetId}" data-qtip="Farm {targetName}">{targetName}</a></tpl>' +
-				'<tpl if="targetType == &quot;role&quot;">Farm: <a href="#/farms?farmId={targetFarmId}" data-qtip="Farm {targetFarmName}">{targetFarmName}</a>' +
-					'&nbsp;&rarr;&nbsp;Role: <a href="#/farms/{targetFarmId}/roles/{targetId}/view" data-qtip="Role {targetName}">{targetName}</a>' +
-				'</tpl>' +
-				'<tpl if="targetType == &quot;instance&quot;">Farm: <a href="#/farms?farmId={targetFarmId}" data-qtip="Farm {targetFarmName}">{targetFarmName}</a>' +
-					'&nbsp;&rarr;&nbsp;Role: <a href="#/farms/{targetFarmId}/roles/{targetRoleId}/view" data-qtip="Role {targetRoleName}">{targetRoleName}</a>' +
-					'&nbsp;&rarr;&nbsp;Server: <a href="#/servers/view?farmId={targetFarmId}" data-qtip="Server {targetName}">{targetName}</a>' +
-				'</tpl>'
-			},*/
-			{ xtype: 'templatecolumn', text: 'Last time executed', width: 170, dataIndex: 'lastStartTime', sortable: true, tpl:
+            { text: 'Start date', flex: 0.5, maxWidth: 165, dataIndex: 'startTime', sortable: true },
+            { text: 'Restart every', width: 120, dataIndex: 'restartEvery', sortable: false, xtype: 'templatecolumn', tpl: new Ext.XTemplate(
+                '<tpl if="restartEvery == 0">Never</tpl>' +
+                '<tpl if="restartEvery != 0">{[this.convertTime(values.restartEvery)]}</tpl>', {
+                    convertTime: function (time) {
+                        if (time > 60) {
+                            var d1 = Math.ceil(time/60), d2 = Math.floor(time/60);
+                            if (d1 == d2) {
+                                time = time/60;
+                                if (time > 24) {
+                                    d1 = Math.ceil(time/24), d2 = Math.floor(time/24);
+                                    if (d1 == d2) {
+                                        time = time/24;
+                                        return time + " days";
+                                    }
+                                } else {
+                                    return time + " hours";
+                                }
+                                time = time * 60;
+                            }
+                        }
+                        return time + " minutes";
+                    }
+                })
+            },
+            { xtype: 'templatecolumn', text: 'Last time executed', flex: 0.5, maxWidth: 165, dataIndex: 'lastStartTime', sortable: true, tpl:
                 '<tpl if="!lastStartTime"><div style="width: 13px; margin: 0 auto">&mdash;</div><tpl else>{lastStartTime}</tpl>'
             },
-			{ text: 'Status', minWidth: 110, width: 110, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'schedulertask'}
-            /*{
-				xtype: 'optionscolumn',
-				getVisibility: function (record) {
-					var reg =/Finished/i;
-					return !reg.test(record.get('status'));
-				},
-				menu: [{
-					iconCls: 'x-menu-icon-edit',
-					text: 'Edit',
-                    showAsQuickAction: true,
-					href: '#/schedulertasks/{id}/edit'
-				}]
-			}*/
-		],
+            { text: 'Timezone', flex: 0.5, maxWidth: 180, dataIndex: 'timezone', sortable: true },
+            { text: 'Status', minWidth: 110, width: 110, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'schedulertask'}
+        ],
 
-		dockedItems: [{
-			xtype: 'toolbar',
-			store: store,
+        dockedItems: [{
+            xtype: 'toolbar',
+            store: store,
             dock: 'top',
             ui: 'simple',
             defaults: {
                 margin: '0 0 0 12'
             },
-			items: [{
+            items: [{
                 xtype: 'filterfield',
                 store: store,
                 filterFields: ['name'],
@@ -333,13 +373,14 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                         grid.getView().refresh();
                     }
                 }
-			}, {
+            }, {
                 xtype: 'tbfill'
             }, {
                 text: 'New task',
                 itemId: 'add',
                 cls: 'x-btn-green',
                 enableToggle: true,
+                hidden: !Scalr.isAllowed('GENERAL_SCHEDULERTASKS', 'manage'),
                 toggleHandler: function (button, state) {
                     if (state) {
                         grid.clearSelectedRecord();
@@ -367,13 +408,13 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                 tooltip: 'Refresh',
                 handler: function () {
                     store.load();
-                    grid.down('#add').toggle(false, true);
                 }
             }, {
                 itemId: 'activate',
                 disabled: true,
                 iconCls: 'x-btn-icon-activate',
                 tooltip: 'Activate',
+                hidden: !Scalr.isAllowed('GENERAL_SCHEDULERTASKS', 'manage'),
                 handler: function () {
                     grid.activateSelectedTasks();
                 }
@@ -382,6 +423,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                 disabled: true,
                 iconCls: 'x-btn-icon-suspend',
                 tooltip: 'Suspend',
+                hidden: !Scalr.isAllowed('GENERAL_SCHEDULERTASKS', 'manage'),
                 handler: function () {
                     grid.suspendSelectedTasks();
                 }
@@ -390,6 +432,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                 disabled: true,
                 iconCls: 'x-btn-icon-launch',
                 tooltip: 'Execute',
+                hidden: !Scalr.isAllowed('GENERAL_SCHEDULERTASKS', 'manage'),
                 handler: function() {
                     grid.executeSelectedTasks();
                 }
@@ -399,12 +442,13 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                 iconCls: 'x-btn-icon-delete',
                 cls: 'x-btn-red',
                 tooltip: 'Delete',
+                hidden: !Scalr.isAllowed('GENERAL_SCHEDULERTASKS', 'manage'),
                 handler: function () {
                     grid.deleteSelectedTasks();
                 }
             }]
-		}]
-	});
+        }]
+    });
 
     var form = Ext.create('Ext.form.Panel', {
 
@@ -592,6 +636,8 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                 applyFarmWidget(farmWidget).
                 hideFieldSets(type);
 
+            me.setFieldsReadOnly(!Scalr.isAllowed('GENERAL_SCHEDULERTASKS', 'manage'));
+
             if (config.scriptId !== 0) {
                 me.applyScriptConfig(config);
                 return me;
@@ -640,6 +686,30 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
             var scriptsStore = me.down('scriptselectfield').getStore();
             scriptsStore.removeAll();
             scriptsStore.loadData(scripts);
+
+            return me;
+        },
+
+        setActualDate: function () {
+            var me = this;
+
+            var startDateField = me.down('[name=startTimeDate]');
+            var startDate = startDateField.getValue();
+            var startTimeField = me.down('[name=startTime]');
+            var startTimeDate = startTimeField.getValue();
+
+            if (!Ext.isEmpty(startDate) && !Ext.isEmpty(startTimeDate)) {
+                startDate = Ext.Date.add(startDate, Ext.Date.HOUR, Ext.Date.format(startTimeDate, 'G'));
+                startDate = Ext.Date.add(startDate, Ext.Date.MINUTE, Ext.Date.format(startTimeDate, 'i'));
+
+                var userTimezoneOffset = Ext.Date.format(new Date(), 'Z');
+                var selectedTimezoneOffset = me.down('[name=timezone]').getOffset();
+                var timestamp = Ext.Date.format(startDate, 'timestamp') - parseInt(userTimezoneOffset) + parseInt(selectedTimezoneOffset);
+                var date = Ext.Date.parse(timestamp, 'timestamp');
+
+                startDateField.setValue(date);
+                startTimeField.setValue(date);
+            }
 
             return me;
         },
@@ -716,6 +786,17 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
             return me;
         },
 
+        setFieldsReadOnly: function (readOnly) {
+            var me = this;
+
+            me.getForm().getFields().each(function (field) {
+                field.setReadOnly(readOnly);
+            });
+            me.down('#eventParams').setReadOnly(readOnly);
+
+            return me;
+        },
+
         listeners: {
             afterloadrecord: function (record) {
                 var me = this;
@@ -729,7 +810,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                     applyInterval(record.get('restartEvery')).
                     hideDeleteButton(false).
                     setSaveButtonText('Save').
-                    setHeader('Edit Task');
+                    setHeader((Scalr.isAllowed('GENERAL_SCHEDULERTASKS', 'manage') ? 'Edit' : 'View') + ' Task');
 
                 grid.down('#add').toggle(false, true);
             }
@@ -796,8 +877,10 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                             setVisible(isTimeDefined).
                             setDisabled(!isTimeDefined);
 
-                        if (isTimeDefined && Ext.isEmpty(form.getRecord())) {
-                            form.setCurrentTime();
+                        if (isTimeDefined) {
+                            form
+                                .setCurrentTime()
+                                .setActualDate();
                         }
                     }
                 }
@@ -824,19 +907,21 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                     margin: '0 0 0 12',
                     listeners: {
                         change: function (timeField, value) {
-                            var minutes = parseInt(Ext.Date.format(value, 'i'));
-                            var modulo =  minutes % 15;
+                            if (!Ext.isEmpty(value)) {
+                                var minutes = parseInt(Ext.Date.format(value, 'i'));
+                                var modulo =  minutes % 15;
 
-                            if (modulo !== 0) {
-                                var hours = parseInt(Ext.Date.format(value, 'H'));
+                                if (modulo !== 0) {
+                                    var hours = parseInt(Ext.Date.format(value, 'H'));
 
-                                minutes = minutes - modulo + 15;
+                                    minutes = minutes - modulo + 15;
 
-                                timeField.setValue(
-                                    minutes !== 60
-                                        ? hours + ':' + minutes
-                                        : (hours + 1) + ':00'
-                                );
+                                    timeField.setValue(
+                                        minutes !== 60
+                                            ? hours + ':' + minutes
+                                            : (hours + 1) + ':00'
+                                    );
+                                }
                             }
                         }
                     }
@@ -852,7 +937,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                     allowBlank: false,
                     value: 30,
                     minValue: 1,
-                    width: 100,
+                    flex: 1,
                     getSubmitValue: function () {
                         var me = this;
 
@@ -871,7 +956,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                     queryMode: 'local',
                     store: [ 'minutes', 'hours', 'days' ],
                     value: 'minutes',
-                    flex: 1,
+                    width: 100,
                     margin: '0 0 0 12'
                 }]
             }, {
@@ -881,9 +966,20 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                 allowBlank: false,
                 forceSelection: true,
                 queryMode: 'local',
-                store: moduleParams['timezones'],
+                editable: false,
+                store: {
+                    fields: ['id', 'name'],
+                    proxy: 'object',
+                    data: moduleParams['timezones']
+                },
+                valueField: 'id',
+                displayField: 'id',
                 value: moduleParams['defaultTimezone'] || '',
-                maxWidth: 350
+                maxWidth: 350,
+                getOffset: function () {
+                    var me = this, record = me.findRecord('id', me.getValue());
+                    return record ? record.get('name') : Ext.Date.format(new Date(), 'Z');
+                }
             }]
         }, {
             xtype: 'farmroles',
@@ -995,6 +1091,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                                         xtype: 'textfield',
                                         fieldLabel: fields[i],
                                         name: 'scriptOptions[' + i + ']',
+                                        readOnly: !Scalr.isAllowed('GENERAL_SCHEDULERTASKS', 'manage'),
                                         value: scriptOptionsValue['scriptOptions[' + i + ']'] ? scriptOptionsValue['scriptOptions[' + i + ']'] : '',
                                         width: '100%'
                                     });
@@ -1053,6 +1150,8 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                     ptype: 'fieldinnericonscope',
                     tooltipScopeType: 'event'
                 },
+                matchFieldWidth: true,
+                listConfig: Scalr.configs.eventsListConfig,
                 displayField: 'name',
                 queryMode: 'local',
                 valueField: 'name',
@@ -1103,6 +1202,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
             xtype: 'container',
             dock: 'bottom',
             cls: 'x-docked-buttons',
+            hidden: !Scalr.isAllowed('GENERAL_SCHEDULERTASKS', 'manage'),
             layout: {
                 type: 'hbox',
                 pack: 'center'
@@ -1157,9 +1257,9 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
         items: [ grid, {
             xtype: 'container',
             itemId: 'rightcol',
-            flex: .6,
-            maxWidth: 900,
-            minWidth: 500,
+            flex: .4,
+            maxWidth: 600,
+            minWidth: 420,
             layout: 'fit',
             items: [ form ]
         }]

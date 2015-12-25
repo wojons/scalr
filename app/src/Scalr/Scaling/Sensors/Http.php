@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\System\Http\Client\Request;
+
 class Scalr_Scaling_Sensors_Http extends Scalr_Scaling_Sensor
 {
     const SETTING_URL = 'url';
@@ -8,23 +10,21 @@ class Scalr_Scaling_Sensors_Http extends Scalr_Scaling_Sensor
     {
         $start_time = microtime(true);
 
-        $HttpRequest = new HttpRequest();
+        $HttpRequest = new Request("GET", $farmRoleMetric->getSetting(self::SETTING_URL));
 
-        $HttpRequest->setOptions(array(
-            "redirect" => 10,
-            "useragent" => "Scalr (http://scalr.net) HTTPResponseTime Scaling Sensor",
+        $HttpRequest->setOptions([
+            "redirect"       => 10,
             "connecttimeout" => 10
-        ));
-        $HttpRequest->setUrl($farmRoleMetric->getSetting(self::SETTING_URL));
-        $HttpRequest->setMethod(constant("HTTP_METH_GET"));
+        ]);
 
         try {
-            $HttpRequest->send();
+            \Scalr::getContainer()->http->sendRequest($HttpRequest);
         } catch (Exception $e) {
-            if ($e->innerException)
+            if ($e->innerException) {
                 $message = $e->innerException->getMessage();
-            else
+            } else {
                 $message = $e->getMessage();
+            }
 
             throw new Exception("HTTPResponseTime Scaling Sensor cannot get value: {$message}");
         }

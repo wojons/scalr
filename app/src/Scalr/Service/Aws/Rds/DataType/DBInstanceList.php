@@ -1,4 +1,5 @@
 <?php
+
 namespace Scalr\Service\Aws\Rds\DataType;
 
 use Scalr\Service\Aws\Rds\RdsListDataType;
@@ -14,7 +15,7 @@ use Scalr\Service\Aws\Rds\RdsListDataType;
  *           If this parameter is specified, the response includes only
  *           records beyond the marker, up to the value specified by MaxRecords
  *
- * @method   string         getMarker() getMarger()     Gets a Marker.
+ * @method   string         getMarker() getMarker()     Gets a Marker.
  * @method   DBInstanceList setMarker() setMarker($val) Sets a Marker value.
  */
 class DBInstanceList extends RdsListDataType
@@ -40,7 +41,7 @@ class DBInstanceList extends RdsListDataType
 
     /**
      * {@inheritdoc}
-     * @see Scalr\Service\Aws\DataType.ListDataType::getQueryArray()
+     * @see Scalr\Service\Aws\DataType\ListDataType::getQueryArray()
      */
     public function getQueryArray($uriParameterName = 'DBInstances', $member = true)
     {

@@ -166,7 +166,7 @@ class AnalyticsNotifications extends AbstractTask
                 $periodData['totals']['forecastCost'] = $periodDataForecast['totals']['forecastCost'];
                 $periodData['name'] = 'Cloud Cost Report';
                 $periodData['jsonVersion'] = '1.0.0';
-                $periodData['detailsUrl'] = $baseUrl . '#/analytics/dashboard';
+                $periodData['detailsUrl'] = $baseUrl . '#/admin/analytics/dashboard';
                 $periodData['totals']['clouds'] = $this->changeCloudNames($periodData['totals']['clouds']);
                 $periodData['date'] = $formatedTitle;
                 $periodData['totals']['budget']['budget'] = null;
@@ -280,7 +280,7 @@ class AnalyticsNotifications extends AbstractTask
             $subjectIdName = 'ccId';
         }
 
-        $periodData['detailsUrl'] = $baseUrl . '#/analytics/' . $subjects . '?' . $subjectIdName . '=' . $subjectId;
+        $periodData['detailsUrl'] = $baseUrl . '#/admin/analytics/' . $subjects . '?' . $subjectIdName . '=' . $subjectId;
         $periodData['period'] = $params['period'];
         $periodData['forecastPeriod'] = $formatedForecastDate;
         $periodData['totals']['forecastCost'] = $periodDataForecast['totals']['forecastCost'];
@@ -368,7 +368,7 @@ class AnalyticsNotifications extends AbstractTask
             'forecastCost'   => $periodSubjectData['totals']['forecastCost'],
             'interval'       => $periodSubjectData['interval'],
             'date'           => $formatedTitle,
-            'detailsUrl'     => $baseUrl . '#/analytics/' . $subjects . '?' . $subjectIdName . '=' . $subject->{$subjectIdName},
+            'detailsUrl'     => $baseUrl . '#/admin/analytics/' . $subjects . '?' . $subjectIdName . '=' . $subject->{$subjectIdName},
             'jsonVersion'    => '1.0.0',
             $childItems     => [],
         ];

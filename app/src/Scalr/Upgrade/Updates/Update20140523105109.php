@@ -3,10 +3,11 @@ namespace Scalr\Upgrade\Updates;
 
 use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
-use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
 use Scalr\Upgrade\SequenceInterface;
 use Scalr\Upgrade\AbstractUpdate;
 use Scalr\Model\Entity\Image;
+use Scalr\Model\Entity\CloudCredentialsProperty;
+use SERVER_PLATFORMS;
 
 class Update20140523105109 extends AbstractUpdate implements SequenceInterface
 {
@@ -16,7 +17,7 @@ class Update20140523105109 extends AbstractUpdate implements SequenceInterface
 
     protected $description = 'Fill new table images from bundle_tasks and role_images';
 
-    protected $ignoreChanges = false;
+    protected $ignoreChanges = true;
 
     public function getNumberStages()
     {
@@ -122,11 +123,12 @@ class Update20140523105109 extends AbstractUpdate implements SequenceInterface
                             break;
 
                         case \SERVER_PLATFORMS::RACKSPACE:
-                            $platform = PlatformFactory::NewPlatform(\SERVER_PLATFORMS::RACKSPACE);
-                            /* @var $platform RackspacePlatformModule */
+                            //TODO: check correct platform name
+                            $ccProps = $env->cloudCredentials($t['cloud_location'] . SERVER_PLATFORMS::RACKSPACE)->properties;
+
                             $client = \Scalr_Service_Cloud_Rackspace::newRackspaceCS(
-                                $env->getPlatformConfigValue(RackspacePlatformModule::USERNAME, true, $t['cloud_location']),
-                                $env->getPlatformConfigValue(RackspacePlatformModule::API_KEY, true, $t['cloud_location']),
+                                $ccProps[CloudCredentialsProperty::RACKSPACE_USERNAME],
+                                $ccProps[CloudCredentialsProperty::RACKSPACE_API_KEY],
                                 $t['cloud_location']
                             );
 
@@ -143,7 +145,7 @@ class Update20140523105109 extends AbstractUpdate implements SequenceInterface
                             /* @var $platform GoogleCEPlatformModule */
                             $client = $platform->getClient($env);
                             /* @var $client \Google_Service_Compute */
-                            $projectId = $env->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID);
+                            $projectId = $env->getPlatformConfigValue(CloudCredentialsProperty::GCE_PROJECT_ID);
                             $snap = $client->images->get($projectId, str_replace($projectId . '/images/', '', $t['id']));
 
                             if ($snap) {
@@ -151,14 +153,6 @@ class Update20140523105109 extends AbstractUpdate implements SequenceInterface
                                 $t['architecture'] = 'x86_64';
                             } else {
                                 $excludedMissing++;
-                            }
-                            break;
-
-                        case \SERVER_PLATFORMS::EUCALYPTUS:
-                            $snap = $env->eucalyptus($t['cloud_location'])->ec2->image->describe($t['id']);
-                            if (count($snap)) {
-                                $add = true;
-                                $t['architecture'] = $snap->toArray()[0]['architecture'];
                             }
                             break;
 

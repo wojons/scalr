@@ -18,12 +18,14 @@ Scalr.regPage('Scalr.ui.account2.variables.view', function (loadParams, modulePa
             cls: 'x-panel-column-left',
             name: 'variables',
             currentScope: 'account',
+            readOnly: !Scalr.isAllowed('GLOBAL_VARIABLES_ACCOUNT', 'manage'),
             value: moduleParams.variables
         },
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
 			cls: 'x-docked-buttons-mini',
+            hidden: !Scalr.isAllowed('GLOBAL_VARIABLES_ACCOUNT', 'manage'),
             weight: 10,
 			layout: {
 				type: 'hbox',

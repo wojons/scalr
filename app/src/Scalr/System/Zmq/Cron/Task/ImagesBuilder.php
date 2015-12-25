@@ -3,6 +3,8 @@
 namespace Scalr\System\Zmq\Cron\Task;
 
 use ArrayObject, Exception, DateTime, DateTimeZone, stdClass;
+use Scalr\Model\Entity\Account\Environment;
+use Scalr\Model\Entity\Account\User;
 use Scalr\System\Zmq\Cron\AbstractTask;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
@@ -18,6 +20,9 @@ use \SERVER_STATUS;
 use \SERVER_SNAPSHOT_CREATION_STATUS;
 use \SERVER_PLATFORMS;
 use \SERVER_REPLACEMENT_TYPE;
+use Scalr;
+use Scalr\Acl\Acl;
+use Scalr\Model\Entity\CloudCredentialsProperty;
 
 /**
  * ImagesBuilder
@@ -104,7 +109,7 @@ class ImagesBuilder extends AbstractTask
         try {
             $dbServer = DBServer::LoadByID($bundleTask->serverId);
         } catch (\Scalr\Exception\ServerNotFoundException $e) {
-            if (!$bundleTask->snapshotId) {
+            if (!$bundleTask->snapshotId && $bundleTask->bundleType != \SERVER_SNAPSHOT_CREATION_TYPE::GCE_WINDOWS) {
                 $bundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::FAILED;
                 $bundleTask->setDate('finished');
                 $bundleTask->failureReason = sprintf(_("Server '%s' was terminated during snapshot creation process"), $bundleTask->serverId);
@@ -199,16 +204,17 @@ class ImagesBuilder extends AbstractTask
                         $cloudLocation = $dbServer->GetCloudLocation();
 
                         $platform = PlatformFactory::NewPlatform($dbServer->platform);
+                        $ccProps = $environment->cloudCredentials($dbServer->platform)->properties;
 
-                        $sharedIpId = $platform->getConfigVariable(CloudstackPlatformModule::SHARED_IP_ID.".{$cloudLocation}", $environment, false);
-                        $sharedIp = $platform->getConfigVariable(CloudstackPlatformModule::SHARED_IP.".{$cloudLocation}", $environment, false);
+                        $sharedIpId = $ccProps[CloudCredentialsProperty::CLOUDSTACK_SHARED_IP_ID . ".{$cloudLocation}"];
+                        $sharedIp = $ccProps[CloudCredentialsProperty::CLOUDSTACK_SHARED_IP . ".{$cloudLocation}"];
 
                         $this->bundleTaskLog("Shared IP: {$sharedIp}");
 
                         $cs = $environment->cloudstack($dbServer->platform);
 
                         // Create port forwarding rules for scalarizr
-                        $port = $platform->getConfigVariable(CloudstackPlatformModule::SZR_PORT_COUNTER.".{$cloudLocation}.{$sharedIpId}", $environment, false);
+                        $port = $ccProps[CloudCredentialsProperty::CLOUDSTACK_SZR_PORT_COUNTER . ".{$cloudLocation}.{$sharedIpId}"];
 
                         if (!$port) {
                             $port1 = 30000;
@@ -276,89 +282,9 @@ class ImagesBuilder extends AbstractTask
                         $dbServer->remoteIp = $sharedIp;
                         $dbServer->Save();
 
-                        $platform->setConfigVariable(array(CloudstackPlatformModule::SZR_PORT_COUNTER.".{$cloudLocation}.{$sharedIpId}" => $port4), $environment, false);
+                        $ccProps->saveSettings([CloudCredentialsProperty::CLOUDSTACK_SZR_PORT_COUNTER . ".{$cloudLocation}.{$sharedIpId}" => $port4]);
                     } catch (Exception $e) {
                         $this->bundleTaskLog("Unable to create port-forwarding rules: {$e->getMessage()}");
-                    }
-
-                    return false;
-                }
-
-                if ($dbServer->platform == SERVER_PLATFORMS::ECS && !$dbServer->remoteIp) {
-                    $this->bundleTaskLog(sprintf(_("Server doesn't have public IP. Assigning...")));
-                    $osClient = $dbServer->GetEnvironmentObject()->openstack(
-                        $dbServer->platform, $dbServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION)
-                    );
-
-                    $ports = $osClient->network->ports->list();
-                    foreach ($ports as $port) {
-                        if ($port->device_id == $dbServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::SERVER_ID)) {
-                            $serverNetworkPort = $port->id;
-                            break;
-                        }
-                    }
-
-                    $ips = $osClient->network->floatingIps->list();
-                    //Check free existing IP
-                    $ipAssigned = false;
-                    $ipAddress = false;
-                    $ipId = false;
-                    $ipInfo = false;
-                    foreach ($ips as $ip) {
-                        if ($ip->port_id && $ip->port_id == $serverNetworkPort) {
-                            $ipAddress = $ip->floating_ip_address;
-                            $ipId = $ip->id;
-                            $ipAssigned = true;
-                            $ipInfo = $ip;
-                            break;
-                        }
-
-                        if (!$ip->fixed_ip_address && !$ipAddress) {
-                            $ipAddress = $ip->floating_ip_address;
-                            $ipId = $ip->id;
-                            $ipInfo = $ip;
-                        }
-                    }
-
-                    if (!$ipAssigned) {
-                        if (!$serverNetworkPort) {
-                            $this->bundleTaskLog("Unable to identify network port of instance");
-                            return false;
-                        } else {
-                            if (!$ipAddress) {
-                                $networks = $osClient->network->listNetworks();
-                                foreach ($networks as $network) {
-                                    if ($network->{"router:external"} == true) {
-                                        $publicNetworkId = $network->id;
-                                    }
-                                }
-
-                                if (!$publicNetworkId) {
-                                    $this->bundleTaskLog("Unable to identify public network to allocate");
-                                    return false;
-                                } else {
-                                    $ip = $osClient->network->floatingIps->create($publicNetworkId, $serverNetworkPort);
-                                    $ipAddress = $ip->floating_ip_address;
-
-                                    $dbServer->SetProperties(array(
-                                        OPENSTACK_SERVER_PROPERTIES::FLOATING_IP => $ip->floating_ip_address,
-                                        OPENSTACK_SERVER_PROPERTIES::FLOATING_IP_ID => $ip->id,
-                                    ));
-
-                                    $this->bundleTaskLog("Allocated new IP {$ipAddress} for port: {$serverNetworkPort}");
-                                }
-                            } else {
-                                $this->bundleTaskLog("Found free floating IP: {$ipAddress} for use (". json_encode($ipInfo) .")");
-                                $osClient->network->floatingIps->update($ipId, $serverNetworkPort);
-                            }
-                        }
-                    } else {
-                        $this->bundleTaskLog("IP: {$ipAddress} already assigned");
-                    }
-
-                    if ($ipAddress) {
-                        $dbServer->remoteIp = $ipAddress;
-                        $dbServer->Save();
                     }
 
                     return false;
@@ -673,14 +599,41 @@ class ImagesBuilder extends AbstractTask
                                         $r_farm_roles[] = $DBFarm->GetFarmRoleByRoleID($bundleTask->prototypeRoleId);
                                     } catch (Exception $e) {}
                                 } elseif ($bundleTask->replaceType == SERVER_REPLACEMENT_TYPE::REPLACE_ALL) {
+                                    $sql = "SELECT f.id FROM farms f WHERE f.env_id = ?";
+                                    $args = [$bundleTask->envId];
+
+                                    /** @var User $user */
+                                    $user = User::findPk($bundleTask->createdById);
+                                    /** @var Environment $env */
+                                    $env = Environment::findPk($bundleTask->envId);
+                                    /** @var Acl $acl */
+                                    $acl = Scalr::getContainer()->acl;
+
+                                    if (!$acl->isUserAllowedByEnvironment($user, $env, Acl::RESOURCE_FARMS, Acl::PERM_FARMS_MANAGE)) {
+                                        $q = [];
+                                        if ($acl->isUserAllowedByEnvironment($user, $env, Acl::RESOURCE_TEAM_FARMS, Acl::PERM_FARMS_MANAGE)) {
+                                            $t = array_map(function($t) { return $t['id']; }, $user->getTeams());
+                                            if (count($t))
+                                                $q[] = "f.team_id IN(" . join(',', $t) . ")";
+                                        }
+
+                                        if ($acl->isUserAllowedByEnvironment($user, $env, Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_MANAGE)) {
+                                            $q[] = "f.created_by_id = ?";
+                                            $args[] = $user->getId();
+                                        }
+
+                                        if (count($q)) {
+                                            $sql .= ' AND (' . join(' OR ', $q) . ')';
+                                        } else {
+                                            $sql .= ' AND false'; // no permissions
+                                        }
+                                    }
+
                                     $farm_roles = $db->GetAll("
-                                        SELECT id FROM farm_roles
-                                        WHERE role_id=?
-                                        AND farmid IN (SELECT id FROM farms WHERE env_id=?)
-                                    ", array(
-                                        $bundleTask->prototypeRoleId,
-                                        $bundleTask->envId
-                                    ));
+                                        SELECT fr.id FROM farm_roles fr
+                                        WHERE fr.role_id=?
+                                        AND fr.farmid IN ({$sql})
+                                    ", array_merge([$bundleTask->prototypeRoleId], $args));
 
                                     foreach ($farm_roles as $farm_role) {
                                         try {

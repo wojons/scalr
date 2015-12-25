@@ -1,8 +1,10 @@
 <?php
 
+use Scalr\Exception\InvalidEntityConfigurationException;
 use Scalr\Model\Entity;
+use Scalr\Model\Entity\FarmRole;
 
-    class Scalr_Role_Behavior_MongoDB extends Scalr_Role_Behavior implements Scalr_Role_iBehavior
+class Scalr_Role_Behavior_MongoDB extends Scalr_Role_Behavior implements Scalr_Role_iBehavior
     {
         /** DBFarmRole settings **/
         const ROLE_DATA_STORAGE_ENGINE = 'mongodb.data_storage.engine';
@@ -67,8 +69,8 @@ use Scalr\Model\Entity;
         public function onFarmSave(DBFarm $dbFarm, DBFarmRole $dbFarmRole)
         {
             if (!$dbFarmRole->GetSetting(self::ROLE_REPLICAS_COUNT)) {
-                $dbFarmRole->SetSetting(self::ROLE_REPLICAS_COUNT, 1, DBFarmRole::TYPE_CFG);
-                $dbFarmRole->SetSetting(self::ROLE_SHARDS_COUNT, 1, DBFarmRole::TYPE_CFG);
+                $dbFarmRole->SetSetting(self::ROLE_REPLICAS_COUNT, 1, Entity\FarmRoleSetting::TYPE_CFG);
+                $dbFarmRole->SetSetting(self::ROLE_SHARDS_COUNT, 1, Entity\FarmRoleSetting::TYPE_CFG);
             }
         }
 
@@ -150,20 +152,24 @@ use Scalr\Model\Entity;
 
         public function onFarmTerminated(DBFarmRole $dbFarmRole)
         {
-            $dbFarmRole->SetSetting(self::ROLE_CLUSTER_STATUS, "", DBFarmRole::TYPE_LCL);
+            $dbFarmRole->SetSetting(self::ROLE_CLUSTER_STATUS, "", Entity\FarmRoleSetting::TYPE_LCL);
         }
 
         public function onBeforeInstanceLaunch(DBServer $dbServer)
         {
             $indexes = $this->getMongoClusterIndexes($dbServer->GetFarmRoleObject());
 
-            Logger::getLogger(LOG_CATEGORY::FARM)->info(new FarmLogMessage($dbServer->farmId, sprintf("MongoDB Scaling: Launching server %s-%s for mongo cluster", $indexes['shardIndex'], $indexes['replicaSetIndex'])));
+            \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->info(new FarmLogMessage(
+                $dbServer->farmId,
+                sprintf("MongoDB Scaling: Launching server %s-%s for mongo cluster", $indexes['shardIndex'], $indexes['replicaSetIndex']),
+                $dbServer->serverId
+            ));
 
             $dbServer->SetProperty(self::SERVER_SHARD_INDEX, $indexes['shardIndex']);
             $dbServer->SetProperty(self::SERVER_REPLICA_SET_INDEX, $indexes['replicaSetIndex']);
 
             if (!$dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_CLUSTER_STATUS) && $indexes['shardIndex'] == 0 && $indexes['replicaSetIndex'] == 0)
-                $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_BUILDING, DBFarmRole::TYPE_LCL);
+                $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_BUILDING, Entity\FarmRoleSetting::TYPE_LCL);
         }
 
         public function getSecurityRules()
@@ -277,11 +283,11 @@ use Scalr\Model\Entity;
                 case "Scalr_Messaging_Msg_MongoDb_ClusterTerminateResult":
 
                     if ($message->status == 'ok') {
-                           $dbFarmRole->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_TERMINATED, DBFarmRole::TYPE_LCL);
+                           $dbFarmRole->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_TERMINATED, Entity\FarmRoleSetting::TYPE_LCL);
                            $this->log($dbFarmRole, "Cluster successfully terminated", "INFO");
                        } else {
                            $this->log($dbFarmRole, "Unable to shutdown mongodb cluster. Received TerminateCluster failed message.", "ERROR");
-                           $dbFarmRole->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_ACTIVE, DBFarmRole::TYPE_LCL);
+                           $dbFarmRole->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_ACTIVE, Entity\FarmRoleSetting::TYPE_LCL);
                        }
 
                     break;
@@ -300,9 +306,9 @@ use Scalr\Model\Entity;
                            return;
 
                        if ($message->status == 'ok') {
-                           $dbFarmRole->SetSetting(self::ROLE_CLUSTER_IS_REMOVING_SHARD_INDEX, null, DBFarmRole::TYPE_LCL);
+                           $dbFarmRole->SetSetting(self::ROLE_CLUSTER_IS_REMOVING_SHARD_INDEX, null, Entity\FarmRoleSetting::TYPE_LCL);
                            $sCount = $dbFarmRole->GetSetting(self::ROLE_SHARDS_COUNT);
-                           $dbFarmRole->SetSetting(self::ROLE_SHARDS_COUNT, $sCount-1, DBFarmRole::TYPE_CFG);
+                           $dbFarmRole->SetSetting(self::ROLE_SHARDS_COUNT, $sCount-1, Entity\FarmRoleSetting::TYPE_CFG);
 
                            // Terminate instances
                            foreach ($dbFarmRole->GetServersByFilter(array('status' => array(SERVER_STATUS::RUNNING, SERVER_STATUS::INIT, SERVER_STATUS::PENDING, SERVER_STATUS::PENDING_LAUNCH))) as $server) {
@@ -353,14 +359,14 @@ use Scalr\Model\Entity;
                     if ($message->mongodb->configServers)
                         $this->setConfigServersConfig($message->mongodb->configServers, $dbServer->GetFarmRoleObject(), $dbServer);
 
-                    $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_KEYFILE, $message->mongodb->keyfile, DBFarmRole::TYPE_LCL);
-                    $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_PASSWORD, $message->mongodb->password, DBFarmRole::TYPE_LCL);
+                    $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_KEYFILE, $message->mongodb->keyfile, Entity\FarmRoleSetting::TYPE_LCL);
+                    $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_PASSWORD, $message->mongodb->password, Entity\FarmRoleSetting::TYPE_LCL);
 
                     $dbServer->SetProperty(self::SERVER_IS_CFG_SERVER, $message->mongodb->configServer);
                     $dbServer->SetProperty(self::SERVER_IS_ROUTER, $message->mongodb->router);
 
                     if (isset($message->mongodb->configServer) || (isset($message->mongodb->configServers) && count($message->mongodb->configServers) > 0)) {
-                        $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_ACTIVE, DBFarmRole::TYPE_LCL);
+                        $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_CLUSTER_STATUS, self::STATUS_ACTIVE, Entity\FarmRoleSetting::TYPE_LCL);
                     }
 
                     break;
@@ -415,9 +421,12 @@ use Scalr\Model\Entity;
                     $snapshotConfig->id,
                     $snapshotConfig->id,
                 ));
-            }
-            catch(Exception $e) {
-                $this->logger->error(new FarmLogMessage($dbFarmRole->FarmID, "Cannot save storage volume: {$e->getMessage()}"));
+            } catch (Exception $e) {
+                $this->logger->error(new FarmLogMessage(
+                    $dbFarmRole->FarmID,
+                    "Cannot save storage volume: {$e->getMessage()}",
+                    !empty($dbServer->serverId) ? $dbServer->serverId : null
+                ));
             }
         }
 
@@ -489,9 +498,12 @@ use Scalr\Model\Entity;
                         $dbServer->GetProperty(self::SERVER_SHARD_INDEX),
                     ));
                 }
-            }
-            catch(Exception $e) {
-                $this->logger->error(new FarmLogMessage($dbFarmRole->FarmID, "Cannot save storage volume: {$e->getMessage()}"));
+            } catch (Exception $e) {
+                $this->logger->error(new FarmLogMessage(
+                    $dbFarmRole->FarmID,
+                    "Cannot save storage volume: {$e->getMessage()}",
+                    !empty($dbServer->serverId) ? $dbServer->serverId : null
+                ));
             }
         }
 
@@ -685,5 +697,23 @@ use Scalr\Model\Entity;
             }
 
             return $message;
+        }
+
+        /**
+         * {@inheritdoc}
+         * @see Scalr_Role_Behavior::setupBehavior()
+         */
+        public static function setupBehavior(FarmRole $farmRole)
+        {
+            if ($farmRole->settings[Scalr_Role_Behavior_MongoDB::ROLE_DATA_STORAGE_ENGINE] == 'ebs') {
+                if ($farmRole->settings[Scalr_Role_Behavior_MongoDB::ROLE_DATA_STORAGE_EBS_SIZE] < 10 || $farmRole->settings[Scalr_Role_Behavior_MongoDB::ROLE_DATA_STORAGE_EBS_SIZE] > 1000) {
+                    throw new InvalidEntityConfigurationException("EBS size for mongoDB role should be between 10 and 1000 GB");
+                }
+            }
+
+            if (empty($farmRole->settings[static::ROLE_REPLICAS_COUNT])) {
+                $farmRole->settings[static::ROLE_REPLICAS_COUNT] = (new Entity\FarmRoleSetting())->setValue(1)->setType(Entity\FarmRoleSetting::TYPE_CFG);
+                $farmRole->settings[static::ROLE_SHARDS_COUNT] = (new Entity\FarmRoleSetting())->setValue(1)->setType(Entity\FarmRoleSetting::TYPE_CFG);
+            }
         }
     }

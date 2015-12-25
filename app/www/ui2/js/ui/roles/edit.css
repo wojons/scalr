@@ -1,3 +1,11 @@
 .scalr-ui-role-edit-tab-scripting .x-container .x-mask{
     background: transparent;
 }
+
+.scalr-ui-panel-account-roles-btn-allowed .x-btn-inner {
+     color: #A2FAA5;
+}
+
+.scalr-ui-panel-account-roles-btn-restricted .x-btn-inner {
+    color: #F8BCC0;
+}

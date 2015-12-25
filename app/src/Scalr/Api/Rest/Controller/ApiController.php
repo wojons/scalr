@@ -2,6 +2,7 @@
 
 namespace Scalr\Api\Rest\Controller;
 
+use DomainException;
 use Scalr\Api\Rest\ApiApplication;
 use Scalr\Api\DataType\ResultEnvelope;
 use Scalr\Api\DataType\ListResultEnvelope;
@@ -10,6 +11,7 @@ use Scalr\Api\Rest\Exception\ApiErrorException;
 use Scalr\Api\DataType\ErrorMessage;
 use Scalr\Api\DataType\ApiEntityAdapter;
 use Scalr\Api\Rest\Exception\ApiInsufficientPermissionsException;
+use Scalr\DataType\ScopeInterface;
 
 /**
  * Api base Controller
@@ -108,10 +110,11 @@ class ApiController extends AbstractController
      *
      * If common query parameter is used
      *
-     * @param    string   $name    The name of the parameter
-     * @param    string   $default optional The default value of the parameter
-     * @return   string   Returns the value of the param. If the name is not specified it returns
-     *                    all query params
+     * @param    string $name    The name of the parameter
+     * @param    string $default optional The default value of the parameter
+     *
+     * @return   string|array   Returns the value of the param. If the name is not specified it returns
+     *                          all query params
      */
     final public function params($name = null, $default = null)
     {
@@ -202,17 +205,11 @@ class ApiController extends AbstractController
      */
     private function generateLink(&$params, $sort = false)
     {
-        $qstr = '';
-
         if ($sort) {
             ksort($params);
         }
 
-        foreach ($params as $k => $v) {
-            $qstr .= '&' . rawurlencode($k) . '=' . rawurlencode($v);
-        }
-
-        return $this->request->getPath() . '?' . ltrim($qstr, '&');
+        return $this->request->getPath() . '?' . http_build_query($params, null, '&', PHP_QUERY_RFC3986);
     }
 
 
@@ -317,9 +314,9 @@ class ApiController extends AbstractController
      *
      * @throws ApiInsufficientPermissionsException
      */
-    public function checkPermissions()
+    public function checkPermissions(...$args)
     {
-        return call_user_func_array([$this->app, 'checkPermissions'], func_get_args());
+        $this->app->checkPermissions(...$args);
     }
 
     /**
@@ -331,13 +328,122 @@ class ApiController extends AbstractController
      */
     public static function getBareId($object, $item)
     {
+        if (is_array($object)) {
+            $object = (object) $object;
+        }
+
         if (!empty($object->{$item}->id)) {
             return $object->{$item}->id;
         } else if (!empty($object->{$item})) {
-            return $object->{$item};
+            $property = $object->{$item};
+            if (is_array($property) && !empty($property['id'])) {
+                return $property['id'];
+            } else if (!(is_array($property) || is_object($property))) {
+                return $object->{$item};
+            }
         }
 
         return null;
     }
 
+    /**
+     * Gets current API request scope
+     *
+     * @return string Returns scope
+     */
+    public function getScope()
+    {
+        return $this->app->getScope();
+    }
+
+    /**
+     * Checks whether the authenticated user either is authorized has permission to ACL Role
+     *
+     * @param   string  $resourceMnemonic            ACL resource name
+     * @param   string  $permissionMnemonic optional ACL permission name
+     *
+     * @throws ApiInsufficientPermissionsException
+     * @throws DomainException
+     */
+    public function checkScopedPermissions($resourceMnemonic, $permissionMnemonic = null)
+    {
+        $resourceConst = 'Scalr\Acl\Acl::RESOURCE_' . strtoupper($resourceMnemonic) . '_' . strtoupper($this->getScope());
+        $permissionConst = $permissionMnemonic ? 'Scalr\Acl\Acl::PERM_' . strtoupper($resourceMnemonic). '_' . strtoupper($this->getScope()) . '_' . strtoupper($permissionMnemonic) : NULL;
+
+        if (!defined($resourceConst)) {
+            throw new DomainException("ACL Constant {$resourceConst} was not found for method checkScopedPermissions");
+        }
+
+        if ($permissionConst && !defined($permissionConst)) {
+            throw new DomainException("ACL Constant {$permissionConst} was not found for method checkScopedPermissions");
+        }
+
+        $resource = constant($resourceConst);
+        $permission = $permissionConst ? constant($permissionConst) : NULL;
+
+        $this->checkPermissions($resource, $permission);
+    }
+
+    /**
+     * Gets criteria corresponding current API request scope
+     *
+     * @param   string  $scope  optional Scope override
+     *
+     * @return  array   Returns criteria
+     * @throws  ApiErrorException
+     */
+    public function getScopeCriteria($scope = null, $strictToScope = false)
+    {
+        switch ($scope ?: $this->getScope()) {
+            case ScopeInterface::SCOPE_ENVIRONMENT:
+                if ($strictToScope) {
+                    $criteria = [
+                        ['accountId' => $this->getUser()->accountId],
+                        ['envId' => $this->getEnvironment()->id]
+                    ];
+                } else {
+                    $criteria = [
+                        ['$or' => [['accountId' => $this->getUser()->accountId], ['accountId' => null]]],
+                        ['$or' => [['envId' => $this->getEnvironment()->id], ['envId' => null]]]
+                    ];
+                }
+                break;
+
+            case ScopeInterface::SCOPE_ACCOUNT:
+                if ($strictToScope) {
+                    $criteria = [
+                        ['accountId' => $this->getUser()->accountId],
+                        ['envId'     => null]
+                    ];
+                } else {
+                    $criteria = [
+                        ['$or' => [['accountId' => $this->getUser()->accountId], ['accountId' => null]]],
+                        ['envId'     => null]
+                    ];
+                }
+                break;
+
+            case ScopeInterface::SCOPE_SCALR:
+                $criteria = [['envId' => null], ['accountId' => null]];
+                break;
+
+            default:
+                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Unexpected scope value");
+        }
+
+        return $criteria;
+    }
+
+    /**
+     * AuditLogger wrapper
+     *
+     * @param  string  $event      Event name, aka tag
+     * @param  mixed   $extra      optional Array of additionally provided information
+     * @param  mixed   $extra,...  optional
+     * @return boolean Whether operation was successful
+     */
+    public function auditLog($event, ...$extra)
+    {
+        return $this->getContainer()->auditlogger->auditLog($event, ...$extra);
+    }
 }

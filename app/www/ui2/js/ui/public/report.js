@@ -1,28 +1,21 @@
 //Ext.getHead().createChild('<style type="text/css" media="print">.x-panel-cost-report{left:0!important;width:100%!important;}.x-panel-cost-report .x-panel-body-default{border:0;width:100%!important}</style>');
 Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
-    var disabledDockedToolbars = function (hide) {
+    var hideDockedToolbars = function (hide) {
         Ext.each(Scalr.application.getDockedItems(), function (item) {
             if (hide) {
-                item.disable();
-
-                if (hide) {
-                    item.wasHiddenBefore = item.isHidden();
-                    if (!item.wasHiddenBefore) {
-                        item.hide();
-                    }
+                item.wasHiddenBefore = item.isHidden();
+                if (!item.wasHiddenBefore) {
+                    item.hide();
                 }
             } else {
                 if (item.wasHiddenBefore !== undefined) {
                     item.setVisible(!item.wasHiddenBefore);
                     delete item.wasHiddenBefore;
                 }
-
-                item.enable();
             }
         });
     };
 
-    disabledDockedToolbars(true);
     Scalr.application.addCls('x-panel-white-background');
 
     var totals = moduleParams['totals'],
@@ -199,7 +192,10 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
             },
             deactivate: function() {
                 Scalr.application.removeCls('x-panel-white-background');
-                disabledDockedToolbars(false);
+                hideDockedToolbars(false);
+            },
+            applyparams: function(params) {
+                hideDockedToolbars(true);
             }
         }
     });
@@ -271,7 +267,7 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
                     }
                 },{
                     xtype: 'component',
-                    tpl: 
+                    tpl:
                         '<tpl if="growth!=0">' +
                             '&nbsp;&nbsp;&nbsp;{[this.pctLabel(values.growth, values.growthPct, \'small\', true, \'noqtip\')]}' +
                         '</tpl>',

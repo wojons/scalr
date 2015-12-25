@@ -31,6 +31,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Devel', {
         this.down('[name="openstack.boot_from_volume"]').setValue(settings['openstack.boot_from_volume'] || 0);
         this.down('[name="openstack.keep_fip_on_suspend"]').setValue(settings['openstack.keep_fip_on_suspend'] || 0);
 
+        this.down('[name="base.union_script_executor"]').setValue(settings['base.union_script_executor'] || 1);
+
         this.down('[name="user-data.enabled"]')[settings['user-data.scm_branch'] || settings['user-data.szr_version'] ? 'expand' : 'collapse']();
     },
 
@@ -45,6 +47,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Devel', {
         settings['base.custom_user_data'] = this.down('[name="base.custom_user_data"]').getValue();
         settings['openstack.boot_from_volume'] = this.down('[name="openstack.boot_from_volume"]').getValue();
         settings['openstack.keep_fip_on_suspend'] = this.down('[name="openstack.keep_fip_on_suspend"]').getValue();
+        settings['base.union_script_executor'] = this.down('[name="base.union_script_executor"]').getValue() ? 1 : 0;
 
         record.set('settings', settings);
     },
@@ -103,6 +106,10 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Devel', {
             xtype: 'checkbox',
             name: 'openstack.keep_fip_on_suspend',
             boxLabel: 'Keep floating IP on server suspend'
+        }, {
+            xtype: 'checkbox',
+            name: 'base.union_script_executor',
+            boxLabel: 'Union script executor'
         }]
     }]
 });

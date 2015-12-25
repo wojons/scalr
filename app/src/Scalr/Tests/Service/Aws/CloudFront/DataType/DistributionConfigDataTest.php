@@ -52,7 +52,7 @@ class DistributionConfigDataTest extends AwsTestCase
         $cfg->setCacheBehaviors(array($cbd, $cbd));
         $cfg->setDefaultCacheBehavior($cbd);
 
-        $this->assertEquals($this->getFixtureFileContent('CloudFront/20120701/DistributionConfig1.xml'), $cfg->toXml());
+        $this->assertEquals($this->getFixtureFileContent('CloudFront/20150727/DistributionConfig1.xml'), $cfg->toXml());
         unset($cfg);
     }
 }

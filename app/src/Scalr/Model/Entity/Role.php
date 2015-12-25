@@ -2,17 +2,13 @@
 namespace Scalr\Model\Entity;
 
 use Scalr\Model\AbstractEntity;
-use Scalr\Model\Entity\ImageHistory;
-use Scalr\Model\Entity\RoleImage;
-use Scalr\Model\Entity\Image;
-use Scalr\Model\Entity\Os;
 use Scalr\DataType\ScopeInterface;
 use Scalr\DataType\AccessPermissionsInterface;
-use SERVER_PLATFORMS;
 use Scalr\Exception\Model\Entity\Os\OsMismatchException;
 use Scalr\Exception\Model\Entity\Image\ImageNotFoundException;
 use Scalr\Exception\Model\Entity\Image\NotAcceptableImageStatusException;
 use Scalr\Exception\Model\Entity\Image\ImageInUseException;
+use Scalr\Util\CryptoTool;
 
 /**
  * Role entity
@@ -115,12 +111,20 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
     public $isDeprecated = false;
 
     /**
-     * Whether it is developent Role
+     * Whether it is development Role
      *
      * @Column(name="is_devel",type="boolean")
      * @var bool
      */
     public $isDevelopment = false;
+
+    /**
+     * Whether it is QuickStart Role
+     *
+     * @Column(name="is_quick_start",type="boolean")
+     * @var bool
+     */
+    public $isQuickStart = false;
 
     /**
      * The generation
@@ -177,6 +181,13 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
     private $_os;
 
     /**
+     * Role behaviors list
+     *
+     * @var string[]
+     */
+    private $_behaviors;
+
+    /**
      * Constructor
      */
     public function __construct()
@@ -199,9 +210,32 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
      * @param    string $name  The name of the Role
      * @return   bool   Returns TRUE when the name is valid or FALSE otherwise
      */
-    public static function validateName($name)
+    public static function isValidName($name)
     {
         return !!preg_match('/^[A-Za-z0-9]+[A-Za-z0-9-]*[A-Za-z0-9]+$/i', $name);
+    }
+
+    /**
+     * Check if given name is used on scalr, account or environment scopes
+     *
+     * @param   string  $name       Role's name to check
+     * @param   int     $accountId  Identifier of account
+     * @param   int     $envId      Identifier of environment
+     * @return  bool    Returns TRUE if a such name has been already used on scalr or account (or environment) scopes
+     */
+    public static function isNameUsed($name, $accountId, $envId)
+    {
+        $criteria = [['accountId' => null]];
+        if ($accountId) {
+            if ($envId) {
+                $criteria[] = ['$and' => [['accountId' => $accountId], ['envId' => null]]];
+                $criteria[] = ['envId' => $envId];
+            } else {
+                $criteria[] = ['accountId' => $accountId];
+            }
+        }
+
+        return !!Role::findOne([['name' => $name], ['$or' => $criteria]]);
     }
 
     /**
@@ -231,20 +265,22 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
      */
     public function getImage($platform, $cloudLocation)
     {
-        if (in_array($platform, [SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS]))
+        if (in_array($platform, [\SERVER_PLATFORMS::GCE, \SERVER_PLATFORMS::AZURE])) {
             $cloudLocation = '';
+        }
 
         $image = RoleImage::findOne([
-            [ 'roleId' => $this->id ],
-            [ 'platform' => $platform ],
-            [ 'cloudLocation' => $cloudLocation ]
+            ['roleId'        => $this->id],
+            ['platform'      => $platform],
+            ['cloudLocation' => $cloudLocation]
         ]);
 
-        if (! $image)
-            throw new \Exception(sprintf(
+        if (!$image) {
+            throw new ImageNotFoundException(sprintf(
                 "No valid role image found for roleId: %d, platform: %s, cloudLocation: %s",
                 $this->id, $platform, $cloudLocation
             ));
+        }
 
         return $image;
     }
@@ -258,28 +294,15 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
     public function fetchImagesArray()
     {
         $result = [];
+        $images = $this->getImages();
 
-        foreach (RoleImage::find([['roleId' => $this->id]]) as $image) {
-            /* @var $image RoleImage */
-            if (!$result[$image->platform])
-                $result[$image->platform] = [];
-
-            $i = ['id' => $image->imageId, 'architecture' => '', 'type' => ''];
-
-            /* @var $im Image */
-            $im = Image::findOne([
-                ['platform' => $image->platform],
-                ['cloudLocation' => $image->cloudLocation],
-                ['id' => $image->imageId],
-                ['$or' => [['envId' => ($this->envId == 0 ? NULL : $this->envId)], ['envId' => NULL]]]
-            ]);
-
-            if ($im) {
-                $i['architecture'] = $im->architecture;
-                $i['type'] = $im->type;
-            }
-
-            $result[$image->platform][$image->cloudLocation] = $i;
+        /* @var $image \Scalr\Model\Entity\Image */
+        foreach ($images as $image) {
+            $result[$image->platform][$image->cloudLocation] = [
+                'id'    => $image->id,
+                'architecture'  => $image->architecture,
+                'type'  => $image->type
+            ];
         }
 
         return $result;
@@ -289,24 +312,24 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
      * Gets Images which are associated with the Role
      *
      * @param    array        $criteria     optional The search criteria on the Image result set.
+     * @param    array        $group        optional The group parameter
      * @param    array        $order        optional The results order looks like [[property1 => true|false], ...]
      * @param    int          $limit        optional The records limit
      * @param    int          $offset       optional The offset
      * @param    bool         $countRecords optional True to calculate total number of the records without limit
      * @return   \Scalr\Model\Collections\EntityIterator Returns Images which are associated with the role
      */
-    public function getImages(array $criteria = null, array $order = null, $limit = null, $offset = null, $countRecords = null)
+    public function getImages(array $criteria = null, array $group = null, array $order = null, $limit = null, $offset = null, $countRecords = null)
     {
         $image = new Image();
         $roleImage = new RoleImage();
 
         $criteria = $criteria ?: [];
 
-        $criteria[self::STMT_FROM] = $image->table() . "
+        $criteria[static::STMT_FROM] = $image->table() . "
             JOIN " . $roleImage->table() . " ON {$roleImage->columnImageId} = {$image->columnId}
                 AND {$roleImage->columnPlatform} = {$image->columnPlatform}
-                AND {$roleImage->columnCloudLocation} = {$image->columnCloudLocation}
-        ";
+                AND {$roleImage->columnCloudLocation} = {$image->columnCloudLocation}";
 
         $criteria[static::STMT_WHERE] = "{$roleImage->columnRoleId} = " . intval($this->id);
 
@@ -316,25 +339,27 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
             $criteria[] = ['envId' => null];
         }
 
-        return $image->find($criteria, $order, $limit, $offset, $countRecords);
+        return $image->find($criteria, $group, $order, $limit, $offset, $countRecords);
     }
 
     /**
      * Add, replace or remove image in role
      *
-     * @param   string    $platform       The cloud platform
-     * @param   string    $cloudLocation  The cloud location
-     * @param   string    $imageId        optional Either Identifier of the Image to add or NULL to remove
-     * @param   integer   $userId         The identifier of the User who adds the Image
-     * @param   string    $userEmail      The email address of the User who adds the Image
-     * @throws  ImageNotFoundException
-     * @throws  NotAcceptableImageStatusException
-     * @throws  OsMismatchException
-     * @throws  ImageNotFoundException
+     * @param   string  $platform      The cloud platform
+     * @param   string  $cloudLocation The cloud location
+     * @param   string  $imageId       optional Either Identifier of the Image to add or NULL to remove
+     * @param   integer $userId        The identifier of the User who adds the Image
+     * @param   string  $userEmail     The email address of the User who adds the Image
+     *
+     * @throws ImageInUseException
+     * @throws ImageNotFoundException
+     * @throws NotAcceptableImageStatusException
+     * @throws OsMismatchException
+     * @throws \Scalr\Exception\ModelException
      */
     public function setImage($platform, $cloudLocation, $imageId, $userId, $userEmail)
     {
-        if (in_array($platform, [SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS]))
+        if (in_array($platform, [\SERVER_PLATFORMS::GCE, \SERVER_PLATFORMS::AZURE]))
             $cloudLocation = '';
 
         $history = new ImageHistory();
@@ -359,10 +384,19 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
         if ($imageId) {
             /* @var $newImage Image */
             $newImage = Image::findOne([
-                ['id' => $imageId],
-                ['platform' => $platform],
+                ['id'            => $imageId],
+                ['platform'      => $platform],
                 ['cloudLocation' => $cloudLocation],
-                ['$or' => [['envId' => $this->envId == 0 ? NULL : $this->envId], ['envId' => NULL]]]
+                ['$or' => [
+                    ['accountId' => null],
+                    ['$and' => [
+                        ['accountId' => $this->accountId],
+                        ['$or' => [
+                            ['envId' => null],
+                            ['envId' => $this->envId]
+                        ]]
+                    ]]
+                ]]
             ]);
 
             if (!$newImage) {
@@ -415,6 +449,45 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
     }
 
     /**
+     * Gets role behaviors list
+     *
+     * @return string[]
+     */
+    public function getBehaviors()
+    {
+        if (empty($this->_behaviors)) {
+            $this->_behaviors = array_unique(explode(",", $this->behaviors));
+            sort($this->_behaviors);
+        }
+
+        return $this->_behaviors;
+    }
+
+    /**
+     * Sets role behaviors
+     *
+     * @param   array|\Scalr\UI\Request\JsonData   $behaviors  Array of behaviors
+     */
+    public function setBehaviors($behaviors)
+    {
+        $this->_behaviors = array_unique($behaviors);
+        sort($this->_behaviors);
+        $this->behaviors = implode(',', $this->_behaviors);
+    }
+
+    /**
+     * Check if role has behavior
+     *
+     * @param   string  $behavior   Behavior name
+     *
+     * @return  bool    Returns true if role has behavior, false otherwise
+     */
+    public function hasBehavior($behavior)
+    {
+        return in_array($behavior, $this->getBehaviors());
+    }
+
+    /**
      * Checks whether the Role is already used in some Farm
      *
      * @return boolean Returns TRUE if the Role is already used or FALSE otherwise
@@ -422,8 +495,8 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
     public function isUsed()
     {
         return !!$this->db()->GetOne("
-            SELECT EXISTS(SELECT 1 FROM farm_roles WHERE role_id = ? OR new_role_id = ?)
-        ", [$this->id, $this->id]);
+            SELECT EXISTS(SELECT 1 FROM farm_roles WHERE role_id = ?)
+        ", [$this->id]);
     }
 
     /**
@@ -442,7 +515,7 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
                      : $user->hasAccessToEnvironment($this->envId);
 
             case static::SCOPE_SCALR:
-                return !$modify;
+                return !$modify || $user->isScalrAdmin();
 
             default:
                 return false;
@@ -450,18 +523,218 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
     }
 
     /**
-     * Gets role scripts
+     * Get scripts of the Role
+     * TODO refactor this method to new Entities
      *
-     * @param    array        $criteria     optional The search criteria.
-     * @param    array        $order        optional The results order looks like [[property1 => true|false], ...]
-     * @param    int          $limit        optional The records limit
-     * @param    int          $offset       optional The offset
-     * @param    bool         $countRecords optional True to calculate total number of the records without limit
-     *
-     * @return Script[]
+     * @return  array
      */
-    public function getScripts(array $criteria = null, array $order = null, $limit = null, $offset = null, $countRecords = null)
+    public function getScripts()
     {
-        return Script::find(array_merge(['roleId' => $this->id], $criteria), $order, $limit, $offset, $countRecords);
+        $dbParams = $this->db()->Execute("SELECT role_scripts.*, scripts.name AS script_name FROM role_scripts LEFT JOIN scripts ON role_scripts.script_id = scripts.id WHERE role_id = ?", array($this->id));
+        $retval = array();
+        while ($script = $dbParams->FetchRow()) {
+            $retval[] = array(
+                'role_script_id' => (int) $script['id'],
+                'event_name' => $script['event_name'],
+                'target' => $script['target'],
+                'script_id' => (int) $script['script_id'],
+                'script_name' => $script['script_name'],
+                'version' => (int) $script['version'],
+                'timeout' => $script['timeout'],
+                'isSync' => (int) $script['issync'],
+                'params' => unserialize($script['params']),
+                'order_index' => $script['order_index'],
+                'hash' => $script['hash'],
+                'script_path' => $script['script_path'],
+                'run_as' => $script['run_as'],
+                'script_type' => $script['script_type'],
+                'os' => $script['os']
+            );
+        }
+
+        return $retval;
+    }
+
+    /**
+     * Set scripts of the Role
+     * TODO refactor this method to new Entities
+     *
+     * @param   array   $scripts
+     */
+    public function setScripts($scripts)
+    {
+        if (! $this->id)
+            return;
+
+        if (! is_array($scripts))
+            return;
+
+        $ids = array();
+        foreach ($scripts as $script) {
+            // TODO: check permission for script_id
+            if (!$script['role_script_id']) {
+                $this->db()->Execute('INSERT INTO role_scripts SET
+                    `role_id` = ?,
+                    `event_name` = ?,
+                    `target` = ?,
+                    `script_id` = ?,
+                    `version` = ?,
+                    `timeout` = ?,
+                    `issync` = ?,
+                    `params` = ?,
+                    `order_index` = ?,
+                    `hash` = ?,
+                    `script_path` = ?,
+                    `run_as` = ?,
+                    `script_type` = ?
+                ', array(
+                    $this->id,
+                    $script['event_name'],
+                    $script['target'],
+                    $script['script_id'] != 0 ? $script['script_id'] : NULL,
+                    $script['version'],
+                    $script['timeout'],
+                    $script['isSync'],
+                    serialize($script['params']),
+                    $script['order_index'],
+                    (!$script['hash']) ? CryptoTool::sault(12) : $script['hash'],
+                    $script['script_path'],
+                    $script['run_as'],
+                    $script['script_type']
+                ));
+                $ids[] = $this->db()->Insert_ID();
+            } else {
+                $this->db()->Execute('UPDATE role_scripts SET
+                    `event_name` = ?,
+                    `target` = ?,
+                    `script_id` = ?,
+                    `version` = ?,
+                    `timeout` = ?,
+                    `issync` = ?,
+                    `params` = ?,
+                    `order_index` = ?,
+                    `script_path` = ?,
+                    `run_as` = ?,
+                    `script_type` = ?
+                    WHERE id = ? AND role_id = ?
+                ', array(
+                    $script['event_name'],
+                    $script['target'],
+                    $script['script_id'] != 0 ? $script['script_id'] : NULL,
+                    $script['version'],
+                    $script['timeout'],
+                    $script['isSync'],
+                    serialize($script['params']),
+                    $script['order_index'],
+                    $script['script_path'],
+                    $script['run_as'],
+                    $script['script_type'],
+
+                    $script['role_script_id'],
+                    $this->id
+                ));
+                $ids[] = $script['role_script_id'];
+            }
+        }
+
+        $toRemove = $this->db()->Execute('SELECT id, hash FROM role_scripts WHERE role_id = ? AND id NOT IN (\'' . implode("','", $ids) . '\')', array($this->id));
+        while ($rScript = $toRemove->FetchRow()) {
+            $this->db()->Execute("DELETE FROM farm_role_scripting_params WHERE hash = ? AND farm_role_id IN (SELECT id FROM farm_roles WHERE role_id = ?)",
+                array($rScript['hash'], $this->id)
+            );
+            $this->db()->Execute("DELETE FROM role_scripts WHERE id = ?", array($rScript['id']));
+        }
+    }
+
+    /**
+     * Gets the number of Farms which are using this Role
+     *
+     * @param   int   $accountId    optional Identifier of account
+     * @param   int   $envId        optional Identifier of environment
+     * @return  int   Returns farm's count which uses current role
+     */
+    public function getFarmsCount($accountId = null, $envId = null)
+    {
+        $sql = "SELECT COUNT(DISTINCT f.id)
+                FROM farm_roles fr
+                JOIN farms f ON fr.farmid = f.id
+                WHERE fr.role_id = ?";
+        $args = [$this->id];
+
+        if ($accountId) {
+            $sql .= " AND f.clientid = ?";
+            $args[] = $accountId;
+        }
+
+        if ($envId) {
+            $sql .= " AND f.env_id = ?";
+            $args[] = $envId;
+        }
+
+        return $this->db()->GetOne($sql, $args);
+    }
+
+    /**
+     * Get the number of Servers which are using this Role
+     *
+     * @param   string  $accountId  optional    Identifier of account
+     * @param   string  $envId      optional    Identifier of environment
+     * @return  int
+     */
+    public function getServersCount($accountId = null, $envId = null)
+    {
+        $sql = "SELECT COUNT(*)
+                FROM servers s
+                JOIN farm_roles ON s.farm_roleid = farm_roles.id
+                WHERE farm_roles.role_id = ?";
+        $args = [$this->id];
+
+        if ($envId) {
+            $sql .= " AND s.env_id = ?";
+            $args[] = $envId;
+        }
+
+        if ($accountId) {
+            $sql .= " AND s.client_id = ?";
+            $args[] = $accountId;
+        }
+
+        return $this->db()->GetOne($sql, $args);
+    }
+
+    /**
+     * Return array of environments where this role is allowed explicitly.
+     * Empty array means everywhere.
+     *
+     * @return  array   Array of envId
+     */
+    public function getAllowedEnvironments()
+    {
+        $r = new RoleEnvironment();
+        return $this->db()->GetCol("SELECT {$r->columnEnvId} FROM {$r->table()} WHERE $r->columnRoleId = ?", [$this->id]);
+    }
+
+    public function save()
+    {
+        $this->db()->BeginTrans();
+        try {
+            parent::save();
+
+            $this->db()->Execute("DELETE FROM `role_behaviors` WHERE `role_id` = ?", [$this->id]);
+            $sql = $args = [];
+            foreach ($this->getBehaviors() as $behavior) {
+                $sql[] = '(?, ?)';
+                $args = array_merge($args, [$this->id, $behavior]);
+            }
+
+            if (count($sql)) {
+                $this->db()->Execute("INSERT INTO `role_behaviors` (`role_id`, `behavior`) VALUES " . join(', ', $sql), $args);
+            }
+
+            $this->db()->CommitTrans();
+        } catch (\Exception $e) {
+            $this->db()->RollbackTrans();
+            throw $e;
+        }
     }
 }

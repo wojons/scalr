@@ -8,11 +8,11 @@ class Scalr_UI_Controller_Admin_Images extends Scalr_UI_Controller
 
     public function defaultAction()
     {
-        self::loadController('Images')->defaultAction();
+        Scalr_UI_Controller_Images::controller()->callActionMethod('defaultAction');
     }
 
-    public function createAction()
+    public function registerAction()
     {
-        self::loadController('Images')->createAction();
+        Scalr_UI_Controller_Images::controller()->callActionMethod('registerAction');
     }
 }

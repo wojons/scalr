@@ -1,0 +1,190 @@
+# `OrchestrationRule` #
+
+
+
+
+
+
+
+## Properties ##
+
+### `trigger` (required) ###
+
+
+
+
+An object of type [`Trigger`](./../definitions/Trigger.mkd).
+
+
+
+### `target` (required) ###
+
+
+
+
+An object of type [`Target`](./../definitions/Target.mkd).
+
+
+
+### `action` (required) ###
+
+
+
+
+An object of type [`Action`](./../definitions/Action.mkd).
+
+
+
+### `timeout` (optional) ###
+
+How long should Scalr wait before aborting the execution of this Orchestration Rule? Defaults to the action's default when null.
+
+
+Property of type: `integer`.
+
+
+
+
+### `runAs` (optional, filterable) ###
+
+
+
+
+Property of type: `string`.
+
+
+To filter on this field, use: `runAs=...`.
+
+
+### `order` (optional, filterable) ###
+
+When should this Orchestration Rule execute relative to other Orchestration Rules that use the same triggeringEvent? Default is relative to existing Rules.
+
+
+Property of type: `integer`.
+
+
+To filter on this field, use: `order=...`.
+
+
+### `blocking` (optional, filterable) ###
+
+Should this Orchestration Rule's execution delay the execution of further Orchestration Rules and triggering of further Events? Defaults to the action's default when null.
+
+
+Property of type: `boolean`.
+
+
+To filter on this field, use: `blocking=...`.
+
+
+### `scope` (read-only) ###
+
+
+
+
+Property of type: `string`.
+
+ 
+The following are valid values for the `scope` property:
+  + `scalr`
+  + `account`
+  + `environment`
+  + `farm`
+  + `farmrole`
+  + `server`
+
+
+
+### `id` (read-only, filterable) ###
+
+
+
+
+Property of type: `integer`.
+
+
+To filter on this field, use: `id=...`.
+
+
+
+
+## Used in ##
+
+  + [`/orchestration-rules/`](./../rest/api/v1beta0/account/orchestration-rules/)
+  + [`/orchestration-rules/{orchestrationRuleId}/`](./../rest/api/v1beta0/account/orchestration-rules/{orchestrationRuleId}/)
+  + [`/roles/{roleId}/orchestration-rules/`](./../rest/api/v1beta0/account/roles/{roleId}/orchestration-rules/)
+  + [`/roles/{roleId}/orchestration-rules/{orchestrationRuleId}/`](./../rest/api/v1beta0/account/roles/{roleId}/orchestration-rules/{orchestrationRuleId}/)
+  + [`/{envId}/farm-roles/{farmRoleId}/orchestration-rules/`](./../rest/api/v1beta0/user/{envId}/farm-roles/{farmRoleId}/orchestration-rules/)
+  + [`/{envId}/farm-roles/{farmRoleId}/orchestration-rules/{orchestrationRuleId}/`](./../rest/api/v1beta0/user/{envId}/farm-roles/{farmRoleId}/orchestration-rules/{orchestrationRuleId}/)
+  + [`/{envId}/roles/{roleId}/orchestration-rules/`](./../rest/api/v1beta0/user/{envId}/roles/{roleId}/orchestration-rules/)
+  + [`/{envId}/roles/{roleId}/orchestration-rules/{orchestrationRuleId}/`](./../rest/api/v1beta0/user/{envId}/roles/{roleId}/orchestration-rules/{orchestrationRuleId}/)
+
+## Swagger Definition ##
+
+    {
+      "required": [
+        "trigger", 
+        "action", 
+        "target"
+      ], 
+      "x-usedIn": [
+        "/orchestration-rules/", 
+        "/orchestration-rules/{orchestrationRuleId}/", 
+        "/roles/{roleId}/orchestration-rules/", 
+        "/roles/{roleId}/orchestration-rules/{orchestrationRuleId}/", 
+        "/{envId}/roles/{roleId}/orchestration-rules/{orchestrationRuleId}/", 
+        "/{envId}/roles/{roleId}/orchestration-rules/", 
+        "/{envId}/farm-roles/{farmRoleId}/orchestration-rules/{orchestrationRuleId}/", 
+        "/{envId}/farm-roles/{farmRoleId}/orchestration-rules/"
+      ], 
+      "properties": {
+        "target": {
+          "$ref": "#/definitions/Target"
+        }, 
+        "runAs": {
+          "type": "string", 
+          "descrition": "User the Orchestration Rule should execute as. Defaults to root / Administrator when null."
+        }, 
+        "order": {
+          "type": "integer", 
+          "description": "When should this Orchestration Rule execute relative to other Orchestration Rules that use the same triggeringEvent? Default is relative to existing Rules."
+        }, 
+        "trigger": {
+          "$ref": "#/definitions/Trigger"
+        }, 
+        "timeout": {
+          "type": "integer", 
+          "description": "How long should Scalr wait before aborting the execution of this Orchestration Rule? Defaults to the action's default when null."
+        }, 
+        "blocking": {
+          "type": "boolean", 
+          "description": "Should this Orchestration Rule's execution delay the execution of further Orchestration Rules and triggering of further Events? Defaults to the action's default when null."
+        }, 
+        "action": {
+          "$ref": "#/definitions/Action"
+        }, 
+        "scope": {
+          "readOnly": true, 
+          "enum": [
+            "scalr", 
+            "account", 
+            "environment", 
+            "farm", 
+            "farmrole", 
+            "server"
+          ], 
+          "type": "string"
+        }, 
+        "id": {
+          "readOnly": true, 
+          "type": "integer"
+        }
+      }, 
+      "x-filterable": [
+        "id", 
+        "blocking", 
+        "order", 
+        "runAs"
+      ]
+    }

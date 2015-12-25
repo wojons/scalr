@@ -13,7 +13,7 @@ class Scalr_UI_Controller_Account2_Billing extends Scalr_UI_Controller
 
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_BILLING);
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_BILLING_ACCOUNT);
     }
 
     public function defaultAction()

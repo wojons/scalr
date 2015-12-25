@@ -17,4 +17,16 @@ class Scalr_UI_Controller_Dashboard_Widget extends Scalr_UI_Controller
     {
         $this->response->data($this->getContent());
     }
+
+    /**
+     * Check if user has access to widget based on params
+     *
+     * @param   array   $params     Params for widget
+     * @throws  Scalr_Exception_Core
+     * @throws  Scalr_Exception_InsufficientPermissions
+     */
+    public function hasWidgetAccess($params)
+    {
+
+    }
 }

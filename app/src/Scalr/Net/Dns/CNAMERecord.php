@@ -30,21 +30,23 @@ class Scalr_Net_Dns_CNAMERecord extends Scalr_Net_Dns_Record
             //default._domainkey.vip
             $this->validator->validateRegexp($name, '/^[_A-Za-z0-9]+[_\.A-Za-z0-9-]*[A-Za-z0-9]+[\.]*$/si') === true ||
             $this->validator->validateDomain($name) === true &&
-            $this->validator->validateIp(rtrim($name, ".")) !== true || $name == "*")
-            $this->name = $name;
-        else
+            $this->validator->validateIp(rtrim($name, ".")) !== true || $name == "*") {
+                $this->name = $name;
+        } else {
             throw new Scalr_Net_Dns_Exception(sprintf(_("'%s' is not a valid name for CNAME record"), $name));
+        }
 
         // cname
         if ($this->validator->validateDomain($value) !== true) {
             if ($this->validator->validateRegexp($value, self::PAT_NON_FDQN) === true ||
-                $this->validator->validateRegexp($value, '/^[_A-Za-z0-9]+[_\.A-Za-z0-9-]*[A-Za-z0-9]+[\.]*$/si') === true)
-                $this->cname = $value;
-            else
-                 throw new Scalr_Net_Dns_Exception(sprintf(_("'%s' is not a valid value for CNAME record"), $value));
-        }
-        else
+                $this->validator->validateRegexp($value, '/^[_A-Za-z0-9]+[_\.A-Za-z0-9-]*[A-Za-z0-9]+[\.]*$/si') === true) {
+                    $this->cname = $value;
+            } else {
+                throw new Scalr_Net_Dns_Exception(sprintf(_("'%s' is not a valid value for CNAME record"), $value));
+            }
+        } else {
             $this->cname = $this->dottify($value);
+        }
 
         $this->ttl = $ttl;
     }

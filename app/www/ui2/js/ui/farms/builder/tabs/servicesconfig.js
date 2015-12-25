@@ -7,10 +7,6 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Servicesconfig', {
     layout: 'anchor',
     cls: 'x-panel-column-left-with-tabs',
 
-    isEnabled: function (record) {
-        return this.callParent(arguments) && record.get('platform') != 'rds';
-    },
-
     beforeShowTab: function (record, handler) {
         var me = this,
             beh = [];
@@ -50,8 +46,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Servicesconfig', {
 
     showTab: function (record) {
         var me = this,
-            behaviors = record.get('behaviors').split(','), 
-            config_presets = record.get('config_presets') || {}, 
+            behaviors = record.get('behaviors').split(','),
+            config_presets = record.get('config_presets') || {},
             fieldset = me.down('#servicesconfig');
 
         Ext.Array.each(behaviors, function (behavior) {

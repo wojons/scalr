@@ -29,7 +29,7 @@
     height: 26px;
     width: 48px;
     background: #f9f9f9;
-    border-radius: 2px;
+    border-radius: 0;
 }
 
 .scalr-ui-panel-account-teams .x-grid-item-over .x-grid-row-options,
@@ -46,4 +46,8 @@
 	height: 100%;
 	background:url("/ui2/images/ui/account/manage_access.png") 0 center no-repeat;
     margin: 0 auto;
+}
+
+.x-tip-light-no-underline a{
+    text-decoration: none!important;
 }

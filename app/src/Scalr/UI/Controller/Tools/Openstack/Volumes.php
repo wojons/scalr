@@ -23,6 +23,8 @@ class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
 
     public function createAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_OPENSTACK_VOLUMES, Acl::PERM_OPENSTACK_VOLUMES_MANAGE);
+
         $locations = self::loadController('Platforms')->getCloudLocations(PlatformFactory::getOpenstackBasedPlatforms(), false);
 
         $this->response->page('ui/tools/openstack/volumes/create.js', array(
@@ -32,6 +34,8 @@ class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
 
     public function xCreateAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_OPENSTACK_VOLUMES, Acl::PERM_OPENSTACK_VOLUMES_MANAGE);
+
         $openstack = $this->getEnvironment()->openstack($this->getParam('platform'), $this->getParam('cloudLocation'));
 
         $volume = $openstack->volume->createVolume(
@@ -47,9 +51,11 @@ class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
 
     public function xDetachAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_OPENSTACK_VOLUMES, Acl::PERM_OPENSTACK_VOLUMES_MANAGE);
+
     	$client = $this->environment->openstack($this->getParam('platform'), $this->getParam('cloudLocation'));
 
-    	$result = $client->servers->detachVolume(
+    	$client->servers->detachVolume(
     		$this->getParam('serverId'),
     		$this->getParam('attachmentId')
     	);
@@ -59,13 +65,15 @@ class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
 
     public function xAttachAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_OPENSTACK_VOLUMES, Acl::PERM_OPENSTACK_VOLUMES_MANAGE);
+
     	$client = $this->environment->openstack($this->getParam('platform'), $this->getParam('cloudLocation'));
 
     	$dbServer = DBServer::LoadByID($this->getParam('serverId'));
 
     	$deviceName = $dbServer->GetFreeDeviceName();
 
-    	$result = $client->servers->attachVolume(
+    	$client->servers->attachVolume(
     		$dbServer->GetCloudServerID(),
     		$this->getParam('volumeId'),
     		$deviceName
@@ -76,7 +84,10 @@ class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
 
     public function attachAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_OPENSTACK_VOLUMES, Acl::PERM_OPENSTACK_VOLUMES_MANAGE);
+
     	$platformName = $this->getParam('platform');
+
         if (!$platformName)
             throw new Exception("Cloud should be specified");
 
@@ -92,7 +103,8 @@ class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
     	if (count($dbServers) == 0)
     		throw new Exception("You have no running servers on {$platformName} platform");
 
-    	$servers = array();
+    	$servers = [];
+
     	foreach ($dbServers as $dbServer) {
     		$dbServer = DBServer::LoadByID($dbServer['server_id']);
     		$servers[$dbServer->serverId] = $dbServer->getNameByConvention();
@@ -101,9 +113,9 @@ class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
     	if (count($servers) == 0)
     		throw new Exception("You have no running servers on the availablity zone of this volume");
 
-    	$this->response->page('ui/tools/openstack/volumes/attach.js', array(
+    	$this->response->page('ui/tools/openstack/volumes/attach.js', [
     		'servers' => $servers
-    	));
+    	]);
     }
 
     public function viewAction()
@@ -121,6 +133,8 @@ class Scalr_UI_Controller_Tools_Openstack_Volumes extends Scalr_UI_Controller
 
     public function xRemoveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_OPENSTACK_VOLUMES, Acl::PERM_OPENSTACK_VOLUMES_MANAGE);
+
         $this->request->defineParams(array(
             'volumeId' => array('type' => 'json'),
             'cloudLocation'

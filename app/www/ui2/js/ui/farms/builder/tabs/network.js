@@ -26,6 +26,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Network', {
             return 'gce';
         } else if (platform === 'ec2') {
             return 'ec2';
+        } else if (platform === 'azure') {
+            return 'azure';
         }
     },
     getDefaultValues: function(record) {
@@ -68,6 +70,13 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Network', {
                     //'router.vpc.networkInterfaceId': undefined
                     'aws.use_elastic_ips': 0,
                     'aws.elastic_ips.map': ''
+                };
+            break;
+            case 'azure':
+                values = {
+                    //'azure.virtual-network': undefined,
+                    //'azure.subnet': undefined,
+                    'azure.use_public_ips': 0
                 };
             break;
         }
@@ -986,11 +995,11 @@ Ext.define('Scalr.ui.FarmRoleNetworkOpenstack', {
                 fields: [ 'elasticIp', 'instanceId', 'serverId', 'serverIndex', 'remoteIp', 'warningInstanceIdDoesntMatch' ]
             },
             columns: [
-                { header: 'Server Index', width: 130, sortable: true, dataIndex: 'serverIndex' },
-                { header: 'Server ID', flex: 1, sortable: true, dataIndex: 'serverId', xtype: 'templatecolumn', tpl:
+                { header: 'Server Index', width: 130, sortable: false, dataIndex: 'serverIndex' },
+                { header: 'Server ID', flex: 1, sortable: false, dataIndex: 'serverId', xtype: 'templatecolumn', tpl:
                     '<tpl if="serverId"><a href="#/servers/{serverId}/dashboard">{serverId}</a> <tpl if="instanceId">({instanceId})</tpl><tpl else>Not running</tpl>'
                 }, {
-                    header: 'Elastic IP', width: 250, sortable: true, dataIndex: 'elasticIp', editable: true, tdCls: 'x-grid-cell-editable',
+                    header: 'Elastic IP', width: 250, sortable: false, dataIndex: 'elasticIp', editable: true, tdCls: 'x-grid-cell-editable',
                     renderer: function(value, metadata, record) {
                         metadata.tdAttr = 'title="Click here to change"';
                         metadata.style = 'line-height: 16px; padding-top: 4px; padding-bottom: 2px';
@@ -1064,21 +1073,13 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
                     this.up().deactivateTab();
                 } else {
                     this.tabData = data;
-                    if (status === 'success') {
-                        if (this.tabData['eips'] && this.tabData['eips']['ips']) {
-                            this.tabData['eips']['ips'].unshift({ipAddress: '0.0.0.0'});
-                        }
-                    }
                     //elb list
                     Scalr.CachedRequestManager.get('farmDesigner').load(
                         {
                             url: '/tools/aws/ec2/elb/xListElasticLoadBalancers',
                             params: {
                                 cloudLocation: record.get('cloud_location'),
-                                placement: this.vpc ? this.vpc.id : 'ec2',
-                                filters: Ext.encode({
-                                    vpcId: this.vpc.id ? this.vpc.id : null
-                                })
+                                placement: this.vpc ? this.vpc.id : 'ec2'
                             }
                         },
                         function(data, status) {
@@ -1116,112 +1117,141 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
             settings = record.get('settings', true),
             eipsData = me.tabData['eips'],
             limits = Scalr.getGovernance('ec2'),
-            fieldLimits, value,
-            field, field2, expand, eipsFieldset, vpcFieldset;
+            value,
+            field, eipsFieldset, vpcFieldset;
 
         me.isLoading = true;
         me.suspendLayouts();
 
         me.down('#vpcoptions').hide();
-        me.down('#no_elasticip_warning').hide();
+        me.down('#subnetsWarning').hide();
 
-        eipsFieldset = me.down('[name="aws.use_elastic_ips"]');
+        eipsFieldset = me.down('#elasticIps');
+        eipsFieldset.down('[name="aws.use_elastic_ips"]').setReadOnly(false);
         vpcFieldset = me.down('#vpcoptions');
         if (me.vpc !== false) {
-                var subnetId = Ext.decode(settings['aws.vpc_subnet_id']);
-                subnetId = Ext.isArray(subnetId) ? subnetId : (settings['aws.vpc_subnet_id'] ? [settings['aws.vpc_subnet_id']] : null)
+            var subnetId = Ext.decode(settings['aws.vpc_subnet_id']);
+            subnetId = Ext.isArray(subnetId) ? subnetId : (settings['aws.vpc_subnet_id'] ? [settings['aws.vpc_subnet_id']] : null)
 
-                field = me.down('[name="router.scalr.farm_role_id"]');
-                Ext.apply(field.store.getProxy(), {
-                    params: {vpcId: me.vpc.id}
-                });
-                field.setValue(settings['router.scalr.farm_role_id']);
-                field.isFieldAvailable = me.moduleTabParams['scalr.instances_connection_policy'] !== 'local';
-                if (settings['router.scalr.farm_role_id']) {
+            field = me.down('[name="router.scalr.farm_role_id"]');
+            Ext.apply(field.store.getProxy(), {
+                params: {vpcId: me.vpc.id}
+            });
+            field.setValue(settings['router.scalr.farm_role_id']);
+            field.isFieldAvailable = me.moduleTabParams['scalr.instances_connection_policy'] !== 'local';
+            if (settings['router.scalr.farm_role_id']) {
+                field.store.load();
+            }
+
+            field = me.down('[name="aws.vpc_subnet_id"]');
+            field.isVpcRouter = me.isVpcRouter;
+            field.maxCount = me.isVpcRouter ? 1 : 0;
+
+            field.getPlugin('comboaddnew').postUrl = '?cloudLocation=' + me.vpc.region + '&vpcId=' + me.vpc.id;
+            field.getPlugin('comboaddnew').setDisabled(limits['aws.vpc'] && limits['aws.vpc']['ids'] && Ext.isArray(limits['aws.vpc']['ids'][me.vpc.id]));
+            //field.store.loadData(Ext.Array.map(subnetId || [], function(id){return {id: id, description: id}}));
+            field.setValue(subnetId);
+
+            field = me.down('[name="router.vpc.networkInterfaceId"]');
+            field.store.proxy.params = {
+                cloudLocation: me.vpc.region,
+                vpcId: me.vpc.id,
+                subnetId: subnetId
+            };
+            field.getPlugin('comboaddnew').postUrl = '?' + Ext.Object.toQueryString(field.store.proxy.params);
+            field.setVisible(me.isVpcRouter);
+            if (me.isVpcRouter) {
+                field.setValue(settings['router.vpc.networkInterfaceId']);
+                if (settings['router.vpc.networkInterfaceId'] && settings['aws.vpc_subnet_id']) {
                     field.store.load();
                 }
-
-                field = me.down('[name="aws.vpc_subnet_id"]');
-                field.isVpcRouter = me.isVpcRouter;
-                field.maxCount = me.isVpcRouter ? 1 : 0;
-
-                field.getPlugin('comboaddnew').postUrl = '?cloudLocation=' + me.vpc.region + '&vpcId=' + me.vpc.id;
-                field.getPlugin('comboaddnew').setDisabled(limits['aws.vpc'] && limits['aws.vpc']['ids'] && Ext.isArray(limits['aws.vpc']['ids'][me.vpc.id]));
-                //field.store.loadData(Ext.Array.map(subnetId || [], function(id){return {id: id, description: id}}));
-                field.setValue(subnetId);
-
-                field = me.down('[name="router.vpc.networkInterfaceId"]');
-                field.store.proxy.params = {
-                    cloudLocation: me.vpc.region,
-                    vpcId: me.vpc.id,
-                    subnetId: subnetId
-                };
-                field.getPlugin('comboaddnew').postUrl = '?' + Ext.Object.toQueryString(field.store.proxy.params);
-                field.setVisible(me.isVpcRouter);
-                if (me.isVpcRouter) {
-                    field.setValue(settings['router.vpc.networkInterfaceId']);
-                    if (settings['router.vpc.networkInterfaceId'] && settings['aws.vpc_subnet_id']) {
-                        field.store.load();
-                    }
-                }
+            }
 
 
-                vpcFieldset.setTitle(vpcFieldset.baseTitle + (limits['aws.vpc']?'&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="' + Ext.String.htmlEncode(Scalr.strings['farmbuilder.vpc.enforced']) + '" class="x-icon-governance" />':''));
-                vpcFieldset.show();
+            vpcFieldset.setTitle(vpcFieldset.baseTitle + (limits['aws.vpc']?'&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="' + Ext.String.htmlEncode(Scalr.strings['farmbuilder.vpc.enforced']) + '" class="x-icon-governance" />':''));
+            vpcFieldset.show();
         } else {
             vpcFieldset.hide();
-            eipsFieldset.checkboxCmp.show();
-            eipsFieldset.show();
         }
 
         //elastic IPs
-        var elasticIpMap = [];
+        eipsFieldset.setVisible(!me.isVpcRouter);
+        eipsFieldset.down('grid').onScalingEnabledChange(settings['scaling.enabled']);
+        var elasticIpMap = {},
+            elasticIps = Ext.isArray(eipsData['ips']) ? Ext.clone(eipsData['ips']) : [];
+        elasticIps.unshift({ipAddress: '0.0.0.0'});
+
         if (settings['aws.elastic_ips.map']) {
             Ext.each((settings['aws.elastic_ips.map']).split(';'), function(value) {
                 if (value) {
                     value = value.split('=');
                     if (value.length === 2) {
-                        var tmp = {
+                        elasticIpMap[value[0]*1] = {
                             serverIndex: value[0]*1,
-                            elasticIp: value[1]
+                            elasticIp: value[1] || '0.0.0.0'
                         };
-                        Ext.each(eipsData.map, function(value) {
-                            if (value['serverIndex'] == tmp['serverIndex']) {
-                                Ext.applyIf(tmp, value);
-                                return false;
-                            }
-                        })
-                        elasticIpMap.push(tmp);
                     }
                 }
             });
-        } else {
-            Ext.each(eipsData.map, function(value) {
-                elasticIpMap.push(Ext.apply({}, value));
+        }
+        if (settings['aws.private_ips.map']) {
+            Ext.Object.each(Ext.decode(settings['aws.private_ips.map'], true) || {}, function(serverIndex, privateIp) {
+                elasticIpMap[serverIndex*1] = {
+                    serverIndex: serverIndex*1,
+                    privateIp: privateIp || ''
+                };
             });
         }
-        var maxInstances = settings['scaling.max_instances'] || 1;
-        if (elasticIpMap.length > maxInstances) {
-            //igor's request
-            var removeIndex = maxInstances;
-            for (var i=elasticIpMap.length-1; i>=0; i--) {
-                removeIndex = i + 1;
-                if (elasticIpMap[i]['serverId'] || removeIndex == maxInstances) {
-                    break;
+        if (Ext.isArray(eipsData.map)) {
+            Ext.each(eipsData.map, function(value) {
+                if (value['elasticIp'] || value['serverId']) {
+                    elasticIpMap[value['serverIndex']*1] = Ext.applyIf(elasticIpMap[value['serverIndex']*1] || {}, value);
+                }
+            });
+        } else {
+            Ext.Object.each(eipsData.map, function(key, value) {
+                if (value['elasticIp'] || value['serverId']) {
+                    elasticIpMap[value['serverIndex']*1] = Ext.applyIf(elasticIpMap[value['serverIndex']*1] || {}, value);
+                }
+            });
+        }
+        //fill the gaps between indexes
+        if (Ext.Object.getSize(elasticIpMap)) {
+            var maxIndex = Ext.Array.max(Ext.Object.getKeys(elasticIpMap)) * 1;
+            for (var i = 1; i <= maxIndex; i++) {
+                if (elasticIpMap[i] === undefined) {
+                    elasticIpMap[i] = {
+                        serverIndex: i,
+                        elasticIp: '0.0.0.0'
+                    };
                 }
             }
-            elasticIpMap.splice(removeIndex, elasticIpMap.length - removeIndex);
-        } else if (elasticIpMap.length < maxInstances) {
-            for (var i = elasticIpMap.length; i < maxInstances; i++)
-                elasticIpMap.push({ serverIndex: i + 1 });
+        }
+        elasticIpMap = Ext.Object.getValues(elasticIpMap);
+        Ext.Array.sort(elasticIpMap, function(a, b){return Ext.Array.numericSortFn(a.serverIndex, b.serverIndex)});
+        if (settings['scaling.enabled'] == 1) {
+            var maxInstances = settings['scaling.max_instances'] || 1;
+            if (elasticIpMap.length > maxInstances) {
+                var removeIndex = maxInstances;
+                for (var i=elasticIpMap.length-1; i>=0; i--) {
+                    removeIndex = i + 1;
+                    if (elasticIpMap[i]['serverId'] || removeIndex == maxInstances) {
+                        break;
+                    }
+                }
+                elasticIpMap.splice(removeIndex, elasticIpMap.length - removeIndex);
+            } else if (elasticIpMap.length < maxInstances) {
+                for (var i = elasticIpMap.length; i < maxInstances; i++)
+                    elasticIpMap.push({ serverIndex: i + 1 });
+            }
         }
 
+        eipsFieldset.down('[name="aws.use_elastic_ips"]').setValue(settings['aws.use_elastic_ips'] == 1);
         field = this.down('[name="aws.elastic_ips.map"]');
+        field.view['isVpcEnabled'] = me.vpc !== false;
+        field['ipAddressEditorIps'] = elasticIps;
         field.store.load({ data: elasticIpMap });
-        field['ipAddressEditorIps'] = eipsData['ips'];
         this.down('[name="aws.elastic_ips.warning"]').hide();
-
-        eipsFieldset[settings['aws.use_elastic_ips'] == 1 ? 'expand' : 'collapse']();
 
         //elb
         var elbIdField = this.down('[name="aws.elb.id"]'),
@@ -1249,6 +1279,7 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
                 roleId: record.get('role_id')
             };
             elbIdField.getPlugin('comboaddnew').postUrl = '?cloudLocation=' + record.get('cloud_location') + (this.vpc ? '&vpcId=' + this.vpc.id : '');
+            elbIdField.getPlugin('comboaddnew').setDisabled(!Scalr.isAllowed('AWS_ELB', 'manage'));
         } else {
             elbFieldset.hide();
         }
@@ -1265,7 +1296,7 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
     hideTab: function (record) {
         var me = this,
             settings = record.get('settings'),
-            eipsFieldset = me.down('[name="aws.use_elastic_ips"]'),
+            eipsFieldset = me.down('#elasticIps'),
             elbFieldset = me.down('[name="aws.elb"]'),
             field, value;
 
@@ -1280,14 +1311,27 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
         }
 
         //elastic IPs
-
-        if (!eipsFieldset.collapsed && eipsFieldset.isVisible()) {
-            settings['aws.use_elastic_ips'] = 1;
+        if (eipsFieldset.isVisible()) {
+            var privateIpsMap = {};
+            settings['aws.use_elastic_ips'] = eipsFieldset.down('[name="aws.use_elastic_ips"]').getValue() ? 1 : 0;
             settings['aws.elastic_ips.map'] = '';
-            me.down('[name="aws.elastic_ips.map"]').store.each(function(record) {
-                settings['aws.elastic_ips.map'] += record.get('serverIndex') + '=' + (record.get('elasticIp') || '') + ';';
+            settings['aws.private_ips.map'] = '';
+            field = me.down('[name="aws.elastic_ips.map"]');
+            field.store.getUnfiltered().each(function(record) {
+                var elasticIp = record.get('elasticIp') || '';
+                elasticIp = elasticIp === '0.0.0.0' ? '' : elasticIp;
+                if (settings['aws.use_elastic_ips'] == 1 && (!field.view.isVpcEnabled || !field.view.isPrivateSubnet)) {
+                    settings['aws.elastic_ips.map'] += record.get('serverIndex') + '=' + elasticIp + ';';
+                }
+                if (field.view.isVpcEnabled && record.get('privateIp')) {
+                    privateIpsMap[record.get('serverIndex')*1] = record.get('privateIp');
+                }
             });
+            if (Ext.Object.getSize(privateIpsMap)) {
+                settings['aws.private_ips.map'] = Ext.encode(privateIpsMap);
+            }
         } else {
+            //vpc router
             settings['aws.use_elastic_ips'] = 0;
         }
 
@@ -1316,36 +1360,6 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
         }
 
         record.set('settings', settings);
-    },
-
-    toggleInternetAccess: function() {
-        var internetAccess,
-            eipsFieldset = this.down('[name="aws.use_elastic_ips"]'),
-            internetAccessField = this.down('[name="aws.vpc_internet_access"]'),
-            internetAccessFieldRO = this.down('#vpc_internet_access'),
-            subnetIdField = this.down('[name="aws.vpc_subnet_id"]');
-
-        if (this.down('[name="vpcSubnetType"]').getValue() === 'new') {
-            internetAccessFieldRO.hide();
-            internetAccessField.show();
-            internetAccess = internetAccessField.getValue();
-        } else {
-            internetAccessField.hide();
-            var rec = subnetIdField.findRecordByValue(subnetIdField.getValue());
-            if (rec) {
-                internetAccess = rec.get('internet') || 'unknown';
-                internetAccessFieldRO.show().setValue(Ext.String.capitalize(internetAccess));
-            } else {
-                internetAccessFieldRO.hide();
-            }
-        }
-
-        this.down('#no_elasticip_warning').setVisible(internetAccess === 'outbound-only');
-        eipsFieldset.setVisible(internetAccess === 'full' || internetAccess === 'unknown');
-        if (internetAccess === 'full') {
-            eipsFieldset.expand();
-        }
-        eipsFieldset.checkboxCmp.setVisible(internetAccess === 'unknown');
     },
 
     toggleElbRemoveWarning: function(remove) {
@@ -1389,7 +1403,7 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
             xtype: 'vpcsubnetfield',
             name: 'aws.vpc_subnet_id',
             flex: 1,
-            maxWidth: 660,
+            maxWidth: 690,
             emptyText: 'Please select subnet(s)',
             requireSameSubnetType: true,
             listeners: {
@@ -1398,7 +1412,6 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
                         networkType,
                         form = this.up('#ec2'),
                         field,
-                        eipsFieldset = form.down('[name="aws.use_elastic_ips"]'),
                         warnings = [];
 
                     Ext.Array.each(subnets, function(subnet) {
@@ -1408,25 +1421,22 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
                         }
                         return !networkType;
                     });
-                    if (subnets.length) {
-                        if (networkType !== 'public') {
-                            warnings.push('ElasticIPs are not available with private subnets.');
-                        }
-                        if (subnets.length > 1) {
-                            warnings.push('If more than one subnet is selected Scalr will evenly distribute instances across each subnet.');
-                        }
-                    }
-                    form.down('#no_elasticip_warning').setValue(warnings.join('<br/>')).setVisible(warnings.length > 0);
+                    form.down('#subnetsWarning').setVisible(subnets && subnets.length > 1);
 
                     var networkTypeField = form.down('#networkType');
                     networkTypeField.setValue(networkType ? Ext.String.capitalize(networkType) : '');
                     networkTypeField.setVisible(!!networkType);
                     networkTypeField.updateIconTooltip('info', networkType === 'public' ? Scalr.strings['vpc.public_subnet.info'] : Scalr.strings['vpc.private_subnet.info']);
 
-                    eipsFieldset.setVisible(!form.isVpcRouter && networkType === 'public');
-                    /*if (eipsFieldset.collapsed && networkType === 'public') {
-                        eipsFieldset.expand();
-                    }*/
+                    field = form.down('[name="aws.use_elastic_ips"]');
+                    field.setReadOnly(networkType === 'private');
+                    if (networkType === 'private') {
+                        field.setValue(false);
+                    }
+
+                    field = form.down('[name="aws.elastic_ips.map"]');
+                    field.view['isPrivateSubnet'] = networkType === 'private';
+                    field.view.refresh();
 
                     field = form.down('[name="router.scalr.farm_role_id"]');
                     if (field.isFieldAvailable) {
@@ -1465,7 +1475,7 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
         },{
             xtype: 'combo',
             flex: 1,
-            maxWidth: 660,
+            maxWidth: 690,
             name: 'router.scalr.farm_role_id',
             fieldLabel: 'Scalr VPC Router',
             editable: false,
@@ -1503,19 +1513,19 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
             xtype: 'vpcnetworkinterfacefield',
             name: 'router.vpc.networkInterfaceId',
             flex: 1,
-            maxWidth: 660,
+            maxWidth: 690,
             labelWidth: 140,
             hidden: true,
             allowBlank: false
         },{
             xtype: 'displayfield',
-            itemId: 'no_elasticip_warning',
+            itemId: 'subnetsWarning',
             margin: 0,
             flex: 1,
-            maxWidth: 660,
+            maxWidth: 690,
             hidden: true,
             cls: 'x-form-field-info',
-            value: '&nbsp;'
+            value: 'If more than one subnet is selected Scalr will evenly distribute instances across each subnet'
         }]
     },{
         xtype: 'fieldset',
@@ -1534,14 +1544,15 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
                 proxy: 'object'
             },
             flex: 1,
-            maxWidth: 660,
+            maxWidth: 690,
             valueField: 'name',
             displayField: 'dnsName',
-            forceSelection: true,
+            restoreValueOnBlur: true,
             name: 'aws.elb.id',
             allowBlank: false,
             emptyText: 'Please select ELB',
             queryMode: 'local',
+            anyMatch: true,
             listConfig: {
                 cls: 'x-boundlist-alt',
                 style: 'white-space:nowrap',
@@ -1625,20 +1636,44 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
             xtype: 'checkbox',
             name: 'aws.elb.remove',
             setElbHostname: function(hostname) {
-                this.boxLabelEl.setHtml('Check to remove <b>'+hostname+'</b> ELB from cloud after saving farm');
-                this.updateLayout();
+                this.setBoxLabel('Check to remove <b>'+hostname+'</b> ELB from cloud after saving farm');
             },
             boxLabel: 'remove'
         }]
     }, {
-        xtype: 'fieldset',
-        title: 'Assign one ElasticIP per instance <img class="x-icon-info" src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="' + Ext.String.htmlEncode('Enable to have Scalr automatically assign an ElasticIP to each instance of this role (this requires a few minutes during which the instance is unreachable from the public internet) after HostInit but before HostUp. If out of allocated IPs, Scalr will request more, but never remove any.') + '"/>',
-        name: 'aws.use_elastic_ips',
-        checkboxToggle: true,
-        toggleOnTitleClick: true,
-        collapsible: true,
-        collapsed: true,
+        xtype: 'container',
+        itemId: 'elasticIps',
+        cls: 'x-container-fieldset',
+        style: 'padding-top:12px',
         items: [{
+            xtype: 'checkbox',
+            name: 'aws.use_elastic_ips',
+            boxLabel: 'Assign one <b>ElasticIP</b> per instance',
+            plugins: [{
+                ptype: 'fieldicons',
+                icons: [{
+                    id: 'info',
+                    tooltip: 'Enable to have Scalr automatically assign an ElasticIP to each instance of this role (this requires a few minutes during which the instance is unreachable from the public internet) after HostInit but before HostUp. If out of allocated IPs, Scalr will request more, but never remove any.'
+                },{
+                    id: 'question',
+                    hidden: true,
+                    tooltip: 'ElasticIPs are not available with private subnets.'
+                }]
+            }],
+            listeners: {
+                writeablechange: function(comp, readOnly) {
+                    if (this.rendered) {
+                        this.toggleIcon('question', readOnly);
+                        this.toggleIcon('info', !readOnly);
+                    }
+                },
+                change: function(comp, value) {
+                    var grid = this.up('#elasticIps').down('grid');
+                    grid.view.useElasticIps = value;
+                    grid.view.refresh();
+                }
+            }
+        },{
             xtype: 'displayfield',
             cls: 'x-form-field-warning',
             anchor: '100%',
@@ -1649,31 +1684,44 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
             xtype: 'grid',
             cls: 'x-grid-no-highlighting',
             name: 'aws.elastic_ips.map',
+            features: {
+                ftype: 'addbutton',
+                text: 'Add server index',
+                hidden: true,
+                handler: function(view) {
+                    var grid = view.up();
+                    grid.store.add(grid.getStore().createModel({serverIndex: grid.store.getMaxServerIndex()+1, ipAddress: '0.0.0.0'}));
+                }
+            },
             plugins: [{
                 ptype: 'cellediting',
                 clicksToEdit: 1,
                 listeners: {
                     beforeedit: function(comp, e) {
                         var editor = this.getEditor(e.record, e.column);
-                        for (var i = 0, len = e.grid['ipAddressEditorIps'].length; i < len; i++) {
-                            e.grid['ipAddressEditorIps'][i]['fieldInstanceId'] = e.record.get('instanceId') && (e.grid['ipAddressEditorIps'][i]['instanceId'] == e.record.get('instanceId'));
+                        if (editor.field.xtype === 'combobox') {
+                            if (!e.grid.view.useElasticIps) return false;
+                            for (var i = 0, len = e.grid['ipAddressEditorIps'].length; i < len; i++) {
+                                e.grid['ipAddressEditorIps'][i]['fieldInstanceId'] = e.record.get('instanceId') && (e.grid['ipAddressEditorIps'][i]['instanceId'] == e.record.get('instanceId'));
+                            }
+                            editor.field.store.load({ data: e.grid['ipAddressEditorIps'] });
+                        } else {
+                            if (!e.grid.view.isVpcEnabled) return false;
+
                         }
-                        editor.field.store.load({ data: e.grid['ipAddressEditorIps'] });
                     },
                     edit: function(comp, e) {
-                        if (e.value == null) {
-                            e.record.set('elasticIp', '');
-                        }
-
-                        if (e.record.get('elasticIp')) {
-                            var editor = this.getEditor(e.record, e.column);
-                            var r = editor.field.store.findRecord('ipAddress', e.record.get('elasticIp'));
-                            if (r && r.get('instanceId') && r.get('instanceId') != e.record.get('instanceId') && r.get('ipAddress') != e.record.get('remoteIp'))
-                                e.grid.up('[tab="tab"]').down('[name="aws.elastic_ips.warning"]').setValue(
-                                    'IP address \'' + e.record.get('elasticIp') + '\' is already in use, and will be re-associated with selected server. IP address on old server will revert to dynamic IP.'
-                                ).show();
-                            else
-                                e.grid.up('[tab="tab"]').down('[name="aws.elastic_ips.warning"]').hide();
+                        var editor = this.getEditor(e.record, e.column);
+                        if (editor.field.xtype === 'combobox') {
+                            if (e.record.get('elasticIp') !== '0.0.0.0') {
+                                var r = editor.field.store.findRecord('ipAddress', e.record.get('elasticIp'));
+                                if (r && r.get('instanceId') && r.get('instanceId') != e.record.get('instanceId') && r.get('ipAddress') != e.record.get('remoteIp'))
+                                    e.grid.up('[tab="tab"]').down('[name="aws.elastic_ips.warning"]').setValue(
+                                        'IP address \'' + e.record.get('elasticIp') + '\' is already in use, and will be re-associated with selected server. IP address on old server will revert to dynamic IP.'
+                                    ).show();
+                                else
+                                    e.grid.up('[tab="tab"]').down('[name="aws.elastic_ips.warning"]').hide();
+                            }
                         }
                     }
                 }
@@ -1681,30 +1729,42 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
             viewConfig: {
                 disableSelection: true
             },
+            onScalingEnabledChange: function(scalingEnabled) {
+                this.view.findFeature('addbutton').setVisible(scalingEnabled != 1);
+                this.columns[4].setVisible(scalingEnabled != 1);
+            },
             store: {
                 proxy: 'object',
-                fields: [ 'elasticIp', 'instanceId', 'serverId', 'serverIndex', 'remoteIp', 'warningInstanceIdDoesntMatch' ]
+                fields: [ {name: 'elasticIp', defaultValue: '0.0.0.0'}, 'instanceId', 'serverId', {name: 'serverIndex', type: 'int'}, 'remoteIp', 'warningInstanceIdDoesntMatch', 'privateIp' ],
+                getMaxServerIndex: function() {
+                    var maxServerIndex = 0;
+                    this.getUnfiltered().each(function(record){
+                        var serverIndex = record.get('serverIndex');
+                        maxServerIndex = maxServerIndex > serverIndex ? maxServerIndex : serverIndex;
+                    });
+                    return maxServerIndex;
+                }
             },
             columns: [
-                { header: 'Server Index', width: 125, sortable: true, dataIndex: 'serverIndex' },
-                { header: 'Server ID', flex: 1, sortable: true, dataIndex: 'serverId', xtype: 'templatecolumn', tpl:
+                { header: 'Server Index', width: 125, sortable: false, dataIndex: 'serverIndex' },
+                { header: 'Server ID', flex: 1, sortable: false, dataIndex: 'serverId', xtype: 'templatecolumn', tpl:
                     '<tpl if="serverId"><a href="#/servers/{serverId}/dashboard">{serverId}</a> <tpl if="instanceId">({instanceId})</tpl><tpl else>Not running</tpl>'
                 }, {
-                    header: 'Elastic IP', width: 250, sortable: true, dataIndex: 'elasticIp', editable: true, tdCls: 'x-grid-cell-editable',
-                    renderer: function(value, metadata, record) {
-                        metadata.tdAttr = 'title="Click here to change"';
-                        metadata.style = 'line-height: 16px; padding-top: 4px; padding-bottom: 2px';
+                    header: 'Public IP', width: 180, sortable: false, dataIndex: 'elasticIp', editable: true, tdCls: 'x-grid-cell-editable',
+                    renderer: function(value, metadata, record, rowIndex, colIndex, store, view) {
+                        metadata.style = 'padding-left:7px;';
+                        if (view.useElasticIps) {
+                            metadata.tdAttr = 'title="Click here to change"';
 
-                        if (value == '0.0.0.0')
-                            value = 'Allocate new';
-                        else if (!value)
-                            value = 'Not allocated yet';
+                            if (value === '0.0.0.0' || !value)
+                                value = 'Allocate new';
 
-                        value = '<span style="float: left">' + value + '</span>';
-
-                        if (record.get('warningInstanceIdDoesntMatch'))
-                            value += '<div style="margin-left: 5px; float: left; height: 15px; width: 16px; background-image: url(/ui2/images/icons/warning_icon_16x16.png)" title="This IP address is out of sync and associated with another instance on EC2">&nbsp;</div>'
-
+                            if (record.get('warningInstanceIdDoesntMatch'))
+                                value += ' <img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-warning" data-qtip="This IP address is out of sync and associated with another instance on EC2"/>'
+                        } else {
+                            value = view.isVpcEnabled && view.isPrivateSubnet ? '&mdash;' : 'Ephemeral IP';
+                            metadata.style += 'background:transparent;';
+                        }
                         return value;
                     },
                     editor: {
@@ -1718,25 +1778,256 @@ Ext.define('Scalr.ui.FarmRoleNetworkEc2', {
                             proxy: 'object',
                             fields: ['ipAddress', {name: 'instanceId', defaultValue: null}, {name: 'farmName', defaultValue: null} , 'roleName', 'serverIndex', 'fieldInstanceId']
                         },
-                        displayTpl: '<tpl for="."><tpl if="values.ipAddress == \'0.0.0.0\'">Allocate new<tpl else>{[values.ipAddress]}</tpl></tpl>',
+                        listeners: {
+                            beforeselect: function(field, record) {
+                                var value = record.get('ipAddress');
+                                if (field.getPicker().isVisible() && value !== '0.0.0.0') {
+                                    var rec;
+                                    field.ownerCt.grid.store.getUnfiltered().each(function(record){
+                                        if (record.get('elasticIp') === value) {
+                                            rec = record;
+                                            return false;
+                                        }
+                                    });
+                                    if (rec) Scalr.message.InfoTip('ElasticIP ' + value + ' is already assigned to Server #' + rec.get('serverIndex'), field.inputEl, {anchor: 'bottom'});
+                                    return !rec;
+                                }
+                            },
+                        },
+                        displayTpl: '<tpl for="."><tpl if="ipAddress==\'0.0.0.0\'">Allocate new<tpl else>{[values.ipAddress]}</tpl></tpl>',
                         listConfig: {
                             minWidth: 250,
                             cls: 'x-boundlist-alt',
-                            tpl: '<tpl for="."><div class="x-boundlist-item" style="font: bold 13px arial; height: auto; padding: 5px;">' +
-                                    '<tpl if="ipAddress == \'0.0.0.0\'"><span>Allocate new</span>' +
-                                    '<tpl elseif="ipAddress != \'\'">' +
+                            tpl: '<tpl for="."><div class="x-boundlist-item" style="height: auto;">' +
+                                    '<tpl if="ipAddress==\'0.0.0.0\'">' +
+                                        'Allocate new' +
+                                    '<tpl else>' +
                                         '<tpl if="!fieldInstanceId">' +
                                             '<tpl if="farmName || instanceId"><span style="color: #F90000">{ipAddress}</span>' +
                                             '<tpl else><span style="color: #138913">{ipAddress}</span> (free)</tpl>' +
-                                        '<tpl else><span>{ipAddress}</span></tpl>' +
-                                    '<tpl else>Not allocated yet</tpl>' +
-                                    '<tpl if="ipAddress && farmName"><br /><span style="font-weight: normal">used by: {farmName} &rarr; {roleName} # {serverIndex}</span></tpl>' +
-                                    '<tpl if="ipAddress && !farmName && instanceId"><br /><span style="font-weight: normal">used by: {instanceId}</span></tpl>' +
+                                        '<tpl else>' + '\
+                                            {ipAddress}' +
+                                        '</tpl>' +
+                                    '</tpl>' +
+                                    '<tpl if="ipAddress && farmName"><div style="font-size:90%;margin-top:6px;">used by: {farmName} &rarr; {roleName} # {serverIndex}</div></tpl>' +
+                                    '<tpl if="ipAddress && !farmName && instanceId"><div style="font-size:90%;margin-top:6px;">used by: {instanceId}</div></tpl>' +
                                 '</div></tpl>'
                         }
                     }
+                }, {
+                    header: 'Private IP', width: 180, sortable: false, dataIndex: 'privateIp', editable: true, tdCls: 'x-grid-cell-editable',
+                    renderer: function(value, metadata, record, rowIndex, colIndex, store, view) {
+                        metadata.style = 'padding-left:6px;';
+                        if (view.isVpcEnabled) {
+                            metadata.tdAttr = 'title="Click here to change"';
+                        } else {
+                            metadata.tdAttr = 'data-qtip="You can assign custom private IPs only for instances inside VPC"';
+                            metadata.style += 'background:transparent;';
+                        }
+                        return view.isVpcEnabled ? value || 'Auto-assign' : 'Auto-assign';
+                    },
+                    editor: {
+                        xtype: 'textfield',
+                        emptyText: 'Auto-assign',
+                        vtype: 'ip',
+                        validator: function(value) {
+                            if (value) {
+                                var rec,
+                                    currentRecord = this.ownerCt.grid.findPlugin('cellediting').getActiveRecord();
+                                this.ownerCt.grid.store.getUnfiltered().each(function(record){
+                                    if (record !== currentRecord && record.get('privateIp') === value) {
+                                        rec = record;
+                                        return false;
+                                    }
+                                });
+                                if (rec) return 'Private IP ' + value + ' is already assigned to Server #' + rec.get('serverIndex');
+                            }
+                            return true;
+                        },
+                        listeners: {
+                            focus: function() {
+                                if (this.getValue() === 'Auto-assign') {
+                                    this.setValue('');
+                                }
+                            }
+                        }
+                    }
+                }, {
+                    width: 42,
+                    sortable: false,
+                    hidden: true,
+                    align:'left',
+                    renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
+                        var serverIndex = record.get('serverIndex'),
+                            ipAddress = record.get('ipAddress');
+                        return  store.getMaxServerIndex() == serverIndex && !record.get('serverId') && !record.get('serverId') && (ipAddress == '0.0.0.0' || !ipAddress)
+                                ? '<img class="x-grid-icon x-grid-icon-delete" title="Delete server index" src="'+Ext.BLANK_IMAGE_URL+'"/>'
+                                : '';
+                    }
+
                 }
-            ]
+            ],
+            listeners: {
+                viewready: function() {
+                    var me = this;
+                    me.store.on('remove', me.view.refresh, me.view);
+                    me.store.on('add', me.view.refresh, me.view);
+                },
+                itemclick: function (view, record, item, index, e) {
+                    if (e.getTarget('img.x-grid-icon-delete')) {
+                        view.store.remove(record);
+                        return false;
+                    }
+                }
+            }
+        }]
+    }]
+});
+
+Ext.define('Scalr.ui.FarmRoleNetworkAzure', {
+	extend: 'Ext.container.Container',
+    alias: 'widget.farmrolenetworkazure',
+    itemId: 'azure',
+
+    beforeShowTab: function (record, handler) {
+        var settings = record.get('settings', true);
+        this.proxyParams = {
+            resourceGroup: settings['azure.resource-group'],
+            cloudLocation: record.get('cloud_location')
+        };
+        Scalr.cachedRequest.load(
+            {
+                url: '/platforms/azure/xGetOptions',
+                params: this.proxyParams
+            },
+            function(data, status){
+                if (status) {
+                    this.tabData = data;
+                    handler();
+                } else {
+                    this.up().deactivateTab();
+                }
+            },
+            this
+        );
+    },
+
+    showTab: function (record) {
+        var settings = record.get('settings', true),
+            data = this.tabData,
+            field;
+        //azure network
+        field = this.down('[name="azure.virtual-network"]');
+        field.store.load({data: data['virtualNetworks'] || []});
+        field.getPlugin('comboaddnew').postUrl = '?' + Ext.Object.toQueryString(this.proxyParams);
+        if (settings['azure.virtual-network']) {
+            field.setValue(settings['azure.virtual-network']);
+        } else {
+            field.reset();
+        }
+        field = this.down('[name="azure.subnet"]');
+        field.setValue(settings['azure.subnet']||'');
+
+        this.down('[name="azure.use_public_ips"]').setValue(settings['azure.use_public_ips'] == 1);
+
+    },
+
+    hideTab: function (record) {
+        var settings = record.get('settings');
+        settings['azure.virtual-network'] = this.down('[name="azure.virtual-network"]').getValue();
+        settings['azure.subnet'] = this.down('[name="azure.subnet"]').getValue();
+        settings['azure.use_public_ips'] = this.down('[name="azure.use_public_ips"]').getValue() ? 1 : 0;
+        record.set('settings', settings);
+    },
+
+    items: [{
+        xtype: 'fieldset',
+        cls: 'x-fieldset-separator-none',
+        layout: 'anchor',
+        defaults: {
+            anchor: '100%',
+            maxWidth: 600,
+            labelWidth: 120
+        },
+        items: [{
+            xtype: 'combo',
+            name: 'azure.virtual-network',
+            fieldLabel: 'Virtual network',
+            editable: false,
+            queryMode: 'local',
+            allowBlank: false,
+            store: {
+                model: Scalr.getModel({fields: [ 'id', 'name', 'subnets' ]}),
+                proxy: 'object'
+            },
+            valueField: 'id',
+            displayField: 'name',
+            plugins: [{
+                ptype: 'comboaddnew',
+                pluginId: 'comboaddnew',
+                url: '/tools/azure/virtualNetworks/create'
+            }],
+            listeners: {
+                addnew: function(item) {
+                    Scalr.CachedRequestManager.get('farmDesigner').setExpired({
+                        url: '/platforms/azure/xGetOptions',
+                        params: this.up('#azure').proxyParams
+                    });
+                },
+                change: function(comp, value){
+                    var rec = comp.findRecordByValue(value),
+                        field = comp.next('[name="azure.subnet"]');
+                    field.reset();
+                    if (value && rec) {
+                        field.show();
+                        field.getPlugin('comboaddnew').postUrl = '?' + Ext.Object.toQueryString(comp.up('#azure').proxyParams) + '&virtualNetwork=' + value;
+                        field.store.load({data: rec.get('subnets')});
+                    } else {
+                        field.hide();
+                    }
+                }
+            }
+        },{
+            xtype: 'combo',
+            name: 'azure.subnet',
+            fieldLabel: 'Subnet',
+            editable: false,
+            hidden: true,
+            queryMode: 'local',
+            allowBlank: false,
+            store: {
+                model: Scalr.getModel({fields: [ 'id', 'name' ]}),
+                proxy: 'object'
+            },
+            valueField: 'id',
+            displayField: 'name',
+            plugins: [{
+                ptype: 'comboaddnew',
+                pluginId: 'comboaddnew',
+                url: '/tools/azure/virtualNetworks/createSubnet'
+            }],
+            updateEmptyText: function(isEmpty){
+                this.emptyText =  isEmpty ? ' ' : 'No existing Subnets found';
+                this.applyEmptyText();
+            },
+            listeners: {
+                afterrender: function(){
+                    var me = this;
+                    me.store.on('load', function(store, records, result){
+                        me.updateEmptyText(records && records.length > 0);
+                    });
+                },
+                addnew: function(item) {
+                    Scalr.CachedRequestManager.get('farmDesigner').setExpired({
+                        url: '/platforms/azure/xGetOptions',
+                        params: this.up('#azure').proxyParams
+                    });
+                }
+            }
+        },{
+            xtype: 'checkbox',
+            name: 'azure.use_public_ips',
+            boxLabel: 'Attach dynamic public IP to every instance of this Farm Role',
         }]
     }]
 });

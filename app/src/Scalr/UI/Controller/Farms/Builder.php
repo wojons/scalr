@@ -2,8 +2,14 @@
 
 use Scalr\Acl\Acl;
 use Scalr\Model\Entity\Script;
+use Scalr\Model\Entity;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Stats\CostAnalytics\Entity\PriceEntity;
+use Scalr\UI\Request\Validator;
+use Scalr\Service\Aws\Ec2\DataType\CreateVolumeRequestData;
+use Scalr\DataType\ScopeInterface;
+use Scalr\Model\Entity\Role;
+use Scalr\Model\Entity\RoleProperty;
 
 class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 {
@@ -72,8 +78,8 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
     {
         $this->errors = array('error_count' => 0);
 
-        $farmVariables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_FARM);
-        $farmRoleVariables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE);
+        $farmVariables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), ScopeInterface::SCOPE_FARM);
+        $farmRoleVariables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), ScopeInterface::SCOPE_FARMROLE);
 
         $name = $this->request->stripValue($farmSettings['name']);
         if (empty($name)) {
@@ -112,9 +118,17 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
         if (!empty($roles)) {
             $hasVpcRouter = false;
             $vpcRouterRequired = false;
-
+            $governance = new Scalr_Governance($this->getEnvironmentId());
+            
             foreach ($roles as $role) {
                 $dbRole = DBRole::loadById($role['role_id']);
+
+                if (!$this->hasPermissions($dbRole->__getNewRoleObject())) {
+                    $this->setBuildError(
+                        $dbRole->name,
+                        'You don\'t have access to this role'
+                    );
+                }
 
                 try {
                     $dbRole->__getNewRoleObject()->getImage($role['platform'], $role['cloud_location']);
@@ -128,26 +142,23 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 }
 
                 if ($role['alias']) {
-                    if (!preg_match("/^[A-Za-z0-9]+[A-Za-z0-9-]*[A-Za-z0-9]+$/si", $role['alias']))
+                    if (!preg_match("/^[[:alnum:]](?:-*[[:alnum:]])*$/", $role['alias']))
                         $this->setBuildError(
                             'alias',
-                            sprintf(_("Alias for role '%s' should start and end with letter or number and contain only letters, numbers and dashes."),
-                                $dbRole->name, $role['platform'], $role['cloud_location']
-                            ),
+                            'Alias should start and end with letter or number and contain only letters, numbers and dashes.',
                             $role['farm_role_id']
                         );
                 }
 
                 // Validate deployments
-                $appId = $role[Scalr_Role_Behavior::ROLE_DM_APPLICATION_ID];
-                if ($appId) {
-                    $application = Scalr_Dm_Application::init()->loadById($appId);
+                if (isset($role[Scalr_Role_Behavior::ROLE_DM_APPLICATION_ID])) {
+                    $application = Scalr_Dm_Application::init()->loadById($role[Scalr_Role_Behavior::ROLE_DM_APPLICATION_ID]);
                     $this->user->getPermissions()->validate($application);
 
                     if (!$role[Scalr_Role_Behavior::ROLE_DM_REMOTE_PATH]) {
                         $this->setBuildError(
                             Scalr_Role_Behavior::ROLE_DM_REMOTE_PATH,
-                            sprintf("Remote path required for deployment on role '%s'", $dbRole->name),
+                            'Remote path is required for deployment',
                             $role['farm_role_id']
                         );
                     }
@@ -157,15 +168,17 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                     $hasVpcRouter = true;
 
                 if ($dbRole->hasBehavior(ROLE_BEHAVIORS::RABBITMQ)) {
-                    $role['settings'][DBFarmRole::SETTING_SCALING_MAX_INSTANCES] = $role['settings'][DBFarmRole::SETTING_SCALING_MIN_INSTANCES];
+                    $role['settings'][Entity\FarmRoleSetting::SCALING_MAX_INSTANCES] = $role['settings'][Entity\FarmRoleSetting::SCALING_MIN_INSTANCES];
 
                     $role['settings'][Scalr_Role_Behavior_RabbitMQ::ROLE_NODES_RATIO] = (int)$role['settings'][Scalr_Role_Behavior_RabbitMQ::ROLE_NODES_RATIO];
                     if ($role['settings'][Scalr_Role_Behavior_RabbitMQ::ROLE_NODES_RATIO] < 1 || $role['settings'][Scalr_Role_Behavior_RabbitMQ::ROLE_NODES_RATIO] > 100) {
                         $this->setBuildError(
                             Scalr_Role_Behavior_RabbitMQ::ROLE_NODES_RATIO,
-                            sprintf("Nodes ratio for RabbitMq role '%s' should be between 1 and 100", $dbRole->name),
+                            'Nodes ratio should be an integer between 1 and 100',
                             $role['farm_role_id']
                         );
+                    } else {
+                        $this->checkInteger($role['farm_role_id'], Scalr_Role_Behavior_RabbitMQ::ROLE_DATA_STORAGE_EBS_SIZE, $role['settings'][Scalr_Role_Behavior_RabbitMQ::ROLE_DATA_STORAGE_EBS_SIZE], 'Storage size', 1, 1000);
                     }
                 }
 
@@ -218,65 +231,121 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                }
 
                 /* Validate scaling */
-                $minCount = (int)$role['settings'][DBFarmRole::SETTING_SCALING_MIN_INSTANCES];
-                if (!$minCount && $minCount != 0)
-                    $minCount = 1;
+                if (!$dbRole->hasBehavior(ROLE_BEHAVIORS::VPC_ROUTER) && !$dbRole->hasBehavior(ROLE_BEHAVIORS::MONGODB)) {
+                    $minCount = $this->checkInteger($role['farm_role_id'], Entity\FarmRoleSetting::SCALING_MIN_INSTANCES, $role['settings'][Entity\FarmRoleSetting::SCALING_MIN_INSTANCES], 'Min instances', 0, 400);
+                    $maxCount = $this->checkInteger($role['farm_role_id'], Entity\FarmRoleSetting::SCALING_MAX_INSTANCES, $role['settings'][Entity\FarmRoleSetting::SCALING_MAX_INSTANCES], 'Max instances', 1, 400);
+                    if ($minCount !== false && $maxCount !== false && $maxCount < $minCount) {
+                        $this->setBuildError(
+                            Entity\FarmRoleSetting::SCALING_MAX_INSTANCES,
+                            'Max instances should be greater than or equal to Min instances',
+                            $role['farm_role_id']
+                        );
+                    }
 
-                if ($minCount < 0 || $minCount > 400) {
-                    $this->setBuildError(
-                        DBFarmRole::SETTING_SCALING_MIN_INSTANCES,
-                        sprintf(_("Min instances for '%s' must be a number between 0 and 400"), $dbRole->name),
-                        $role['farm_role_id']
-                    );
+                    $this->checkInteger($role['farm_role_id'], Entity\FarmRoleSetting::SCALING_POLLING_INTERVAL, $role['settings'][Entity\FarmRoleSetting::SCALING_POLLING_INTERVAL], 'Polling interval', 1, 50);
+
+                    if (array_key_exists(Entity\FarmRoleSetting::SCALING_UPSCALE_TIMEOUT_ENABLED, $role["settings"]) && $role['settings'][Entity\FarmRoleSetting::SCALING_UPSCALE_TIMEOUT_ENABLED] == 1) {
+                        $this->checkInteger($role['farm_role_id'], Entity\FarmRoleSetting::SCALING_UPSCALE_TIMEOUT, $role['settings'][Entity\FarmRoleSetting::SCALING_UPSCALE_TIMEOUT], 'Upscale timeout', 1);
+                    }
+
+                    if (array_key_exists(Entity\FarmRoleSetting::SCALING_DOWNSCALE_TIMEOUT_ENABLED, $role["settings"]) && $role['settings'][Entity\FarmRoleSetting::SCALING_DOWNSCALE_TIMEOUT_ENABLED] == 1) {
+                        $this->checkInteger($role['farm_role_id'], Entity\FarmRoleSetting::SCALING_DOWNSCALE_TIMEOUT, $role['settings'][Entity\FarmRoleSetting::SCALING_DOWNSCALE_TIMEOUT], 'Downscale timeout', 1);
+                    }
+
+                    if (is_array($role['scaling'])) {
+                        foreach ($role['scaling'] as $metricId => $metricSettings) {
+                            $hasError = false;
+                            if ($metricId == Entity\ScalingMetric::METRIC_URL_RESPONSE_TIME_ID) {
+                                $hasError = Validator::validateUrl($metricSettings['url']) !== true ||
+                                            Validator::validateInteger($metricSettings['min']) !== true ||
+                                            Validator::validateInteger($metricSettings['max']) !== true;
+                            } elseif ($metricId == Entity\ScalingMetric::METRIC_SQS_QUEUE_SIZE_ID) {
+                                $hasError = Validator::validateNotEmpty($metricSettings['queue_name']) !== true ||
+                                            Validator::validateInteger($metricSettings['min']) !== true ||
+                                            Validator::validateInteger($metricSettings['max']) !== true;
+                            } elseif (in_array($metricId, [Entity\ScalingMetric::METRIC_LOAD_AVERAGES_ID, Entity\ScalingMetric::METRIC_FREE_RAM_ID, Entity\ScalingMetric::METRIC_BANDWIDTH_ID])) {
+                                $hasError = Validator::validateFloat($metricSettings['min']) !== true ||
+                                            Validator::validateFloat($metricSettings['max']) !== true;
+                            }
+                            if ($hasError) {
+                                $this->setBuildError(
+                                    'scaling',
+                                    ['message' => 'Scaling metric settings are invalid', 'invalidIndex' => $metricId],
+                                    $role['farm_role_id']
+                                );
+                                break;
+                            }
+                        }
+                    }
                 }
 
-                $maxCount = (int)$role['settings'][DBFarmRole::SETTING_SCALING_MAX_INSTANCES];
-                if (!$maxCount)
-                    $maxCount = 1;
+                /* Validate advanced settings */
+                if (!$dbRole->hasBehavior(ROLE_BEHAVIORS::VPC_ROUTER)) {
+                    if (isset($role['settings'][Scalr_Role_Behavior::ROLE_BASE_API_PORT])) {
+                        $this->checkInteger($role['farm_role_id'], Scalr_Role_Behavior::ROLE_BASE_API_PORT, $role['settings'][Scalr_Role_Behavior::ROLE_BASE_API_PORT], 'Scalarizr API port', 1, 65535);
+                    }
+                    if (isset($role['settings'][Scalr_Role_Behavior::ROLE_BASE_MESSAGING_PORT])) {
+                        $this->checkInteger($role['farm_role_id'], Scalr_Role_Behavior::ROLE_BASE_MESSAGING_PORT, $role['settings'][Scalr_Role_Behavior::ROLE_BASE_MESSAGING_PORT], 'Scalarizr control port', 1, 65535);
+                    }
 
-                if ($maxCount < 1 || $maxCount > 400) {
-                    $this->setBuildError(
-                        DBFarmRole::SETTING_SCALING_MAX_INSTANCES,
-                        sprintf(_("Max instances for '%s' must be a number between 1 and 400"), $dbRole->name),
-                        $role['farm_role_id']
-                    );
+                    if (isset($role['settings'][Entity\FarmRoleSetting::SYSTEM_REBOOT_TIMEOUT])) {
+                        $this->checkInteger($role['farm_role_id'], Entity\FarmRoleSetting::SYSTEM_REBOOT_TIMEOUT, $role['settings'][Entity\FarmRoleSetting::SYSTEM_REBOOT_TIMEOUT], 'Reboot timeout', 1);
+                    }
+                    if (isset($role['settings'][Entity\FarmRoleSetting::SYSTEM_LAUNCH_TIMEOUT])) {
+                        $this->checkInteger($role['farm_role_id'], Entity\FarmRoleSetting::SYSTEM_LAUNCH_TIMEOUT, $role['settings'][Entity\FarmRoleSetting::SYSTEM_LAUNCH_TIMEOUT], 'Launch timeout', 1);
+                    }
                 }
 
-                if ($maxCount < $minCount) {
-                    $this->setBuildError(
-                        DBFarmRole::SETTING_SCALING_MAX_INSTANCES,
-                        sprintf(_("Max instances should be greater or equal than Min instances for role '%s'"), $dbRole->name),
-                        $role['farm_role_id']
-                    );
+                /* Validate chef settings */
+                if ($dbRole->hasBehavior(ROLE_BEHAVIORS::CHEF)) {
+                    if ($role['settings'][Scalr_Role_Behavior_Chef::ROLE_CHEF_BOOTSTRAP] == 1) {
+                        if (empty($role['settings'][Scalr_Role_Behavior_Chef::ROLE_CHEF_COOKBOOK_URL]) && empty($role['settings'][Scalr_Role_Behavior_Chef::ROLE_CHEF_SERVER_ID])) {
+                            $this->setBuildError(
+                                Scalr_Role_Behavior_Chef::ROLE_CHEF_SERVER_ID,
+                                'Chef Server or Chef Solo must be setup if using Chef to bootstrap Role',
+                                $role['farm_role_id']
+                            );
+                        } elseif ($role['settings'][Scalr_Role_Behavior_Chef::ROLE_CHEF_COOKBOOK_URL_TYPE] == 'http' &&
+                                  !empty($role['settings'][Scalr_Role_Behavior_Chef::ROLE_CHEF_COOKBOOK_URL]) &&
+                                  Validator::validateUrl($role['settings'][Scalr_Role_Behavior_Chef::ROLE_CHEF_COOKBOOK_URL]) !== true) {
+                            $this->setBuildError(
+                                Scalr_Role_Behavior_Chef::ROLE_CHEF_COOKBOOK_URL,
+                                'Cookbook URL is invalid.',
+                                $role['farm_role_id']
+                            );
+                        }
+                    } elseif ($dbRole->getProperty(Scalr_Role_Behavior_Chef::ROLE_CHEF_BOOTSTRAP) == 1 && $dbRole->getProperty(Scalr_Role_Behavior_Chef::ROLE_CHEF_SERVER_ID)) {
+                        if (strpos($role['farm_role_id'], "virtual_") !== false) {
+                            $chefGovernance = $governance->getValue(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_CHEF, 'servers');
+                            if ($chefGovernance !== null && !isset($chefGovernance[$dbRole->getProperty(Scalr_Role_Behavior_Chef::ROLE_CHEF_SERVER_ID)])) {
+                                $this->setBuildError(
+                                    Scalr_Role_Behavior_Chef::ROLE_CHEF_SERVER_ID,
+                                    'Chef server is not allowed by Governance.',
+                                    $role['farm_role_id']
+                                );
+                            }
+                        }
+                        if (empty($dbRole->getProperty(Scalr_Role_Behavior_Chef::ROLE_CHEF_ENVIRONMENT)) && empty($role['settings'][Scalr_Role_Behavior_Chef::ROLE_CHEF_ENVIRONMENT])) {
+                            $this->setBuildError(
+                                Scalr_Role_Behavior_Chef::ROLE_CHEF_ENVIRONMENT,
+                                'Chef Environment is required',
+                                $role['farm_role_id']
+                            );
+                        }
+                    }
                 }
-
-                if (isset($role['settings'][DBFarmRole::SETTING_SCALING_POLLING_INTERVAL]) && $role['settings'][DBFarmRole::SETTING_SCALING_POLLING_INTERVAL] > 0)
-                    $polling_interval = (int)$role['settings'][DBFarmRole::SETTING_SCALING_POLLING_INTERVAL];
-                else
-                    $polling_interval = 2;
-
-
-                if ($polling_interval < 1 || $polling_interval > 50) {
-                    $this->setBuildError(
-                        DBFarmRole::SETTING_SCALING_POLLING_INTERVAL,
-                        sprintf(_("Polling interval for role '%s' must be a number between 1 and 50"), $dbRole->name),
-                        $role['farm_role_id']
-                    );
-                }
-
                 /** Validate platform specified settings **/
                 switch($role['platform']) {
                     case SERVER_PLATFORMS::EC2:
-
-                        if ($role['settings'][DBFarmRole::SETTING_AWS_TAGS_LIST]) {
+                        if (!empty($role['settings'][Entity\FarmRoleSetting::AWS_TAGS_LIST])) {
                             $reservedBaseCustomTags = ['scalr-meta', 'Name'];
-                            $baseCustomTags = @explode("\n", $role['settings'][DBFarmRole::SETTING_AWS_TAGS_LIST]);
+                            $baseCustomTags = @explode("\n", $role['settings'][Entity\FarmRoleSetting::AWS_TAGS_LIST]);
                             foreach ((array)$baseCustomTags as $tag) {
                                 $tag = trim($tag);
                                 $tagChunks = explode("=", $tag);
                                 if (in_array(trim($tagChunks[0]), $reservedBaseCustomTags)) {
                                     $this->setBuildError(
-                                        DBFarmRole::SETTING_AWS_TAGS_LIST,
+                                        Entity\FarmRoleSetting::AWS_TAGS_LIST,
                                         "Avoid using Scalr-reserved tag names.",
                                         $role['farm_role_id']
                                     );
@@ -285,16 +354,14 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                         }
 
                         if ($dbRole->hasBehavior(ROLE_BEHAVIORS::MYSQL)) {
-                            if ($role['settings'][DBFarmRole::SETTING_MYSQL_DATA_STORAGE_ENGINE] == MYSQL_STORAGE_ENGINE::EBS) {
-
-                                if ($dbRole->generation != 2) {
-                                    if ($role['settings'][DBFarmRole::SETTING_AWS_AVAIL_ZONE] == "" ||
-                                    $role['settings'][DBFarmRole::SETTING_AWS_AVAIL_ZONE] == "x-scalr-diff" ||
-                                    stristr($role['settings'][DBFarmRole::SETTING_AWS_AVAIL_ZONE], 'x-scalr-custom')
-                                    ) {
+                            if ($role['settings'][Entity\FarmRoleSetting::MYSQL_DATA_STORAGE_ENGINE] == MYSQL_STORAGE_ENGINE::EBS) {
+                                if ($dbRole->generation != 2 && isset($role['settings'][Entity\FarmRoleSetting::AWS_AVAIL_ZONE])) {
+                                    if ($role['settings'][Entity\FarmRoleSetting::AWS_AVAIL_ZONE] == "" ||
+                                        $role['settings'][Entity\FarmRoleSetting::AWS_AVAIL_ZONE] == "x-scalr-diff" ||
+                                        stristr($role['settings'][Entity\FarmRoleSetting::AWS_AVAIL_ZONE], 'x-scalr-custom')) {
                                         $this->setBuildError(
-                                            DBFarmRole::SETTING_AWS_AVAIL_ZONE,
-                                            sprintf(_("Requirement for EBS MySQL data storage is specific 'Placement' parameter for role '%s'"), $dbRole->name),
+                                            Entity\FarmRoleSetting::AWS_AVAIL_ZONE,
+                                            'Requirement for EBS MySQL data storage is specific \'Placement\' parameter',
                                             $role['farm_role_id']
                                         );
                                     }
@@ -302,62 +369,78 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                             }
                         }
 
-                        if ($dbRole->getDbMsrBehavior())
-                        {
+                        if ($dbRole->getDbMsrBehavior()) {
                             if ($role['settings'][Scalr_Db_Msr::DATA_STORAGE_ENGINE] == MYSQL_STORAGE_ENGINE::EPH) {
                                 if (!$role['settings'][Scalr_Db_Msr::DATA_STORAGE_EPH_DISK] && !$role['settings'][Scalr_Db_Msr::DATA_STORAGE_EPH_DISKS]) {
                                     $this->setBuildError(
                                         Scalr_Db_Msr::DATA_STORAGE_EPH_DISK,
-                                        sprintf(_("Ephemeral disk settings is required for role '%s'"), $dbRole->name),
+                                        'Ephemeral disk settings is required',
                                         $role['farm_role_id']
                                     );
                                 }
+                            } elseif ($role['settings'][Scalr_Db_Msr::DATA_STORAGE_ENGINE] == MYSQL_STORAGE_ENGINE::EBS) {
+                                if (array_key_exists(Scalr_Db_Msr::DATA_STORAGE_EBS_TYPE, $role["settings"])) {
+                                    if ($role['settings'][Scalr_Db_Msr::DATA_STORAGE_EBS_TYPE] == CreateVolumeRequestData::VOLUME_TYPE_STANDARD) {
+                                        $this->checkInteger($role['farm_role_id'], Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE, $role['settings'][Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE], 'Storage size', 1, 1024);
+                                    } elseif ($role['settings'][Scalr_Db_Msr::DATA_STORAGE_EBS_TYPE] == CreateVolumeRequestData::VOLUME_TYPE_GP2) {
+                                        $this->checkInteger($role['farm_role_id'], Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE, $role['settings'][Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE], 'Storage size', 1, 16384);
+                                    } elseif ($role['settings'][Scalr_Db_Msr::DATA_STORAGE_EBS_TYPE] == CreateVolumeRequestData::VOLUME_TYPE_IO1) {
+                                        $this->checkInteger($role['farm_role_id'], Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE, $role['settings'][Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE], 'Storage size', 4, 16384);
+                                        $this->checkInteger($role['farm_role_id'], Scalr_Db_Msr::DATA_STORAGE_EBS_IOPS, $role['settings'][Scalr_Db_Msr::DATA_STORAGE_EBS_IOPS], 'IOPS', 100, 20000);
+                                    }
+                                }
+                            }
+
+                            if (array_key_exists(Scalr_Db_Msr::DATA_STORAGE_EBS_ENABLE_ROTATION, $role["settings"]) && $role['settings'][Scalr_Db_Msr::DATA_STORAGE_EBS_ENABLE_ROTATION] == 1) {
+                                $this->checkInteger($role['farm_role_id'], Scalr_Db_Msr::DATA_STORAGE_EBS_ROTATE, $role['settings'][Scalr_Db_Msr::DATA_STORAGE_EBS_ROTATE], 'Snapshot rotation limit', 1);
                             }
 
                             if ($role['settings'][Scalr_Db_Msr::DATA_STORAGE_ENGINE] == MYSQL_STORAGE_ENGINE::LVM) {
                                 if (!$role['settings'][Scalr_Role_DbMsrBehavior::ROLE_DATA_STORAGE_LVM_VOLUMES]) {
                                     $this->setBuildError(
                                         Scalr_Role_DbMsrBehavior::ROLE_DATA_STORAGE_LVM_VOLUMES,
-                                        sprintf(_("LVM storage settings is required for role '%s'"), $dbRole->name),
+                                        'LVM storage settings is required',
                                         $role['farm_role_id']
                                     );
                                 }
                             }
                         }
 
-                        if ($role['settings'][DBFarmRole::SETTING_AWS_AVAIL_ZONE] == 'x-scalr-custom=') {
+                        if ($role['settings'][Entity\FarmRoleSetting::AWS_AVAIL_ZONE] == 'x-scalr-custom=') {
                             $this->setBuildError(
-                                DBFarmRole::SETTING_AWS_AVAIL_ZONE,
-                                sprintf(_("Availability zone for role \"%s\" should be selected"), $dbRole->name),
+                                Entity\FarmRoleSetting::AWS_AVAIL_ZONE,
+                                'Availability zone should be selected',
                                 $role['farm_role_id']
                             );
                         }
 
-                        if ($farmSettings['vpc_id']) {
-                            $sgs = @json_decode($role['settings'][DBFarmRole::SETTING_AWS_SECURITY_GROUPS_LIST]);
-                            if (!$dbRole->hasBehavior(ROLE_BEHAVIORS::VPC_ROUTER) && empty($sgs) && !$role['settings'][DBFarmRole::SETTING_AWS_SG_LIST] && !$role['settings']['aws.security_group']) {
+                        if (!empty($farmSettings['vpc_id'])) {
+                            $sgs = @json_decode($role['settings'][Entity\FarmRoleSetting::AWS_SECURITY_GROUPS_LIST]);
+                            if (!$governance->getValue(SERVER_PLATFORMS::EC2, Scalr_Governance::AWS_SECURITY_GROUPS) &&
+                                !$dbRole->hasBehavior(ROLE_BEHAVIORS::VPC_ROUTER) && 
+                                empty($sgs) && 
+                                empty($role['settings'][Entity\FarmRoleSetting::AWS_SG_LIST])
+                            ) {
                                 $this->setBuildError(
-                                    DBFarmRole::SETTING_AWS_SECURITY_GROUPS_LIST,
+                                    Entity\FarmRoleSetting::AWS_SECURITY_GROUPS_LIST,
                                     'Security group(s) should be selected',
                                     $role['farm_role_id']
                                 );
                             }
 
-                            $subnets = @json_decode($role['settings'][DBFarmRole::SETTING_AWS_VPC_SUBNET_ID]);
+                            $subnets = @json_decode($role['settings'][Entity\FarmRoleSetting::AWS_VPC_SUBNET_ID]);
                             if (empty($subnets)) {
                                 $this->setBuildError(
-                                    DBFarmRole::SETTING_AWS_VPC_SUBNET_ID,
+                                    Entity\FarmRoleSetting::AWS_VPC_SUBNET_ID,
                                     'VPC Subnet(s) should be selected',
                                     $role['farm_role_id']
                                 );
                             }
 
-                        if (\Scalr::config('scalr.instances_connection_policy') != 'local' &&
-                            !$role['settings'][Scalr_Role_Behavior_Router::ROLE_VPC_SCALR_ROUTER_ID] &&
-                            !$vpcRouterRequired) {
+                            if (\Scalr::config('scalr.instances_connection_policy') != 'local' &&
+                                empty($role['settings'][Scalr_Role_Behavior_Router::ROLE_VPC_SCALR_ROUTER_ID])) {
                                 try {
-                                    $subnets = @json_decode($role['settings'][DBFarmRole::SETTING_AWS_VPC_SUBNET_ID]);
-                                    if ($subnets[0]) {
+                                    if (!empty($subnets[0])) {
                                         $platform = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
                                         $info = $platform->listSubnets(
                                             $this->getEnvironment(),
@@ -367,37 +450,62 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                                             $subnets[0]
                                         );
 
-                                        if ($info && $info['type'] == 'private')
+                                        if (!empty($info["type"]) && $info['type'] == 'private') {
                                             $vpcRouterRequired = $role['farm_role_id'];
+                                        }
                                     }
                                 } catch (Exception $e) {}
                             }
                         }
-
                         break;
-
                     case SERVER_PLATFORMS::CLOUDSTACK:
-                        if (!$role['settings'][DBFarmRole::SETTING_CLOUDSTACK_SERVICE_OFFERING_ID]) {
+                        if (!$role['settings'][Entity\FarmRoleSetting::CLOUDSTACK_SERVICE_OFFERING_ID]) {
                             $this->setBuildError(
-                                DBFarmRole::SETTING_CLOUDSTACK_SERVICE_OFFERING_ID,
-                                sprintf(_("Service offering for '%s' cloudstack role should be selected on 'Cloudstack settings' tab"), $dbRole->name),
+                                Entity\FarmRoleSetting::CLOUDSTACK_SERVICE_OFFERING_ID,
+                                'Service offering should be selected',
                                 $role['farm_role_id']
                             );
                         }
                         break;
-
                     case SERVER_PLATFORMS::RACKSPACE:
-                        if (!$role['settings'][DBFarmRole::SETTING_RS_FLAVOR_ID]) {
+                        if (!$role['settings'][Entity\FarmRoleSetting::RS_FLAVOR_ID]) {
                             $this->setBuildError(
-                                DBFarmRole::SETTING_CLOUDSTACK_SERVICE_OFFERING_ID,
-                                sprintf(_("Flavor for '%s' rackspace role should be selected on 'Placement and type' tab"), $dbRole->name),
+                                Entity\FarmRoleSetting::CLOUDSTACK_SERVICE_OFFERING_ID,
+                                'Flavor should be selected',
                                 $role['farm_role_id']
                             );
+                        }
+                        break;
+                    case SERVER_PLATFORMS::GCE:
+                        if ($dbRole->getDbMsrBehavior()) {
+                            if ($role['settings'][Scalr_Db_Msr::DATA_STORAGE_ENGINE] == MYSQL_STORAGE_ENGINE::GCE_PERSISTENT) {
+                                $this->checkInteger($role['farm_role_id'], Scalr_Db_Msr::DATA_STORAGE_GCED_SIZE, $role['settings'][Scalr_Db_Msr::DATA_STORAGE_GCED_SIZE], 'Storage size', 1);
+                            }
                         }
                         break;
                 }
 
-                if ($role['settings'][Scalr_Role_Behavior::ROLE_BASE_CUSTOM_TAGS] && PlatformFactory::isOpenstack($role['platform'])) {
+                if ($dbRole->getDbMsrBehavior()) {
+                    if (array_key_exists(Scalr_Db_Msr::DATA_BUNDLE_ENABLED, $role["settings"]) && $role['settings'][Scalr_Db_Msr::DATA_BUNDLE_ENABLED] == 1) {
+                        $this->checkInteger($role['farm_role_id'], Scalr_Db_Msr::DATA_BUNDLE_EVERY, $role['settings'][Scalr_Db_Msr::DATA_BUNDLE_EVERY], 'Bundle period', 1);
+
+                        $this->checkString($role['farm_role_id'], Scalr_Db_Msr::DATA_BUNDLE_TIMEFRAME_START_HH, $role['settings'][Scalr_Db_Msr::DATA_BUNDLE_TIMEFRAME_START_HH], 'Preferred bundle window start HH is invalid', '/^([0-1][0-9])|(2[0-4])$/');
+                        $this->checkString($role['farm_role_id'], Scalr_Db_Msr::DATA_BUNDLE_TIMEFRAME_START_MM, $role['settings'][Scalr_Db_Msr::DATA_BUNDLE_TIMEFRAME_START_MM], 'Preferred bundle window start MM is invalid', '/^[0-5][0-9]$/');
+                        $this->checkString($role['farm_role_id'], Scalr_Db_Msr::DATA_BUNDLE_TIMEFRAME_END_HH, $role['settings'][Scalr_Db_Msr::DATA_BUNDLE_TIMEFRAME_END_HH], 'Preferred bundle window end HH is invalid', '/^([0-1][0-9])|(2[0-4])$/');
+                        $this->checkString($role['farm_role_id'], Scalr_Db_Msr::DATA_BUNDLE_TIMEFRAME_END_MM, $role['settings'][Scalr_Db_Msr::DATA_BUNDLE_TIMEFRAME_END_MM], 'Preferred bundle window end MM is invalid', '/^[0-5][0-9]$/');
+                    }
+
+                    if (array_key_exists(Scalr_Db_Msr::DATA_BACKUP_ENABLED, $role["settings"]) && $role['settings'][Scalr_Db_Msr::DATA_BACKUP_ENABLED] == 1) {
+                        $this->checkInteger($role['farm_role_id'], Scalr_Db_Msr::DATA_BACKUP_EVERY, $role['settings'][Scalr_Db_Msr::DATA_BACKUP_EVERY], 'Backup period', 1);
+
+                        $this->checkString($role['farm_role_id'], Scalr_Db_Msr::DATA_BACKUP_TIMEFRAME_START_HH, $role['settings'][Scalr_Db_Msr::DATA_BACKUP_TIMEFRAME_START_HH], 'Preferred backup window start HH is invalid', '/^([0-1][0-9])|(2[0-4])$/');
+                        $this->checkString($role['farm_role_id'], Scalr_Db_Msr::DATA_BACKUP_TIMEFRAME_START_MM, $role['settings'][Scalr_Db_Msr::DATA_BACKUP_TIMEFRAME_START_MM], 'Preferred backup window start MM is invalid', '/^[0-5][0-9]$/');
+                        $this->checkString($role['farm_role_id'], Scalr_Db_Msr::DATA_BACKUP_TIMEFRAME_END_HH, $role['settings'][Scalr_Db_Msr::DATA_BACKUP_TIMEFRAME_END_HH], 'Preferred backup window end HH is invalid', '/^([0-1][0-9])|(2[0-4])$/');
+                        $this->checkString($role['farm_role_id'], Scalr_Db_Msr::DATA_BACKUP_TIMEFRAME_END_MM, $role['settings'][Scalr_Db_Msr::DATA_BACKUP_TIMEFRAME_END_MM], 'Preferred backup window end MM is invalid', '/^[0-5][0-9]$/');
+                    }
+                }
+
+                if (!empty($role['settings'][Scalr_Role_Behavior::ROLE_BASE_CUSTOM_TAGS]) && PlatformFactory::isOpenstack($role['platform'])) {
                     $reservedBaseCustomTags = ['scalr-meta', 'farmid', 'role', 'httpproto', 'region', 'hash', 'realrolename', 'szr_key', 'serverid', 'p2p_producer_endpoint', 'queryenv_url', 'behaviors', 'farm_roleid', 'roleid', 'env_id', 'platform', 'server_index', 'cloud_server_id', 'cloud_location_zone', 'owner_email'];
                     $baseCustomTags = @explode("\n", $role['settings'][Scalr_Role_Behavior::ROLE_BASE_CUSTOM_TAGS]);
                     foreach ((array)$baseCustomTags as $tag) {
@@ -413,8 +521,8 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                     }
                 }
 
-                if ($role['settings'][Scalr_Role_Behavior::ROLE_BASE_HOSTNAME_FORMAT]) {
-                    if (!preg_match('/^[A-Za-z0-9\{\}_\.-]+$/si', $role['settings'][Scalr_Role_Behavior::ROLE_BASE_HOSTNAME_FORMAT])) {
+                if (!empty($role['settings'][Scalr_Role_Behavior::ROLE_BASE_HOSTNAME_FORMAT])) {
+                    if (!preg_match('/^[\w\{\}\.-]+$/', $role['settings'][Scalr_Role_Behavior::ROLE_BASE_HOSTNAME_FORMAT])) {
                         $this->setBuildError(
                             Scalr_Role_Behavior::ROLE_BASE_HOSTNAME_FORMAT,
                             "server hostname format for role'{$dbRole->name}' should contain only [a-z0-9-] chars. First char should not be hypen.",
@@ -423,53 +531,25 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                     }
                 }
 
-                if ($role['settings'][DBFarmRole::SETTING_DNS_CREATE_RECORDS]) {
-                    if ($role['settings'][DBFarmRole::SETTING_DNS_EXT_RECORD_ALIAS]) {
-                        if (!preg_match('/^[A-Za-z0-9\{\}_\.-]+$/si', $role['settings'][DBFarmRole::SETTING_DNS_EXT_RECORD_ALIAS])) {
+                if (!empty($role['settings'][Entity\FarmRoleSetting::DNS_CREATE_RECORDS])) {
+                    if ($role['settings'][Entity\FarmRoleSetting::DNS_EXT_RECORD_ALIAS]) {
+                        if (!preg_match('/^[\w\{\}\.-]+$/', $role['settings'][Entity\FarmRoleSetting::DNS_EXT_RECORD_ALIAS])) {
                             $this->setBuildError(
-                                DBFarmRole::SETTING_DNS_EXT_RECORD_ALIAS,
+                                Entity\FarmRoleSetting::DNS_EXT_RECORD_ALIAS,
                                 "ext- record alias for role '{$dbRole->name}' should contain only [A-Za-z0-9-] chars. First and last char should not be hypen.",
                                 $role['farm_role_id']
                             );
                         }
                     }
 
-                    if ($role['settings'][DBFarmRole::SETTING_DNS_INT_RECORD_ALIAS]) {
-                        if (!preg_match('/^[A-Za-z0-9\{\}_\.-]+$/si', $role['settings'][DBFarmRole::SETTING_DNS_INT_RECORD_ALIAS])) {
+                    if ($role['settings'][Entity\FarmRoleSetting::DNS_INT_RECORD_ALIAS]) {
+                        if (!preg_match('/^[\w\{\}\.-]+$/', $role['settings'][Entity\FarmRoleSetting::DNS_INT_RECORD_ALIAS])) {
                             $this->setBuildError(
-                                DBFarmRole::SETTING_DNS_INT_RECORD_ALIAS,
+                                Entity\FarmRoleSetting::DNS_INT_RECORD_ALIAS,
                                 "int- record alias for role '{$dbRole->name}' should contain only [A-Za-z0-9-] chars. First and last char should not by hypen.",
                                 $role['farm_role_id']
                             );
                         }
-                    }
-                }
-
-                //DEPRECATED
-                $rParams = $dbRole->getParameters();
-                if (count($rParams) > 0 && strpos($role['farm_role_id'], 'virtual_') === false) {
-                    if (empty($role['params'])) {
-                        try {
-                            $dbFarmRole = DBFarmRole::LoadByID($role['farm_role_id']);
-                            foreach ($rParams as $param) {
-                                $farmRoleOption = $this->db->GetRow("SELECT id, value FROM farm_role_options WHERE farm_roleid=? AND `hash`=? LIMIT 1", array($dbFarmRole->ID, $param['hash']));
-                                if ($farmRoleOption['id'])
-                                    $value = $farmRoleOption['value'];
-
-                                $role['params'][$param['hash']] = $value;
-                            }
-                        } catch (Exception $e) {}
-                    }
-                }
-
-                //Validate role parameters
-                foreach ($rParams as $p) {
-                    if ($p['required'] && $role['params'][$p['hash']] == "" && !$p['defval']) {
-                        $this->setBuildError(
-                            $p['name'],
-                            "Missed required parameter '{$p['name']}' for role '{$dbRole->name}'",
-                            $role['farm_role_id']
-                        );
                     }
                 }
 
@@ -478,6 +558,25 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                     $farmRole = DBFarmRole::LoadByID($role['farm_role_id']);
                 } else {
                     $farmRole = null;
+
+                    if ($dbRole->isDeprecated == 1) {
+                        $this->setBuildError('roleId', 'This role has been deprecated and cannot be added', $role['farm_role_id']);
+                    }
+
+                    if (!empty(($envs = $dbRole->__getNewRoleObject()->getAllowedEnvironments()))) {
+                        if (!in_array($this->getEnvironmentId(), $envs)) {
+                            $this->setBuildError('roleId', "You don't have access to this role", $role['farm_role_id']);
+                        }
+                    }
+                }
+
+                if (isset($role['storages']['configs'])) {
+                    // TODO: refactor, get rid of using DBFarmRole in constructor
+                    $fr = $farmRole ? $farmRole : new DBFarmRole(0);
+                    foreach ($fr->getStorage()->validateConfigs($role['storages']['configs']) as $index => $message) {
+                        $this->setBuildError('storages', ['message' => $message, 'invalidIndex' => $index], $role['farm_role_id']);
+                        break;
+                    }
                 }
 
                 $result = $farmRoleVariables->validateValues(is_array($role['variables']) ? $role['variables'] : [], $dbRole->id, $farmId, $farmRole ? $farmRole->ID : 0);
@@ -489,14 +588,14 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
         if ($farmSettings['vpc_id']) {
             if (!$hasVpcRouter && $vpcRouterRequired) {
                 $this->setBuildError(
-                    DBFarmRole::SETTING_AWS_VPC_SUBNET_ID,
+                    Entity\FarmRoleSetting::AWS_VPC_SUBNET_ID,
                     'You must select a VPC Router for Farm Roles launched in a Private VPC Subnet',
                     $vpcRouterRequired
                 );
             }
         }
 
-        if ($this->getContainer()->analytics->enabled && $this->request->isInterfaceBetaOrNotHostedScalr()) {
+        if ($this->getContainer()->analytics->enabled) {
             if ($farmSettings['projectId']) {
                 $project = $this->getContainer()->analytics->projects->get($farmSettings['projectId']);
                 if (!$project) {
@@ -592,7 +691,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                     $dbFarm->createdByUserId = $user->getId();
                     $dbFarm->createdByUserEmail = $user->getEmail();
                     // TODO: move to subclass \Farm\Setting\OwnerHistory
-                    $history = unserialize($dbFarm->GetSetting(DBFarm::SETTING_OWNER_HISTORY));
+                    $history = unserialize($dbFarm->GetSetting(Entity\FarmSetting::OWNER_HISTORY));
                     if (! is_array($history))
                         $history = [];
                     $history[] = [
@@ -602,7 +701,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                         'changedByEmail' => $this->user->getEmail(),
                         'dt' => date('Y-m-d H:i:s')
                     ];
-                    $dbFarm->SetSetting(DBFarm::SETTING_OWNER_HISTORY, serialize($history));
+                    $dbFarm->SetSetting(Entity\FarmSetting::OWNER_HISTORY, serialize($history));
                 }
 
                 $dbFarm->teamId = is_numeric($farm['teamOwner']) && $farm['teamOwner'] > 0 ? $farm['teamOwner'] : NULL;
@@ -613,11 +712,11 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 
         $governance = new Scalr_Governance($this->getEnvironmentId());
         if (!$this->getParam('farmId') && $governance->isEnabled(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_LEASE)) {
-            $dbFarm->SetSetting(DBFarm::SETTING_LEASE_STATUS, 'Active'); // for created farm
+            $dbFarm->SetSetting(Entity\FarmSetting::LEASE_STATUS, 'Active'); // for created farm
         }
 
         if (isset($farm['variables'])) {
-            $variables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_FARM);
+            $variables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), ScopeInterface::SCOPE_FARM);
             $variables->setValues(is_array($farm['variables']) ? $farm['variables'] : [], 0, $dbFarm->ID, 0, '', false, true);
         }
 
@@ -625,16 +724,15 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
             $farm['timezone'] = date_default_timezone_get();
         }
 
-        $dbFarm->SetSetting(DBFarm::SETTING_TIMEZONE, $farm['timezone']);
-        $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_ID, $farm['vpc_id']);
-        $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_REGION, $farm['vpc_region']);
+        $dbFarm->SetSetting(Entity\FarmSetting::TIMEZONE, $farm['timezone']);
+        $dbFarm->SetSetting(Entity\FarmSetting::EC2_VPC_ID, isset($farm["vpc_id"]) ? $farm['vpc_id'] : null);
+        $dbFarm->SetSetting(Entity\FarmSetting::EC2_VPC_REGION, isset($farm["vpc_id"]) ? $farm['vpc_region'] : null);
+        $dbFarm->SetSetting(Entity\FarmSetting::SZR_UPD_REPOSITORY, $farm[Entity\FarmSetting::SZR_UPD_REPOSITORY]);
+        $dbFarm->SetSetting(Entity\FarmSetting::SZR_UPD_SCHEDULE, $farm[Entity\FarmSetting::SZR_UPD_SCHEDULE]);
 
-        $dbFarm->SetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY, $farm[DBFarm::SETTING_SZR_UPD_REPOSITORY]);
-        $dbFarm->SetSetting(DBFarm::SETTING_SZR_UPD_SCHEDULE, $farm[DBFarm::SETTING_SZR_UPD_SCHEDULE]);
 
-
-        if (!$dbFarm->GetSetting(DBFarm::SETTING_CRYPTO_KEY)) {
-            $dbFarm->SetSetting(DBFarm::SETTING_CRYPTO_KEY, Scalr::GenerateRandomKey(40));
+        if (!$dbFarm->GetSetting(Entity\FarmSetting::CRYPTO_KEY)) {
+            $dbFarm->SetSetting(Entity\FarmSetting::CRYPTO_KEY, Scalr::GenerateRandomKey(40));
         }
 
         if ($this->getContainer()->analytics->enabled) {
@@ -659,38 +757,31 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
         $usedPlatforms = array();
         $dbFarmRolesList = array();
         $newFarmRolesList = array();
-        $farmRoleVariables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE);
+        $farmRoleVariables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), ScopeInterface::SCOPE_FARMROLE);
 
         if (!empty($roles)) {
             foreach ($roles as $role) {
                 if ($role['farm_role_id']) {
-
-                    if ($virtualFarmRoles[$role['farm_role_id']])
+                    if (isset($virtualFarmRoles[$role['farm_role_id']])) {
                         $role['farm_role_id'] = $virtualFarmRoles[$role['farm_role_id']];
+                    }
 
                     $update = true;
                     $dbFarmRole = DBFarmRole::LoadByID($role['farm_role_id']);
                     $dbRole = DBRole::loadById($dbFarmRole->RoleID);
                     $role['role_id'] = $dbFarmRole->RoleID;
 
-                    if ($dbFarmRole->Platform == SERVER_PLATFORMS::GCE)
+                    if ($dbFarmRole->Platform == SERVER_PLATFORMS::GCE) {
                         $dbFarmRole->CloudLocation = $role['cloud_location'];
-
-                }
-
-                /** TODO:  Remove because will be handled with virtual_ **/
-                 else {
+                    }
+                } else { /** TODO:  Remove because will be handled with virtual_ **/
                     $update = false;
                     $dbRole = DBRole::loadById($role['role_id']);
                     $dbFarmRole = $dbFarm->AddRole($dbRole, $role['platform'], $role['cloud_location'], (int)$role['launch_index']);
                 }
 
                 if ($dbRole->hasBehavior(ROLE_BEHAVIORS::RABBITMQ))
-                    $role['settings'][DBFarmRole::SETTING_SCALING_MAX_INSTANCES] = $role['settings'][DBFarmRole::SETTING_SCALING_MIN_INSTANCES];
-
-                if ($dbFarmRole->NewRoleID) {
-                    continue;
-                }
+                    $role['settings'][Entity\FarmRoleSetting::SCALING_MAX_INSTANCES] = $role['settings'][Entity\FarmRoleSetting::SCALING_MIN_INSTANCES];
 
                 if ($update) {
                     $dbFarmRole->LaunchIndex = (int)$role['launch_index'];
@@ -704,7 +795,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 
                 // Update virtual farm_role_id with actual value
                 $scripts = (array)$role['scripting'];
-                if (count($virtualFarmRoles) > 0) {
+                if (!empty($virtualFarmRoles)) {
                     array_walk_recursive($scripts, function(&$v, $k) use ($virtualFarmRoles) {
                         if (is_string($v))
                             $v = str_replace(array_keys($virtualFarmRoles), array_values($virtualFarmRoles), $v);
@@ -720,12 +811,12 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 
                 if (!empty($role['scaling_settings']) && is_array($role['scaling_settings']))
                     foreach ($role['scaling_settings'] as $k => $v) {
-                        $dbFarmRole->SetSetting($k, $v, DBFarmRole::TYPE_CFG);
+                        $dbFarmRole->SetSetting($k, $v, Entity\FarmRoleSetting::TYPE_CFG);
                     }
 
 
                 foreach ($role['settings'] as $k => $v)
-                    $dbFarmRole->SetSetting($k, $v, DBFarmRole::TYPE_CFG);
+                    $dbFarmRole->SetSetting($k, $v, Entity\FarmRoleSetting::TYPE_CFG);
 
 
                 /****** Scaling settings ******/
@@ -738,8 +829,8 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 );
 
                 // 5 = Time based scaling -> move to constants
-                if ($role['scaling'][5]) {
-                    foreach ($role['scaling'][5] as $scal_period) {
+                if (!empty($role['scaling'][Entity\ScalingMetric::METRIC_DATE_AND_TIME_ID])) {
+                    foreach ($role['scaling'][Entity\ScalingMetric::METRIC_DATE_AND_TIME_ID] as $scal_period) {
                         $chunks = explode(":", $scal_period['id']);
                         $this->db->Execute("INSERT INTO farm_role_scaling_times SET
                             farm_roleid		= ?,
@@ -758,10 +849,6 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 }
                 /*****************/
 
-                /* Update role params */
-                $dbFarmRole->SetParameters((array)$role['params']);
-                /* End of role params management */
-
                 /* Add script options to databse */
                 $dbFarmRole->SetScripts($scripts, (array)$role['scripting_params']);
                 /* End of scripting section */
@@ -771,9 +858,8 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 /* End of scripting section */
 
                 /* Add storage configuration */
-                if (isset($role['storages'])) {
-                    if (isset($role['storages']['configs']))
-                        $dbFarmRole->getStorage()->setConfigs($role['storages']['configs']);
+                if (isset($role['storages']['configs'])) {
+                    $dbFarmRole->getStorage()->setConfigs($role['storages']['configs'], false);
                 }
 
                 $farmRoleVariables->setValues(is_array($role['variables']) ? $role['variables']: [], $dbFarmRole->GetRoleID(), $dbFarm->ID, $dbFarmRole->ID, '', false, true);
@@ -800,9 +886,11 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
         }
 
         if (!$this->getParam('roleUpdate')) {
-            foreach ($dbFarm->GetFarmRoles() as $dbFarmRole) {
-                if (!$dbFarmRole->NewRoleID && !in_array($dbFarmRole->ID, $newFarmRolesList))
-                    $dbFarmRole->Delete();
+            /* @var $farmRole Entity\FarmRole */
+            foreach (Entity\FarmRole::findByFarmId($dbFarm->ID) as $farmRole) {
+                if (!in_array($farmRole->id, $newFarmRolesList)) {
+                    $farmRole->delete();
+                }
             }
         }
 
@@ -813,8 +901,11 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 
         if ($this->request->isFarmAllowed($dbFarm, Acl::PERM_FARMS_LAUNCH_TERMINATE) && $this->getParam('launch')) {
             $this->user->getPermissions()->validate($dbFarm);
+
             $dbFarm->isLocked();
+
             Scalr::FireEvent($dbFarm->ID, new FarmLaunchedEvent(true, $this->user->id));
+
             $this->response->success('Farm successfully saved and launched');
         } else {
             $this->response->success('Farm successfully saved');
@@ -829,8 +920,8 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 
         $farmRoles = array();
 
-        $variables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_FARM);
-        $farmRoleVariables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE);
+        $variables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), ScopeInterface::SCOPE_FARM);
+        $farmRoleVariables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), ScopeInterface::SCOPE_FARMROLE);
 
         foreach ($dbFarm->GetFarmRoles() as $dbFarmRole) {
 
@@ -907,13 +998,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
             foreach ($dbPresets as $preset)
                 $presets[$preset['behavior']] = $preset['preset_id'];
 
-            if ($dbFarmRole->NewRoleID) {
-                $roleName = DBRole::loadById($dbFarmRole->NewRoleID)->name;
-                $isBundling = true;
-            } else {
-                $roleName = $dbFarmRole->GetRoleObject()->name;
-                $isBundling = false;
-            }
+            $roleName = $dbFarmRole->GetRoleObject()->name;
 
             $storages = array(
                 'configs' => $dbFarmRole->getStorage()->getConfigs()
@@ -934,7 +1019,7 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 
                     try {
                         $server = DBServer::LoadByFarmRoleIDAndIndex($device->farmRoleId, $device->serverIndex);
-                        if ($server->status != SERVER_STATUS::TERMINATED && $server->status != SERVER_STATUS::TROUBLESHOOTING) {
+                        if ($server->status != SERVER_STATUS::TERMINATED) {
                             $info['serverId'] = $server->serverId;
                             $info['serverInstanceId'] = $server->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID);
                         }
@@ -965,7 +1050,6 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 'group'			=> $dbFarmRole->GetRoleObject()->getCategoryName(),
                 'cat_id'        => $dbFarmRole->GetRoleObject()->catId,
                 'name'			=> $roleName,
-                'is_bundle_running'	=> $isBundling,
                 'behaviors'		=> implode(",", $dbFarmRole->GetRoleObject()->getBehaviors()),
                 'scripting'		=> $scriptsObject,
                 'scripting_params' => $sParams,
@@ -980,26 +1064,26 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 'running_servers' => $dbFarmRole->GetRunningInstancesCount(),
                 'suspended_servers' => $dbFarmRole->GetSuspendedInstancesCount(),
                 'security_groups' => $securityGroups,
-                'hourly_rate'     => $this->getInstanceTypeHourlyRate($dbFarmRole->Platform, $dbFarmRole->CloudLocation, $dbFarmRole->getInstanceType(), $dbFarmRole->GetRoleObject()->osFamily)
+                'hourly_rate'     => $this->getInstanceTypeHourlyRate($dbFarmRole->Platform, $dbFarmRole->CloudLocation, $dbFarmRole->getInstanceType(), $dbFarmRole->GetRoleObject()->getOs()->family)
             );
         }
 
         $vpc = array();
-        if ($dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID)) {
+        if ($dbFarm->GetSetting(Entity\FarmSetting::EC2_VPC_ID)) {
             $vpc = array(
-                'id'        => $dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID),
-                'region'    => $dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_REGION)
+                'id'        => $dbFarm->GetSetting(Entity\FarmSetting::EC2_VPC_ID),
+                'region'    => $dbFarm->GetSetting(Entity\FarmSetting::EC2_VPC_REGION)
             );
         }
 
-        $farmOwnerEditable = $dbFarm->createdByUserId == $this->user->getId() || $this->user->isAccountOwner() || $this->request->isFarmAllowed($dbFarm, Acl::PERM_FARMS_CHANGE_OWNERSHIP);
+        $farmOwnerEditable = $this->user->isAccountOwner() || $this->request->isFarmAllowed($dbFarm, Acl::PERM_FARMS_CHANGE_OWNERSHIP);
 
         return array(
             'farm' => array(
                 'name' => $dbFarm->Name,
                 'description' => $dbFarm->Comments,
                 'rolesLaunchOrder' => $dbFarm->RolesLaunchOrder,
-                'timezone' => $dbFarm->GetSetting(DBFarm::SETTING_TIMEZONE),
+                'timezone' => $dbFarm->GetSetting(Entity\FarmSetting::TIMEZONE),
                 'variables' => $variables->getValues(0, $dbFarm->ID),
                 'vpc' => $vpc,
                 'status' => $dbFarm->Status,
@@ -1009,8 +1093,9 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
                 'teamOwner' => $farmOwnerEditable ? $dbFarm->teamId : ($dbFarm->teamId ? (new Scalr_Account_Team())->loadById($dbFarm->teamId)->name : ''),
                 'teamOwnerEditable' => $farmOwnerEditable,
                 'launchPermission' => $this->request->isFarmAllowed($dbFarm, Acl::PERM_FARMS_LAUNCH_TERMINATE),
-                DBFarm::SETTING_SZR_UPD_REPOSITORY => $dbFarm->GetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY),
-                DBFarm::SETTING_SZR_UPD_SCHEDULE => $dbFarm->GetSetting(DBFarm::SETTING_SZR_UPD_SCHEDULE)
+
+                Entity\FarmSetting::SZR_UPD_REPOSITORY => $dbFarm->GetSetting(Entity\FarmSetting::SZR_UPD_REPOSITORY),
+                Entity\FarmSetting::SZR_UPD_SCHEDULE => $dbFarm->GetSetting(Entity\FarmSetting::SZR_UPD_SCHEDULE)
             ),
             'roles' => $farmRoles,
             'lock' => $dbFarm->isLocked(false),
@@ -1020,11 +1105,11 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
 
     private function getInitialSecurityGroupsList(DBFarmRole $dbFarmRole)
     {
-        $additionalSecurityGroups = $dbFarmRole->GetSetting(DBFarmRole::SETTING_AWS_SG_LIST);
-        $append = $dbFarmRole->GetSetting(DBFarmRole::SETTING_AWS_SG_LIST_APPEND);
+        $additionalSecurityGroups = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_SG_LIST);
+        $append = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_SG_LIST_APPEND);
         if ($append === null || $append == 1 || ($append == 0 && $additionalSecurityGroups === null)) {
             $retval = array('default', \Scalr::config('scalr.aws.security_group_name'));
-            if (!$dbFarmRole->GetFarmObject()->GetSetting(DBFarm::SETTING_EC2_VPC_ID)) {
+            if (!$dbFarmRole->GetFarmObject()->GetSetting(Entity\FarmSetting::EC2_VPC_ID)) {
                 $retval = array_merge($retval, array(
                     "scalr-farm.{$dbFarmRole->FarmID}",
                     "scalr-role.{$dbFarmRole->ID}"
@@ -1046,25 +1131,46 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
         return $retval;
     }
 
-    public function xGetScriptsAction()
+    /**
+     * @param  int  $roleId
+     */
+    public function xGetScriptsAction($roleId)
     {
-        $dbRole = DBRole::loadById($this->getParam('roleId'));
-        if ($dbRole->origin == ROLE_TYPE::CUSTOM)
-            $this->user->getPermissions()->validate($dbRole);
+        $role = Role::findPk($roleId);
+        if (!$role) {
+            $this->response->failure('Role not found');
+            return;
+        }
+
+        $this->checkPermissions($role);
 
         $data = \Scalr\Model\Entity\Script::getScriptingData($this->user->getAccountId(), $this->getEnvironmentId());
-        $data['roleScripts'] = $dbRole->getScripts();
+        $data['roleScripts'] = $role->getScripts();
 
         $this->response->data($data);
     }
 
-    public function xGetRoleChefSettingsAction()
+    /**
+     * @param  int  $roleId
+     */
+    public function xGetRoleChefSettingsAction($roleId)
     {
-        $dbRole = DBRole::loadById($this->getParam('roleId'));
-        if ($dbRole->origin == ROLE_TYPE::CUSTOM)
-            $this->user->getPermissions()->validate($dbRole);
+        /* @var $role Role */
+        $role = Role::findPk($roleId);
+        if (!$role) {
+            $this->response->failure('Role not found');
+            return;
+        }
 
-        $this->response->data(array('chef' => $dbRole->getProperties('chef.')));
+        $this->checkPermissions($role);
+
+        $properties = [];
+        foreach (RoleProperty::find([['roleId' => $role->id], ['name' => ['$like' => 'chef.%']]]) as $prop) {
+            /* @var $prop RoleProperty */
+            $properties[$prop->name] = $prop->value;
+        }
+
+        $this->response->data(['chef' => $properties]);
     }
 
     /**
@@ -1103,6 +1209,78 @@ class Scalr_UI_Controller_Farms_Builder extends Scalr_UI_Controller
             $rate = $pricing instanceof PriceEntity ? $pricing->cost : 0;
         }
         return $rate;
+    }
+
+    /**
+     * Validate integer and set builder error if value is not valid
+     *
+     * @param string $farmRoleId
+     * @param string $name
+     * @param string $value
+     * @param string $title optional
+     * @param string $min optional
+     * @param string $max optional
+     * @return integer|false Value or false if value is invalid.
+     */
+    private function checkInteger($farmRoleId, $name, $value, $title = null, $min = null, $max = null)
+    {
+        $result = false;
+        if (ctype_digit((string)$value)) {
+            $result = (int)$value;
+            if (!is_null($min) && $result < $min || !is_null($max) && $result > $max) {
+                $result = false;
+            }
+        }
+
+        if ($result === false) {
+            $errorMessage = ' must be an integer';
+            if (!is_null($min) && !is_null($max)) {
+                $errorMessage .= ' between ' . $min . ' and ' . $max;
+            } elseif (!is_null($min)) {
+                $errorMessage .= ' greater than or equal to ' . $min;
+            } elseif (!is_null($max)) {
+                $errorMessage .= ' less than or equal to ' . $max;
+            }
+            if (is_array($title)) {
+                $title['message'] = 'Value' . $errorMessage;
+            } else {
+                $title = (!is_null($title) ? $title : 'Value') . $errorMessage;
+            }
+            $this->setBuildError(
+                $name,
+                $title,
+                $farmRoleId
+            );
+        }
+
+        return $result;
+    }
+
+    /**
+     * Validate string using regular expression
+     *
+     * @param string $farmRoleId
+     * @param string $name
+     * @param string $value
+     * @param string $errorMessage
+     * @param string $regexp
+     * @return string|false Value or false if value is invalid.
+     */
+    private function checkString($farmRoleId, $name, $value, $errorMessage, $regexp)
+    {
+        if (!preg_match($regexp, $value)) {
+            $result = false;
+            $this->setBuildError(
+                $name,
+                $errorMessage ? $errorMessage : 'Invalid value',
+                $farmRoleId
+            );
+        } else {
+            $result = $value;
+        }
+
+        return $result;
+
     }
 
 }

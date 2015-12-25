@@ -184,7 +184,7 @@ class RouteTest extends TestCase
     public function testGetHandler()
     {
         //Application instance is needed to setup container
-        $app = new ApiApplication([ApiApplication::SETTING_API_VERSION => '1']);
+        $app = new ApiApplication([ApiApplication::SETTING_API_VERSION => '1beta0']);
 
         $route = $this->getRouteFixture();
 
@@ -206,7 +206,7 @@ class RouteTest extends TestCase
         //AbstractController based handler
         $route->setDefaults(['controller' => $app->getRouteHandler('Admin_Users:get')]);
         $this->assertInternalType('callable', $route->getHandler());
-        $this->assertInstanceOf('Scalr\Api\Service\Admin\V1\Controller\Users', $route->getHandler()[0]);
+        $this->assertInstanceOf('Scalr\Api\Service\Admin\V1beta0\Controller\Users', $route->getHandler()[0]);
         $this->assertEquals('get', $route->getHandler()[1]);
     }
 

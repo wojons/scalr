@@ -19,7 +19,9 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Chef', {
         'chef.attributes': undefined,
         'chef.node_name_tpl' : undefined,
         'chef.daemonize': undefined,
-        'chef.log_level': undefined
+        'chef.log_level': undefined,
+        'chef.client_rb_template': undefined,
+        'chef.solo_rb_template': undefined
     },
 
     isEnabled: function (record) {
@@ -30,6 +32,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Chef', {
         var me = this,
             field = me.down('chefsettings');
 
+        field.clearInvalid();
         record.loadRoleChefSettings(function(data, status){
             if (status) {
                 if (!data.roleChefSettings) {
@@ -53,7 +56,6 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Chef', {
                 me.deactivateTab();
             }
         });
-        field.clearInvalid();
     },
 
     showTab: function (record) {
@@ -70,6 +72,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Chef', {
         record.set('settings', settings);
     },
     __items: [{
-        xtype: 'chefsettings'
+        xtype: 'chefsettings',
+        mode: 'farmrole'
     }]
 });

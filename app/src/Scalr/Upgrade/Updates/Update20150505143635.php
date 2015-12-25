@@ -1,11 +1,12 @@
 <?php
+
 namespace Scalr\Upgrade\Updates;
 
 use Scalr\Upgrade\SequenceInterface;
 use Scalr\Upgrade\AbstractUpdate;
-
 use Scalr\Acl\Resource\Definition;
 use Scalr\Acl\Acl;
+use Scalr\Model\Entity;
 
 class Update20150505143635 extends AbstractUpdate implements SequenceInterface
 {
@@ -374,6 +375,6 @@ class Update20150505143635 extends AbstractUpdate implements SequenceInterface
 
     protected function run9()
     {
-        $this->db->Execute("UPDATE farm_settings SET value = ? WHERE name = ? AND value = ?", ['owner', \DBFarm::SETTING_LOCK_RESTRICT, 1]);
+        $this->db->Execute("UPDATE farm_settings SET value = ? WHERE name = ? AND value = ?", ['owner', Entity\FarmSetting::LOCK_RESTRICT, 1]);
     }
 }

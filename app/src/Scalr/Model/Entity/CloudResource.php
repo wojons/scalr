@@ -10,13 +10,11 @@ use Scalr\Exception\ScalrException;
  */
 class CloudResource extends AbstractEntity
 {
-
     /* Amazon Services */
     const TYPE_AWS_ELB = 'aws_elb';
     const TYPE_AWS_RDS = 'aws_rds';
     /* GCE Services */
     const TYPE_GCE_LB  = 'gce_lb';
-
 
     /**
      * The identifier of the cloud resource
@@ -30,6 +28,7 @@ class CloudResource extends AbstractEntity
     /**
      * The type
      *
+     * @Id
      * @Column(type="string")
      * @var string
      */
@@ -43,22 +42,6 @@ class CloudResource extends AbstractEntity
      * @var int
      */
     public $envId;
-
-    /**
-     * The identifier of the farm
-     *
-     * @Column(type="integer")
-     * @var int
-     */
-    public $farmId;
-
-    /**
-     * The identifier of the farm role
-     *
-     * @Column(type="integer",nullable=true)
-     * @var int
-     */
-    public $farmRoleId;
 
     /**
      * Cloud platform
@@ -78,12 +61,20 @@ class CloudResource extends AbstractEntity
      */
     public $cloudLocation;
 
+    /**
+     * The identifier of the farm
+     *
+     * @Column(type="integer")
+     * @var int
+     */
+    public $farmId;
 
     /**
-     * Constructor
+     * The identifier of the farm role
+     *
+     * @Column(type="integer",nullable=true)
+     * @var int
      */
-    public function __construct()
-    {
+    public $farmRoleId;
 
-    }
 }

@@ -29,7 +29,7 @@ class Scalr_Service_Zookeeper_Lock {
         foreach ($config as $k => $v) {
             $this->{$k} = $v;
         }
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
         if ($this->acquireAttemptTimeout) {
             if (!$this->acquireAttemptTimeout instanceof Scalr_Util_Timeout) {
                 $this->acquireAttemptTimeout = new Scalr_Util_Timeout($this->acquireAttemptTimeout);

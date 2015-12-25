@@ -16,7 +16,4 @@ final class SERVER_STATUS
     const PENDING_SUSPEND   = "Pending suspend";
     const SUSPENDED			= "Suspended";
     const RESUMING			= "Resuming";
-
-
-    const TROUBLESHOOTING	= "Troubleshooting";
 }

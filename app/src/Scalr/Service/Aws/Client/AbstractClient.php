@@ -14,41 +14,6 @@ abstract class AbstractClient
 {
 
     /**
-     * HttpRequest predefined methods
-     *
-     * @var array
-     */
-    protected static $httpMethods = [
-        1 => 'GET',
-        2 => 'HEAD',
-        3 => 'POST',
-        4 => 'PUT',
-        5 => 'DELETE',
-        6 => 'OPTIONS',
-        7 => 'TRACE',
-        8 => 'CONNECT',
-        9 => 'PROPFIND',
-        10 => 'PROPPATCH',
-        11 => 'MKCOL',
-        12 => 'COPY',
-        13 => 'MOVE',
-        14 => 'LOCK',
-        15 => 'UNLOCK',
-        16 => 'VERSION_CONTROL',
-        17 => 'REPORT',
-        18 => 'CHECKOUT',
-        19 => 'CHECKIN',
-        20 => 'UNCHECKOUT',
-        21 => 'MKWORKSPACE',
-        22 => 'UPDATE',
-        23 => 'LABEL',
-        24 => 'MERGE',
-        25 => 'BASELINE_CONTROL',
-        26 => 'MKACTIVITY',
-        27 => 'ACL',
-    ];
-
-    /**
      * Aws instance
      *
      * @var \Scalr\Service\Aws

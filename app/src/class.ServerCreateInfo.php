@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\Modules\PlatformFactory;
+use Scalr\Model\Entity;
 
 class ServerCreateInfo
 {
@@ -59,12 +60,6 @@ class ServerCreateInfo
                 ));
             } else {
                 switch($this->platform) {
-                	case SERVER_PLATFORMS::EUCALYPTUS:
-                	    $this->SetProperties(array(
-                	       EUCA_SERVER_PROPERTIES::REGION => $DBFarmRole->CloudLocation
-                	    ));
-                	    break;
-
                 	case SERVER_PLATFORMS::RACKSPACE:
                 	    $this->SetProperties(array(
                 	       RACKSPACE_SERVER_PROPERTIES::DATACENTER => $DBFarmRole->CloudLocation
@@ -79,7 +74,7 @@ class ServerCreateInfo
 
                 	case SERVER_PLATFORMS::EC2:
                 	    $this->SetProperties(array(
-                    	    //EC2_SERVER_PROPERTIES::AVAIL_ZONE => $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_AVAIL_ZONE),
+                    	    //EC2_SERVER_PROPERTIES::AVAIL_ZONE => $DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_AVAIL_ZONE),
                     	    EC2_SERVER_PROPERTIES::REGION => $DBFarmRole->CloudLocation
                 	    ));
                 	    break;

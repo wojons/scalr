@@ -1,4 +1,11 @@
 Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, moduleParams) {
+    var isWebhooksReadOnly = false;
+    if (Scalr.scope === 'environment') {
+        isWebhooksReadOnly = !Scalr.isAllowed('WEBHOOKS_ENVIRONMENT', 'manage');
+    } else if (Scalr.scope === 'account') {
+        isWebhooksReadOnly = !Scalr.isAllowed('WEBHOOKS_ACCOUNT', 'manage');
+    }
+
     var store = Ext.create('store.store', {
         model: Ext.define(null, {
             extend: 'Ext.data.Model',
@@ -60,6 +67,7 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
         store: store,
         type: 'config',
         filterFields: ['name'],
+        readOnly: isWebhooksReadOnly,
         columns: [
             {
                 text: 'Webhook',
@@ -128,7 +136,7 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
 				}
                 grid.down('#add').toggle(isNewRecord, true);
 
-                var readOnly = moduleParams['scope'] != record.get('scope');
+                var readOnly = moduleParams['scope'] != record.get('scope') || isWebhooksReadOnly;
                 Ext.each(this.query('[isFormField]'), function(field){
                     field.setReadOnly(readOnly);
                 });
@@ -178,7 +186,7 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
                 itemId: 'endpoints',
                 name: 'endpoints',
                 store: {
-                    fields: ['id', 'url', 'isValid'],
+                    fields: ['id', 'url', 'isValid', 'scope'],
                     data: moduleParams['endpoints'],
                     proxy: 'object'
                 },
@@ -195,8 +203,17 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
                         return record.get('isValid') == 1;
                     }
                 },
+                labelTpl: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-{scope}" data-qtip="{scope:capitalize} scope"/>&nbsp;{url}',
                 listConfig: {
-                    tpl: '<tpl for="."><div class="x-boundlist-item">{[values.isValid!=1?\'<span style="color:#999">\'+values.url+\' (inactive)</span>\':values.url]}</div></tpl>'
+                    tpl:
+                        '<tpl for=".">' +
+                            '<div class="x-boundlist-item">' +
+                                '<div style="white-space:nowrap">' +
+                                    '&nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-{scope}" data-qtip="{scope:capitalize} scope"/>&nbsp; '+
+                                    '{[values.isValid!=1?\'<span style="color:#999">\'+values.url+\' (inactive)</span>\':values.url]}' +
+                                '</div>' +
+                            '</div>' +
+                        '</tpl>'
                 },
                 submitValue: false
             },{
@@ -221,14 +238,9 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
                 itemId: 'events',
                 name: 'events',
                 emptyText: 'Please select events',
-                listConfig: {
-                    cls: 'x-boundlist-role-scripting-events',
-                    style: 'white-space:nowrap',
-                    getInnerTpl: function(displayField) {
-                        return '&nbsp;<img src="'+Ext.BLANK_IMAGE_URL+'" class="scalr-scope-{scope}" data-qtip="{scope:capitalize} scope"/>&nbsp; '+
-                               '{id} <span style="color:#999">({description})</span>';
-                    }
-                },
+                matchFieldWidth: true,
+                labelTpl: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-{scope}" data-qtip="{scope:capitalize} scope"/>&nbsp;{name}',
+                listConfig: Scalr.configs.eventsListConfig,
                 submitValue: false
             },{
                 xtype: 'tagfield',
@@ -313,6 +325,7 @@ Scalr.regPage('Scalr.ui.webhooks.configs.view', function (loadParams, modulePara
 			xtype: 'container',
 			dock: 'bottom',
 			cls: 'x-docked-buttons',
+            hidden: isWebhooksReadOnly,
 			layout: {
 				type: 'hbox',
 				pack: 'center'

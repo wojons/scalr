@@ -14,7 +14,7 @@ use Scalr\Service\Aws\Rds\RdsListDataType;
  *           If this parameter is specified, the response includes only
  *           records beyond the marker, up to the value specified by MaxRecords
  *
- * @method   string              getMarker() getMarger()     Gets a Marker.
+ * @method   string              getMarker() getMarker()     Gets a Marker.
  * @method   DBSnapshotList      setMarker() setMarker($val) Sets a Marker value.
  */
 class DBSnapshotList extends RdsListDataType

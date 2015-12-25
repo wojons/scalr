@@ -1,7 +1,7 @@
 <?php
 namespace Scalr\System\Zmq\Cron;
 
-use Scalr\LoggerTrait;
+use Scalr\LoggerAwareTrait;
 
 /**
  * PidFile handler
@@ -11,7 +11,7 @@ use Scalr\LoggerTrait;
  */
 class PidFile
 {
-    use LoggerTrait;
+    use LoggerAwareTrait;
 
     /**
      * Path to the pid file

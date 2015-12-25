@@ -23,9 +23,14 @@ class CloudFront extends AbstractService implements ServiceInterface
     const API_VERSION_20120701 = '20120701';
 
     /**
+     * API Version 20150727
+     */
+    const API_VERSION_20150727 = '20150727';
+
+    /**
      * Current version of the API
      */
-    const API_VERSION_CURRENT = self::API_VERSION_20120701;
+    const API_VERSION_CURRENT = self::API_VERSION_20150727;
 
     /**
      * {@inheritdoc}
@@ -42,7 +47,7 @@ class CloudFront extends AbstractService implements ServiceInterface
      */
     public function getAvailableApiVersions()
     {
-        return array(self::API_VERSION_20120701);
+        return [self::API_VERSION_20120701, self::API_VERSION_20150727];
     }
 
     /**

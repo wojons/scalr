@@ -1,10 +1,13 @@
 <?php
 namespace Scalr\Service\Aws\Iam\V20100508;
 
+use Scalr\Service\Aws;
 use Scalr\Service\Aws\AbstractApi;
 use Scalr\Service\Aws\Iam\DataType\AccessKeyMetadataData;
 use Scalr\Service\Aws\Iam\DataType\AccessKeyMetadataList;
 use Scalr\Service\Aws\Iam\DataType\AccessKeyData;
+use Scalr\Service\Aws\Iam\DataType\ServerCertificateMetadataData;
+use Scalr\Service\Aws\Iam\DataType\ServerCertificateMetadataList;
 use Scalr\Service\Aws\Iam\DataType\UserData;
 use Scalr\Service\Aws\IamException;
 use Scalr\Service\Aws\Iam;
@@ -189,7 +192,7 @@ class IamApi extends AbstractApi
      * @param   \SimpleXMLElement $sxml
      * @return  UserData Returns new user data object
      */
-    protected function _loadUserData(\SimpleXMLElement &$sxml)
+    protected function _loadUserData(SimpleXMLElement &$sxml)
     {
         $userData = new UserData();
         $userData->setIam($this->iam);
@@ -469,7 +472,7 @@ class IamApi extends AbstractApi
      * @param   \SimpleXMLElement $sxml
      * @return  RoleData Returns RoleData
      */
-    protected function _loadRoleData(\SimpleXMLElement $sxml)
+    protected function _loadRoleData(SimpleXMLElement $sxml)
     {
         $item = null;
         if ($this->exist($sxml)) {
@@ -491,7 +494,7 @@ class IamApi extends AbstractApi
      * @param   \SimpleXMLElement $sxml
      * @return  RoleList  Returns RoleList
      */
-    protected function _loadRoleList(\SimpleXMLElement $sxml)
+    protected function _loadRoleList(SimpleXMLElement $sxml)
     {
         $list = new RoleList();
         $list->setIam($this->iam);
@@ -509,7 +512,7 @@ class IamApi extends AbstractApi
      * @param   \SimpleXMLElement $sxml
      * @return  InstanceProfileData Returns InstanceProfileData
      */
-    protected function _loadInstanceProfileData(\SimpleXMLElement $sxml)
+    protected function _loadInstanceProfileData(SimpleXMLElement $sxml)
     {
         $item = null;
         if ($this->exist($sxml)) {
@@ -531,7 +534,7 @@ class IamApi extends AbstractApi
      * @param   \SimpleXMLElement $sxml
      * @return  InstanceProfileList  Returns InstanceProfileList
      */
-    protected function _loadInstanceProfileList(\SimpleXMLElement $sxml)
+    protected function _loadInstanceProfileList(SimpleXMLElement $sxml)
     {
         $list = new InstanceProfileList();
         $list->setIam($this->iam);
@@ -544,16 +547,65 @@ class IamApi extends AbstractApi
     }
 
     /**
+     * Loads ServerCertificateMetadataList from simple xml object
+     *
+     * @param   SimpleXMLElement $xml
+     * @return  ServerCertificateMetadataList
+     */
+    protected function _loadServerCertificateList(SimpleXMLElement $xml)
+    {
+        $list = new ServerCertificateMetadataList();
+        $list->setIam($this->iam);
+
+        $list->setIsTruncated((string)$xml->IsTruncated === 'false' ? false : true);
+        if ($list->getIsTruncated()) {
+            $list->setMarker((string)$xml->Marker);
+        }
+
+        if (!empty($xml->member)) {
+            foreach ($xml->member as $member) {
+                $list->append($this->_loadServerCertificateMetadataData($member));
+            }
+        }
+
+        return $list;
+    }
+
+    /**
+     * Loads ServerCertificateMetadataData from simple xml object
+     *
+     * @param   SimpleXMLElement $xml
+     * @return  ServerCertificateMetadataData
+     */
+    protected function _loadServerCertificateMetadataData(SimpleXMLElement $xml)
+    {
+        $item = null;
+        if ($this->exist($xml)) {
+            $item = new ServerCertificateMetadataData();
+            $item->setIam($this->iam);
+            $item->serverCertificateId = (string)$xml->ServerCertificateId;
+            $item->serverCertificateName = (string)$xml->ServerCertificateName;
+            $item->arn = $this->exist($xml->Arn) ? (string)$xml->Arn : null;
+            $item->expiration = $this->exist($xml->Expiration) ? new DateTime((string)$xml->Expiration, new DateTimeZone('UTC')) : null;
+            $item->uploadDate = $this->exist($xml->UploadDate) ? new DateTime((string)$xml->UploadDate, new DateTimeZone('UTC')) : null;
+            $item->path = $this->exist($xml->Path) ? (string)$xml->Path : null;
+        }
+
+        return $item;
+    }
+
+    /**
      * Makes list call
      *
      * This method is used internally for making list calls
      *
-     * @param   string    $action    Action
-     * @param   string    $listname  The class name for the list
-     * @param   array     $opt       options list
+     * @param   string    $action       Action
+     * @param   string    $listname     The class name for the list
+     * @param   array     $opt          Options list
+     * @param   string    $listElement  optional Node name of list results in XML response
      * @return  ListDataType Returns the list
      */
-    protected function _makeListCall($action, $listname, array $opt)
+    protected function _makeListCall($action, $listname, array $opt, $listElement = null)
     {
         $result = null;
         $options = array();
@@ -564,8 +616,11 @@ class IamApi extends AbstractApi
         }
         $response = $this->client->call($action, $options);
         if ($response->getError() === false) {
+            if (empty($listElement)) {
+                $listElement = "{$listname}s";
+            }
             $sxml = simplexml_load_string($response->getRawContent());
-            $result = $this->{'_load' . $listname . 'List'}($sxml->{$action . 'Result'}->{$listname . 's'});
+            $result = $this->{'_load' . $listname . 'List'}($sxml->{$action . 'Result'}->{$listElement});
             $result->setIsTruncated(((string)$sxml->{$action . 'Result'}->IsTruncated) !== 'false');
             if ($result->getIsTruncated()) {
                 $result->setMarker((string)$sxml->{$action . 'Result'}->Marker);
@@ -577,7 +632,7 @@ class IamApi extends AbstractApi
     /**
      * Makes data call
      *
-     * This method is used internally for making list calls
+     * This method is used internally for making data calls
      *
      * @param   string    $action    Action
      * @param   string    $dataname  The class name for the data
@@ -794,5 +849,65 @@ class IamApi extends AbstractApi
     public function getEntityManager()
     {
         return $this->iam->getEntityManager();
+    }
+
+    /**
+     * Lists the server certificates that have the specified path prefix
+     *
+     * @param   string $pathPrefix              optional The path prefix for filtering the results
+     * @param   string $marker                  optional Set this parameter to the value of the Marker element in the response you just received.
+     * @param   string $maxItems                optional Maximum number of the records you want in the response
+     * @return  ServerCertificateMetadataList   Returns ServerCertificateMetadataList object on success or throws an exception
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function listServerCertificates($pathPrefix = null, $marker = null, $maxItems = null)
+    {
+        return $this->_makeListCall(ucfirst(__FUNCTION__), 'ServerCertificate', array(
+            "PathPrefix"    => $pathPrefix,
+            "Marker"        => $marker,
+            "MaxItems"      => $maxItems
+        ), 'ServerCertificateMetadataList');
+    }
+
+    /**
+     * Upload server certificate that have the specified path prefix
+     *
+     * @param   string   $certificateBody       The contents of the public key certificate in PEM-encoded format
+     * @param   string   $privateKey            The contents of the private key in PEM-encoded format
+     * @param   string   $serverCertificateName The name for the server certificate. The name of the certificate cannot contain any spaces
+     * @param   string   $certificateChain      optional The contents of the certificate chain. This is typically a concatenation of the PEM-encoded public key certificates of the chain
+     * @param   string   $pathPrefix            optional The path for the server certificate
+     * @return  ServerCertificateMetadataData   Returns ServerCertificateMetadataData object on success or throws an exception
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function uploadServerCertificate($certificateBody, $privateKey, $serverCertificateName, $certificateChain = null, $pathPrefix = null)
+    {
+        return $this->_makeDataCall(ucfirst(__FUNCTION__), 'ServerCertificateMetadata', array(
+            "CertificateBody"       => $certificateBody,
+            "PrivateKey"            => $privateKey,
+            "ServerCertificateName" => $serverCertificateName,
+            "CertificateChain"      => $certificateChain,
+            "Path"                  => $pathPrefix
+        ));
+    }
+
+    /**
+     * Delete server certificate action
+     *
+     * Deletes the specified server certificate
+     * NOTE! If you are using a server certificate with Elastic Load Balancing, deleting the certificate could have implications for your application
+     *
+     * @param   string $serverCertificateName The name of the server certificate you want to delete.
+     * @return  bool Returns TRUE if server certificate has been successfully removed.
+     * @throws  IamException
+     * @throws  ClientException
+     */
+    public function deleteServerCertificate($serverCertificateName)
+    {
+        return $this->_makeBooleanCall(ucfirst(__FUNCTION__), array(
+            'ServerCertificateName' => (string)$serverCertificateName
+        ));
     }
 }

@@ -318,15 +318,17 @@ Scalr.regPage('Scalr.ui.dnszones.create', function (loadParams, moduleParams) {
 								Scalr.event.fireEvent('close');
 							},
 							failure: function(data) {
-								Ext.Object.each(data.errors, function(index, item){
-									storeOwnRecords.getUnfiltered().each(function(record, recIndex){
-										if (index.replace('record-', '') == recIndex) {
-											form.down('#dnsrecords').getPlugin('rowediting').startEdit(record, 0);
-										}
+								if (!Ext.isEmpty(data) && Ext.isObject(data.errors)) {
+									Ext.Object.each(data.errors, function(index, item){
+										storeOwnRecords.getUnfiltered().each(function(record, recIndex){
+											if (index.replace('record-', '') == recIndex) {
+												form.down('#dnsrecords').getPlugin('rowediting').startEdit(record, 0);
+											}
+										});
+										Scalr.message.Error(item);
+										return false;
 									});
-									Scalr.message.Error(item);
-									return false;
-								});
+								}
 							}
 						});
 					}

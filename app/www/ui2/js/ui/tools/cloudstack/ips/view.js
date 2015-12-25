@@ -34,7 +34,7 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.ips.view', function (loadParams, module
         },
 
         columns: [
-            { header: "Used by", flex: 1, dataIndex: 'id', sortable: false, xtype: 'templatecolumn', tpl:
+            { header: "Used by", flex: 1, dataIndex: 'instanceId', sortable: false, xtype: 'templatecolumn', tpl:
                 '<tpl if="farmId">' +
                     '<a href="#/farms?farmId={farmId}" title="Farm {farmName}">{farmName}</a>' +
                     '<tpl if="roleName">' +
@@ -47,13 +47,13 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.ips.view', function (loadParams, module
 				'</tpl>' +
                 '<tpl if="!farmId && !instanceId">&mdash;</tpl>'
             },
-			{ header: "IP Address", width: 120, dataIndex: 'ip', sortable: true },
-            { header: "Network", width: 150, dataIndex: 'networkName', sortable: true },
+			{ header: "IP Address", flex: .5, dataIndex: 'ip', sortable: true },
+            { header: "Network", flex: .5, dataIndex: 'networkName', sortable: true },
             { header: "Purpose", width: 150, dataIndex: 'purpose', sortable: true},
             { header: "State", width: 120, dataIndex: 'state', sortable: true }
         ],
 
-        selModel: 'selectedmodel',
+        selModel: Scalr.isAllowed('CLOUDSTACK_PUBLIC_IPS', 'manage') ? 'selectedmodel' : null,
         listeners: {
             selectionchange: function(selModel, selections) {
                 this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
@@ -70,6 +70,7 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.ips.view', function (loadParams, module
                 cls: 'x-btn-red',
                 tooltip: 'Select one or more IP(s) to delete them',
                 disabled: true,
+                hidden: !Scalr.isAllowed('CLOUDSTACK_PUBLIC_IPS', 'manage'),
                 handler: function() {
                     var request = {
                         confirmBox: {

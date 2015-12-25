@@ -3,7 +3,8 @@ Ext.define('Scalr.ui.RoleDesignerTabChef', {
     alias: 'widget.roleeditchef',
     cls: 'x-panel-column-left x-panel-column-left-with-tabs',
     items: [{
-        xtype: 'chefsettings'
+        xtype: 'chefsettings',
+        mode: 'role'
     }],
     autoScroll: true,
     initComponent: function(){

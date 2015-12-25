@@ -21,7 +21,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Addfarm extends Scalr_UI_Controller_D
     public function getContent($params = array())
     {
         $this->request->restrictFarmAccess(null, Acl::PERM_FARMS_MANAGE);
-        
+
         $projects = [];
         if ($this->getContainer()->analytics->enabled && $this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID)) {
             $costCenter = $this->getContainer()->analytics->ccs->get($this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID));
@@ -34,7 +34,13 @@ class Scalr_UI_Controller_Dashboard_Widget_Addfarm extends Scalr_UI_Controller_D
                 $projectsIterator = new SharedProjectsFilterIterator($costCenter->getProjects(), $costCenter->ccId, $this->user, $this->getEnvironment());
 
                 foreach ($projectsIterator as $item) {
-                    $quarterBudget = QuarterlyBudgetEntity::findOne([['year' => $currentYear], ['subjectType' => QuarterlyBudgetEntity::SUBJECT_TYPE_PROJECT], ['subjectId' => $item->projectId], ['quarter' => $currentQuarter]]);
+                    $quarterBudget = QuarterlyBudgetEntity::findOne([
+                        ['year'        => $currentYear],
+                        ['subjectType' => QuarterlyBudgetEntity::SUBJECT_TYPE_PROJECT],
+                        ['subjectId'   => $item->projectId],
+                        ['quarter'     => $currentQuarter]
+                    ]);
+
                     $projects[] = array(
                         'projectId'     => $item->projectId,
                         'name'          => $item->name,

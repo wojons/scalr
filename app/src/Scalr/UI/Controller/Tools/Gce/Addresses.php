@@ -2,7 +2,7 @@
 
 use Scalr\Acl\Acl;
 use Scalr\Modules\PlatformFactory;
-use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Tools_Gce_Addresses extends Scalr_UI_Controller
 {
@@ -30,7 +30,7 @@ class Scalr_UI_Controller_Tools_Gce_Addresses extends Scalr_UI_Controller
 
         $locations = array();
         $regions = $client->regions->listRegions(
-            $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID)
+            $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID]
         );
         foreach ($regions as $region) {
             /* @var $region Google_Service_Compute_Region */
@@ -45,6 +45,8 @@ class Scalr_UI_Controller_Tools_Gce_Addresses extends Scalr_UI_Controller
 
     public function xRemoveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_GCE_STATIC_IPS, Acl::PERM_GCE_STATIC_IPS_MANAGE);
+
         $this->request->defineParams(array(
             'addressId' => array('type' => 'json'),
             'cloudLocation'
@@ -56,7 +58,7 @@ class Scalr_UI_Controller_Tools_Gce_Addresses extends Scalr_UI_Controller
 
         foreach ($this->getParam('addressId') as $addressId) {
             $client->addresses->delete(
-                $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID),
+                $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
                 $this->getParam('cloudLocation'),
                 $addressId
             );
@@ -65,13 +67,12 @@ class Scalr_UI_Controller_Tools_Gce_Addresses extends Scalr_UI_Controller
         $this->response->success('Address(s) successfully removed');
     }
 
-    public function xListAddressesAction()
+    /**
+     * @param   string  $cloudLocation
+     * @param   string  $addressId      optional
+     */
+    public function xListAction($cloudLocation, $addressId = '')
     {
-        $this->request->defineParams(array(
-            'sort' => array('type' => 'json', 'default' => array('property' => 'id', 'direction' => 'ASC')),
-            'addressId'
-        ));
-
         $platform = PlatformFactory::NewPlatform(SERVER_PLATFORMS::GCE);
         $client = $platform->getClient($this->environment);
         /* @var $client Google_Service_Compute */
@@ -79,26 +80,24 @@ class Scalr_UI_Controller_Tools_Gce_Addresses extends Scalr_UI_Controller
         $retval = array();
 
         $addresses = $client->addresses->listAddresses(
-            $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID),
-            $this->getParam('cloudLocation')
+            $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
+            $cloudLocation,
+            $addressId ? ['filter' => "name eq {$addressId}"] : []
         );
 
         foreach ($addresses as $address) {
             /* @var $address Google_Service_Compute_Address */
-            if ($this->getParam('addressId') && $this->getParam('addressId') != $address->name)
-                continue;
-
             $item = array(
-                'id'	=> $address->name,
-                'ip'    => $address->address,
-                'description'	=> $address->description,
-                'createdAt' => Scalr_Util_DateTime::convertTz(strtotime($address->creationTimestamp)),
-                'status' => $address->status
+                'id'            => $address->name,
+                'ip'            => ip2long($address->address),
+                'description'   => $address->description,
+                'createdAt'     => strtotime($address->creationTimestamp),
+                'status'        => $address->status
             );
 
             if ($item['status'] == 'IN_USE') {
                 $instanceURL = $address->users[0];
-                $instanceName = substr($instanceURL, strrpos($instanceURL, "/")+1);
+                $instanceName = substr($instanceURL, strrpos($instanceURL, "/") + 1);
                 $item['instanceId'] = $instanceName;
 
                 try {
@@ -117,7 +116,11 @@ class Scalr_UI_Controller_Tools_Gce_Addresses extends Scalr_UI_Controller
             $retval[] = $item;
         }
 
-        $response = $this->buildResponseFromData($retval, array('id', 'ip', 'description'));
+        $response = $this->buildResponseFromData($retval, array('id', 'ip', 'description', 'createdAt'));
+        foreach ($response['data'] as &$row) {
+            $row['createdAt'] = Scalr_Util_DateTime::convertTz($row['createdAt']);
+            $row['ip'] = long2ip($row['ip']);
+        }
 
         $this->response->data($response);
     }

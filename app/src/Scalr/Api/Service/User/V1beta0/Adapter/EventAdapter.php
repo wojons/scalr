@@ -112,11 +112,10 @@ class EventAdapter extends ApiEntityAdapter
             throw new ApiErrorException(403, ErrorMessage::ERR_PERMISSION_VIOLATION, "Insufficient permissions");
         }
 
-        $scope = $this->controller->getScope();
         //We only allow to either create or modify Account or Environment Scope Events
-        if ($entity->getScope() !== $scope) {
+        if ($entity->getScope() !== $this->controller->getScope()) {
             throw new ApiErrorException(403, ErrorMessage::ERR_SCOPE_VIOLATION, sprintf(
-                "Only %s scope is allowed.", $scope
+                "Invalid scope"
             ));
         }
     }

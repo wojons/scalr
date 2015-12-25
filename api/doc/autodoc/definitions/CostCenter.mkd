@@ -1,0 +1,79 @@
+# `CostCenter` #
+
+
+
+
+
+
+
+## Properties ##
+
+### `name` (required, filterable) ###
+
+
+
+
+Property of type: `string`.
+
+
+To filter on this field, use: `name=...`.
+
+
+### `id` (read-only, filterable) ###
+
+
+
+
+Property of type: `string`.
+
+
+To filter on this field, use: `id=...`.
+
+
+### `billingCode` (read-only, filterable) ###
+
+
+
+
+Property of type: `string`.
+
+
+To filter on this field, use: `billingCode=...`.
+
+
+
+
+## Used in ##
+
+  + [`/cost-centers/{costCenterId}/`](./../rest/api/v1beta0/account/cost-centers/{costCenterId}/)
+  + [`/{envId}/cost-centers/{costCenterId}/`](./../rest/api/v1beta0/user/{envId}/cost-centers/{costCenterId}/)
+
+## Swagger Definition ##
+
+    {
+      "required": [
+        "name"
+      ], 
+      "x-usedIn": [
+        "/cost-centers/{costCenterId}/", 
+        "/{envId}/cost-centers/{costCenterId}/"
+      ], 
+      "properties": {
+        "id": {
+          "readOnly": true, 
+          "type": "string"
+        }, 
+        "name": {
+          "type": "string"
+        }, 
+        "billingCode": {
+          "readOnly": true, 
+          "type": "string"
+        }
+      }, 
+      "x-filterable": [
+        "id", 
+        "name", 
+        "billingCode"
+      ]
+    }

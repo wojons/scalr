@@ -1,6 +1,9 @@
 <?php
 
+use Scalr\Exception\NotYetImplementedException;
 use Scalr\Farm\Role\FarmRoleStorage;
+use Scalr\Model\Entity\FarmRole;
+use Scalr\Model\Entity;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Util\CryptoTool;
 
@@ -28,10 +31,6 @@ class Scalr_Role_Behavior
     const ROLE_BASE_MESSAGING_PORT = 'base.messaging_port';
 
     const SERVER_BASE_HOSTNAME = 'base.hostname';
-
-    const RESUME_STRATEGY_REBOOT = 'reboot';
-    const RESUME_STRATEGY_INIT = 'init';
-    const RESUME_STRATEGY_NOT_SUPPORTED = 'not-supported';
 
     protected $behavior;
 
@@ -126,7 +125,7 @@ class Scalr_Role_Behavior
      *
      * Enter description here ...
      * @param DBRole $dbRole
-     * @return Scalr_Role_Behavior
+     * @return Scalr_Role_Behavior[]
      */
     static public function getListForRole(DBRole $role)
     {
@@ -141,7 +140,7 @@ class Scalr_Role_Behavior
      *
      * Enter description here ...
      * @param DBFarmRole $dbFarmRole
-     * @return Scalr_Role_Behavior
+     * @return Scalr_Role_Behavior[]
      */
     static public function getListForFarmRole(DBFarmRole $farmRole)
     {
@@ -151,7 +150,7 @@ class Scalr_Role_Behavior
     public function __construct($behavior = ROLE_BEHAVIORS::BASE)
     {
         $this->behavior = $behavior;
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
         $this->db = \Scalr::getDb();
     }
 
@@ -173,19 +172,25 @@ class Scalr_Role_Behavior
 
                 if ($message->base->apiPort) {
                     $currentApiPort = $dbServer->getPort(DBServer::PORT_API);
+
                     $this->logger->warn(new FarmLogMessage(
-                        $dbServer->farmId, "Scalarizr API port was changed from {$currentApiPort} to {$message->base->apiPort}",
+                        $dbServer->farmId,
+                        "Scalarizr API port was changed from {$currentApiPort} to {$message->base->apiPort}",
                         $dbServer->serverId
                     ));
+
                     $dbServer->SetProperty(SERVER_PROPERTIES::SZR_API_PORT, $message->base->apiPort);
                 }
 
                 if ($message->base->messagingPort) {
                     $currentCtrlPort = $dbServer->getPort(DBServer::PORT_CTRL);
+
                     $this->logger->warn(new FarmLogMessage(
-                        $dbServer->farmId, "Scalarizr CTRL port was changed from {$currentCtrlPort} to {$message->base->messagingPort}",
+                        $dbServer->farmId,
+                        "Scalarizr CTRL port was changed from {$currentCtrlPort} to {$message->base->messagingPort}",
                         $dbServer->serverId
                     ));
+
                     $dbServer->SetProperty(SERVER_PROPERTIES::SZR_CTRL_PORT, $message->base->messagingPort);
                 }
 
@@ -199,11 +204,17 @@ class Scalr_Role_Behavior
                         $storage->setVolumes($dbServer, $message->volumes);
                     }
                 } catch (Exception $e) {
-                    $this->logger->error(new FarmLogMessage($dbServer->farmId, "Error in role message handler: {$e->getMessage()}", $dbServer->serverId));
+                    $this->logger->error(new FarmLogMessage(
+                        $dbServer->farmId,
+                        "Error in role message handler: {$e->getMessage()}",
+                        $dbServer->serverId
+                    ));
                 }
 
-                if (isset($message->base) && isset($message->base->hostname))
+                if (isset($message->base) && isset($message->base->hostname)) {
                     $dbServer->SetProperty(self::SERVER_BASE_HOSTNAME, $message->base->hostname);
+                }
+
                 break;
         }
     }
@@ -250,7 +261,11 @@ class Scalr_Role_Behavior
                         $configuration->volumes = $volumes;
                 }
             } catch (Exception $e) {
-                $this->logger->error(new FarmLogMessage($dbServer->farmId, "Cannot init storage: {$e->getMessage()}"));
+                $this->logger->error(new FarmLogMessage(
+                    $dbServer->farmId,
+                    "Cannot init storage: {$e->getMessage()}",
+                    !empty($dbServer->serverId) ? $dbServer->serverId : null
+                ));
             }
         }
 
@@ -267,13 +282,9 @@ class Scalr_Role_Behavior
                 $configuration->base->disableFirewallManagement = (int)$dbFarmRole->GetSetting(self::ROLE_BASE_DISABLE_FIREWALL_MANAGEMENT);
                 $configuration->base->rebootAfterHostinitPhase = (int)$dbFarmRole->GetSetting(self::ROLE_BASE_REBOOT_AFTER_HOSTINIT_PHASE);
 
-                $configuration->base->resumeStrategy = PlatformFactory::NewPlatform($dbFarmRole->Platform)->getResumeStrategy();
+                // For backward compatibility
+                $configuration->base->resumeStrategy = 'reboot';
 
-                //Dev falgs for our
-                if (Scalr::isHostedScalr() && $dbServer->envId == 3414) {
-                    $configuration->base->unionScriptExecutor = 1;
-                }
-                
                 $governance = new Scalr_Governance($dbFarmRole->GetFarmObject()->EnvID);
                 if ($governance->isEnabled(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_HOSTNAME_FORMAT)) {
                     $hostNameFormat = $governance->getValue(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_HOSTNAME_FORMAT);
@@ -283,7 +294,7 @@ class Scalr_Role_Behavior
                 $configuration->base->hostname = (!empty($hostNameFormat)) ? $dbServer->applyGlobalVarsToValue($hostNameFormat) : '';
                 if ($configuration->base->hostname != '')
                     $dbServer->SetProperty(self::SERVER_BASE_HOSTNAME, $configuration->base->hostname);
-                
+
 
                 $apiPort = null;
                 $messagingPort = null;
@@ -291,7 +302,7 @@ class Scalr_Role_Behavior
                     $apiPort = $dbFarmRole->GetSetting(self::ROLE_BASE_API_PORT);
                     $messagingPort = $dbFarmRole->GetSetting(self::ROLE_BASE_MESSAGING_PORT);
                 }
-                
+
                 $configuration->base->apiPort = ($apiPort) ? $apiPort : 8010;
                 $configuration->base->messagingPort = ($messagingPort) ? $messagingPort : 8013;
             }
@@ -329,16 +340,20 @@ class Scalr_Role_Behavior
                             $message->volumes = $volumes;
                     }
                 } catch (Exception $e) {
-                    $this->logger->error(new FarmLogMessage($dbServer->farmId, "Cannot init storage: {$e->getMessage()}"));
+                    $this->logger->error(new FarmLogMessage(
+                        $dbServer->farmId,
+                        "Cannot init storage: {$e->getMessage()}",
+                        !empty($dbServer->serverId) ? $dbServer->serverId : null
+                    ));
                 }
 
                 break;
-                
+
             case "Scalr_Messaging_Msg_HostInit":
-            
-                $configuration = $this->getBaseConfiguration($dbServer, true, true);                
+
+                $configuration = $this->getBaseConfiguration($dbServer, true, true);
                 $message->base = $configuration->base;
-            
+
                 break;
 
             case "Scalr_Messaging_Msg_HostInitResponse":
@@ -363,7 +378,11 @@ class Scalr_Role_Behavior
                         }
                     }
                 } catch (Exception $e) {
-                    $this->logger->error(new FarmLogMessage($dbServer->farmId, "Cannot init deployment: {$e->getMessage()}"));
+                    $this->logger->error(new FarmLogMessage(
+                        $dbServer->farmId,
+                        "Cannot init deployment: {$e->getMessage()}",
+                        !empty($dbServer->serverId) ? $dbServer->serverId : null
+                    ));
                 }
 
                 $configuration = $this->getBaseConfiguration($dbServer, true);
@@ -395,9 +414,14 @@ class Scalr_Role_Behavior
 
     }
 
-    public function onHostDown(DBServer $dbServer)
+    /**
+     * OnHostDown handler
+     *
+     * @param   DBServer      $dbServer  DBServer instance
+     * @param   HostDownEvent $event     Event
+     */
+    public function onHostDown(DBServer $dbServer, HostDownEvent $event)
     {
-        
     }
 
     public function onBeforeInstanceLaunch(DBServer $dbServer)
@@ -438,10 +462,13 @@ class Scalr_Role_Behavior
                     throw $e;
             }
 
-            $dbFarmRole->SetSetting(static::ROLE_SNAPSHOT_ID, $storageSnapshot->id, DBFarmRole::TYPE_LCL);
-        }
-        catch(Exception $e) {
-            $this->logger->error(new FarmLogMessage($dbFarmRole->FarmID, "Cannot save storage volume: {$e->getMessage()}"));
+            $dbFarmRole->SetSetting(static::ROLE_SNAPSHOT_ID, $storageSnapshot->id, Entity\FarmRoleSetting::TYPE_LCL);
+        } catch (Exception $e) {
+            $this->logger->error(new FarmLogMessage(
+                $dbFarmRole->FarmID,
+                "Cannot save storage volume: {$e->getMessage()}",
+                !empty($dbServer->serverId) ? $dbServer->serverId : null
+            ));
         }
     }
 
@@ -475,10 +502,13 @@ class Scalr_Role_Behavior
                     throw $e;
             }
 
-            $dbFarmRole->SetSetting(static::ROLE_VOLUME_ID, $storageVolume->id, DBFarmRole::TYPE_LCL);
-        }
-        catch(Exception $e) {
-            $this->logger->error(new FarmLogMessage($dbFarmRole->FarmID, "Cannot save storage volume: {$e->getMessage()}"));
+            $dbFarmRole->SetSetting(static::ROLE_VOLUME_ID, $storageVolume->id, Entity\FarmRoleSetting::TYPE_LCL);
+        } catch (Exception $e) {
+            $this->logger->error(new FarmLogMessage(
+                $dbFarmRole->FarmID,
+                "Cannot save storage volume: {$e->getMessage()}",
+                !empty($dbServer->serverId) ? $dbServer->serverId : null
+            ));
         }
     }
 
@@ -544,5 +574,17 @@ class Scalr_Role_Behavior
 
         } else
             return false;
+    }
+
+    /**
+     * Setups farm role settings related to this behavior
+     *
+     * @param   FarmRole    $farmRole   Farm-role to which setting behavior
+     *
+     * @throws NotYetImplementedException
+     */
+    public static function setupBehavior(FarmRole $farmRole)
+    {
+        throw new NotYetImplementedException("Role behavior '" . get_called_class() . "' is unfinished!");
     }
 }

@@ -18,6 +18,8 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Eips extends Scalr_UI_Controller
 
     public function xDeleteAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_ELASTIC_IPS, Acl::PERM_AWS_ELASTIC_IPS_MANAGE);
+
         $this->request->defineParams(array(
             'eips' => array('type' => 'json')
         ));
@@ -37,6 +39,8 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Eips extends Scalr_UI_Controller
 
     public function associateAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_ELASTIC_IPS, Acl::PERM_AWS_ELASTIC_IPS_MANAGE);
+
         $dbServers = $this->db->GetAll("SELECT server_id FROM servers WHERE platform=? AND status=? AND env_id=?", array(
             SERVER_PLATFORMS::EC2,
             SERVER_STATUS::RUNNING,

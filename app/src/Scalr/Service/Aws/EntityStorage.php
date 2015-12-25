@@ -137,7 +137,7 @@ class EntityStorage implements \Countable, \Iterator
             $value .= ',' . (string) $v;
         }
         if ($value != '') {
-            $value = substr($value, 1);
+            $value = (string) substr($value, 1);
         }
         if ($this->repos !== null) {
             if (array_key_exists($value, $this->indexes) && isset($this->storage[$this->indexes[$value]])) {

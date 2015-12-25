@@ -32,10 +32,10 @@ from scalrpy.util import helper
 from scalrpy.util import szr_api
 from scalrpy.util import dbmanager
 from scalrpy.util import cryptotool
-from scalrpy.util import exceptions
 from scalrpy.util import application
 
 from scalrpy import LOG
+from scalrpy import exceptions
 
 
 app = None
@@ -379,9 +379,9 @@ class Poller(object):
         self.scalr_config = scalr_config
         self._db = dbmanager.ScalrDB(self.config['connections']['mysql'], pool_size=1)
 
-    def _get_servers(self):
+    def _get_servers(self, limit=500):
         query = (
-            "SELECT f.id farm_id, f.hash, s.server_id, s.farm_roleid, s.index, "
+            "SELECT f.id farm_id, f.hash, s.server_id, s.farm_roleid farm_role_id, s.index, "
             "s.remote_ip, s.local_ip, s.env_id, s.os_type, s.platform "
             "FROM servers s "
             "JOIN farms f ON s.farm_id=f.id "
@@ -391,14 +391,14 @@ class Poller(object):
             "AND ce.status='Active' "
             "AND s.status='Running' "
             "ORDER BY s.server_id")
-        return self._db.execute_with_limit(query, 1000, retries=1)
+        return self._db.execute_with_limit(query, limit, retries=1)
 
     def _get_rf_keys(self, result):
         r_key = os.path.join(
             self.config['rrd']['dir'],
             helper.x1x2(result['farm_id']),
             '%s' % result['farm_id'],
-            'FR_%s' % result['farm_roleid']
+            'FR_%s' % result['farm_role_id']
         )
         f_key = os.path.join(
             self.config['rrd']['dir'],
@@ -470,14 +470,14 @@ class Poller(object):
             LOG.warning(msg)
         result = {
             'farm_id': server['farm_id'],
-            'farm_roleid': server['farm_roleid'],
+            'farm_role_id': server['farm_role_id'],
             'index': server['index'],
             'data': data,
         }
         return result
 
-    def get_servers(self):
-        for servers in self._get_servers():
+    def get_servers(self, limit=500):
+        for servers in self._get_servers(limit=limit):
 
             prop = ['scalarizr.api_port', 'scalarizr.key']
             self._db.load_server_properties(servers, prop)
@@ -522,7 +522,7 @@ class Poller(object):
                             self.config['rrd']['dir'],
                             helper.x1x2(result['farm_id']),
                             '%s' % result['farm_id'],
-                            'INSTANCE_%s_%s' % (result['farm_roleid'], result['index']))
+                            'INSTANCE_%s_%s' % (result['farm_role_id'], result['index']))
                         rrd_pool.apply_async(
                             rrd.write,
                             args=(file_dir, result['data'],),

@@ -1,4 +1,10 @@
 Scalr.regPage('Scalr.ui.webhooks.endpoints.view', function (loadParams, moduleParams) {
+    var isWebhooksReadOnly = false;
+    if (Scalr.scope === 'environment') {
+        isWebhooksReadOnly = !Scalr.isAllowed('WEBHOOKS_ENVIRONMENT', 'manage');
+    } else if (Scalr.scope === 'account') {
+        isWebhooksReadOnly = !Scalr.isAllowed('WEBHOOKS_ACCOUNT', 'manage');
+    }
 	var store = Ext.create('store.store', {
         model: Ext.define(null, {
             extend: 'Ext.data.Model',
@@ -57,6 +63,7 @@ Scalr.regPage('Scalr.ui.webhooks.endpoints.view', function (loadParams, modulePa
         store: store,
         type: 'endpoint',
         filterFields: ['url'],
+        readOnly: isWebhooksReadOnly,
         columns: [
             {
                 text: 'URL',
@@ -123,9 +130,8 @@ Scalr.regPage('Scalr.ui.webhooks.endpoints.view', function (loadParams, modulePa
                 this.down('#formtitle').setTitle(isNewRecord ? 'New endpoint' : 'Edit endpoint');
 
                 if (!isNewRecord && isEndpointValid) {
-                    var usedBy = [];
-                    Ext.Object.each(record.get('webhooks'), function(webhookId, webhookName){
-                        usedBy.push('<a href="#/'+(moduleParams['scope']=='account'?'account/':'')+'webhooks/configs?webhookId='+webhookId+'">'+webhookName+'</a>');
+                    var usedBy = Ext.Array.map(record.get('webhooks') || [], function(webhookConfig){
+                        return '<a href="#'+Scalr.utils.getUrlPrefix(webhookConfig.scope, webhookConfig.envId)+'/webhooks/configs?webhookId='+webhookConfig.webhookId+'">'+webhookConfig.name+'</a>';
                     });
                     this.down('#usedBy').setValue(usedBy.length ? usedBy.join(', ') : '-');
                 }
@@ -137,7 +143,7 @@ Scalr.regPage('Scalr.ui.webhooks.endpoints.view', function (loadParams, modulePa
 
                 if (moduleParams['scope'] === record.get('scope')) {
                     //this.disableButtons(false, record.get('scope'), isEventUsed);
-                    frm.findField('url').setReadOnly(false);
+                    frm.findField('url').setReadOnly(isWebhooksReadOnly);
                     this.down('#delete').setDisabled(false);
                     this.down('#save').setDisabled(false);
                 } else {
@@ -195,6 +201,7 @@ Scalr.regPage('Scalr.ui.webhooks.endpoints.view', function (loadParams, modulePa
 			xtype: 'container',
 			dock: 'bottom',
 			cls: 'x-docked-buttons',
+            hidden: isWebhooksReadOnly,
 			layout: {
 				type: 'hbox',
 				pack: 'center'

@@ -5,14 +5,8 @@ class Scalr_Scaling_Sensors_BandWidth extends Scalr_Scaling_Sensor
     const SETTING_BW_TYPE = 'type';
     const SETTING_BW_LAST_VALUE_RAW = 'raw_last_value';
 
-    private $snmpOids = array(
-        'inbound'		=> '.1.3.6.1.2.1.2.2.1.10.2',
-        'outbound'		=> '.1.3.6.1.2.1.2.2.1.16.2'
-    );
-
     public function __construct()
     {
-        $this->snmpClient = new Scalr_Net_Snmp_Client();
         $this->db = \Scalr::getDb();
     }
 
@@ -24,37 +18,36 @@ class Scalr_Scaling_Sensors_BandWidth extends Scalr_Scaling_Sensor
         if (count($servers) == 0)
             return 0;
 
-        $_roleBW = array();
+        $roleBWRaw = array();
         $retval = array();
 
-        foreach ($servers as $DBServer)
-        {
-            $port = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_SNMP_PORT);
-            $type = $farmRoleMetric->getSetting(self::SETTING_BW_TYPE);
-            if (!$type)
-                $type = 'outbound';
+        foreach ($servers as $DBServer) {
+            $type = $farmRoleMetric->getSetting(self::SETTING_BW_TYPE) == 'inbound' ? 'receive' : 'transmit';            
 
-            $this->snmpClient->connect($DBServer->remoteIp, $port ? $port : 161, $DBFarm->Hash, null, null, false);
-            preg_match_all("/[0-9]+/si", $this->snmpClient->get(
-                $this->snmpOids[$type]
-            ), $matches);
-            $bw_out = (float)$matches[0][0];
+            $netStat = (array)$DBServer->scalarizr->system->netStat();
+            foreach ($netStat as $interface => $usage) {
+                if ($interface != 'lo')
+                    break;
+            }
 
-            $bw = round($bw_out/1024/1024, 2);
-            $_roleBW[]= $bw;
+            if ($usage)
+                array_push($roleBWRaw, round($usage->{$type}->bytes / 1024 / 1024, 2));
         }
 
-        $roleBW = round(array_sum($_roleBW)/count($_roleBW), 2);
+        $roleBW = round(array_sum($roleBWRaw) / count($roleBWRaw), 2);
 
-        if ($farmRoleMetric->getSetting(self::SETTING_BW_LAST_VALUE_RAW) !== null && $farmRoleMetric->getSetting(self::SETTING_BW_LAST_VALUE_RAW) !== '')
-        {
-            $time = (time()-$farmRoleMetric->dtLastPolled);
-            $bandwidth_usage = ($roleBW - (float)$farmRoleMetric->getSetting(self::SETTING_BW_LAST_VALUE_RAW))*8;
-            $bandwidth_channel_usage = $bandwidth_usage/$time; // in Mbits/sec
-            $retval = round($bandwidth_channel_usage, 2);
-        }
-        else
+        if ($farmRoleMetric->getSetting(self::SETTING_BW_LAST_VALUE_RAW) !== null &&
+            $farmRoleMetric->getSetting(self::SETTING_BW_LAST_VALUE_RAW) !== '') {
+            $time = time() - $farmRoleMetric->dtLastPolled;
+
+            $bandwidthUsage = ($roleBW - (float)$farmRoleMetric->getSetting(self::SETTING_BW_LAST_VALUE_RAW)) * 8;
+
+            $bandwidthChannelUsage = $bandwidthUsage/$time; // in Mbits/sec
+
+            $retval = round($bandwidthChannelUsage, 2);
+        } else {
             $retval = 0;
+        }
 
         $farmRoleMetric->setSetting(self::SETTING_BW_LAST_VALUE_RAW, $roleBW);
 

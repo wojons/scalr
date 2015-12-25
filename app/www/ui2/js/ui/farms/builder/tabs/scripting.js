@@ -7,10 +7,6 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scripting', {
 
     tabData: null,
 
-    isEnabled: function (record) {
-        return this.callParent(arguments) && record.get('platform') != 'rds';
-    },
-
     getDefaultValues: function (record) {
         record.set('scripting', []);
         return {};

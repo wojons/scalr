@@ -1,192 +1,200 @@
 // ready for extjs 5
 Ext.define('Scalr.ui.FilterFieldPicker', {
-	extend: 'Ext.form.Panel',
-	alias: 'trigger.filterfieldpicker',
+    extend: 'Ext.form.Panel',
+    alias: 'trigger.filterfieldpicker',
 
-	cls: 'x-panel-shadow x-form-filterfield-picker-form',
+    cls: 'x-form-filterfield-picker-form',
 
-	floating: true,
-	focusable: true,
-	tabIndex: 0,
-	hidden: true,
+    floating: true,
+    focusable: true,
+    tabIndex: 0,
+    hidden: true,
+    shadow: false,
 
-	fieldDefaults: {
-		anchor: '100%'
-	},
+    fieldDefaults: {
+        anchor: '100%'
+    },
 
-	initEvents: function () {
-		var me = this;
+    initEvents: function () {
+        var me = this;
 
-		me.callParent();
+        me.callParent();
 
-		var filterField = me.pickerField;
+        me.oldValues = {};
 
-		me.getForm().getFields().each(function (field) {
-			field.on('specialkey', function (field, e) {
-				var key = e.getKey();
+        var filterField = me.pickerField;
+        var form = me.getForm();
 
-				if (key === e.ESC) {
-					filterField.collapse();
-				}
+        form.getFields().each(function (field) {
+            field.on('specialkey', function (field, e) {
+                var key = e.getKey();
 
-				if (key === e.ENTER) {
-					filterField.collapse();
-					filterField.doForceChange();
-				}
-			});
-		});
-	}
+                if (key === e.ESC) {
+                    form.reset();
+                    form.setValues(me.oldValues);
+                    filterField.collapse();
+                }
+
+                if (key === e.ENTER) {
+                    filterField.collapse();
+                    filterField.doForceChange();
+                }
+            });
+        });
+    }
 });
 
 // ready for extjs 5
 Ext.define('Scalr.ui.FormFilterField', {
-	extend: 'Ext.form.field.Picker',
-	alias: 'widget.filterfield',
+    extend: 'Ext.form.field.Picker',
+    alias: 'widget.filterfield',
 
     isFilterField: true,
 
-	cls: 'x-form-filterfield',
+    cls: 'x-form-filterfield',
 
-	filterId: 'filterfield',
+    filterId: 'filterfield',
 
-	width: 250,
+    width: 250,
 
-	hideTrigger: false,
+    hideTrigger: false,
 
-	enableKeyEvents: true,
+    enableKeyEvents: true,
 
-	filterFields: [],
+    filterFields: [],
 
-	remoteSort: false,
+    remoteSort: false,
 
     checkChangeBuffer: 300,
 
     forceSearchButonVisibility: false,
 
-	config: {
-		triggers: {
-			cancelButton: {
-				cls: 'x-form-filterfield-trigger-cancel-button',
-				hidden: true,
-				handler: 'resetFilter',
-				toggleVisibility: function () {
-					var me = this;
+    config: {
+        triggers: {
+            cancelButton: {
+                cls: 'x-form-filterfield-trigger-cancel-button',
+                hidden: true,
+                handler: 'resetFilter',
+                toggleVisibility: function () {
+                    var me = this;
 
-					me.setVisible(!me.isVisible());
+                    me.setVisible(!me.isVisible());
 
-					return me;
-				},
-				scope: 'this'
-			},
-			picker: {
-				cls: 'x-form-filterfield-trigger-picker-button',
-				weight: 1,
-				handler: 'onTriggerClick',
-				scope: 'this'
-			},
-			searchButton: {
-				cls: 'x-form-filterfield-trigger-search-button',
-				weight: 2,
-				handler: 'doForceChange',
-				scope: 'this'
-			}
-		}
-	},
+                    return me;
+                },
+                scope: 'this'
+            },
+            picker: {
+                cls: 'x-form-filterfield-trigger-picker-button',
+                weight: 1,
+                handler: 'onTriggerClick',
+                scope: 'this'
+            },
+            searchButton: {
+                cls: 'x-form-filterfield-trigger-search-button',
+                weight: 2,
+                handler: 'doForceChange',
+                scope: 'this'
+            }
+        }
+    },
 
-	hasStore: function () {
-		return Ext.isDefined(this.store);
-	},
+    hasStore: function () {
+        return Ext.isDefined(this.store);
+    },
 
-	getStore: function () {
-		return this.store;
-	},
+    getStore: function () {
+        return this.store;
+    },
 
-	getRemoteSort: function () {
-		return this.getStore().remoteSort;
-	},
+    getRemoteSort: function () {
+        return this.getStore().remoteSort;
+    },
 
     getRemoteFilter: function () {
         return this.getStore().remoteFilter;
     },
 
-	getFilterFields: function () {
-		return this.filterFields;
-	},
+    getFilterFields: function () {
+        return this.filterFields;
+    },
 
-	hasForm: function () {
-		return Ext.isDefined(this.form);
-	},
+    hasForm: function () {
+        return Ext.isDefined(this.form);
+    },
 
-	getForm: function () {
-		return this.form;
-	},
+    getForm: function () {
+        return this.form;
+    },
 
-	createForm: function () {
-		var me = this;
+    createForm: function () {
+        var me = this;
 
-		return new Scalr.ui.FilterFieldPicker(Ext.apply(me.getForm(), {
-			pickerField: me
-		}));
-	},
+        return new Scalr.ui.FilterFieldPicker(Ext.apply(me.getForm(), {
+            pickerField: me
+        }));
+    },
 
-	hasMenu: function () {
-		return Ext.isDefined(this.menu);
-	},
+    hasMenu: function () {
+        return Ext.isDefined(this.menu);
+    },
 
-	getMenu: function () {
-		return this.menu;
-	},
+    getMenu: function () {
+        return this.menu;
+    },
 
-	createMenu: function () {
-		var me = this;
+    createMenu: function () {
+        var me = this;
 
-		return Ext.widget(me.getMenu(), {
-			keepVisibleEls: []
-		}).
+        return Ext.widget(me.getMenu(), {
+            keepVisibleEls: []
+        }).
             on('hide', function () {
                 me.collapse();
             });
-	},
+    },
 
-	hasHandler: function () {
-		return Ext.isFunction(this.handler);
-	},
+    hasHandler: function () {
+        return Ext.isFunction(this.handler);
+    },
 
-	applyTriggers: function (triggers) {
-		var me = this;
+    applyTriggers: function (triggers) {
+        var me = this;
 
-		var picker = triggers.picker;
-		picker.hidden = !me.hasForm() && !me.hasMenu();
+        var picker = triggers.picker;
+        picker.hidden = !me.hasForm() && !me.hasMenu();
 
-		var searchButton = triggers.searchButton;
-		searchButton.hidden = !(me.hasStore() && (me.getRemoteSort() || me.getRemoteFilter()))
+        var searchButton = triggers.searchButton;
+        searchButton.hidden = !(me.hasStore() && (me.getRemoteSort() || me.getRemoteFilter()))
             && !me.forceSearchButonVisibility;
 
-		return me.callParent([triggers]);
-	},
+        return me.callParent([triggers]);
+    },
 
-	initComponent: function () {
-		var me = this;
+    initComponent: function () {
+        var me = this;
 
-		me.callParent();
+        me.callParent();
 
-		if (me.hasStore()) {
-			me.remoteSort = me.remoteSort || me.getRemoteSort() || me.getRemoteFilter();
+        if (me.hasStore()) {
+            me.remoteSort = me.remoteSort || me.getRemoteSort() || me.getRemoteFilter();
 
-			if (me.remoteSort) {
-				me.addCls('x-form-filterfield-remote');
-			}
-		}
+            if (me.remoteSort) {
+                me.addCls('x-form-filterfield-remote');
+            }
+        } else if (me.forceSearchButonVisibility) {
+            me.addCls('x-form-filterfield-remote');
+        }
 
-		if (!Ext.isDefined(me.emptyText)) {
-			me.emptyText = me.remoteSort ? 'Search' : 'Filter';
-		}
-	},
+        if (!Ext.isDefined(me.emptyText)) {
+            me.emptyText = me.remoteSort ? 'Search' : 'Filter';
+        }
+    },
 
-	initEvents: function () {
-		var me = this;
+    initEvents: function () {
+        var me = this;
 
-		me.callParent();
+        me.callParent();
 
         me.on('change', function (me, value, oldValue) {
 
@@ -197,24 +205,29 @@ Ext.define('Scalr.ui.FormFilterField', {
             }
 
             if (me.isValueInverted(value, oldValue)) {
-                me.toggleFocusCls().
-                    getTrigger('cancelButton').toggleVisibility();
+                me
+                    .toggleFocusCls()
+                    .getTrigger('cancelButton')
+                        .toggleVisibility();
+
+                me.updateLayout();
             }
 
         }, me);
 
-		me.on('specialkey', function (me, e) {
-			var key = e.getKey();
+        me.on('specialkey', function (me, e) {
+            var key = e.getKey();
 
-			if (key === e.ESC) {
-				me.resetFilter();
-			}
+            if (key === e.ESC) {
+                me.resetFilter();
+                e.stopEvent();
+            }
 
-			if (key === e.ENTER && (me.remoteSort || me.forceSearchButonVisibility)) {
-				me.doForceChange();
-			}
-		});
-	},
+            if (key === e.ENTER && (me.remoteSort || me.forceSearchButonVisibility)) {
+                me.doForceChange();
+            }
+        });
+    },
 
     onTriggerClick: function () {
         var me = this;
@@ -224,50 +237,87 @@ Ext.define('Scalr.ui.FormFilterField', {
         }
     },
 
-	checkChange: function () {
-		var me = this;
+    // Fixed bug with FilterField's resetting (until the checkChangeBuffer's time has elapsed)
+    onFieldMutation: function (e) {
+        // When using propertychange, we want to skip out on various values, since they won't cause
+        // the underlying value to change.
+        var me = this,
+            task = me.checkChangeTask;
+        if (!(e.type == 'propertychange' && me.ignoreChangeRe.test(e.browserEvent.propertyName))) {
+            if (!task) {
+                me.checkChangeTask = task = new Ext.util.DelayedTask(me.doCheckChangeTask,me);
+            }
+            if (!me.bindNotifyListener) {
+                // We continually create/destroy the listener as needed (see doCheckChangeTask) because we're listening
+                // to a global event, so we don't want the event to be triggered unless absolutely necessary. In this case,
+                // we only need to fix the value when we have a pending change to check.
+                me.bindNotifyListener = Ext.on('beforebindnotify', me.onBeforeNotify, me, {
+                    destroyable: true
+                });
+            }
+            /** Changed */
+            if (me.remoteSort) {
+                me.rawValue = me.inputEl.getValue();
+            }
+            /** End */
+            task.delay(me.checkChangeBuffer);
+        }
+    },
+
+    checkChange: function () {
+        var me = this;
 
         if (!me.remoteSort) {
-			me.callParent();
-		}
+            me.callParent();
+        }
 
-		return me;
-	},
+        return me;
+    },
 
-	doForceChange: function () {
-		var me = this;
+    doForceChange: function () {
+        var me = this;
 
-		if (!me.isDestroyed) {
-			var newValue = me.getValue();
-			var oldValue = me.lastValue;
+        if (!me.isDestroyed) {
+            var picker = me.getTrigger('picker');
 
-			me.lastValue = newValue;
+            if (!Ext.isEmpty(picker) && picker.isVisible()) {
+                me.collapse();
+            }
 
-			me.fireEvent('change', me, newValue, oldValue);
-			me.onChange(newValue, oldValue);
-		}
+            var newValue = me.getValue();
+            var oldValue = me.lastValue;
 
-		return me;
-	},
+            me.lastValue = newValue;
 
-	createPicker: function () {
-		var me = this;
+            me.fireEvent('change', me, newValue, oldValue);
+            me.onChange(newValue, oldValue);
+        }
 
-		return me.hasForm() ? me.createForm() : me.createMenu();
-	},
+        return me;
+    },
 
-	onExpand: function () {
-		var me = this;
+    createPicker: function () {
+        var me = this;
+
+        return me.hasForm() ? me.createForm() : me.createMenu();
+    },
+
+    onExpand: function () {
+        var me = this;
 
         if (me.hasForm()) {
-            var form = me.getPicker().getForm();
-            form.reset();
-            form.setValues(me.getParsedValue());
-        }
-	},
+            var picker = me.getPicker();
+            var form = picker.getForm();
+            var parsedValues = me.getParsedValue();
 
-	onCollapse: function () {
-		var me = this;
+            picker.oldValues = parsedValues;
+            form.reset();
+            form.setValues(parsedValues);
+        }
+    },
+
+    onCollapse: function () {
+        var me = this;
 
         if (me.hasForm()) {
             me.setValue(me.compileValue(
@@ -277,315 +327,315 @@ Ext.define('Scalr.ui.FormFilterField', {
                 )
             ));
         }
-	},
+    },
 
-	toggleFocusCls: function () {
-		var me = this;
+    toggleFocusCls: function () {
+        var me = this;
 
-		var className = 'x-form-filterfield-has-value';
+        var className = 'x-form-filterfield-has-value';
 
-		if (!me.hasCls(className)) {
-			me.addCls(className);
-			return me;
-		}
+        if (!me.hasCls(className)) {
+            me.addCls(className);
+            return me;
+        }
 
-		me.removeCls(className);
-		return me;
-	},
+        me.removeCls(className);
+        return me;
+    },
 
-	isValueInverted: function (value, oldValue) {
-		var isValueEmpty = Ext.isEmpty(value);
-		var isOldValueEmpty = Ext.isEmpty(oldValue);
+    isValueInverted: function (value, oldValue) {
+        var isValueEmpty = Ext.isEmpty(value);
+        var isOldValueEmpty = Ext.isEmpty(oldValue);
 
-		return (!isValueEmpty && isOldValueEmpty)
-			|| (isValueEmpty && !isOldValueEmpty);
-	},
+        return (!isValueEmpty && isOldValueEmpty)
+            || (isValueEmpty && !isOldValueEmpty);
+    },
 
-	parseValue: function (array) {
-		var params = {};
+    parseValue: function (array) {
+        var params = {};
 
-		Ext.Array.each(array, function (string) {
-			var separator = string.indexOf(':');
-			var key = string.substring(0, separator).trim();
+        Ext.Array.each(array, function (string) {
+            var separator = string.indexOf(':');
+            var key = string.substring(0, separator).trim();
 
-			params[key] = string.substring(separator + 1).trim();
-		});
+            params[key] = string.substring(separator + 1).trim();
+        });
 
-		return params;
-	},
+        return params;
+    },
 
-	compileValue: function (object) {
-		var string = object.query || '';
+    compileValue: function (object) {
+        var string = object.query || '';
 
-		Ext.Object.each(object, function (key, value) {
-			if (value && key !== 'query') {
-				string = string + ' (' + key + ':' + value + ')';
-			}
-		});
+        Ext.Object.each(object, function (key, value) {
+            if (value && key !== 'query') {
+                string = string + ' (' + key + ':' + value + ')';
+            }
+        });
 
-		return string.trim();
-	},
+        return string.trim();
+    },
 
-	formatQuery: function (string) {
-		return string.trim().replace(/\s+/g, ' ');
-	},
+    formatQuery: function (string) {
+        return string.trim().replace(/\s+/g, ' ');
+    },
 
-	getParsedValue: function () {
-		var me = this;
+    getParsedValue: function () {
+        var me = this;
 
-		var value = me.getValue();
-		var usefulParams = [];
-		var query = value;
-		var regex = /\(([^)]+)\)/g;
-		var found;
+        var value = me.getValue();
+        var usefulParams = [];
+        var query = value;
+        var regex = /\(([^)]+)\)/g;
+        var found;
 
-		while (found = regex.exec(value)) {
-			usefulParams.push(found[1]);
-			query = query.replace(found[0], '');
-		}
+        while (found = regex.exec(value)) {
+            usefulParams.push(found[1]);
+            query = query.replace(found[0], '');
+        }
 
-		return Ext.Object.merge(
-			me.parseValue(usefulParams), {
-				query: me.formatQuery(query)
-			}
-		);
-	},
+        return Ext.Object.merge(
+            me.parseValue(usefulParams), {
+                query: me.formatQuery(query)
+            }
+        );
+    },
 
-	resetFilter: function () {
-		var me = this;
+    resetFilter: function () {
+        var me = this;
 
-		me.reset();
-		me.doForceChange();
+        me.reset();
+        me.doForceChange();
 
-		return me;
-	},
+        return me;
+    },
 
     isRecordMatched: function (record) {
-		var me = this;
+        var me = this;
 
         var value = me.getValue().toLowerCase();
 
-		return me.getFilterFields().some(function (field) {
-			var fieldValue = !Ext.isFunction(field)
-				? record.get(field)
-				: field(record);
+        return me.getFilterFields().some(function (field) {
+            var fieldValue = !Ext.isFunction(field)
+                ? record.get(field)
+                : field(record);
 
             return !Ext.isEmpty(fieldValue)
                 && fieldValue.toLowerCase().indexOf(value) !== -1;
-		});
-	},
+        });
+    },
 
-	clearTreeFilter: function () {
-		var me = this;
+    clearTreeFilter: function () {
+        var me = this;
 
-		var store = me.getStore();
-		store.removeFilter(me.filterId);
+        var store = me.getStore();
+        store.removeFilter(me.filterId);
 
-		store.each(function (record) {
-			record.set('isVisible', false);
-		});
+        store.each(function (record) {
+            record.set('isVisible', false);
+        });
 
-		return store;
-	},
+        return store;
+    },
 
-	isNodeVisible: function (record) {
-		var me = this;
+    isNodeVisible: function (record) {
+        var me = this;
 
-		var value = me.getValue();
-		var isNodeVisible = !record.get('isVisible')
+        var value = me.getValue();
+        var isNodeVisible = !record.get('isVisible')
             ? me.getFilterField().isRecordMatched(record, value)
             : true;
-		var parentNode = record.parentNode;
+        var parentNode = record.parentNode;
 
-		if (isNodeVisible && !Ext.isEmpty(parentNode) && !parentNode.get('isVisible')) {
-			parentNode.set('isVisible', isNodeVisible);
-		}
+        if (isNodeVisible && !Ext.isEmpty(parentNode) && !parentNode.get('isVisible')) {
+            parentNode.set('isVisible', isNodeVisible);
+        }
 
-		return isNodeVisible || record.get('isVisible');
-	},
+        return isNodeVisible || record.get('isVisible');
+    },
 
-	filterTreeLocally: function (value) {
-		var me = this;
+    filterTreeLocally: function (value) {
+        var me = this;
 
-		me.clearTreeFilter().
-			addFilter({
-				id: me.filterId,
-				value: value,
-				filterFn: me.isNodeVisible,
-				getFilterField: function () {
-					return me;
-				}
-			});
+        me.clearTreeFilter().
+            addFilter({
+                id: me.filterId,
+                value: value,
+                filterFn: me.isNodeVisible,
+                getFilterField: function () {
+                    return me;
+                }
+            });
 
-		return me;
-	},
+        return me;
+    },
 
-	filterGridLocally: function (value) {
-		var me = this;
+    filterGridLocally: function (value) {
+        var me = this;
 
-		var store = me.getStore();
-		store.removeFilter(me.filterId);
+        var store = me.getStore();
+        store.removeFilter(me.filterId);
 
-		store.addFilter({
-			id: me.filterId,
-			value: value,
-			filterFn: me.isRecordMatched,
+        store.addFilter({
+            id: me.filterId,
+            value: value,
+            filterFn: me.isRecordMatched,
             scope: me
-		});
+        });
 
-		return me;
-	},
+        return me;
+    },
 
-	doLocalSort: function (value) {
-		var me = this;
+    doLocalSort: function (value) {
+        var me = this;
 
-		if (me.getStore().isTreeStore) {
-			me.filterTreeLocally(value);
-			return me;
-		}
+        if (me.getStore().isTreeStore) {
+            me.filterTreeLocally(value);
+            return me;
+        }
 
-		me.filterGridLocally(value);
-		return me;
-	},
+        me.filterGridLocally(value);
+        return me;
+    },
 
-	doRemoteSort: function () {
-		var me = this;
+    doRemoteSort: function () {
+        var me = this;
 
-		var parsedValue = me.getParsedValue();
+        var parsedValue = me.getParsedValue();
 
-		me.getStore().
-			clearProxyParams(me.appliedParamKeys).
-			applyProxyParams(parsedValue);
+        me.getStore().
+            clearProxyParams(me.appliedParamKeys).
+            applyProxyParams(parsedValue);
 
-		me.appliedParamKeys = Ext.Object.getKeys(parsedValue);
+        me.appliedParamKeys = Ext.Object.getKeys(parsedValue);
 
-		return me;
-	},
+        return me;
+    },
 
-	applyFilter: function (value) {
-		var me = this;
+    applyFilter: function (value) {
+        var me = this;
 
-		if (me.hasStore()) {
-			me.fireEvent('beforefilter', me);
+        if (me.hasStore()) {
+            me.fireEvent('beforefilter', me);
 
             if (me.getRemoteSort() || me.getRemoteFilter()) {
-				me.doRemoteSort();
-			} else {
-				me.doLocalSort(value);
-			}
+                me.doRemoteSort();
+            } else {
+                me.doLocalSort(value);
+            }
 
-			me.fireEvent('afterfilter', me);
-		}
+            me.fireEvent('afterfilter', me);
+        }
 
-		return me;
-	}
+        return me;
+    }
 });
 
 Ext.define('Scalr.ui.FormFieldButtonGroup', {
-	extend: 'Ext.form.FieldContainer',
-	alias: 'widget.buttongroupfield',
+    extend: 'Ext.form.FieldContainer',
+    alias: 'widget.buttongroupfield',
 
-	mixins: {
-		field: 'Ext.form.field.Field'
-	},
-	baseCls: 'x-form-buttongroupfield',
-	allowBlank: false,
+    mixins: {
+        field: 'Ext.form.field.Field'
+    },
+    baseCls: 'x-form-buttongroupfield',
+    allowBlank: false,
     readOnly: false,
     labelSeparator: '',
     defaultBindProperty: 'value',
     maskOnDisable: false,
 
-	initComponent: function() {
-		var me = this, defaults;
-		defaults = {
-			xtype: 'button',
-			enableToggle: true,
-			//toggleGroup: me.getInputId(),
-			allowDepress: me.allowBlank,
-			scope: me,
+    initComponent: function() {
+        var me = this, defaults;
+        defaults = {
+            xtype: 'button',
+            enableToggle: true,
+            //toggleGroup: me.getInputId(),
+            allowDepress: me.allowBlank,
+            scope: me,
             disabled: me.readOnly,
-			doToggle: function(){
-				/* Changed */
-				if (this.enableToggle && this.allowDepress !== false || !this.pressed && this.ownerCt.fireEvent('beforetoggle', this, this.value) !== false) {
-					this.toggle();
-				}
-				/* End */
-			},
-			toggleHandler: function(button, state){
-				button.ownerCt.setValue(state ? button.value : null);
-			},
+            doToggle: function(){
+                /* Changed */
+                if (this.enableToggle && this.allowDepress !== false || !this.pressed && this.ownerCt.fireEvent('beforetoggle', this, this.value) !== false) {
+                    this.toggle();
+                }
+                /* End */
+            },
+            toggleHandler: function(button, state){
+                button.ownerCt.setValue(state ? button.value : null);
+            },
             onMouseDown: function(e) {
                 var me = this;
                 if (!me.disabled && e.button === 0) {
                     Ext.button.Manager.onButtonMousedown(me, e);
                 }
             }
-		};
-		me.defaults = me.initialConfig.defaults ? Ext.clone(me.initialConfig.defaults) : {};
-		Ext.applyIf(me.defaults, defaults);
+        };
+        me.defaults = me.initialConfig.defaults ? Ext.clone(me.initialConfig.defaults) : {};
+        Ext.applyIf(me.defaults, defaults);
 
-		me.callParent();
+        me.callParent();
         me.addCls(me.baseCls);
-		me.initField();
-		if (!me.name) {
-			me.name = me.getInputId();
-		}
-	},
+        me.initField();
+        if (!me.name) {
+            me.name = me.getInputId();
+        }
+    },
 
-	getValue: function() {
-		var me = this,
-			val = me.getRawValue();
-		me.value = val;
-		return val;
-	},
+    getValue: function() {
+        var me = this,
+            val = me.getRawValue();
+        me.value = val;
+        return val;
+    },
 
-	setValue: function(value) {
-		var me = this;
-		me.setRawValue(value);
-		return me.mixins.field.setValue.call(me, value);
-	},
+    setValue: function(value) {
+        var me = this;
+        me.setRawValue(value);
+        return me.mixins.field.setValue.call(me, value);
+    },
 
-	getRawValue: function() {
-		var me = this, v, b;
-		me.items.each(function(){
-			if (this.pressed === true) {
+    getRawValue: function() {
+        var me = this, v, b;
+        me.items.each(function(){
+            if (this.pressed === true) {
                 b = this;
-			}
-		});
+            }
+        });
 
-		if (b) {
-			v = b.value;
-			me.rawValue = v;
-		} else {
-			v = me.rawValue;
-		}
-		return v;
-	},
+        if (b) {
+            v = b.value;
+            me.rawValue = v;
+        } else {
+            v = me.rawValue;
+        }
+        return v;
+    },
 
-	setRawValue: function(value) {
-		var me = this;
-		me.rawValue = value;
-		me.items.each(function(){
-			if (me.rendered) {
-				this.toggle(this.value == value, this.value != value);
-			} else {
-				this.pressed = this.value == value;
-			}
-		});
-		return value;
-	},
+    setRawValue: function(value) {
+        var me = this;
+        me.rawValue = value;
+        me.items.each(function(){
+            if (me.rendered) {
+                this.toggle(this.value == value, this.value != value);
+            } else {
+                this.pressed = this.value == value;
+            }
+        });
+        return value;
+    },
 
-	getInputId: function() {
-		return this.inputId || (this.inputId = this.id + '-inputEl');
-	},
+    getInputId: function() {
+        return this.inputId || (this.inputId = this.id + '-inputEl');
+    },
 
     setReadOnly: function(readOnly) {
         var me = this;
         readOnly = !!readOnly;
         me.readOnly = readOnly;
-		me.items.each(function(btn){
-    		btn.setDisabled(readOnly);
-		});
+        me.items.each(function(btn){
+            btn.setDisabled(readOnly);
+        });
         me.fireEvent('writeablechange', me, readOnly);
     },
 
@@ -629,34 +679,34 @@ Ext.define('Scalr.ui.FormButtonField', {
 });
 
 Ext.define('Scalr.ui.FormCheckButtonField', {
-	alias: 'widget.checkbuttonfield',
-	extend: 'Scalr.ui.FormButtonField',
+    alias: 'widget.checkbuttonfield',
+    extend: 'Scalr.ui.FormButtonField',
 
-	setValue: function (value) {
-		var me = this;
+    setValue: function (value) {
+        var me = this;
 
-		if (value) {
-			value = value.split('-');
+        if (value) {
+            value = value.split('-');
 
-			Ext.Array.each(me.menu.items.items, function (field, index) {
-				field.checked = parseInt(value[index]);
-			});
-		}
+            Ext.Array.each(me.menu.items.items, function (field, index) {
+                field.checked = parseInt(value[index]);
+            });
+        }
 
-		return me;
-	}
+        return me;
+    }
 });
 
 Ext.define('Scalr.ui.FormFieldInfoTooltip', {
-	extend: 'Ext.form.DisplayField',
-	alias: 'widget.displayinfofield',
-	initComponent: function () {
-		// should use value for message
-		var info = this.value || this.info;
-		this.value = '<img class="x-icon-info" src="'+Ext.BLANK_IMAGE_URL+'" data-qtip=\'' + info + '\'/>';
+    extend: 'Ext.form.DisplayField',
+    alias: 'widget.displayinfofield',
+    initComponent: function () {
+        // should use value for message
+        var info = this.value || this.info;
+        this.value = '<img class="x-icon-info" src="'+Ext.BLANK_IMAGE_URL+'" data-qtip=\'' + info + '\'/>';
 
-		this.callParent(arguments);
-	},
+        this.callParent(arguments);
+    },
 
     setInfo: function (text) {
         var me = this;
@@ -666,263 +716,263 @@ Ext.define('Scalr.ui.FormFieldInfoTooltip', {
 });
 
 Ext.define('Scalr.ui.FormFieldFarmRoles', {
-	extend: 'Ext.form.FieldSet',
-	alias: 'widget.farmroles',
+    extend: 'Ext.form.FieldSet',
+    alias: 'widget.farmroles',
 
-	layout: 'column',
+    layout: 'column',
 
-	initComponent: function() {
-		this.callParent(arguments);
-		this.params = this.params || {};
-		this.params.options = this.params.options || [];
+    initComponent: function() {
+        this.callParent(arguments);
+        this.params = this.params || {};
+        this.params.options = this.params.options || [];
 
-		var farmField = this.down('[name="farmId"]'), farmRoleField = this.down('[name="farmRoleId"]'), serverField = this.down('[name="serverId"]');
-		farmField.store.loadData(this.params['dataFarms'] || []);
-		farmField.setValue(this.params['farmId'] || '');
+        var farmField = this.down('[name="farmId"]'), farmRoleField = this.down('[name="farmRoleId"]'), serverField = this.down('[name="serverId"]');
+        farmField.store.loadData(this.params['dataFarms'] || []);
+        farmField.setValue(this.params['farmId'] || '');
 
-		if (this.params.options.indexOf('requiredFarm') != -1)
-			farmField.allowBlank = false;
+        if (this.params.options.indexOf('requiredFarm') != -1)
+            farmField.allowBlank = false;
 
-		if (this.params.options.indexOf('requiredFarmRole') != -1)
-			farmRoleField.allowBlank = false;
+        if (this.params.options.indexOf('requiredFarmRole') != -1)
+            farmRoleField.allowBlank = false;
 
-		if (this.params.options.indexOf('requiredServer') != -1)
-			serverField.allowBlank = false;
+        if (this.params.options.indexOf('requiredServer') != -1)
+            serverField.allowBlank = false;
 
-		delete this.params['farmId'];
-		delete this.params['farmRoleId'];
-		delete this.params['serverId'];
-		this.fixWidth();
-	},
+        delete this.params['farmId'];
+        delete this.params['farmRoleId'];
+        delete this.params['serverId'];
+        this.fixWidth();
+    },
 
-	fixWidth: function() {
-		var farmField = this.down('[name="farmId"]'), farmRoleField = this.down('[name="farmRoleId"]'), serverField = this.down('[name="serverId"]');
+    fixWidth: function() {
+        var farmField = this.down('[name="farmId"]'), farmRoleField = this.down('[name="farmRoleId"]'), serverField = this.down('[name="serverId"]');
 
-		if (this.params.options.indexOf('disabledServer') != -1) {
-			farmField.columnWidth = 0.5;
-			farmRoleField.columnWidth = 0.5;
-		} else if (this.params.options.indexOf('disabledFarmRole') != -1) {
-			farmField.columnWidth = 1;
-		} else {
-			farmField.columnWidth = 1/3;
-			farmRoleField.columnWidth = 1/3;
-			serverField.columnWidth = 1/3;
-		}
-	},
+        if (this.params.options.indexOf('disabledServer') != -1) {
+            farmField.columnWidth = 0.5;
+            farmRoleField.columnWidth = 0.5;
+        } else if (this.params.options.indexOf('disabledFarmRole') != -1) {
+            farmField.columnWidth = 1;
+        } else {
+            farmField.columnWidth = 1/3;
+            farmRoleField.columnWidth = 1/3;
+            serverField.columnWidth = 1/3;
+        }
+    },
 
-	items: [{
-		xtype: 'combo',
-		hideLabel: true,
-		name: 'farmId',
-		store: {
+    items: [{
+        xtype: 'combo',
+        hideLabel: true,
+        name: 'farmId',
+        store: {
             model: Scalr.getModel({fields: [ 'id', 'name' ]})
-		},
-		valueField: 'id',
-		displayField: 'name',
-		emptyText: 'Select a farm',
-		editable: false,
-		queryMode: 'local',
-		listeners: {
-			change: function () {
-				var me = this, fieldset = this.up('fieldset');
+        },
+        valueField: 'id',
+        displayField: 'name',
+        emptyText: 'Select a farm',
+        editable: false,
+        queryMode: 'local',
+        listeners: {
+            change: function () {
+                var me = this, fieldset = this.up('fieldset');
 
-				if (fieldset.params.options.indexOf('disabledFarmRole') != -1)
-					return;
+                if (fieldset.params.options.indexOf('disabledFarmRole') != -1)
+                    return;
 
-				if (fieldset.params.options.indexOf('disabledServer') == -1)
-					fieldset.down('[name="serverId"]').hide();
+                if (fieldset.params.options.indexOf('disabledServer') == -1)
+                    fieldset.down('[name="serverId"]').hide();
 
-				if (!this.getValue() || this.getValue() == '0') {
-					fieldset.down('[name="farmRoleId"]').hide();
-					return;
-				}
+                if (!this.getValue() || this.getValue() == '0') {
+                    fieldset.down('[name="farmRoleId"]').hide();
+                    return;
+                }
 
-				var successHandler = function(data) {
-					var field = fieldset.down('[name="farmRoleId"]');
+                var successHandler = function(data) {
+                    var field = fieldset.down('[name="farmRoleId"]');
                     if (Ext.isEmpty(field)) {
                         return;
                     }
-					field.show();
-					if (data['dataFarmRoles']) {
-						field.emptyText = 'Select a role';
-						field.reset();
-						field.store.loadData(data['dataFarmRoles']);
+                    field.show();
+                    if (data['dataFarmRoles']) {
+                        field.emptyText = 'Select a role';
+                        field.reset();
+                        field.store.loadData(data['dataFarmRoles']);
 
-						if (fieldset.params['farmRoleId']) {
-							field.setValue(fieldset.params['farmRoleId']);
-							delete fieldset.params['farmRoleId'];
-						} else {
-							if (fieldset.params.options.indexOf('addAll') != -1) {
-								field.setValue('0');
-							} else {
-								if (field.store.getCount() == 1)
-									field.setValue(field.store.first()); // preselect single element
-								else
-									field.setValue('');
-							}
-						}
+                        if (fieldset.params['farmRoleId']) {
+                            field.setValue(fieldset.params['farmRoleId']);
+                            delete fieldset.params['farmRoleId'];
+                        } else {
+                            if (fieldset.params.options.indexOf('addAll') != -1) {
+                                field.setValue('0');
+                            } else {
+                                if (field.store.getCount() == 1)
+                                    field.setValue(field.store.first()); // preselect single element
+                                else
+                                    field.setValue('');
+                            }
+                        }
 
-						field.enable();
-						field.clearInvalid();
-					} else {
-						field.store.removeAll();
-						field.emptyText = 'No roles';
-						field.reset();
-						field.disable();
-						if (field.allowBlank == false)
-							field.markInvalid('This field is required');
-					}
-				};
+                        field.enable();
+                        field.clearInvalid();
+                    } else {
+                        field.store.removeAll();
+                        field.emptyText = 'No roles';
+                        field.reset();
+                        field.disable();
+                        if (field.allowBlank == false)
+                            field.markInvalid('This field is required');
+                    }
+                };
 
-				if (fieldset.params['dataFarmRoles']) {
-					successHandler(fieldset.params);
-					delete fieldset.params['dataFarmRoles'];
-				} else
-					Scalr.Request({
-						url: '/farms/xGetFarmWidgetRoles/',
-						params: {farmId: me.getValue(), options: fieldset.params['options'].join(',')},
-						processBox: {
-							type: 'load',
-							msg: 'Loading farm roles ...'
-						},
-						success: successHandler
-					});
-			}
-		}
-	}, {
-		xtype: 'combo',
-		hideLabel: true,
-		hidden: true,
-		name: 'farmRoleId',
-		store: {
+                if (fieldset.params['dataFarmRoles']) {
+                    successHandler(fieldset.params);
+                    delete fieldset.params['dataFarmRoles'];
+                } else
+                    Scalr.Request({
+                        url: '/farms/xGetFarmWidgetRoles/',
+                        params: {farmId: me.getValue(), options: fieldset.params['options'].join(',')},
+                        processBox: {
+                            type: 'load',
+                            msg: 'Loading farm roles ...'
+                        },
+                        success: successHandler
+                    });
+            }
+        }
+    }, {
+        xtype: 'combo',
+        hideLabel: true,
+        hidden: true,
+        name: 'farmRoleId',
+        store: {
             model: Scalr.getModel({fields: [ 'id', 'name', 'platform', 'role_id' ]})
-		},
-		valueField: 'id',
-		displayField: 'name',
-		emptyText: 'Select a role',
-		margin: '0 0 0 5',
-		editable: false,
-		queryMode: 'local',
-		listeners: {
-			change: function () {
-				var me = this, fieldset = this.up('fieldset');
+        },
+        valueField: 'id',
+        displayField: 'name',
+        emptyText: 'Select a role',
+        margin: '0 0 0 5',
+        editable: false,
+        queryMode: 'local',
+        listeners: {
+            change: function () {
+                var me = this, fieldset = this.up('fieldset');
 
-				if (fieldset.params.options.indexOf('disabledServer') != -1) {
-					fieldset.down('[name="serverId"]').hide();
-					return;
-				}
+                if (fieldset.params.options.indexOf('disabledServer') != -1) {
+                    fieldset.down('[name="serverId"]').hide();
+                    return;
+                }
 
-				if (! me.getValue() || me.getValue() == '0') {
-					fieldset.down('[name="serverId"]').hide();
-					return;
-				}
+                if (! me.getValue() || me.getValue() == '0') {
+                    fieldset.down('[name="serverId"]').hide();
+                    return;
+                }
 
-				var successHandler = function (data) {
-					var field = fieldset.down('[name="serverId"]');
-					field.show();
-					if (data['dataServers']) {
-						field.emptyText = 'Select a server';
-						field.reset();
-						field.store.load({data: data['dataServers']});
+                var successHandler = function (data) {
+                    var field = fieldset.down('[name="serverId"]');
+                    field.show();
+                    if (data['dataServers']) {
+                        field.emptyText = 'Select a server';
+                        field.reset();
+                        field.store.load({data: data['dataServers']});
 
-						if (fieldset.params['serverId']) {
-							field.setValue(fieldset.params['serverId']);
-							delete fieldset.params['serverId'];
-						} else {
-							field.setValue(0);
-						}
+                        if (fieldset.params['serverId']) {
+                            field.setValue(fieldset.params['serverId']);
+                            delete fieldset.params['serverId'];
+                        } else {
+                            field.setValue(0);
+                        }
 
-						field.enable();
-					} else {
-						field.emptyText = 'No running servers';
-						field.reset();
-						field.disable();
-					}
-				};
+                        field.enable();
+                    } else {
+                        field.emptyText = 'No running servers';
+                        field.reset();
+                        field.disable();
+                    }
+                };
 
-				if (fieldset.params['dataServers']) {
-					successHandler(fieldset.params);
-					delete fieldset.params['dataServers'];
-				} else
-					Scalr.Request({
-						url: '/farms/xGetFarmWidgetServers',
-						params: {farmRoleId: me.getValue(), options: fieldset.params['options'].join(',')},
-						processBox: {
-							type: 'load',
-							msg: 'Loading servers ...'
-						},
-						success: successHandler
-					});
-			}
-		}
-	}, {
-		xtype: 'combo',
-		hideLabel: true,
-		hidden: true,
-		name: 'serverId',
-		store: {
+                if (fieldset.params['dataServers']) {
+                    successHandler(fieldset.params);
+                    delete fieldset.params['dataServers'];
+                } else
+                    Scalr.Request({
+                        url: '/farms/xGetFarmWidgetServers',
+                        params: {farmRoleId: me.getValue(), options: fieldset.params['options'].join(',')},
+                        processBox: {
+                            type: 'load',
+                            msg: 'Loading servers ...'
+                        },
+                        success: successHandler
+                    });
+            }
+        }
+    }, {
+        xtype: 'combo',
+        hideLabel: true,
+        hidden: true,
+        name: 'serverId',
+        store: {
             model: Scalr.getModel({fields: [ 'id', 'name' ]})
-		},
-		valueField: 'id',
-		displayField: 'name',
-		margin: '0 0 0 5',
+        },
+        valueField: 'id',
+        displayField: 'name',
+        margin: '0 0 0 5',
         editable: true,
         selectOnFocus: true,
         forceSelection: true,
         autoSearch: false,
-		queryMode: 'local'
-	}],
+        queryMode: 'local'
+    }],
 
-	optionChange: function(action, key) {
-		var index = this.params.options.indexOf(key);
+    optionChange: function(action, key) {
+        var index = this.params.options.indexOf(key);
 
-		if (action == 'remove' && index != -1 || action == 'add' && index == -1) {
-			if (action == 'remove') {
-				this.params.options.splice(index, index);
-			} else {
-				this.params.options.push(key);
-			}
+        if (action == 'remove' && index != -1 || action == 'add' && index == -1) {
+            if (action == 'remove') {
+                this.params.options.splice(index, index);
+            } else {
+                this.params.options.push(key);
+            }
 
-			switch(key) {
-				case 'disabledFarmRole':
-					if (action == 'add') {
-						this.down('[name="farmRoleId"]').hide();
-						this.down('[name="serverId"]').hide();
-					} else {
-						this.down('[name="farmId"]').fireEvent('change');
-					}
-					break;
+            switch(key) {
+                case 'disabledFarmRole':
+                    if (action == 'add') {
+                        this.down('[name="farmRoleId"]').hide();
+                        this.down('[name="serverId"]').hide();
+                    } else {
+                        this.down('[name="farmId"]').fireEvent('change');
+                    }
+                    break;
 
-				case 'disabledServer':
-					if (action == 'add') {
-						this.down('[name="serverId"]').hide();
-					} else {
-						this.down('[name="farmRoleId"]').fireEvent('change');
-					}
-					break;
-			}
-		}
+                case 'disabledServer':
+                    if (action == 'add') {
+                        this.down('[name="serverId"]').hide();
+                    } else {
+                        this.down('[name="farmRoleId"]').fireEvent('change');
+                    }
+                    break;
+            }
+        }
 
-		this.fixWidth();
-		this.updateLayout();
+        this.fixWidth();
+        this.updateLayout();
 
         return this;
-	},
+    },
 
-	syncItems: function () {
-		/*if (this.enableFarmRoleId && this.down('[name="farmId"]').getValue()) {
-		 this.down('[name="farmId"]').fireEvent('change');
-		 } else
-		 this.down('[name="farmRoleId"]').hide();
+    syncItems: function () {
+        /*if (this.enableFarmRoleId && this.down('[name="farmId"]').getValue()) {
+         this.down('[name="farmId"]').fireEvent('change');
+         } else
+         this.down('[name="farmRoleId"]').hide();
 
-		 if (! this.enableServerId)
-		 this.down('[name="serverId"]').hide();*/
-	}
+         if (! this.enableServerId)
+         this.down('[name="serverId"]').hide();*/
+    }
 });
 
 Ext.define('Scalr.ui.FormFieldProgress', {
-	extend: 'Ext.form.field.Display',
-	alias: 'widget.progressfield',
+    extend: 'Ext.form.field.Display',
+    alias: 'widget.progressfield',
 
     fieldSubTpl: [
         '<div id="{id}"',
@@ -934,68 +984,82 @@ Ext.define('Scalr.ui.FormFieldProgress', {
         }
     ],
 
-	fieldCls: Ext.baseCSSPrefix + 'form-progress-field',
+    fieldCls: Ext.baseCSSPrefix + 'form-progress-field',
 
-	progressTextCls: 'x-form-progress-text',
-	progressBarCls: 'x-form-progress-bar',
-	warningPercentage: 60,
-	alertPercentage: 80,
-	warningCls: 'x-form-progress-bar-warning',
-	alertCls: 'x-form-progress-bar-alert',
+    progressTextCls: 'x-form-progress-text',
+    pendingCls: 'x-form-progress-pending',
+    failedCls: 'x-form-progress-failed',
+    progressBarCls: 'x-form-progress-bar',
+    warningPercentage: 60,
+    alertPercentage: 80,
+    warningCls: 'x-form-progress-bar-warning',
+    alertCls: 'x-form-progress-bar-alert',
 
-	valueField: 'value',
-	emptyText: '',
-	units: '%',
+    valueField: 'value',
+    emptyText: '',
+    units: '%',
 
-	setRawValue: function(value) {
-		var me = this;
-		me.rawValue = Ext.isObject(value) ? Ext.clone(value) : value;
-		if (me.rendered) {
+    checkValue: false,
+    checkValueFn: Ext.emptyFn,
+    invalidValueText: '',
+
+    setRawValue: function(value) {
+        var me = this;
+
+        var preventValueRendering = me.checkValue && !me.checkValueFn(value);
+
+        if (preventValueRendering) {
+            value = me.invalidValueText;
+        }
+
+        me.rawValue = Ext.isObject(value) ? Ext.clone(value) : value;
+
+        if (me.rendered) {
             me.doRenderProgressBar();
-		} else {
+        } else {
             me.deferredRender = true;
         }
-		return value;
-	},
+        return value;
+    },
 
-	getProgressBarPercentage: function() {
+    getProgressBarPercentage: function() {
         var value = this.getRawValue(),
             size = 0;
-		if (Ext.isNumeric(value)) {
-			size = value*100;
-		} else if (Ext.isObject(value)) {
-			size = Math.round(value[this.valueField]*100/value.total);
-		}
-		return size;
-	},
+        if (Ext.isNumeric(value)) {
+            size = value*100;
+        } else if (Ext.isObject(value)) {
+            size = Math.round(value[this.valueField]*100/value.total);
+        }
+        return size;
+    },
 
     getDisplayValue: function() {
         var value = this.getRawValue(),
             display;
-		if (Ext.isObject(value)) {
-			if (this.units == '%') {
-				display = Math.round(value[this.valueField]*100/value.total);
-			} else {
-				display = value[this.valueField] + ' of ' + value.total;
-			}
-		} else if (Ext.isNumeric(value)) {
-			display = Math.round(value*100);
-		}
+        if (Ext.isObject(value)) {
+            if (this.units == '%') {
+                display = Math.round(value[this.valueField]*100/value.total);
+            } else {
+                display = value[this.valueField] + ' of ' + value.total;
+            }
+        } else if (Ext.isNumeric(value)) {
+            display = Math.round(value*100);
+        }
         if (display !== undefined) {
-			display += ' ' + this.units;
-		} else if (value){
+            display += ' ' + this.units;
+        } else if (value){
             display = value;
         }
 
         return display !== undefined ? display : this.emptyText;
     },
 
-	setText: function(text) {
-		var me = this;
-		if (me.rendered) {
-			me.inputEl.down('.'+me.progressTextCls).dom.innerHTML = text;
-		}
-	},
+    setText: function(text) {
+        var me = this;
+        if (me.rendered) {
+            me.inputEl.down('.'+me.progressTextCls).dom.innerHTML = text;
+        }
+    },
 
     valueToRaw: function(value) {
         return value;
@@ -1028,6 +1092,60 @@ Ext.define('Scalr.ui.FormFieldProgress', {
         me.inputEl.down('.'+me.progressTextCls).dom.innerHTML = me.getDisplayValue();
     },
 
+    setPending: function (isPending) {
+        var me = this;
+
+        var pendingText = 'Pending';
+
+        if (Ext.isString(isPending)) {
+            pendingText = isPending;
+            isPending = true;
+        }
+
+        var inputEl = me.inputEl;
+        var pendingCls = me.pendingCls;
+
+        if (isPending) {
+            inputEl.addCls(pendingCls);
+            me.setRawValue('');
+            me.setText(
+                '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-field-pending" />' +
+                pendingText
+            );
+            return me;
+        }
+
+        inputEl.removeCls(pendingCls);
+
+        return me;
+    },
+
+    setFailed: function (isFailed) {
+        var me = this;
+
+        var inputEl = me.inputEl;
+        var failedCls = me.failedCls;
+        var failedText = 'Pending';
+
+        if (Ext.isString(isFailed)) {
+            failedText = isFailed;
+            isFailed = true;
+        }
+
+        if (isFailed) {
+            inputEl.addCls(failedCls);
+            me.setRawValue('');
+            me.setText(
+                '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-field-failed" />' + failedText
+            );
+            return me;
+        }
+
+        inputEl.removeCls(failedCls);
+
+        return me;
+    },
+
     onRender: function() {
         this.callParent(arguments);
         if (this.deferredRender) {
@@ -1038,89 +1156,89 @@ Ext.define('Scalr.ui.FormFieldProgress', {
 });
 
 Ext.define('Scalr.ui.CloudLocationMap', {
-	extend: 'Ext.Component',
-	alias: 'widget.cloudlocationmap',
-	baseCls: 'scalr-ui-cloudlocationmap',
+    extend: 'Ext.Component',
+    alias: 'widget.cloudlocationmap',
+    baseCls: 'scalr-ui-cloudlocationmap',
 
-	settings: {
-		common: {
-			size: {
-				width: 210,
-				height: 100
-			},
-			cls: 'common'
-		},
-		large: {
-			size: {
-				width: 320,
-				height: 140
-			},
-			cls: 'large'
-		}
-	},
-	size: 'common',
+    settings: {
+        common: {
+            size: {
+                width: 210,
+                height: 100
+            },
+            cls: 'common'
+        },
+        large: {
+            size: {
+                width: 320,
+                height: 140
+            },
+            cls: 'large'
+        }
+    },
+    size: 'common',
 
-	mode: 'multi',
-	platforms: {},
-	regions: {
-		us: 0,
-		sa: 3,
-		eu: 2,
-		ap: 1,
-		unknown: 4,
-		all: 5,
+    mode: 'multi',
+    platforms: {},
+    regions: {
+        us: 0,
+        sa: 3,
+        eu: 2,
+        ap: 1,
+        unknown: 4,
+        all: 5,
         jp: 6
-	},
+    },
     autoSelect: false,
-	locations: {
-		ec2: {
-			'ap-northeast-1': {region: 'ap', x: {common: 125, large: 183}, y: {common:27, large: 40}},
-			'ap-southeast-1': {region: 'ap', x: {common: 95, large: 142}, y: {common:58, large: 81}},
-			'ap-southeast-2': {region: 'ap', x: {common: 133, large: 193}, y: {common:88, large: 118}},
-			'eu-west-1': {region: 'eu', x: {common: 75, large: 112}, y: {common:14, large: 18}},
+    locations: {
+        ec2: {
+            'ap-northeast-1': {region: 'ap', x: {common: 125, large: 183}, y: {common:27, large: 40}},
+            'ap-southeast-1': {region: 'ap', x: {common: 95, large: 142}, y: {common:58, large: 81}},
+            'ap-southeast-2': {region: 'ap', x: {common: 133, large: 193}, y: {common:88, large: 118}},
+            'eu-west-1': {region: 'eu', x: {common: 75, large: 112}, y: {common:14, large: 18}},
             'eu-central-1': {region: 'eu', x: {common: 88, large: 112}, y: {common:16, large: 18}},
-			'sa-east-1': {region: 'sa', x: {common: 114, large: 170}, y: {common:51, large: 71}},
-			'us-east-1': {region: 'us', x: {common: 145, large: 212}, y: {common:53, large: 74}},
-			'us-west-1': {region: 'us', x: {common: 43, large: 78}, y: {common:50, large: 66}},
-			'us-west-2': {region: 'us', x: {common: 35, large: 72}, y: {common:26, large: 40}}
-		},
-		ec2_world: {//all locations on a single map
-			'ap-northeast-1': {region: 'all', x: {common: 182, large: 274}, y: {common:32, large: 46}},
-			'ap-southeast-1': {region: 'all', x: {common: 156, large: 244}, y: {common:54, large: 78}},
-			'ap-southeast-2': {region: 'all', x: {common: 186, large: 286}, y: {common:76, large: 110}},
-			'eu-west-1': {region: 'all', x: {common: 88, large: 140}, y: {common:24, large: 32}},
+            'sa-east-1': {region: 'sa', x: {common: 114, large: 170}, y: {common:51, large: 71}},
+            'us-east-1': {region: 'us', x: {common: 145, large: 212}, y: {common:53, large: 74}},
+            'us-west-1': {region: 'us', x: {common: 43, large: 78}, y: {common:50, large: 66}},
+            'us-west-2': {region: 'us', x: {common: 35, large: 72}, y: {common:26, large: 40}}
+        },
+        ec2_world: {//all locations on a single map
+            'ap-northeast-1': {region: 'all', x: {common: 182, large: 274}, y: {common:32, large: 46}},
+            'ap-southeast-1': {region: 'all', x: {common: 156, large: 244}, y: {common:54, large: 78}},
+            'ap-southeast-2': {region: 'all', x: {common: 186, large: 286}, y: {common:76, large: 110}},
+            'eu-west-1': {region: 'all', x: {common: 88, large: 140}, y: {common:24, large: 32}},
             'eu-central-1': {region: 'all', x: {common: 100, large: 156}, y: {common:26, large: 36}},
-			'sa-east-1': {region: 'all', x: {common: 68, large: 104}, y: {common:70, large: 100}},
-			'us-east-1': {region: 'all', x: {common: 48, large: 78}, y: {common:34, large: 48}},
-			'us-west-1': {region: 'all', x: {common: 28, large: 42}, y: {common:40, large: 50}},
-			'us-west-2': {region: 'all', x: {common: 22, large: 40}, y: {common:30, large: 40}}
-		},
-		rackspace: {
-			'rs-LONx': {region: 'eu', x: {common: 75, large: 120}, y: {common:14, large: 18}},
-			'rs-ORD1': {region: 'us', x: {common: 120, large: 180}, y: {common:32, large: 44}}
-		},
-		rackspace_world: {
-			'rs-LONx': {region: 'all', x: {common: 88, large: 144}, y: {common:24, large: 30}},
-			'rs-ORD1': {region: 'all', x: {common: 40, large: 70}, y: {common:28, large: 45}}
-		},
-		rackspacengus: {
-			'DFW': {region: 'us', x: {common: 100, large: 154}, y: {common:60, large: 78}},
-			'ORD': {region: 'us', x: {common: 120, large: 180}, y: {common:32, large: 44}},
+            'sa-east-1': {region: 'all', x: {common: 68, large: 104}, y: {common:70, large: 100}},
+            'us-east-1': {region: 'all', x: {common: 48, large: 78}, y: {common:34, large: 48}},
+            'us-west-1': {region: 'all', x: {common: 28, large: 42}, y: {common:40, large: 50}},
+            'us-west-2': {region: 'all', x: {common: 22, large: 40}, y: {common:30, large: 40}}
+        },
+        rackspace: {
+            'rs-LONx': {region: 'eu', x: {common: 75, large: 120}, y: {common:14, large: 18}},
+            'rs-ORD1': {region: 'us', x: {common: 120, large: 180}, y: {common:32, large: 44}}
+        },
+        rackspace_world: {
+            'rs-LONx': {region: 'all', x: {common: 88, large: 144}, y: {common:24, large: 30}},
+            'rs-ORD1': {region: 'all', x: {common: 40, large: 70}, y: {common:28, large: 45}}
+        },
+        rackspacengus: {
+            'DFW': {region: 'us', x: {common: 100, large: 154}, y: {common:60, large: 78}},
+            'ORD': {region: 'us', x: {common: 120, large: 180}, y: {common:32, large: 44}},
             'IAD': {region: 'us', x: {common: 145, large: 180}, y: {common:44, large: 44}},
             'SYD': {region: 'ap', x: {common: 135, large: 180}, y: {common:88, large: 44}}
-		},
-		rackspacengus_world: {
-			'DFW': {region: 'all', x: {common: 40, large: 63}, y: {common:37, large: 52}},
-			'ORD': {region: 'all', x: {common: 45, large: 70}, y: {common:30, large: 45}},
+        },
+        rackspacengus_world: {
+            'DFW': {region: 'all', x: {common: 40, large: 63}, y: {common:37, large: 52}},
+            'ORD': {region: 'all', x: {common: 45, large: 70}, y: {common:30, large: 45}},
             'IAD': {region: 'all', x: {common: 53, large: 78}, y: {common:34, large: 47}},
             'SYD': {region: 'all', x: {common: 186, large: 285}, y: {common:76, large: 112}}
-		},
-		rackspacenguk: {
-			'LON': {region: 'eu', x: {common: 75, large: 120}, y: {common:14, large: 18}}
-		},
-		rackspacenguk_world: {
-			'LON': {region: 'all', x: {common: 88, large: 144}, y: {common:24, large: 34}}
-		},
+        },
+        rackspacenguk: {
+            'LON': {region: 'eu', x: {common: 75, large: 120}, y: {common:14, large: 18}}
+        },
+        rackspacenguk_world: {
+            'LON': {region: 'all', x: {common: 88, large: 144}, y: {common:24, large: 34}}
+        },
         idcf: {
             'jp-east-t1v': {region: 'jp', x: {common: 114, large: 168}, y: {common:66, large: 88}},//Tokyo
             'jp-east-f2v': {region: 'jp', x: {common: 116, large: 176}, y: {common:46, large: 68}}//Shirakawa
@@ -1145,40 +1263,38 @@ Ext.define('Scalr.ui.CloudLocationMap', {
             'asia-east1': {region: 'all', x: {common: 166, large: 254}, y: {common:46, large: 64}},
             'us-west1': {region: 'all', x: {common: 30, large: 46}, y: {common:32, large: 48}}
         },
-		openstack: {
-			'ItalyMilano1': {region: 'eu', x: {common: 96, large: 148}, y: {common:26, large: 36}},
-			'it-mil1': {region: 'eu', x: {common: 96, large: 148}, y: {common:26, large: 36}},
+        openstack: {
+            'ItalyMilano1': {region: 'eu', x: {common: 96, large: 148}, y: {common:26, large: 36}},
+            'it-mil1': {region: 'eu', x: {common: 96, large: 148}, y: {common:26, large: 36}},
             'de-fra1': {region: 'eu', x: {common: 90, large: 140}, y: {common:14, large: 24}},
             'nl-ams1': {region: 'eu', x: {common: 80, large: 134}, y: {common:16, large: 26}}
-		},
-		openstack_world: {
-			'ItalyMilano1': {region: 'eu', x: {common: 96, large: 148}, y: {common:26, large: 36}},
-			'it-mil1': {region: 'eu', x: {common: 96, large: 148}, y: {common:26, large: 36}},
+        },
+        openstack_world: {
+            'ItalyMilano1': {region: 'eu', x: {common: 96, large: 148}, y: {common:26, large: 36}},
+            'it-mil1': {region: 'eu', x: {common: 96, large: 148}, y: {common:26, large: 36}},
             'de-fra1': {region: 'eu', x: {common: 90, large: 140}, y: {common:14, large: 24}},
             'nl-ams1': {region: 'eu', x: {common: 80, large: 134}, y: {common:16, large: 26}}
-		}
-	},
-	renderTpl: [
-		'<div id="{id}-mapEl" data-ref="mapEl" class="map map-{mapCls}" style="{mapStyle}"><div id="{id}-titleEl" data-ref="titleEl" class="title x-semibold"></div></div>'
-	],
-	childEls: ['mapEl', 'titleEl'],
+        }
+    },
+    renderTpl: [
+        '<div id="{id}-mapEl" data-ref="mapEl" class="map map-{mapCls}" style="{mapStyle}"><div id="{id}-titleEl" data-ref="titleEl" class="title x-semibold"></div></div>'
+    ],
+    childEls: ['mapEl', 'titleEl'],
 
-	constructor: function(config) {
-		this.callParent(arguments);
-		this.locations.rds = this.locations.ec2;
-        this.locations.ecs = this.locations.openstack;
-        this.locations.ecs_world = this.locations.openstack_world;
-		this.settings[this.size].style = 'width:' + this.settings[this.size].size.width + 'px;';
-		this.settings[this.size].style += 'height:' + this.settings[this.size].size.height + 'px;';
-		this.mapSize = this.settings[this.size].size;
+    constructor: function(config) {
+        this.callParent(arguments);
+        this.locations.rds = this.locations.ec2;
+        this.settings[this.size].style = 'width:' + this.settings[this.size].size.width + 'px;';
+        this.settings[this.size].style += 'height:' + this.settings[this.size].size.height + 'px;';
+        this.mapSize = this.settings[this.size].size;
         this.renderData.mapStyle = this.settings[this.size].style;
         this.renderData.mapCls = this.settings[this.size].cls;
-	},
+    },
 
-	selectLocation: function(platform, selectedLocations, allLocations, map){
+    selectLocation: function(platform, selectedLocations, allLocations, map){
         var me = this,
             locationFound = false,
-            platformMap = platform !== 'idcf' && platform !== 'ecs' && (me.locations[platform + '_' + map] !== undefined) ? platform + '_' + map : platform;
+            platformMap = platform !== 'idcf' && (me.locations[platform + '_' + map] !== undefined) ? platform + '_' + map : platform;
         fn = function() {
             me.suspendLayouts();
             allLocations = allLocations || [];
@@ -1218,13 +1334,14 @@ Ext.define('Scalr.ui.CloudLocationMap', {
         } else {
             me.on('afterrender', fn, me, {single: true});
         }
-	},
+    },
 
     addLocation: function(platform, name, data, selected, silent) {
         var me = this,
-            title = name;
-        if (platform !== 'gce' && me.platforms[platform] && me.platforms[platform].locations[name]) {
-            title = me.platforms[platform].locations[name];
+            title = name,
+            platformInfo = me.platforms[platform] || {};
+        if (platform !== 'gce' && platformInfo.locations && platformInfo.locations[name]) {
+            title = platformInfo.locations[name];
         }
         var el = Ext.DomHelper.append(me.mapEl.dom, '<div data-location="'+Ext.util.Format.htmlEncode(name)+'" style="top:'+data.y[me.size]+'px;left:'+data.x[me.size]+'px" class="location'+(selected ? ' selected' : '')+'" title="'+Ext.util.Format.htmlEncode(title)+'"></div>', true)
         if (!silent) {
@@ -1259,34 +1376,34 @@ Ext.define('Scalr.ui.CloudLocationMap', {
         });
     },
 
-	fixTitlePosition: function() {
-		var loc = this.mapEl.query('.location');
-		if (loc[0]) {
-			var el = Ext.fly(loc[0]);
-			//we are trying to avoid overlapping between title and location div
-			if (el.getTop(true) > this.mapSize.height/2) {
-				this.titleEl.setTop(el.getTop(true)-35);
-			} else {
-				this.titleEl.setTop(el.getTop(true)+20);
-			}
-		}
-	},
+    fixTitlePosition: function() {
+        var loc = this.mapEl.query('.location');
+        if (loc[0]) {
+            var el = Ext.fly(loc[0]);
+            //we are trying to avoid overlapping between title and location div
+            if (el.getTop(true) > this.mapSize.height/2) {
+                this.titleEl.setTop(el.getTop(true)-35);
+            } else {
+                this.titleEl.setTop(el.getTop(true)+20);
+            }
+        }
+    },
 
-	reset: function() {
+    reset: function() {
         if (!this.rendered) return;
-		var loc = this.mapEl.query('.location');
-		for (var i=0, len=loc.length; i<len; i++) {
-			Ext.removeNode(loc[i]);
-		}
+        var loc = this.mapEl.query('.location');
+        for (var i=0, len=loc.length; i<len; i++) {
+            Ext.removeNode(loc[i]);
+        }
         this.titleEl.setHtml('');
-	},
+    },
 
-	getRegionPosition: function(region) {
-		return '0 -' + (this.regions[region]*this.mapSize.height) + 'px';
-	},
+    getRegionPosition: function(region) {
+        return '0 -' + (this.regions[region]*this.mapSize.height) + 'px';
+    },
 
     setLocation: function(location) {
-		var locations = this.mapEl.query('.location');
+        var locations = this.mapEl.query('.location');
         Ext.Array.each(locations, function(loc){
             var el = Ext.fly(loc);
             el[el.getAttribute('data-location') == location ? 'addCls' : 'removeCls']('selected');
@@ -1444,9 +1561,9 @@ Ext.define('Scalr.ui.CycleButtonAlt', {
 
     extend: 'Ext.button.Split',
 
-	mixins: {
-		field: 'Ext.form.field.Field'
-	},
+    mixins: {
+        field: 'Ext.form.field.Field'
+    },
 
     showText: true,
     getItemIconCls: false,
@@ -1564,7 +1681,7 @@ Ext.define('Scalr.ui.CycleButtonAlt', {
 
         me.itemCount = me.menu.items.length;
         me.callParent(arguments);
-		me.initField();
+        me.initField();
         if (!me.multiselect) {
             me.on('click', me.toggleSelected, me);
         }
@@ -1587,8 +1704,16 @@ Ext.define('Scalr.ui.CycleButtonAlt', {
             m = me.menu,
             checkItem;
 
-        checkItem = me.activeItems[0].next(':not([disabled])') || m.items.getAt(0);
-        checkItem.setChecked(true);
+        checkItem = me.activeItems[0].next(':not([disabled])');
+
+        if (Ext.isEmpty(checkItem)) {
+            var firstItem = me.getMenu().items.first();
+            checkItem = !firstItem.isDisabled() ? firstItem : firstItem.next(':not([disabled])');
+        }
+
+        if (!Ext.isEmpty(checkItem)) {
+            checkItem.setChecked(true);
+        }
     },
 
     getValue: function() {
@@ -1615,6 +1740,8 @@ Ext.define('Scalr.ui.CycleButtonAlt', {
                 me.toggleItem(item, true, suppressEvent);
             }
         });
+
+        return me;
     },
 
     add: function(item){
@@ -1692,19 +1819,19 @@ Ext.define('Ext.form.field.Color', {
     onFocusLeave: Ext.emptyFn,
 
     setRawValue: function(value) {
-		var me = this;
+        var me = this;
         me.callParent(arguments);
         me.setRawColor(value);
     },
 
     setRawColor: function(value) {
-		var me = this,
+        var me = this,
             color = me.emptyColor;
-		if (!Ext.isEmpty(value)) {
-			color = value;
-		}
+        if (!Ext.isEmpty(value)) {
+            color = value;
+        }
         if (me.inputEl) {
-		    me.inputEl.setStyle({'background': '#' + color});
+            me.inputEl.setStyle({'background': '#' + color});
         }
     },
 
@@ -1717,8 +1844,8 @@ Ext.define('Ext.form.field.Color', {
 });
 
 Ext.define('Scalr.ui.VpcSubnetField', {
-	extend: 'Ext.form.field.Tag',
-	alias: 'widget.vpcsubnetfield',
+    extend: 'Ext.form.field.Tag',
+    alias: 'widget.vpcsubnetfield',
 
     displayField: 'description',
     valueField: 'id',
@@ -1951,6 +2078,7 @@ Ext.define('Scalr.ui.NameValueListField', {
     setReadOnly: function(readOnly) {
         this.readOnly = !!readOnly;
         this.view.refresh();
+        this.view.findFeature('addbutton').setDisabled(readOnly);
     },
 
     setValue: function(value){
@@ -2092,7 +2220,7 @@ Ext.define('Scalr.ui.Ec2TagsField', {
 
     setCloud: function(cloud) {
         this.cloud = cloud;
-        if (cloud === 'ec2') {
+        if (cloud === 'ec2' || cloud === 'azure') {
             this.itemName = 'tag';
             this.subjectName = 'Tagging';
             this.reservedNames = ['scalr-meta', 'Name'];
@@ -2218,7 +2346,7 @@ Ext.define('Scalr.ui.Ec2TagsField', {
             tooltip = me.readOnly ? me.governanceTooltip : 'Tag limit of ' + tagsLimit + ' reached' + (!me.allowNameTag ? ' (1 tag reserved for Name)' : '');
             view.findFeature('addbutton').setDisabled((view.store.snapshot || view.store.data).length >= tagsLimit || me.readOnly, tooltip);
         } else {
-            view.findFeature('addbutton').setDisabled(me.readOnly, '');
+            view.findFeature('addbutton').setDisabled(me.readOnly, me.readOnly ? me.governanceTooltip : '');
         }
 
     }
@@ -2294,6 +2422,55 @@ Ext.define('Scalr.ui.FieldProgressBar', {
     }
 });
 
+Ext.define('Scalr.ui.view.TagBoundListKeyNav', {
+    extend: 'Ext.view.BoundListKeyNav',
+    alias: 'view.navigation.tagboundlist',
+
+    onKeyEnter: function(e) {
+        var me = this,
+            field = me.view.pickerField,
+            inputEl = field.inputEl,
+            rawValue = inputEl.dom.value,
+            preventKeyUpEvent = field.preventKeyUpEvent;
+
+        rawValue = Ext.Array.clean(rawValue.split(field.delimiterRegexp));
+        inputEl.dom.value = '';
+        field.setValue(field.valueStore.getRange().concat(rawValue));
+        field.collapse();
+        inputEl.focus();
+    },
+
+    onKeyTab: function(e) {
+        var selModel = this.view.getSelectionModel(),
+            field = this.view.pickerField,
+            count = selModel.getCount();
+
+        this.selectHighlighted(e);
+
+        // Handle the case where the highlighted item is already selected
+        // In this case, the change event won't fire, so just collapse
+        if (!field.multiSelect && count === selModel.getCount()) {
+            field.collapse();
+        }
+    },
+
+    selectHighlighted: function(e) {
+        var boundList = this.view,
+            selModel = boundList.getSelectionModel(),
+            highlightedRec;
+
+        highlightedRec = boundList.getNavigationModel().getRecord();
+        if (highlightedRec) {
+
+            // Select if not already selected.
+            // If already selected, selecting with no CTRL flag will deselect the record.
+            if (e.getKey() === e.TAB || !selModel.isSelected(highlightedRec)) {
+                selModel.selectWithEvent(highlightedRec, e);
+            }
+        }
+    }
+});
+
 Ext.define('Scalr.ui.form.field.TagList', {
     extend: 'Ext.form.field.Tag',
     alias: 'widget.taglistfield',
@@ -2328,10 +2505,11 @@ Ext.define('Scalr.ui.form.field.TagList', {
             fields: ['tag']
         });
 
-        me.plugins = {
+        me.plugins = me.plugins || [];
+        me.plugins.push({
             ptype: 'addnewtag',
             pluginId: 'addnewtag'
-        };
+        });
 
         me.callParent(arguments);
     },
@@ -2552,6 +2730,7 @@ Ext.define('Scalr.ui.form.field.TagList', {
         var me = this;
 
         me.setValue();
+        me.inputEl.dom.value = '';
 
         me.callParent();
     }
@@ -2984,7 +3163,306 @@ Ext.define('Scalr.ui.CloudLocationField', {
         } else {
             callback();
         }
+    }
+});
+
+Ext.define('Scalr.ui.ReCaptchaField', {
+    extend:'Ext.form.field.Base',
+    alias: 'widget.recaptchafield',
+
+    fieldSubTpl: [
+        '<div id="{id}" role="{role}" {inputAttrTpl}',
+        '<tpl if="fieldStyle"> style="{fieldStyle}"</tpl>',
+        ' class="{fieldCls} {fieldCls}-{ui}"><span style="font-style: italic">Loading reCaptcha</span></div>',
+        {
+            compiled: true,
+            disableFormats: true
+        }
+    ],
+
+    focusable: false,
+    readOnly: true,
+    height: 78,
+    minWidth: 304,
+
+    initEvents: function() {
+        var me = this;
+
+        me.callParent();
+
+        if (Scalr.flags['recaptchaPublicKey']) {
+            if (this.isVisible()) {
+                this.renderRecaptcha();
+            } else {
+                this.on('show', this.renderRecaptcha, this, {
+                    single: true
+                });
+            }
+        } else {
+            this.hide();
+            this.disable();
+        }
     },
 
+    callbackRecaptcha: function() {
+        this.validate();
+    },
 
+    renderRecaptcha: function() {
+        if ('grecaptcha' in window) {
+            this.inputEl.update('');
+            this.recaptchaEl = grecaptcha.render(this.inputEl.dom, {
+                'sitekey': Scalr.flags['recaptchaPublicKey'],
+                'callback': this.callbackRecaptcha.bind(this)
+            });
+        } else {
+            this.loadRecaptcha();
+        }
+    },
+
+    beforeDestroy: function() {
+        if (Ext.isDefined(this.recaptchaEl)) {
+            grecaptcha.reset(this.recaptchaEl);
+
+            // google recaptcha issue: if captcha was checked, after remove -> error
+            var plsContainers = document.body.getElementsByClassName('pls-container');
+            for(var i = 0; i < plsContainers.length; i++){
+                var parent = plsContainers[i].parentNode;
+                while (parent.firstChild) {
+                    parent.removeChild(parent.firstChild);
+                }
+            }
+        }
+    },
+
+    loadRecaptcha: function() {
+        reCaptchaLoadedCallback = (function() {
+            this.renderRecaptcha();
+            delete reCaptchaLoadedCallback;
+        }).bind(this);
+        Ext.Loader.loadScalrScript('https://www.google.com/recaptcha/api.js?onload=reCaptchaLoadedCallback&render=explicit');
+    },
+
+    isDirty: function() {
+        return false;
+    },
+
+    isValid: function() {
+        return Ext.isDefined(this.recaptchaEl) ? !!grecaptcha.getResponse(this.recaptchaEl) : (this.isDisabled() ? true : false);
+    },
+
+    getRawValue: function() {
+        return Ext.isDefined(this.recaptchaEl) ? grecaptcha.getResponse(this.recaptchaEl) : '';
+    },
+
+    reset: function() {
+        if (Ext.isDefined(this.recaptchaEl)) {
+            grecaptcha.reset(this.recaptchaEl);
+        }
+    },
+
+    setRawValue: function(value) {
+
+    }
+});
+
+Ext.define('Scalr.ui.FormInstanceTypeField', {
+    extend: 'Ext.form.field.ComboBox',
+    alias: 'widget.instancetypefield',
+
+    editable: true,
+    hideInputOnReadOnly: true,
+    queryMode: 'local',
+    fieldLabel: 'Instance type',
+    anyMatch: true,
+    autoSearch: false,
+    selectOnFocus: true,
+    restoreValueOnBlur: true,
+    markInvalidInstaceType: false,
+    nl2brErrors: true,
+    store: {
+        fields: [ 'id', 'name', 'note', 'ram', 'type', 'vcpus', 'disk', 'ebsencryption', 'ebsoptimized', 'placementgroups', 'instancestore', {name: 'disabled', defaultValue: false}, 'disabledReason' ],
+        proxy: 'object',
+        sorters: {
+            property: 'disabled'
+        }
+    },
+    valueField: 'id',
+    displayField: 'name',
+    listConfig: {
+        emptyText: 'No instance type matching query',
+        emptyTextTpl: new Ext.XTemplate(
+            '<div style="margin:8px 8px 0">' +
+                '<span class="x-semibold">No instance type matching query</span>' +
+                '<div style="line-height:24px">Instance types unavailable in <i>{cloudLocation}</i><tpl if="limits"> or restricted by Governance</tpl> are not listed</div>' +
+            '</div>'
+        ),
+        cls: 'x-boundlist-alt',
+        tpl:
+            '<tpl for="."><div class="x-boundlist-item" style="white-space:nowrap;height: auto; width: auto;<tpl if="disabled">color:#999</tpl>">' +
+                '<div><span class="x-semibold">{name}</span> &nbsp;<tpl if="disabled"><span style="font-size:12px;font-style:italic">({[values.disabledReason||\'Not compatible with the selected image\']})</span></tpl></div>' +
+                '<div style="line-height: 26px;white-space:nowrap;">{[this.instanceTypeInfo(values)]}</div>' +
+            '</div></tpl>'
+    },
+    updateListEmptyText: function(data) {
+        var picker = this.getPicker();
+        if (picker) {
+            picker.emptyText = picker.emptyTextTpl.apply(data);
+        }
+    },
+    initComponent: function() {
+        this.plugins = {
+            ptype: 'fieldicons',
+            position: this.iconsPosition || 'inner',
+            icons: [{id: 'governance', tooltip: 'The account owner has limited which instance types can be used in this Environment'}]
+        };
+        this.callParent(arguments);
+        this.on('beforeselect', function(comp, record){
+            if (record.get('disabled') && comp.getPicker().isVisible()) {
+                return false;
+            }
+        }, this, {priority: 1});
+
+        if (this.markInvalidInstaceType) {
+            this.validateOnChange = false;
+            this.on('change', function(comp, value){
+                comp.refreshInvalidState();
+            });
+        }
+    },
+    refreshInvalidState: function(value) {
+        if (!this.markInvalidInstaceType) {
+            return;
+        }
+        var record = this.findRecordByValue(value !== undefined ? value : this.getValue());
+        if (record && record.get('disabled')) {
+            this.markInvalid('Instance type ' + record.get('name') + ' is not compatible with selected Role.\n Please choose another one.');
+        } else {
+            this.clearInvalid();
+        }
+    }
+});
+
+Ext.define('Scalr.ui.FormFieldPassword', {
+    extend: 'Ext.form.field.Text',
+    alias: 'widget.passwordfield',
+
+    inputType: 'password',
+    placeholder: '******',
+    initialValue: null,
+
+    isPasswordEmpty: function(password) {
+        return Ext.isEmpty(password) || password === false;
+    },
+
+    getSubmitData: function() {
+        if (!this.isPasswordEmpty(this.initialValue) && this.getValue() == this.placeholder ||
+            this.isPasswordEmpty(this.initialValue) && this.getValue() == '') {
+            return null;
+        } else {
+            return this.callParent(arguments);
+        }
+    },
+
+    getModelData: function() {
+        var data = {};
+        data[this.getName()] = this.getValue() != '' ? true : false;
+        return data;
+    },
+
+    setValue: function(value) {
+        this.initialValue = value;
+        if (!this.isPasswordEmpty(value)) {
+            value = this.placeholder;
+        } else {
+            value = '';
+        }
+        this.callParent(arguments);
+    }
+
+});
+
+Ext.define('Scalr.form.field.Password', {
+    extend: 'Scalr.ui.FormFieldPassword',
+    alias: 'widget.scalrpasswordfield',
+
+    /*config: {
+        triggers: {
+            state: {
+                cls: Ext.baseCSSPrefix + 'passwordfield-state'
+            }
+        }
+    },*/
+
+    // TODO: remove or replace x-passwordfield style and corresponding image sprite
+    //cls: Ext.baseCSSPrefix + 'passwordfield',
+
+    defaultSets: {
+        'lowercase': 'abcdefghjkmnpqrstuvwxyz',
+        'uppercase': 'ABCDEFGHJKMNPQRSTUVWXYZ',
+        'digit': '1234567890',
+        'special symbols': '!@#$%&*?'
+    },
+
+    strengthLevelNames: [ 'invalid', 'weak', 'fair', 'good', 'strong' ],
+
+    minPasswordLengthAdmin: false,
+    minPasswordLengthText: 'The minimum password length is {0} characters.',
+
+    //regex: /^[ A-Za-z0-9!@#$%&*?]*$/,
+    //regexText: 'Password should contain only upper- and lower-case letters, numbers and special symbols: !@#$%&*?',
+
+    getErrors: function(value) {
+        value = arguments.length ? (value == null ? '' : value) : this.processRawValue(this.getRawValue());
+
+        var me = this,
+            errors = me.callParent(arguments),
+            groups = [],
+            passLen = me.minPasswordLengthAdmin ? 15 : 8;
+
+        if (Ext.isEmpty(value) || value == '******') {
+            //me.setStrengthLevelCls();
+        } else {
+            Ext.Object.each(me.defaultSets, function (key, set) {
+                var verified = Ext.Array.some(set.split(''), function (symbol) {
+                    return value.indexOf(symbol) !== -1;
+                });
+
+                if (!verified) {
+                    groups.push(key);
+                }
+            });
+
+            if (value.length < passLen) {
+                errors.push(Ext.String.format(me.minPasswordLengthText, passLen));
+            }
+
+            if (groups.length) {
+                errors.push("Password doesn't contain any characters from the following group(s): " + groups.join(", "));
+            }
+
+            //me.setStrengthLevelCls(me.strengthLevelNames[4 - groups.length]);
+        }
+
+        return errors;
+    },
+
+    setStrengthLevelCls: function (levelName) {
+        var me = this;
+
+        if (me.rendered) {
+            var stateTriggerEl = me.getTrigger('state').getEl();
+            var stateClsPrefix = Ext.baseCSSPrefix + 'password-';
+
+            Ext.Array.each(me.strengthLevelNames, function (name) {
+                if (name === levelName) {
+                    stateTriggerEl.addCls(stateClsPrefix + name);
+                } else {
+                    stateTriggerEl.removeCls(stateClsPrefix + name);
+                }
+            });
+        }
+
+        return me;
+    }
 });

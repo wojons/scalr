@@ -13,7 +13,7 @@ class Scalr_UI_Controller_Scripts_Shortcuts extends Scalr_UI_Controller
      */
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_SCRIPTS);
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_SCRIPTS_ENVIRONMENT);
     }
 
     public function defaultAction()
@@ -73,9 +73,7 @@ class Scalr_UI_Controller_Scripts_Shortcuts extends Scalr_UI_Controller
      */
     public function xListAction(JsonData $sort, $start = 0, $limit = 20)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_ADMINISTRATION_SCRIPTS);
-
-        $result = ScriptShortcut::find(['farmId' => ['$in' => $this->getAllowedFarmId()]], Scalr\UI\Utils::convertOrder($sort, ['scriptId' => 'ASC'], ['scriptId', 'farmId', 'farmRoleId']), $limit, $start, true);
+        $result = ScriptShortcut::find(['farmId' => ['$in' => $this->getAllowedFarmId()]], null, Scalr\UI\Utils::convertOrder($sort, ['scriptId' => true], ['scriptId', 'farmId', 'farmRoleId']), $limit, $start, true);
         $data = [];
         foreach ($result as $shortcut) {
             /* @var $shortcut ScriptShortcut */

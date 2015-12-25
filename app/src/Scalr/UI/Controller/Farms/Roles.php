@@ -2,6 +2,7 @@
 
 use Scalr\Acl\Acl;
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
 {
@@ -11,15 +12,6 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
      * @var DBFarm
      */
     private $dbFarm;
-
-    /**
-     * {@inheritdoc}
-     * @see Scalr_UI_Controller::hasAccess()
-     */
-    public function hasAccess()
-    {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES);
-    }
 
     public function init()
     {
@@ -143,7 +135,7 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
             'xtype' => 'fieldset',
             'labelWidth' => 250,
             'defaults' => array('labelWidth' => 250),
-            'title' => 'Scalr information',
+            'title' => 'Scaling information',
             'items' => $it
         );
 
@@ -170,47 +162,71 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
         ));
     }
 
-    public function xLaunchNewServerAction()
+    /**
+     * Launches new server
+     * @param   int     $farmRoleId
+     * @param   bool    $increaseMinInstances
+     * @param   bool    $needConfirmation
+     * @throws  Scalr_Exception_Core
+     */
+    public function xLaunchNewServerAction($farmRoleId, $increaseMinInstances = false, $needConfirmation = true)
     {
-        $dbFarmRole = DBFarmRole::LoadByID($this->getParam('farmRoleId'));
+        $dbFarmRole = DBFarmRole::LoadByID($farmRoleId);
         $dbFarm = $dbFarmRole->GetFarmObject();
 
         $this->user->getPermissions()->validate($dbFarmRole);
+        $this->request->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_SERVERS);
 
-        if ($dbFarm->Status != FARM_STATUS::RUNNING)
-            throw new Exception("You can launch servers only on running farms");
+        if ($dbFarm->Status != FARM_STATUS::RUNNING) {
+            throw new Scalr_Exception_Core('You can launch servers only on running farms');
+        }
 
         $dbRole = $dbFarmRole->GetRoleObject();
 
-        if ($dbRole->hasBehavior(ROLE_BEHAVIORS::VPC_ROUTER))
-            throw new Exception("Manual launch of VPC Router insatnces is not allowed");
-
-        $pendingInstancesCount = $dbFarmRole->GetPendingInstancesCount();
-
-        $maxInstances = $dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES);
-        $minInstances = $dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MIN_INSTANCES);
-
-        if ($maxInstances < $minInstances+1) {
-            $dbFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES, $maxInstances+1, DBFarmRole::TYPE_CFG);
-
-            $warnMsg = sprintf(_("Server count has been increased. Scalr will now request a new server from your cloud. Since the server count was already at the maximum set for this role, we increased the maximum by one."),
-                $dbRole->name, $dbRole->name
-            );
+        if ($dbRole->hasBehavior(ROLE_BEHAVIORS::VPC_ROUTER)) {
+            throw new Scalr_Exception_Core('Manual launch of VPC Router insatnces is not allowed');
         }
 
-        $runningInstancesCount = $dbFarmRole->GetRunningInstancesCount();
+        if ($dbFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_ENABLED) == 1) {
+            $scalingManager = new Scalr_Scaling_Manager($dbFarmRole);
+            $scalingMetrics = $scalingManager->getFarmRoleMetrics();
+            $hasScalingMetrics = count($scalingMetrics) > 0;
 
-        if ($runningInstancesCount+$pendingInstancesCount >= $minInstances)
-            $dbFarmRole->SetSetting(DBFarmRole::SETTING_SCALING_MIN_INSTANCES, $minInstances+1, DBFarmRole::TYPE_CFG);
+            $curInstances = $dbFarmRole->GetPendingInstancesCount() + $dbFarmRole->GetRunningInstancesCount();
+
+            $maxInstances = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MAX_INSTANCES);
+            $minInstances = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MIN_INSTANCES);
+
+            if ($needConfirmation) {
+                $res = ['showConfirmation' => true];
+                if ($maxInstances < $curInstances+1) {
+                    $res['showIncreaseMaxInstancesWarning'] = true;
+                    $res['maxInstances'] = $maxInstances+1;
+                }
+
+                if ($hasScalingMetrics && $curInstances >= $minInstances) {
+                    $res['showIncreaseMinInstancesConfirm'] = true;
+                }
+
+                $this->response->data($res);
+                return;
+            } else {
+
+                if ($maxInstances < $curInstances+1) {
+                    $dbFarmRole->SetSetting(Entity\FarmRoleSetting::SCALING_MAX_INSTANCES, $maxInstances+1, Entity\FarmRoleSetting::TYPE_CFG);
+                }
+
+                if ($increaseMinInstances && $hasScalingMetrics && $curInstances >= $minInstances) {
+                    $dbFarmRole->SetSetting(Entity\FarmRoleSetting::SCALING_MIN_INSTANCES, $minInstances+1, Entity\FarmRoleSetting::TYPE_CFG);
+                }
+            }
+        }
 
         $serverCreateInfo = new ServerCreateInfo($dbFarmRole->Platform, $dbFarmRole);
 
         Scalr::LaunchServer($serverCreateInfo, null, false, DBServer::LAUNCH_REASON_MANUALLY, $this->user);
 
-        if ($warnMsg)
-            $this->response->warning($warnMsg);
-        else
-            $this->response->success('Server successfully launched');
+        $this->response->success('Server successfully launched');
     }
 
     public function xListFarmRolesAction()
@@ -222,8 +238,6 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
             'id' => array('type' => 'int'),
             'sort' => array('type' => 'json')
         ));
-
-        $this->request->restrictFarmAccess(DBFarm::LoadByID($this->getParam('farmId')));
 
         $sql = "
             SELECT farm_roles.*
@@ -253,9 +267,20 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
         );
 
         foreach ($response['data'] as &$row) {
-            $row["running_servers"] = $this->db->GetOne("SELECT COUNT(*) FROM servers WHERE farm_roleid='{$row['id']}' AND status IN ('Pending', 'Initializing', 'Running', 'Temporary')");
-            $row["suspended_servers"] = $this->db->GetOne("SELECT COUNT(*) FROM servers WHERE farm_roleid='{$row['id']}' AND status IN ('Suspended', 'Pending suspend')");
-            $row["non_running_servers"] = $this->db->GetOne("SELECT COUNT(*) FROM servers WHERE farm_roleid='{$row['id']}' AND status NOT IN ('Pending', 'Initializing', 'Running', 'Temporary')");
+            $servers = $this->db->GetRow("
+                SELECT SUM(IF(`status` IN (?,?,?,?,?),1,0)) AS running_servers,
+                    SUM(IF(`status` IN (?,?),1,0)) AS suspended_servers,
+                    SUM(IF(`status` IN (?,?),1,0)) AS non_running_servers
+                FROM `servers` WHERE `farm_roleid` = ?
+            ", [Entity\Server::STATUS_PENDING, Entity\Server::STATUS_INIT, Entity\Server::STATUS_RUNNING, Entity\Server::STATUS_TEMPORARY, Entity\Server::STATUS_RESUMING,
+                Entity\Server::STATUS_SUSPENDED, Entity\Server::STATUS_PENDING_SUSPEND,
+                Entity\Server::STATUS_TERMINATED, Entity\Server::STATUS_PENDING_TERMINATE,
+                $row['id']
+            ]);
+            if (is_null($servers['running_servers'])) {
+                $servers = ['running_servers' => 0, 'suspended_servers' => 0, 'non_running_servers' => 0];
+            }
+            $row = array_merge($row, $servers);
 
             $row['farm_status'] = $this->db->GetOne("SELECT status FROM farms WHERE id=? LIMIT 1", array($row['farmid']));
 
@@ -265,12 +290,10 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
 
             $DBFarmRole = DBFarmRole::LoadByID($row['id']);
 
-            $row['min_count'] = $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MIN_INSTANCES);
-            $row['max_count'] = $DBFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES);
             $row['allow_launch_instance'] = (!$DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MONGODB) && !$DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::CF_CLOUD_CONTROLLER));
 
             $vpcId = $this->environment->getPlatformConfigValue(Ec2PlatformModule::DEFAULT_VPC_ID.".{$DBFarmRole->CloudLocation}");
-            $row['is_vpc'] = ($vpcId || $DBFarmRole->GetFarmObject()->GetSetting(DBFarm::SETTING_EC2_VPC_ID)) ? true : false;
+            $row['is_vpc'] = ($vpcId || $DBFarmRole->GetFarmObject()->GetSetting(Entity\FarmSetting::EC2_VPC_ID)) ? true : false;
 
             $row['location'] = $DBFarmRole->CloudLocation;
 
@@ -283,26 +306,29 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
 
             if ($DBFarmRole->GetFarmObject()->Status == FARM_STATUS::RUNNING) {
                 $row['shortcuts'] = [];
-                foreach (\Scalr\Model\Entity\ScriptShortcut::find(array(
-                    array('farmRoleId' => $row['id'])
-                )) as $shortcut) {
+                foreach (\Scalr\Model\Entity\ScriptShortcut::find([['farmRoleId' => $row['id']]]) as $shortcut) {
                     /* @var $shortcut \Scalr\Model\Entity\ScriptShortcut */
                     $row['shortcuts'][] = array(
-                        'id' => $shortcut->id,
+                        'id'   => $shortcut->id,
                         'name' => $shortcut->getScriptName()
                     );
                 }
             }
 
-            $scalingManager = new Scalr_Scaling_Manager($DBFarmRole);
-            $scaling_algos = array();
-            foreach ($scalingManager->getFarmRoleMetrics() as $farmRoleMetric)
-                $scaling_algos[] = $farmRoleMetric->getMetric()->name;
+            $row['scaling_enabled'] = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_ENABLED);
+            if ($row['scaling_enabled'] == 1) {
+                $row['min_count'] = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MIN_INSTANCES);
+                $row['max_count'] = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MAX_INSTANCES);
+                $scalingManager = new Scalr_Scaling_Manager($DBFarmRole);
+                $scaling_algos = [];
+                foreach ($scalingManager->getFarmRoleMetrics() as $farmRoleMetric)
+                    $scaling_algos[] = $farmRoleMetric->getMetric()->name;
 
-            if (count($scaling_algos) == 0)
-                $row['scaling_algos'] = _("Scaling disabled");
-            else
                 $row['scaling_algos'] = implode(', ', $scaling_algos);
+            }
+
+            $row['farmOwnerIdPerm'] = $DBFarmRole->GetFarmObject()->createdByUserId == $this->user->getId();
+            $row['farmTeamIdPerm'] = $DBFarmRole->GetFarmObject()->teamId ? $this->user->isInTeam($DBFarmRole->GetFarmObject()->teamId) : false;
         }
 
         $this->response->data($response);
@@ -312,6 +338,7 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
     {
         $dbFarmRole = DBFarmRole::LoadByID($this->getParam(self::CALL_PARAM_NAME));
         $this->user->getPermissions()->validate($dbFarmRole);
+        $this->request->restrictFarmAccess($this->dbFarm, Acl::PERM_FARMS_MANAGE);
 
         $roles = $dbFarmRole->getReplacementRoles(true);
         $this->response->page('ui/farms/roles/replaceRole.js', array(
@@ -328,12 +355,16 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
 
         $dbFarmRole = DBFarmRole::LoadByID($this->getParam(self::CALL_PARAM_NAME));
         $this->user->getPermissions()->validate($dbFarmRole);
+        $this->request->restrictFarmAccess($this->dbFarm, Acl::PERM_FARMS_MANAGE);
 
         $newRole = DBRole::loadById($this->request->getParam('roleId'));
-        if ($newRole->envId != 0) {
-            $this->user->getPermissions()->validate($newRole);
-        }
+        $this->checkPermissions($newRole->__getNewRoleObject());
 
+        if (!empty(($envs = $newRole->__getNewRoleObject()->getAllowedEnvironments()))) {
+            if (!in_array($this->getEnvironmentId(), $envs)) {
+                throw new Exception("You don't have access to this role");
+            }
+        }
         //TODO: Add validation of cloud/location/os_family and behavior
 
         $oldName = $dbFarmRole->GetRoleObject()->name;
@@ -341,7 +372,8 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
         $dbFarmRole->RoleID = $newRole->id;
         $dbFarmRole->Save();
 
-        Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($dbFarmRole->FarmID,
+        \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
+            $dbFarmRole->FarmID,
             sprintf("Role '%s' was upgraded to role '%s'",
                 $oldName,
                 $newRole->name
@@ -355,16 +387,16 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
             'role' => array(
                 'role_id'       => $newRole->id,
                 'name'          => $newRole->name,
-                'os'			=> $newRole->getOs()->name,
-                'osId'			=> $newRole->getOs()->id,
-                'generation'	=> $newRole->generation,
+                'os'            => $newRole->getOs()->name,
+                'osId'          => $newRole->getOs()->id,
+                'generation'    => $newRole->generation,
                 'image'         => [
                     'id' => $image->id,
                     'type' => $image->type,
                     'architecture' => $image->architecture
-                ]
-            ),
+                ],
+                'behaviors'     => join(",", $newRole->getBehaviors())
+            )
         ));
     }
-
 }

@@ -1,9 +1,8 @@
 <?php
 
 use Scalr\Acl\Acl;
-use Scalr\Server\Operations;
 use Scalr\Modules\PlatformFactory;
-use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
 {
@@ -75,12 +74,12 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
             'configured' => false
         );
 
-        if ($dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_USER)) {
+        if ($dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_PMA_USER)) {
             $retval['configured'] = true;
         } else {
-            $errmsg = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_ERROR);
+            $errmsg = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_PMA_REQUEST_ERROR);
             if (!$errmsg) {
-                $time = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME);
+                $time = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_PMA_REQUEST_TIME);
                 if ($time) {
                     if ($time + 3600 < time()) {
                         $retval['accessError'] = _("Scalr didn't receive auth info from MySQL instance. Please check that MySQL running and Scalr has access to it.");
@@ -151,14 +150,38 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
         }
 
         if ($retval['growSupported']) {
-            $retval['ebs_settings'] = array(
-                'volumeType' => $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_TYPE),
-                'size' => $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE)
-            );
-            if ($retval['ebs_settings']['volumeType'] == 'io1') {
-                $retval['ebs_settings']['iops'] = $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_IOPS);
+            if ($retval['engine'] == MYSQL_STORAGE_ENGINE::EBS) {
+                $retval['ebs_settings'] = array(
+                    'volumeType' => $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_TYPE),
+                    'size' => $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE)
+                );
+                if ($retval['ebs_settings']['volumeType'] == 'io1') {
+                    $retval['ebs_settings']['iops'] = $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_IOPS);
+                }
+            } else {
+                $retval['ebs_settings'] = array(
+                    'volumeType' => $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_EBS_DISK_TYPE),
+                    'size' => $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_DISK_SIZE)
+                );
+                if ($retval['ebs_settings']['volumeType'] == 'io1') {
+                    $retval['ebs_settings']['iops'] = $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_EBS_DISK_IOPS);
+                }
             }
+        }
 
+        $retval['growLastError'] = $masterServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::STORAGE_GROW_LAST_ERROR);
+        if ($retval['growLastError']) {
+            $masterServer->GetFarmRoleObject()->SetSetting(Entity\FarmRoleSetting::STORAGE_GROW_LAST_ERROR, null);
+        }
+
+        if (($operationId = $masterServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::STORAGE_GROW_OPERATION_ID)) &&
+            ($serverId = $masterServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::STORAGE_GROW_SERVER_ID)) &&
+            ($serverId == $masterServer->serverId)
+        ) {
+            $retval['growOperation'] = [
+                'operationId' => $operationId,
+                'serverId' => $serverId
+            ];
         }
 
         switch ($retval['engine']) {
@@ -186,6 +209,26 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
         }
 
         return $retval;
+    }
+
+    /**
+     * @param   string  $serverId
+     * @throws  Scalr_Exception_Core
+     */
+    public function xGetDbStorageStatusAction($serverId)
+    {
+        $server = DBServer::LoadByID($serverId);
+        $this->user->getPermissions()->validate($server);
+
+        $dbType = $server->GetFarmRoleObject()->GetRoleObject()->getDbMsrBehavior();
+        if (empty($dbType)) {
+            throw new Scalr_Exception_Core("Unknown db type");
+        }
+        $dbStorageStatusData = $this->getDbStorageStatus($server, $dbType);
+
+        $this->response->data([
+            'storage' => $dbStorageStatusData
+        ]);
     }
 
     public function dashboardAction()
@@ -312,7 +355,10 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
             ),
             'last'       => $lastActionTime ? Scalr_Util_DateTime::convertTz((int)$lastActionTime, 'd M Y \a\\t H:i:s') : 'Never',
             'supported'  => !PlatformFactory::isCloudstack($dbFarmRole->Platform) &&
-                           (!PlatformFactory::isOpenstack($dbFarmRole->Platform) || PlatformFactory::NewPlatform($dbFarmRole->Platform)->getConfigVariable(OpenstackPlatformModule::EXT_SWIFT_ENABLED, $this->getEnvironment(), false))
+                           (!PlatformFactory::isOpenstack($dbFarmRole->Platform) ||
+                             $this->getEnvironment()
+                                  ->cloudCredentials($dbFarmRole->Platform)
+                                  ->properties[Entity\CloudCredentialsProperty::OPENSTACK_EXT_SWIFT_ENABLED])
         );
         foreach ($data['backups']['history'] as &$h)
             $h['date'] = Scalr_Util_DateTime::convertTz((int)$h['date'], 'd M Y \a\\t H:i:s');
@@ -352,16 +398,19 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                 'cloudServerId' => $dbServer->GetCloudServerID(),
                 'cloudLocation' => $dbServer->GetCloudLocation(),
                 'serverRole'    => $serverRole,
-                'index'         => $dbServer->index
+                'index'         => $dbServer->index,
+                'disabledServerPermission' => !$this->request->isFarmAllowed($dbFarm, Acl::PERM_FARMS_SERVERS)
             );
 
-            $serverInfo['monitoring'] = array(
-                'farmId'     => $dbFarmRole->FarmID,
-                'farmRoleId' => $dbFarmRole->ID,
-                'index'      => $dbServer->index,
-                'hash'       => $dbFarm->Hash,
-                'hostUrl'    => "{$conf['scheme']}://{$conf['host']}:{$conf['port']}"
-            );
+            if ($this->request->isFarmAllowed($dbFarm, Acl::PERM_FARMS_STATISTICS)) {
+                $serverInfo['monitoring'] = [
+                    'farmId'     => $dbFarmRole->FarmID,
+                    'farmRoleId' => $dbFarmRole->ID,
+                    'index'      => $dbServer->index,
+                    'hash'       => $dbFarm->Hash,
+                    'hostUrl'    => "{$conf['scheme']}://{$conf['host']}:{$conf['port']}"
+                ];
+            }
 
             if ($dbServer->platform == SERVER_PLATFORMS::EC2)
                 $serverInfo['cloudLocation'] = $dbServer->GetProperty(EC2_SERVER_PROPERTIES::AVAIL_ZONE);
@@ -429,14 +478,18 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
         $this->response->page('ui/db/manager/dashboard.js', $data, array('ui/monitoring/window.js'), array('ui/db/manager/dashboard.css'));
     }
 
-    public function xChangeStorageSettingsAction()
+    /**
+     * @param   int     $farmRoleId
+     * @param   int     $newSize        optional
+     * @param   string  $volumeType     optional
+     * @param   int     $iops           optional
+     * @throws  Exception
+     */
+    public function xGrowStorageAction($farmRoleId, $newSize = 0, $volumeType = '', $iops = 0)
     {
-        return $this->xGrowStorageAction();
-    }
+        $this->request->restrictAccess(Acl::RESOURCE_DB_DATABASE_STATUS, Acl::PERM_DB_DATABASE_STATUS_MANAGE);
 
-    public function xGrowStorageAction()
-    {
-        $dbFarmRole = DBFarmRole::LoadByID($this->getParam('farmRoleId'));
+        $dbFarmRole = DBFarmRole::LoadByID($farmRoleId);
         $this->user->getPermissions()->validate($dbFarmRole->GetFarmObject());
 
         $textBehavior = $dbFarmRole->GetRoleObject()->getDbMsrBehavior();
@@ -444,7 +497,6 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
         $master = $behavior->getMasterServer($dbFarmRole);
 
         /* @var $master \DBServer */
-
         if ($master) {
             $port = $master->getPort(\DBServer::PORT_API);
 
@@ -456,19 +508,24 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                 if ($volume->type != MYSQL_STORAGE_ENGINE::EBS && $volume->type != MYSQL_STORAGE_ENGINE::RAID_EBS && $volume->type != 'raid')
                     throw new Exception("Grow feature available only for EBS and RAID storage types");
 
-                if ($this->getParam('newSize') && $volume->size >= (int)$this->getParam('newSize'))
+                if ($newSize && $volume->size >= $newSize)
                     throw new Exception("New size should be greather than current one ({$volume->size} GB)");
 
                 $volumeConfig = $volume->getConfig();
                 $platformAccessData = PlatformFactory::NewPlatform($dbFarmRole->Platform)->GetPlatformAccessData($this->environment, $master);
 
                 $newConfig = new stdClass();
-                if ($this->getParam('newSize'))
-                    $newConfig->size = $this->getParam('newSize');
-                if ($this->getParam('volumeType'))
-                    $newConfig->volumeType = $this->getParam('volumeType');
-                if ($this->getParam('iops'))
-                    $newConfig->iops = $this->getParam('iops');
+                if ($newSize) {
+                    $newConfig->size = $newSize;
+                }
+
+                if ($volumeType) {
+                    $newConfig->volumeType = $volumeType;
+                }
+
+                if ($iops && ($volumeType == 'io1' || !$volumeType && $volumeConfig->volumeType == 'io1')) {
+                    $newConfig->iops = $iops;
+                }
 
                 switch ($textBehavior) {
                     case ROLE_BEHAVIORS::REDIS:
@@ -481,6 +538,10 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                         $operationId = $master->scalarizr->mysql->growStorage($volumeConfig, $newConfig, $platformAccessData);
                         break;
                 }
+
+                $dbFarmRole->SetSetting(Entity\FarmRoleSetting::STORAGE_GROW_OPERATION_ID, $operationId);
+                $dbFarmRole->SetSetting(Entity\FarmRoleSetting::STORAGE_GROW_SERVER_ID, $master->serverId);
+                $dbFarmRole->SetSetting(Entity\FarmRoleSetting::STORAGE_GROW_LAST_ERROR, '');
 
                 $this->response->data(['serverId' => $master->serverId, 'operationId' => $operationId]);
 
@@ -512,16 +573,16 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
         if ($dbMsrBehavior) {
             $behavior = Scalr_Role_Behavior::loadByName($dbMsrBehavior);
             $masterDbServer = $behavior->getMasterServer($dbFarmRole);
-    
+
             if ($masterDbServer) {
-                $time = $dbFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME);
+                $time = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_PMA_REQUEST_TIME);
                 if (!$time || $time + 3600 < time()) {
                     $msg = new Scalr_Messaging_Msg_Mysql_CreatePmaUser($dbFarmRole->ID, \Scalr::config('scalr.ui.pma.server_ip'));
                     $masterDbServer->SendMessage($msg);
-    
-                    $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_TIME, time(), DBFarmRole::TYPE_LCL);
-                    $dbFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_PMA_REQUEST_ERROR, "", DBFarmRole::TYPE_LCL);
-    
+
+                    $dbFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_PMA_REQUEST_TIME, time(), Entity\FarmRoleSetting::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_PMA_REQUEST_ERROR, "", Entity\FarmRoleSetting::TYPE_LCL);
+
                     $this->response->success();
                 }
                 else
@@ -535,6 +596,8 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
 
     public function xCancelBackupAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_DB_DATABASE_STATUS, Acl::PERM_DB_DATABASE_STATUS_MANAGE);
+
         $this->request->defineParams(array(
             'farmId' => array('type' => 'int'),
             'farmRoleId' => array('type' => 'int')
@@ -566,6 +629,8 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
 
     public function xCancelDataBundleAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_DB_DATABASE_STATUS, Acl::PERM_DB_DATABASE_STATUS_MANAGE);
+
         $this->request->defineParams(array(
             'farmId' => array('type' => 'int'),
             'farmRoleId' => array('type' => 'int')
@@ -596,6 +661,8 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
 
     public function xCreateDataBundleAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_DB_DATABASE_STATUS, Acl::PERM_DB_DATABASE_STATUS_MANAGE);
+
         $this->request->defineParams(array(
             'farmId' => array('type' => 'int'),
             'farmRoleId' => array('type' => 'int'),
@@ -621,6 +688,8 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
 
     public function xCreateBackupAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_DB_DATABASE_STATUS, Acl::PERM_DB_DATABASE_STATUS_MANAGE);
+
         $this->request->defineParams(array(
             'farmId' => array('type' => 'int'),
             'farmRoleId' => array('type' => 'int')
@@ -638,5 +707,17 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
         $behavior->createBackup($dbFarmRole);
 
         $this->response->success('Backup successfully initiated');
+    }
+
+    /**
+     * @param   int   $farmRoleId
+     */
+    public function xClearGrowStorageErrorAction($farmRoleId)
+    {
+        $dbFarmRole = DBFarmRole::LoadByID($farmRoleId);
+        $this->user->getPermissions()->validate($dbFarmRole->GetFarmObject());
+
+        $dbFarmRole->SetSetting(Entity\FarmRoleSetting::STORAGE_GROW_LAST_ERROR, null);
+        $this->response->success();
     }
 }

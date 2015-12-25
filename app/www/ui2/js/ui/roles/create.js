@@ -1,7 +1,11 @@
 Scalr.regPage('Scalr.ui.roles.create', function (loadParams, moduleParams) {
-	return Ext.create('Ext.panel.Panel', {
+
+    var isImportAllowed = Scalr.isAllowed('IMAGES_ENVIRONMENT', 'import');
+    var isBuildAllowed = Scalr.isAllowed('IMAGES_ENVIRONMENT', 'build');
+
+    return Ext.create('Ext.panel.Panel', {
         title: 'Choose a role creation method',
-        width: 415,
+        width: isImportAllowed && isBuildAllowed ? 410 : 280,
         layout: 'hbox',
 
         scalrOptions: {
@@ -19,7 +23,7 @@ Scalr.regPage('Scalr.ui.roles.create', function (loadParams, moduleParams) {
             xtype: 'button',
             ui: 'simple',
             cls: 'x-btn-simple-large',
-            margin: '20 0 20 20',
+            margin: isImportAllowed || isBuildAllowed ? '20 0 20 20' : '20 0 20 85',
             iconAlign: 'top'
         },
 
@@ -37,6 +41,7 @@ Scalr.regPage('Scalr.ui.roles.create', function (loadParams, moduleParams) {
             hrefTarget: '_self',
             iconCls: 'x-icon-behavior-large x-icon-behavior-large-wizard',
             tooltip: 'Snapshot an existing Server that is not currently managed by Scalr, and use the snapshot as an Image for your new Role.',
+            hidden: !isImportAllowed,
             listeners: {
                 boxready: function() {
                     this.btnInnerEl.applyStyles('margin-top: -6px;');
@@ -47,6 +52,7 @@ Scalr.regPage('Scalr.ui.roles.create', function (loadParams, moduleParams) {
             text: 'Role builder',
             href: '#/roles/builder',
             hrefTarget: '_self',
+            hidden: !isBuildAllowed,
             iconCls: 'x-icon-behavior-large x-icon-behavior-large-rolebuilder',
             tooltip: 'Use the Role Builder wizard to bundle supported software into an Image for your new Role.'
         }]

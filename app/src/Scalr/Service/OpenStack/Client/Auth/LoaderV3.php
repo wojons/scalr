@@ -31,49 +31,54 @@ class LoaderV3 implements LoaderInterface
         if (empty($token)) {
             $invalid = true;
         }
+
         if (isset($invalid) || !isset($obj->token->expires_at)) {
             throw new InvalidArgumentException("Malformed JSON document " . (string) $jsonString);
         }
 
-        $services = array();
-        $regions = array();
+        $regions = $services = [];
+
         if (!empty($obj->token->catalog)) {
             foreach ($obj->token->catalog as $srv) {
                 foreach ($srv->endpoints as $srvEndpoint) {
                     $url = $srvEndpoint->url;
 
                     $srvVersion = OpenStackConfig::parseIdentityVersion($url);
+
                     if (isset($srvEndpoint->region)) {
                         $regions[$srvEndpoint->region] = true;
                         $endpointRegion = $srvEndpoint->region;
                     } else {
                         $endpointRegion = '';
                     }
+
                     if (!isset($services[$srv->type][$endpointRegion][$srvVersion])) {
-                        $services[$srv->type][$endpointRegion][$srvVersion] = array();
+                        $services[$srv->type][$endpointRegion][$srvVersion] = [];
                     }
 
                     $srvEndpoint->publicURL = $url;
 
-                    $services[$srv->type][$endpointRegion][$srvVersion][] = $srvEndpoint;
+                    //Interface - can be public, internal or admin
+                    $services[$srv->type][$endpointRegion][$srvVersion][$srvEndpoint->interface] = $srvEndpoint;
                 }
             }
         }
         $regions = array_keys($regions);
 
         $ret = new AuthToken();
-        $ret
-            ->setExpires(new DateTime($obj->token->expires_at))
+        $ret->setExpires(new DateTime($obj->token->expires_at))
             ->setId($token)
             ->setAuthDocument($obj)
             ->setRegionEndpoints($services)
             ->setZones($regions)
         ;
-        if (isset($obj->token->user->id)) {
-            $ret->setTenantId($obj->token->user->id);
+
+        if (isset($obj->token->project->id)) {
+            $ret->setTenantId($obj->token->project->id);
         }
-        if (isset($obj->token->user->name)) {
-            $ret->setTenantName($obj->token->user->name);
+
+        if (isset($obj->token->project->name)) {
+            $ret->setTenantName($obj->token->project->name);
         }
 
         return $ret;

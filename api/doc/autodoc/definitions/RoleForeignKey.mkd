@@ -1,0 +1,46 @@
+# `RoleForeignKey` #
+
+
+
+
+
+## Reference ##
+
+`RoleForeignKey` is used when a reference to an object of type [`Role`](./../definitions/Role.mkd) is expected.
+Note that you can pass a complete [`Role`](./../definitions/Role.mkd) object as well.
+
+
+## Properties ##
+
+### `id` (required, read-only) ###
+
+
+
+
+Property of type: `integer`.
+
+
+
+
+
+
+
+## Swagger Definition ##
+
+    {
+      "required": [
+        "id"
+      ], 
+      "x-references": {
+        "$ref": "#/definitions/Role"
+      }, 
+      "x-derived": {
+        "$ref": "#/definitions/Role"
+      }, 
+      "properties": {
+        "id": {
+          "readOnly": true, 
+          "type": "integer"
+        }
+      }
+    }

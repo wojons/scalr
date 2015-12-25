@@ -1,10 +1,10 @@
 <?php
+
 namespace Scalr\Service\CloudStack\Client;
 
+use http\Client\Response;
 use Scalr\Service\CloudStack\DataType\ErrorData;
 use Scalr\Service\CloudStack\Exception\CloudStackResponseErrorFactory;
-use Scalr\Service\CloudStack\Exception\RestClientException;
-use \HttpMessage;
 
 /**
  * CloudStack Query Client Response
@@ -15,9 +15,9 @@ use \HttpMessage;
 class QueryClientResponse implements ClientResponseInterface
 {
     /**
-     * @var HttpMessage
+     * @var Response
      */
-    private $message;
+    private $response;
 
     /**
      * @var ErrorData|bool
@@ -38,29 +38,29 @@ class QueryClientResponse implements ClientResponseInterface
     /**
      * Constructor
      *
-     * @param   HttpMessage $message  An HTTP message
+     * @param   Response  $response  An HTTP response
      * @param   string    $command   Command name
      */
-    public function __construct(\HttpMessage $message, $command)
+    public function __construct(Response $response, $command)
     {
-        $this->message = $message;
+        $this->response = $response;
         $this->command = strtolower($command);
     }
 
     /**
-     * Gets an HTTP Message
+     * Gets an HTTP Response
      *
-     * @return HttpMessage Returns an HttpMessage object
+     * @return Response Returns an http Response object
      */
-    public function getMessage()
+    public function getResponse()
     {
-        return $this->message;
+        return $this->response;
     }
 
     /**
      * Gets a cloudstack command name
      *
-     * @return HttpMessage Returns an HttpMessage object
+     * @return string Returns an http Response object
      */
     public function getCommand()
     {
@@ -73,7 +73,7 @@ class QueryClientResponse implements ClientResponseInterface
      */
     public function getContent()
     {
-        return $this->message->getBody();
+        return $this->response->getBody()->toString();
     }
 
 
@@ -83,7 +83,7 @@ class QueryClientResponse implements ClientResponseInterface
      */
     public function getResponseCode()
     {
-        return $this->message->getResponseCode();
+        return $this->response->getResponseCode();
     }
 
     /**
@@ -92,7 +92,7 @@ class QueryClientResponse implements ClientResponseInterface
      */
     public function getHeader($headerName)
     {
-        return $this->message->getHeader($headerName);
+        return $this->response->getHeader($headerName);
     }
 
     /**
@@ -101,7 +101,7 @@ class QueryClientResponse implements ClientResponseInterface
      */
     public function getHeaders()
     {
-        return $this->message->getHeaders();
+        return $this->response->getHeaders();
     }
 
     public function getResult()
@@ -175,7 +175,7 @@ class QueryClientResponse implements ClientResponseInterface
      * Sets raw request message
      *
      * @param   string   $rawRequestMessage  Raw request message
-     * @return  RestClientResponse
+     * @return  QueryClientResponse
      */
     public function setRawRequestMessage($rawRequestMessage)
     {

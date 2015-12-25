@@ -7,6 +7,10 @@ use Scalr\Service\Aws\CloudFront\DataType\DistributionConfigOriginData;
 use Scalr\Service\Aws\CloudFront\DataType\CacheBehaviorData;
 use Scalr\Service\Aws\CloudFront\DataType\DistributionS3OriginConfigData;
 use Scalr\Acl\Acl;
+use Scalr\Modules\PlatformFactory;
+use Scalr\Service\Aws;
+use Scalr\Service\Aws\Client\ClientException;
+use Scalr\Service\Aws\DataType\ErrorData;
 
 class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
 {
@@ -16,11 +20,15 @@ class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
      */
     public function hasAccess()
     {
-        if (!parent::hasAccess() || !$this->request->isAllowed(Acl::RESOURCE_AWS_S3)) return false;
+        if (!parent::hasAccess() || !$this->request->isAllowed(Acl::RESOURCE_AWS_S3)) {
+            return false;
+        }
 
         $enabledPlatforms = $this->getEnvironment()->getEnabledPlatforms();
-        if (!in_array(SERVER_PLATFORMS::EC2, $enabledPlatforms))
+
+        if (!in_array(SERVER_PLATFORMS::EC2, $enabledPlatforms)) {
             throw new Exception("You need to enable EC2 platform for current environment");
+        }
 
         return true;
     }
@@ -37,47 +45,85 @@ class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
         ));
     }
 
+    /**
+     * Gets AWS instance
+     *
+     * If cloud location is not specified it will use default cloud location for
+     * current User's session
+     *
+     * @param  string  $cloudLocation optional A Cloud Location
+     * @return Aws     Returns AWS initialized for the specified cloud location
+     */
+    protected function getAws($cloudLocation = null)
+    {
+        if (empty($cloudLocation)) {
+            $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
+
+            $cloudLocations = $p->getLocations($this->environment);
+
+            list($cloudLocation) = each($cloudLocations);
+        }
+
+        return $this->environment->aws($cloudLocation);
+    }
+
     public function xListBucketsAction()
     {
-        $aws = $this->environment->aws('us-east-1');
-        $distributions = array();
-        //Retrieves the list of all distributions
-        $distList = $aws->cloudFront->distribution->describe();
-        /* @var $dist DistributionData */
-        foreach ($distList as $dist) {
-            /* @var $org DistributionConfigOriginData */
-            foreach ($dist->distributionConfig->origins as $org) {
-                $distributions[preg_replace('#\.s3\.amazonaws\.com$#', '', $org->domainName)] = $dist;
+        $aws = $this->getAws();
+
+        $distributions = [];
+
+        try {
+            //Retrieves the list of all distributions
+            $distList = $this->getAws(Aws::REGION_US_EAST_1)->cloudFront->distribution->describe();
+
+            /* @var $dist DistributionData */
+            foreach ($distList as $dist) {
+                /* @var $org DistributionConfigOriginData */
+                foreach ($dist->distributionConfig->origins as $org) {
+                    $distributions[preg_replace('#\.s3\.amazonaws\.com$#', '', $org->domainName)] = $dist;
+                }
+
+                unset($dist);
             }
-            unset($dist);
+        } catch (ClientException $e) {
+            Scalr::logException($e);
         }
 
         // Get list of all user buckets
-        $buckets = array();
+        $buckets = [];
+
         /* @var $bucket BucketData */
         foreach ($aws->s3->bucket->getList() as $bucket) {
             $bucketName = $bucket->bucketName;
+
             if (empty($distributions[$bucketName])) {
-                $info = array(
-                    "name" => $bucketName
-                );
+                $info = ["name" => $bucketName];
             } else {
                 $dist = $distributions[$bucketName];
-                $info = array(
+
+                $info = [
                     "name"    => $bucketName,
                     "cfid"    => $dist->distributionId,
                     "cfurl"   => $dist->domainName,
                     "cname"   => $dist->distributionConfig->aliases->get(0)->cname,
                     "status"  => $dist->status,
                     "enabled" => $dist->distributionConfig->enabled ? 'true' : 'false'
-                );
+                ];
             }
 
             $c = explode("-", $info['name']);
+
             if ($c[0] == 'farm') {
                 $hash = $c[1];
 
-                $farm = $this->db->GetRow("SELECT id, name FROM farms WHERE hash=? AND env_id = ? LIMIT 1", array($hash, $this->environment->id));
+                $farm = $this->db->GetRow("
+                    SELECT id, name
+                    FROM farms
+                    WHERE hash = ? AND env_id = ?
+                    LIMIT 1
+                ", [$hash, $this->environment->id]);
+
                 if ($farm) {
                     $info['farmId'] = $farm['id'];
                     $info['farmName'] = $farm['name'];
@@ -88,133 +134,133 @@ class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
         }
 
         $response = $this->buildResponseFromData($buckets, array('name', 'farmName'));
+
         $this->response->data($response);
     }
 
-    public function xCreateBucketAction ()
+    /**
+     * @param string $location    AWS Cloud Location
+     * @param string $bucketName  The name of the bucket to create
+     */
+    public function xCreateBucketAction($location, $bucketName)
     {
-        $aws = $this->environment->aws('us-east-1');
-        $aws->s3->bucket->create($this->getParam('bucketName'), $this->getParam('location'));
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_S3, Acl::PERM_AWS_S3_MANAGE);
+
+        // It is important to sign request with the same location as the bucket
+        $aws = $this->environment->aws($location);
+
+        $aws->s3->bucket->create($bucketName, $location);
+
         $this->response->success('Bucket successfully created');
     }
 
-    public function xDeleteBucketAction ()
+    public function xDeleteBucketAction()
     {
-        $this->request->defineParams(array(
-            'buckets' => array('type' => 'json')
-        ));
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_S3, Acl::PERM_AWS_S3_MANAGE);
 
-        $aws = $this->environment->aws('us-east-1');
-        foreach ($this->getParam('buckets') as $bucketName)
-            $aws->s3->bucket->delete($bucketName);
+        $this->request->defineParams([
+            'buckets' => ['type' => 'json']
+        ]);
+
+        $aws = $this->getAws();
+
+        foreach ($this->getParam('buckets') as $bucketName) {
+            try {
+                // Delete operation should be processed in the bucket's cloud location
+                $aws->s3->bucket->delete($bucketName);
+            } catch (ClientException $e) {
+                if ($e->getErrorData() && $e->getErrorData()->getCode() == ErrorData::ERR_AUTHORIZATION_HEADER_MALFORMED &&
+                    preg_match('/region\s+\'(.+?)\'\s+is\s+wrong.\s+expecting\s+\'(.+?)\'/', $e->getMessage(), $m) &&
+                    in_array($m[2], $aws->getCloudLocations())) {
+                    $this->getAws($m[2])->s3->bucket->delete($bucketName);
+                } else {
+                    throw $e;
+                }
+            }
+        }
 
         $this->response->success('Bucket(s) successfully deleted');
     }
 
-    public function manageDistributionAction ()
+    public function manageDistributionAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_S3, Acl::PERM_AWS_S3_MANAGE);
+
         $this->response->page('ui/tools/aws/s3/distribution.js');
     }
 
-    public function xCreateDistributionAction ()
+    public function xCreateDistributionAction()
     {
-        $aws = $this->environment->aws('us-east-1');
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_S3, Acl::PERM_AWS_S3_MANAGE);
+
         $distributionConfig = new DistributionConfigData();
+
         if ($this->getParam('localDomain') && $this->getParam('zone')) {
-            $distributionConfig->aliases->append(array(
+            $distributionConfig->aliases->append([
                 'cname' => $this->getParam('localDomain') . '.' . $this->getParam('zone'),
-            ));
+            ]);
         } else if ($this->getParam('remoteDomain')) {
-            $distributionConfig->aliases->append(array(
+            $distributionConfig->aliases->append([
                 'cname' => $this->getParam('remoteDomain'),
-            ));
+            ]);
         }
+
         $distributionConfig->comment = $this->getParam('comment');
         $distributionConfig->enabled = true;
+
         $origin = new DistributionConfigOriginData('MyOrigin', $this->getParam('bucketName') . ".s3.amazonaws.com");
         $origin->setS3OriginConfig(new DistributionS3OriginConfigData());
         $distributionConfig->origins->append($origin);
         $distributionConfig->priceClass = DistributionConfigData::PRICE_CLASS_ALL;
+
         $distributionConfig->setDefaultCacheBehavior(
-            new CacheBehaviorData($origin->originId, CacheBehaviorData::VIEWER_PROTOCOL_POLICY_ALLOW_ALL, 3600)
+            new CacheBehaviorData($origin->originId, CacheBehaviorData::VIEWER_PROTOCOL_POLICY_ALLOW_ALL, 3600, 86400, 31536000)
         );
 
-        $result = $aws->cloudFront->distribution->create($distributionConfig);
+        $result = $this->getAws(Aws::REGION_US_EAST_1)->cloudFront->distribution->create($distributionConfig);
 
-        $this->db->Execute("INSERT INTO distributions SET
-                cfid	= ?,
-                cfurl	= ?,
-                cname	= ?,
-                zone	= ?,
-                bucket	= ?,
-                clientid= ?
-            ",
-                array(
-                    $result->distributionId,
-                    $result->domainName,
-                    $this->getParam('localDomain') ? $this->getParam('localDomain') : $result->distributionConfig->aliases[0]->cname,
-                    $this->getParam('zone')? $this->getParam('zone') : $result->distributionConfig->aliases[0]->cname,
-                    $this->getParam('bucketName'),
-                    $this->user->getAccountId()
-                )
-            );
-
-//         $zoneinfo = $this->db->GetRow("SELECT * FROM dns_zones WHERE zone_name=? AND client_id=? LIMIT 1",
-//             array(
-//             $this->getParam('zone')? $this->getParam('zone') : $distributionConfig->CNAME,
-//             $this->user->getAccountId()
-//         ));
-//         if ($zoneinfo)
-//         {
-//             $this->db->Execute("INSERT INTO dns_zone_records SET
-//                 zone_id	= ?,
-//                 type	= ?,
-//                 ttl		= ?,
-//                 name	= ?,
-//                 value	= ?,
-//                 issystem= ?
-//             ", array($zoneinfo['id'], 'CNAME', 14400, $distributionConfig->CNAME, $result['DomainName'], 0));
-//         }
+        $this->db->Execute("
+            INSERT INTO distributions
+            SET cfid = ?,
+                cfurl = ?,
+                cname = ?,
+                zone = ?,
+                bucket = ?,
+                clientid = ?
+        ", [
+            $result->distributionId,
+            $result->domainName,
+            $this->getParam('localDomain') ? $this->getParam('localDomain') : $result->distributionConfig->aliases[0]->cname,
+            $this->getParam('zone')? $this->getParam('zone') : $result->distributionConfig->aliases[0]->cname,
+            $this->getParam('bucketName'),
+            $this->user->getAccountId()
+        ]);
 
         $this->response->success("Distribution successfully created");
     }
 
-    public function xUpdateDistributionAction ()
+    public function xUpdateDistributionAction()
     {
-        $aws = $this->environment->aws('us-east-1');
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_S3, Acl::PERM_AWS_S3_MANAGE);
 
-        $dist = $aws->cloudFront->distribution->fetch($this->getParam('id'));
+        $dist = $this->getAws(Aws::REGION_US_EAST_1)->cloudFront->distribution->fetch($this->getParam('id'));
         $dist->distributionConfig->enabled = ($this->getParam('enabled') == 'true');
         $dist->setConfig($dist->distributionConfig, $dist->getETag());
 
         $this->response->success("Distribution successfully updated");
     }
 
-    public function xDeleteDistributionAction ()
+    public function xDeleteDistributionAction()
     {
-        $aws = $this->environment->aws('us-east-1');
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_S3, Acl::PERM_AWS_S3_MANAGE);
 
-        $dist = $aws->cloudFront->distribution->fetch($this->getParam('id'));
+        $dist = $this->getAws(Aws::REGION_US_EAST_1)->cloudFront->distribution->fetch($this->getParam('id'));
         $result = $dist->delete();
 
         $info = $this->db->GetRow("SELECT * FROM distributions WHERE cfid=? LIMIT 1", array($this->getParam('id')));
 
         if ($info) {
             $this->db->Execute("DELETE FROM distributions WHERE cfid=?", array($this->getParam('id')));
-
-            // Remove CNAME from DNS zone
-//             $zoneinfo = $this->db->GetRow("SELECT * FROM dns_zones WHERE zone_name=? AND client_id=? LIMIT 1",
-//                 array($info['zone'], $this->user->getAccountId())
-//             );
-
-//             if ($zoneinfo) {
-//                 $this->db->Execute("DELETE FROM dns_zone_records WHERE
-//                     zone_id	= ? AND
-//                     type	= ? AND
-//                     name	= ? AND
-//                     value	= ?
-//                 ", array($zoneinfo['id'], 'CNAME', $this->getParam('cname'), $this->getParam('cfurl')));
-//             }
         }
 
         $this->response->success("Distribution successfully removed");
@@ -222,10 +268,11 @@ class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
 
     public function xListZonesAction()
     {
-        $zones = $this->db->GetAll("SELECT zone_name FROM dns_zones WHERE status!=? AND env_id=?",
-            array(DNS_ZONE_STATUS::PENDING_DELETE,
-            $this->getEnvironmentId())
-        );
-        $this->response->data(array('data'=>$zones));
+        $zones = $this->db->GetAll("SELECT zone_name FROM dns_zones WHERE status!=? AND env_id=?", [
+            DNS_ZONE_STATUS::PENDING_DELETE,
+            $this->getEnvironmentId()
+        ]);
+
+        $this->response->data(['data' => $zones]);
     }
 }

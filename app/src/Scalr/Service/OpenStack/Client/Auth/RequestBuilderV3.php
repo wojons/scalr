@@ -20,12 +20,8 @@ class RequestBuilderV3 implements RequestBuilderInterface
             $requestBody = [
                 'auth' => [
                     'identity' => [
-                        'methods' => [
-                            'token'
-                        ],
-                        'token' => [
-                            'id' => $config->getApiKey()
-                        ]
+                        'methods' => ['token'],
+                        'token'   => ['id' => $config->getApiKey()]
                     ]
                 ]
             ];
@@ -33,14 +29,8 @@ class RequestBuilderV3 implements RequestBuilderInterface
             $requestBody = [
                 'auth' => [
                     'identity' => [
-                        'methods' => [
-                            'password'
-                        ],
-                        'password' => [
-                            'user' => [
-                                'password'  => $config->getPassword()
-                            ]
-                        ]
+                        'methods'  => ['password'],
+                        'password' => ['user' => ['password'  => $config->getPassword()]]
                     ]
                 ]
             ];
@@ -51,9 +41,14 @@ class RequestBuilderV3 implements RequestBuilderInterface
                 $requestBody['auth']['identity']['password']['user']['name'] = $config->getUsername();
             } else {
                 throw new OpenStackException(
-                    'Neither user name nor user id was provided for the OpenStack config.'
+                    'Neither user name nor user identifier was provided for the OpenStack config.'
                 );
             }
+
+            if ($config->getDomainName()) {
+                $requestBody['auth']['identity']['password']['user']['domain']['name'] = $config->getDomainName();
+            }
+
         } else {
             throw new OpenStackException(
                 'Neither api key nor password was provided for the OpenStack config.'
@@ -62,8 +57,16 @@ class RequestBuilderV3 implements RequestBuilderInterface
 
         if ($config->getProjectId() !== null) {
             $requestBody['auth']['scope']['project']['id'] = $config->getProjectId();
+
+            if ($config->getDomainName()) {
+                $requestBody['auth']['scope']['project']['domain']['name'] = $config->getDomainName();
+            }
         } else if ($config->getTenantName() !== null) {
             $requestBody['auth']['scope']['project']['name'] = $config->getTenantName();
+
+            if ($config->getDomainName()) {
+                $requestBody['auth']['scope']['project']['domain']['name'] = $config->getDomainName();
+            }
         }
 
         return $requestBody;

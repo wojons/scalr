@@ -1,14 +1,19 @@
 <?php
 
 use Scalr\Acl\Acl;
+use Scalr\DataType\AggregationCollection;
+use Scalr\Stats\CostAnalytics\Entity\UsageTypeEntity;
+use Scalr\Stats\CostAnalytics\Forecast;
 use Scalr\Stats\CostAnalytics\Iterator\ChartPeriodIterator;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 
 class Scalr_UI_Controller_Account2_Analytics extends Scalr_UI_Controller
 {
+    use Forecast;
+
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_ANALYTICS);
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_ANALYTICS_ACCOUNT);
     }
 
     /**
@@ -188,6 +193,40 @@ class Scalr_UI_Controller_Account2_Analytics extends Scalr_UI_Controller
         $this->response->setHeader('Content-Disposition', 'attachment; filename=' . $fileName . ".csv");
         $this->response->setResponse(file_get_contents($metadata['uri']));
         fclose($temp);
+    }
+
+    /**
+     * Gets the detailed usage for the specified Farm and point on the chart
+     *
+     * @param   string      $mode         The mode (chart)
+     * @param   string      $date         The UTC date within period ('Y-m-d H:00')
+     * @param   string      $start        The start date of the period in UTC ('Y-m-d')
+     * @param   string      $end          The end date of the period in UTC ('Y-m-d')
+     * @param   strign      $projectId    optional Identifier of the Project
+     * @param   int         $envId        optional Identifier of the Environment
+     * @param   string      $farmId       optional Identifier of the Farm
+     * @param   int         $farmRoleId   optional Identifier of the FarmRole
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function xGetUsageItemsAction($mode, $date, $start, $end, $projectId = null, $envId = null, $farmId = null, $farmRoleId = null)
+    {
+        if (!is_numeric($farmId)) {
+            $farmId = @json_decode($farmId, true);
+        } elseif (empty($farmId)) {
+            $farmId = null;
+        } else {
+            $farmId = intval($farmId);
+        }
+
+        if (!empty($farmId) && is_array($farmId)) {
+            $farmId = ['$nin' => $farmId];
+        }
+
+        $data = $this->getContainer()->analytics->usage->getFarmPointData(
+            $this->user->getAccountId(), $projectId, $envId, $farmId, $farmRoleId, $mode, $date, $start, $end
+        );
+
+        $this->response->data(['distributionTypes' => $data]);
     }
 
 }

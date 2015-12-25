@@ -184,10 +184,10 @@ Ext.define('Scalr.ui.CoreGovernanceLease', {
                     margin: '0 0 0 8'
                 }, {
                     xtype: 'button',
-                    ui: 'action',
                     itemId: 'delete',
-                    margin: '0 0 0 8',
-                    cls: 'x-btn-action-delete',
+                    margin: '0 0 0 12',
+                    cls: 'x-btn-red',
+                    iconCls: 'x-btn-icon-delete',
                     disabled: true,
                     handler: function() {
                         var ct = this.up('container');

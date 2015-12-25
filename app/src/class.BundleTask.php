@@ -2,6 +2,9 @@
 
 use Scalr\Model\Entity\Image;
 use Scalr\Model\Entity\Os;
+use Scalr\Modules\Platforms\Ec2\Helpers\Ec2Helper;
+use Scalr\Model\Entity;
+use Scalr\DataType\ScopeInterface;
 
 class ServerSnapshotDetails
 {
@@ -196,9 +199,23 @@ class BundleTask
     {
         $snapshot = $this->getSnapshotDetails();
 
+        $envId = $this->envId;
+        /* @var Entity\Server $server */
+        $server = Entity\Server::findOneByServerId($this->serverId);
+        if (!empty($server->farmRoleId)) {
+            /* @var Entity\FarmRole $farmRole */
+            $farmRole = Entity\FarmRole::findPk($server->farmRoleId);
+            if (!empty($farmRole->roleId)) {
+                /* @var Entity\Role $role */
+                $role = Entity\Role::findPk($farmRole->roleId);
+                $envId = $role->getScope() == ScopeInterface::SCOPE_ACCOUNT ? NULL : $envId;
+            }
+        }
+
         $image = new Image();
         $image->id = $this->snapshotId;
-        $image->envId = $this->envId;
+        $image->accountId = $this->clientId;
+        $image->envId = $envId;
         $image->bundleTaskId = $this->id;
         $image->platform = $this->platform;
         $image->cloudLocation = $this->cloudLocation;
@@ -269,9 +286,9 @@ class BundleTask
                 break;
             case "amazon":
                 $retval->family = $this->osFamily;
-                $retval->generation = (int)substr($this->osVersion, 0, 1);
+                $retval->generation = $this->osVersion;
                 $retval->version = $this->osVersion;
-                $retval->name = "Amazon Linux {$this->osName}";
+                $retval->name = "Amazon Linux {$retval->version}";
                 break;
             case "oel":
                 $retval->family = $this->osFamily;
@@ -361,6 +378,10 @@ class BundleTask
         ));
 
         $this->Save();
+
+        if ($this->platform == \SERVER_PLATFORMS::EC2) {
+            Ec2Helper::createObjectTags($this);
+        }
     }
 
     public function SnapshotCreationFailed($failed_reason)
@@ -576,10 +597,10 @@ class BundleTask
     public function getImageEntity()
     {
         return Image::findOne([
-            ['id' => $this->snapshotId],
-            ['envId' => $this->envId],
-            ['platform' => $this->platform],
-            ['cloudLocation' => $this->cloudLocation]
+            ['id'            => $this->snapshotId],
+            ['envId'         => $this->envId],
+            ['platform'      => $this->platform],
+            ['cloudLocation' => in_array($this->platform, [SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::AZURE]) ? '' : $this->cloudLocation]
         ]);
     }
 }

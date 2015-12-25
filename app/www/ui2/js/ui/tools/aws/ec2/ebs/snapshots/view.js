@@ -5,6 +5,10 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 			type: 'scalr.paging',
 			url: '/tools/aws/ec2/ebs/snapshots/xListSnapshots/'
 		},
+        sorters: [{
+            property: 'snapshotId',
+            direction: 'DESC'
+        }],
 		remoteSort: true
 	});
 
@@ -45,6 +49,9 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 					text: 'Create new volume based on this snapshot',
 					iconCls: 'x-menu-icon-create',
                     showAsQuickAction: true,
+                    getVisibility: function(data) {
+                        return Scalr.isAllowed('AWS_VOLUMES', 'manage');
+                    },
 					menuHandler: function(data) {
 						Scalr.event.fireEvent('redirect','#/tools/aws/ec2/ebs/volumes/create?' +
 							Ext.Object.toQueryString({
@@ -58,6 +65,9 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 					iconCls: 'x-menu-icon-fork',
 					text: 'Copy to another EC2 region',
                     showAsQuickAction: true,
+                    getVisibility: function(data) {
+                        return Scalr.isAllowed('AWS_SNAPSHOTS', 'manage');
+                    },
 					request: {
 						processBox: {
 							type:'action'
@@ -128,7 +138,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 			}
 		],
 
-		selType: 'selectedmodel',
+		selModel: Scalr.isAllowed('AWS_SNAPSHOTS', 'manage') ? 'selectedmodel' : null,
 		listeners: {
 			selectionchange: function(selModel, selections) {
 				var toolbar = this.down('scalrpagingtoolbar');
@@ -146,6 +156,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.snapshots.view', function (loadParams,
 				iconCls: 'x-btn-icon-delete',
                 cls: 'x-btn-red',
 				tooltip: 'Delete',
+                hidden: !Scalr.isAllowed('AWS_SNAPSHOTS', 'manage'),
 				handler: function() {
 					var request = {
 						confirmBox: {

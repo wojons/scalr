@@ -570,8 +570,10 @@ class Aws
                         throw new AwsException(sprintf('Invalid region "%s" for the service "%s"', $this->region, $n));
                     }
                 }
+
+                $class = __CLASS__ . '\\' . ucfirst($n);
+
                 try {
-                    $class = __CLASS__ . '\\' . ucfirst($n);
                     /* @var $service ServiceInterface */
                     $service = new $class($this);
                     $this->serviceInterfaces[$n] = $service;

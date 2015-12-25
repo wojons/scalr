@@ -7,34 +7,17 @@ use Scalr\Util\CryptoTool;
 use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectPropertyEntity;
+use Scalr\Model\Entity;
+use Scalr\DataType\ScopeInterface;
 
+/**
+ * Class DBFarm
+ *
+ * @deprecated
+ * @see Scalr\Model\Entity\Farm
+ */
 class DBFarm
 {
-    const SETTING_CRYPTO_KEY				= 'crypto.key';
-
-    const SETTING_SZR_UPD_REPOSITORY		= 'szr.upd.repository';
-    const SETTING_SZR_UPD_SCHEDULE			= 'szr.upd.schedule';
-
-    const SETTING_LOCK                      = 'lock';
-    const SETTING_LOCK_COMMENT              = 'lock.comment';
-    const SETTING_LOCK_BY                   = 'lock.by';
-    const SETTING_LOCK_RESTRICT             = 'lock.restrict';
-    const SETTING_LOCK_UNLOCK_BY            = 'lock.unlock.by';
-
-    const SETTING_EC2_VPC_REGION            = 'ec2.vpc.region';
-    const SETTING_EC2_VPC_ID                = 'ec2.vpc.id';
-
-    const SETTING_LEASE_STATUS              = 'lease.status';
-    const SETTING_LEASE_TERMINATE_DATE      = 'lease.terminate.date';
-    const SETTING_LEASE_EXTEND_CNT          = 'lease.extend.cnt';
-    const SETTING_LEASE_NOTIFICATION_SEND   = 'lease.notification.send';
-
-    const SETTING_TIMEZONE                  = 'timezone';
-
-    const SETTING_PROJECT_ID                = 'project_id';
-
-    const SETTING_OWNER_HISTORY             = 'owner.history';
-
     public
         $ID,
         $ClientID,
@@ -129,7 +112,7 @@ class DBFarm
 
         $dbFarm->save();
 
-        $dbFarm->SetSetting(DBFarm::SETTING_CRYPTO_KEY, Scalr::GenerateRandomKey(40));
+        $dbFarm->SetSetting(Entity\FarmSetting::CRYPTO_KEY, Scalr::GenerateRandomKey(40));
 
         return $dbFarm;
     }
@@ -172,18 +155,21 @@ class DBFarm
         $dbFarm->RolesLaunchOrder = $definition->rolesLaunchOrder;
         $dbFarm->teamId = $definition->teamId;
 
-        $dbFarm->SetSetting(DBFarm::SETTING_TIMEZONE, $definition->settings[DBFarm::SETTING_TIMEZONE]);
-        $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_ID, $definition->settings[DBFarm::SETTING_EC2_VPC_ID]);
-        $dbFarm->SetSetting(DBFarm::SETTING_EC2_VPC_REGION, $definition->settings[DBFarm::SETTING_EC2_VPC_REGION]);
-        $dbFarm->SetSetting(DBFarm::SETTING_SZR_UPD_REPOSITORY, $definition->settings[DBFarm::SETTING_SZR_UPD_REPOSITORY]);
-        $dbFarm->SetSetting(DBFarm::SETTING_SZR_UPD_SCHEDULE, $definition->settings[DBFarm::SETTING_SZR_UPD_SCHEDULE]);
-        $dbFarm->SetSetting(DBFarm::SETTING_LEASE_STATUS, $definition->settings[DBFarm::SETTING_LEASE_STATUS]);
+        $dbFarm->SetSetting(Entity\FarmSetting::TIMEZONE, $definition->settings[Entity\FarmSetting::TIMEZONE]);
+        $dbFarm->SetSetting(Entity\FarmSetting::EC2_VPC_ID, $definition->settings[Entity\FarmSetting::EC2_VPC_ID]);
+        $dbFarm->SetSetting(Entity\FarmSetting::EC2_VPC_REGION, $definition->settings[Entity\FarmSetting::EC2_VPC_REGION]);
+        $dbFarm->SetSetting(Entity\FarmSetting::SZR_UPD_REPOSITORY, $definition->settings[Entity\FarmSetting::SZR_UPD_REPOSITORY]);
+        $dbFarm->SetSetting(Entity\FarmSetting::SZR_UPD_SCHEDULE, $definition->settings[Entity\FarmSetting::SZR_UPD_SCHEDULE]);
+        $dbFarm->SetSetting(Entity\FarmSetting::LEASE_STATUS, $definition->settings[Entity\FarmSetting::LEASE_STATUS]);
+        if ($definition->settings[Entity\FarmSetting::PROJECT_ID]) {
+            $dbFarm->SetSetting(Entity\FarmSetting::PROJECT_ID, $definition->settings[Entity\FarmSetting::PROJECT_ID]);
+        }
 
-        $variables = new Scalr_Scripting_GlobalVariables($dbFarm->ClientID, $envId, Scalr_Scripting_GlobalVariables::SCOPE_FARM);
+        $variables = new Scalr_Scripting_GlobalVariables($dbFarm->ClientID, $envId, ScopeInterface::SCOPE_FARM);
         $variables->setValues($definition->globalVariables, 0, $dbFarm->ID, 0);
 
         foreach ($definition->roles as $index => $role) {
-            $dbFarmRole = $dbFarm->AddRole(DBRole::loadById($role->roleId), $role->platform, $role->cloudLocation, $index+1, $role->alias);
+            $dbFarmRole = $dbFarm->AddRole(DBRole::loadById($role->roleId), $role->platform, $role->cloudLocation, $role->launchIndex, $role->alias);
             $oldRoleSettings = $dbFarmRole->GetAllSettings();
             $dbFarmRole->applyDefinition($role, true);
             $newSettings = $dbFarmRole->GetAllSettings();
@@ -207,33 +193,34 @@ class DBFarm
 
         return $dbFarm;
     }
-    
+
     public function applyGlobalVarsToValue($value)
     {
         if (empty($this->globalVariablesCache)) {
             $formats = \Scalr::config("scalr.system.global_variables.format");
-    
+
             $systemVars = array(
                 'env_id'		=> $this->EnvID,
                 'env_name'		=> $this->GetEnvironmentObject()->name,
+                'farm_team'     => $this->teamId ? (new Scalr_Account_Team())->loadById($this->teamId)->name : '',
                 'farm_id'       => $this->ID,
                 'farm_name'     => $this->Name,
                 'farm_hash'     => $this->Hash,
                 'farm_owner_email' => $this->createdByUserEmail
             );
-            
+
             if (\Scalr::getContainer()->analytics->enabled) {
-                $projectId = $this->GetSetting(DBFarm::SETTING_PROJECT_ID);
+                $projectId = $this->GetSetting(Entity\FarmSetting::PROJECT_ID);
                 if ($projectId) {
                     $project = ProjectEntity::findPk($projectId);
                     /* @var $project ProjectEntity */
                     $systemVars['project_id'] = $projectId;
                     $systemVars['project_bc'] = $project->getProperty(ProjectPropertyEntity::NAME_BILLING_CODE);
                     $systemVars['project_name'] = $project->name;
-            
+
                     $ccId = $project->ccId;
                 }
-            
+
                 if ($ccId) {
                     $cc = CostCentreEntity::findPk($ccId);
                     if ($cc) {
@@ -245,33 +232,33 @@ class DBFarm
                         throw new Exception("Cost center {$ccId} not found");
                 }
             }
-    
+
             // Get list of Server system vars
             foreach ($systemVars as $name => $val) {
                 $name = "SCALR_".strtoupper($name);
                 $val = trim($val);
-    
+
                 if (isset($formats[$name]))
                     $val = @sprintf($formats[$name], $val);
-    
+
                 $this->globalVariablesCache[$name] = $val;
             }
-    
+
             // Add custom variables
-            $gv = new Scalr_Scripting_GlobalVariables($this->ClientID, $this->EnvID, Scalr_Scripting_GlobalVariables::SCOPE_FARM);
+            $gv = new Scalr_Scripting_GlobalVariables($this->ClientID, $this->EnvID, ScopeInterface::SCOPE_FARM);
             $vars = $gv->listVariables(0, $this->ID);
             foreach ($vars as $v)
                 $this->globalVariablesCache[$v['name']] = $v['value'];
         }
-    
+
         //Parse variable
         $keys = array_keys($this->globalVariablesCache);
         $f = create_function('$item', 'return "{".$item."}";');
         $keys = array_map($f, $keys);
         $values = array_values($this->globalVariablesCache);
-    
+
         $retval = str_replace($keys, $values, $value);
-    
+
         // Strip undefined variables & return value
         return preg_replace("/{[A-Za-z0-9_-]+}/", "", $retval);
     }
@@ -290,7 +277,7 @@ class DBFarm
         }
 
         //Farm Global Variables
-        $variables = new Scalr_Scripting_GlobalVariables($this->ClientID, $this->EnvID, Scalr_Scripting_GlobalVariables::SCOPE_FARM);
+        $variables = new Scalr_Scripting_GlobalVariables($this->ClientID, $this->EnvID, ScopeInterface::SCOPE_FARM);
         $farmDefinition->globalVariables = $variables->getValues(0, $this->ID, 0);
 
         //Farm Settings
@@ -384,6 +371,13 @@ class DBFarm
         return $retval;
     }
 
+    /**
+     * Gets the list of the servers by specified filter
+     *
+     * @param    array    $filter_args  optional Positive logic of filtering
+     * @param    array    $ufilter_args optional Negation logic of filtering
+     * @return   DBServer[] Returns the list of the DBServers
+     */
     public function GetServersByFilter($filter_args = array(), $ufilter_args = array())
     {
         $sql = "SELECT server_id FROM servers WHERE `farm_id`=?";
@@ -496,8 +490,8 @@ class DBFarm
         $DBFarmRole->Alias = $alias;
 
         $default_settings = [
-            DBFarmRole::SETTING_SCALING_MIN_INSTANCES => 1,
-            DBFarmRole::SETTING_SCALING_MAX_INSTANCES => 1
+            Entity\FarmRoleSetting::SCALING_MIN_INSTANCES => 1,
+            Entity\FarmRoleSetting::SCALING_MAX_INSTANCES => 1
         ];
 
         foreach ($default_settings as $k => $v) {
@@ -522,7 +516,7 @@ class DBFarm
      */
     public function SetSetting($name, $value)
     {
-        $Reflect = new ReflectionClass($this);
+        $Reflect = new ReflectionClass('Scalr\Model\Entity\FarmSetting');
         $consts = array_values($Reflect->getConstants());
         if (in_array($name, $consts)) {
             //UNIQUE KEY `farmid_name` (`farmid`,`name`)
@@ -606,9 +600,9 @@ class DBFarm
             if (isset($projectId)) {
                 $project = isset($project) ? $project : $analytics->projects->get($projectId);
 
-                $oldProjectId = $this->GetSetting(DBFarm::SETTING_PROJECT_ID);
+                $oldProjectId = $this->GetSetting(Entity\FarmSetting::PROJECT_ID);
 
-                $this->SetSetting(DBFarm::SETTING_PROJECT_ID, $project->projectId);
+                $this->SetSetting(Entity\FarmSetting::PROJECT_ID, $project->projectId);
 
                 //Server property SERVER_PROPERTIES::FARM_PROJECT_ID should be updated
                 //for all running servers associated with the farm.
@@ -672,28 +666,30 @@ class DBFarm
     /**
      * Check if farm is locked
      *
-     * @param $throwException
+     * @param  $throwException
      * @return bool
      * @throws Exception
      */
     public function isLocked($throwException = true)
     {
-        if ($this->GetSetting(DBFarm::SETTING_LOCK)) {
-            $message = $this->GetSetting(DBFarm::SETTING_LOCK_COMMENT);
+        if ($this->GetSetting(Entity\FarmSetting::LOCK)) {
+            $message = $this->GetSetting(Entity\FarmSetting::LOCK_COMMENT);
 
             try {
-                $userName = Scalr_Account_User::init()->loadById($this->getSetting(DBFarm::SETTING_LOCK_BY))->getEmail();
-            } catch(Exception $e) {
-                $userName = $this->getSetting(DBFarm::SETTING_LOCK_BY);
+                $userName = Scalr_Account_User::init()->loadById($this->getSetting(Entity\FarmSetting::LOCK_BY))->getEmail();
+            } catch (Exception $e) {
+                $userName = $this->getSetting(Entity\FarmSetting::LOCK_BY);
             }
 
-            if ($message)
+            if ($message) {
                 $message = sprintf(' with comment: \'%s\'', $message);
+            }
 
-            if ($throwException)
+            if ($throwException) {
                 throw new Exception(sprintf('Farm was locked by %s%s. Please unlock it first.', $userName, $message));
-            else
+            } else {
                 return sprintf('Farm was locked by %s%s.', $userName, $message);
+            }
         }
 
         return false;
@@ -706,13 +702,14 @@ class DBFarm
      */
     public function lock($userId, $comment, $restrict)
     {
-        $this->SetSetting(DBFarm::SETTING_LOCK, 1);
-        $this->SetSetting(DBFarm::SETTING_LOCK_BY, $userId);
-        $this->SetSetting(DBFarm::SETTING_LOCK_COMMENT, $comment);
-        $this->SetSetting(DBFarm::SETTING_LOCK_UNLOCK_BY, '');
+        $this->SetSetting(Entity\FarmSetting::LOCK, 1);
+        $this->SetSetting(Entity\FarmSetting::LOCK_BY, $userId);
+        $this->SetSetting(Entity\FarmSetting::LOCK_COMMENT, $comment);
+        $this->SetSetting(Entity\FarmSetting::LOCK_UNLOCK_BY, '');
 
-        if ($this->createdByUserId && $restrict)
-            $this->SetSetting(DBFarm::SETTING_LOCK_RESTRICT, $restrict);
+        if ($this->createdByUserId && $restrict) {
+            $this->SetSetting(Entity\FarmSetting::LOCK_RESTRICT, $restrict);
+        }
     }
 
     /**
@@ -720,11 +717,11 @@ class DBFarm
      */
     public function unlock($userId)
     {
-        $this->SetSetting(DBFarm::SETTING_LOCK, '');
-        $this->SetSetting(DBFarm::SETTING_LOCK_BY, '');
-        $this->SetSetting(DBFarm::SETTING_LOCK_UNLOCK_BY, $userId);
-        $this->SetSetting(DBFarm::SETTING_LOCK_COMMENT, '');
-        $this->SetSetting(DBFarm::SETTING_LOCK_RESTRICT, '');
+        $this->SetSetting(Entity\FarmSetting::LOCK, '');
+        $this->SetSetting(Entity\FarmSetting::LOCK_BY, '');
+        $this->SetSetting(Entity\FarmSetting::LOCK_UNLOCK_BY, $userId);
+        $this->SetSetting(Entity\FarmSetting::LOCK_COMMENT, '');
+        $this->SetSetting(Entity\FarmSetting::LOCK_RESTRICT, '');
     }
 
     /**
@@ -881,5 +878,33 @@ class DBFarm
                 $this->ClientID, \Scalr\Stats\CostAnalytics\Entity\TagEntity::TAG_ID_FARM_OWNER, $this->ID, $this->createdByUserId
             );
         }
+    }
+
+    /**
+     * Gets AWS tags that should be applied to the resource
+     *
+     * @return  array  Returns list of the AWS tags
+     */
+    public function getAwsTags()
+    {
+        $tags = [[
+            'key'   => \Scalr_Governance::SCALR_META_TAG_NAME,
+            'value' => $this->applyGlobalVarsToValue(\Scalr_Governance::SCALR_META_TAG_VALUE)
+        ]];
+
+        //Tags governance
+        $governance = new \Scalr_Governance($this->EnvID);
+        $gTags = (array) $governance->getValue('ec2', \Scalr_Governance::AWS_TAGS);
+
+        if (count($gTags) > 0) {
+            foreach ($gTags as $tKey => $tValue) {
+                $tags[] = [
+                    'key'   => $tKey,
+                    'value' => $this->applyGlobalVarsToValue($tValue)
+                ];
+            }
+        }
+
+        return $tags;
     }
 }

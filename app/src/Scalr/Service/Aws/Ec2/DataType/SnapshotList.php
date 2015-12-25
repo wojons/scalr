@@ -8,6 +8,16 @@ use Scalr\Service\Aws\Ec2\Ec2ListDataType;
  *
  * @author   Vitaliy Demidov   <vitaliy@scalr.com>
  * @since    30.01.2013
+ *
+ * @method   string getNextToken() getNextToken()
+ *           Gets a next token.
+ *
+ * @method   string getRequestId() getRequestId()
+ *           Gets an ID of the request.
+ *
+ * @method   \Scalr\Service\Aws\Ec2\DataType\SnapshotData get()
+ *           get(int $index)
+ *           Gets InstanceStatusData object for the specified position in the list.
  */
 class SnapshotList extends Ec2ListDataType
 {
@@ -18,7 +28,7 @@ class SnapshotList extends Ec2ListDataType
      *
      * @var  array
      */
-    protected $_properties = array('requestId');
+    protected $_properties = array('nextToken', 'requestId');
 
     /**
      * Constructor

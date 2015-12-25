@@ -9,7 +9,7 @@
 .scalr-ui-addfield {
     height: 30px;
     background: #E1ECDD url('/ui2/images/widget/addfield/add-item.png') no-repeat center center;
-    border-radius: 3px;
+    border-radius: 0;
     cursor: pointer;
 }
 
@@ -80,48 +80,14 @@
 
 
 /*4.2 ready styles below*/
-
-
-/*dataview boxes*/
-.x-dataview-boxes .x-item{
-	width: 110px;
-	height: 110px;
-	background: #fff;
-	border-radius: 2px;
-	cursor: pointer;
-	text-align:center;
-	float: left;
-	margin: 0 12px 12px 0;
-    padding: 0;
-    position:relative;
-}
-
-.x-dataview-boxes .x-item-over{
-	background: #F9FAFB;
-}
-
-.x-dataview-boxes .x-item-selected{
-    background: #3e648e;
-    color: #fff;
-}
-
-.x-dataview-boxes .x-item-inner div{
-    margin: 6px auto 0;
-}
-
-.x-dataview-boxes .x-grid-empty{
-	background:transparent;
-    padding: 0;
-}
-
 .scalr-ui-tagbox-tip-with-list {
     border-top-right-radius: 0;
     border-top-left-radius: 0;
 }
 
 .scalr-ui-tagbox-tip-without-list {
-    border-top-right-radius: 3px;
-    border-top-left-radius: 3px;
+    border-top-right-radius: 0;
+    border-top-left-radius: 0;
 }
 
 .scalr-ui-tagbox-boundlist-with-tip {
@@ -130,8 +96,8 @@
 }
 
 .scalr-ui-tagbox-boundlist-without-tip {
-    border-bottom-right-radius: 3px;
-    border-bottom-left-radius: 3px;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
 }
 /*
 .x-boxselect-item {
@@ -148,50 +114,6 @@
     display: inline-block;
 }
 */
-/*cloudlocationmap*/
-.scalr-ui-cloudlocationmap{
-    text-align:center;
-}
-
-.scalr-ui-cloudlocationmap .map{
-    margin: 0 auto;
-    position: relative;
-}
-
-.scalr-ui-cloudlocationmap .map-common{
-    background: url(/ui2/images/widget/cloudlocationmap/maps.png?1.1) 0 -400px no-repeat;
-}
-
-.scalr-ui-cloudlocationmap .map-large{
-    background: url(/ui2/images/widget/cloudlocationmap/maps-large.png?1.1) 0 -560px no-repeat;
-}
-
-.scalr-ui-cloudlocationmap .location{
-	position: absolute;
-	width: 10px;
-	height: 10px;
-	background: #7e9dc2;
-	border-radius: 5px;
-	z-index: 2;
-	cursor: pointer;
-}
-
-.scalr-ui-cloudlocationmap .selected{
-	background: #0f8b0c;
-}
-
-.scalr-ui-cloudlocationmap .title{
-	text-align:center;
-	padding: 0 5px;
-	top:40px;
-	left:50px;
-	position:absolute;
-	z-index:3;
-    line-height: 20px;
-    background: white;
-    box-shadow: 0 1px 1px #95A0B3;
-    border-radius: 2px;
-}
 
 /*todo: move to theme*/
 /*expanded*/
@@ -279,7 +201,7 @@
 .x-display-field-highlight .x-form-display-field-body{
     background:#fbfbfc;
     padding: 6px 6px 4px;
-    border-radius: 3px;
+    border-radius: 0;
 }
 
 
@@ -300,12 +222,12 @@
 
 /*custom progress bar with steps*/
 .scalr-ui-progress-step:first-child{
-    border-radius: 3px 0 0 3px;
+    border-radius: 0;
     border: 0!important;
 }
 
 .scalr-ui-progress-step:last-child{
-    border-radius: 0 3px 3px 0;
+    border-radius: 0;
 }
 
 .scalr-ui-progress-step{
@@ -332,13 +254,6 @@
     filter: grayscale(100%);
     filter: url('/ui2/js/extjs-4.2/theme/svg/grayscale.svg#greyscale');
     opacity: .4;
-}
-
-/*exclusively for chrome + retina to fix disappearing buttons on #/account/roles*/
-.x-grid-cell-buttongroupcolumn .x-btn,
-.x-grid-cell-buttongroupcolumn .x-btn-wrap,
-.x-grid-cell-buttongroupcolumn .x-btn-button{
-    position: static;
 }
 
 /*colored status*/
@@ -410,16 +325,6 @@ a.x-colored-status.yellow {
         background-image: url('/ui2/images/widget/addfield/add-item-retina.png');
     }
 
-    .scalr-ui-cloudlocationmap .map-common{
-        background-size: 210px 700px;
-        background-image: url(/ui2/images/widget/cloudlocationmap/maps-retina.png);
-    }
-
-    .scalr-ui-cloudlocationmap .map-large{
-        background-size: 320px 980px;
-        background-image: url(/ui2/images/widget/cloudlocationmap/maps-large-retina.png);
-    }
-
     .scalr-ui-progress-step.inprogress{
         background-size: 300px 32px;
         background-image: url('/ui2/images/widget/progress/progress-retina.gif');
@@ -440,7 +345,7 @@ a.x-colored-status.yellow {
 /* move to style, taken from account2/users/view.css */
 .scalr-ui-container-danger {
     background: #fefde0;
-    border-radius: 3px;
+    border-radius: 0;
     padding: 18px 18px 12px;
 }
 

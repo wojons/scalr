@@ -18,7 +18,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Ec2', {
         'aws.instance_name_format': '',
         'aws.additional_tags': undefined,
         'aws.iam_instance_profile_arn': undefined,
-        'aws.instance_initiated_shutdown_behavior': 'terminate'
+        'aws.instance_initiated_shutdown_behavior': function() {return Scalr.getDefaultValue('AWS_INSTANCE_INITIATED_SHUTDOWN_BEHAVIOR')}
     },
 
     tabData: null,
@@ -37,14 +37,14 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Ec2', {
 
             record.loadPlacementGroupsSupport(function(pgSupported){
                 if (!pgSupported) {
-                    settings['aws.cluster_pg'] = '';
+                    settings['aws.cluster_pg'] = 0;
                 }
                 if (me.isVisible()) {
                     field = me.down('[name="aws.cluster_pg"]');
                     if (field) {
                         field.setReadOnly(!pgSupported);
                         if (!pgSupported) {
-                            field.setValue('');
+                            field.setValue(0);
                         }
                     }
                 }
@@ -79,23 +79,6 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Ec2', {
                     this.deactivateTab();
                 } else {
                     this.tabData = data;
-                    if (status === 'success') {
-                        if (this.tabData['iamProfiles']) {
-                            var iamLimits = Scalr.getGovernance('ec2', 'aws.iam');
-                            if (iamLimits !== undefined) {
-                                var iamProfiles = [{arn: '', name: ''}],
-                                    allowedProfiles = (iamLimits['iam_instance_profile_arn'] || '').split(',');
-                                Ext.Array.each(this.tabData['iamProfiles'], function(profile) {
-                                    if (Ext.Array.contains(allowedProfiles, profile.arn) || Ext.Array.contains(allowedProfiles, profile.name)) {
-                                        iamProfiles.push(profile);
-                                    }
-                                });
-                                this.tabData['iamProfiles'] = iamProfiles;
-                            } else {
-                                this.tabData['iamProfiles'].unshift({arn: '', name: ''});
-                            }
-                        }
-                    }
                     var ebsOptField = this.down('[name="aws.ebs_optimized"]');
                     record.loadEBSOptimizedSupport(function(ensOptSupported){
                         ebsOptField.setReadOnly(!ensOptSupported);
@@ -114,7 +97,6 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Ec2', {
 
     showTab: function (record) {
         var settings = record.get('settings', true),
-            iamProfilesData = this.tabData['iamProfiles'],
             limits = Scalr.getGovernance('ec2'),
             field, field2;
         this.suspendLayouts();
@@ -157,7 +139,13 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Ec2', {
         field = this.down('[name="aws.cluster_pg"]');
         field.store.proxy.params = {cloudLocation: record.get('cloud_location')};
         field.getPlugin('comboaddnew').postUrl = '?cloudLocation=' + record.get('cloud_location');
-        field.setValue(field.readOnly ? '' : settings['aws.cluster_pg']);
+        var clusterPgData = [{id: 0, groupName: 'Do not use placement group'}];
+        if (!Ext.isEmpty(settings['aws.cluster_pg'])) {
+            clusterPgData.push({id: settings['aws.cluster_pg'], groupName: settings['aws.cluster_pg']});
+        }
+        field.store.loadData(clusterPgData);
+
+        field.setValue(field.readOnly ? 0 : (settings['aws.cluster_pg'] || 0));
 
         field = this.down('[name="aws.instance_initiated_shutdown_behavior"]');
         field.setValue(settings['aws.instance_initiated_shutdown_behavior'] || 'terminate');
@@ -191,6 +179,22 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Ec2', {
         }
         this.resumeLayouts(true);
 
+        var iamProfilesData = Ext.clone(this.tabData['iamProfiles']);
+        if (iamProfilesData) {
+            if (limits['aws.iam'] !== undefined) {
+                var iamProfiles = [{arn: '', name: ''}],
+                    allowedProfiles = (limits['aws.iam']['iam_instance_profile_arn'] || '').split(',');
+                Ext.Array.each(iamProfilesData, function(profile) {
+                    if (Ext.Array.contains(allowedProfiles, profile.arn) || Ext.Array.contains(allowedProfiles, profile.name)) {
+                        iamProfiles.push(profile);
+                    }
+                });
+                iamProfilesData = iamProfiles;
+            } else {
+                iamProfilesData.unshift({arn: '', name: ''});
+            }
+        }
+
         //toggle governance icon before resumeLayouts causes wrong width calculation
         field = this.down('[name="aws.iam_instance_profile_arn"]');
         field.store.load({data: iamProfilesData});
@@ -213,7 +217,14 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Ec2', {
 
         settings['aws.aki_id'] = me.down('[name="aws.aki_id"]').getValue();
         settings['aws.ari_id'] = me.down('[name="aws.ari_id"]').getValue();
-        settings['aws.cluster_pg'] = me.down('[name="aws.cluster_pg"]').getValue();
+        field = me.down('[name="aws.cluster_pg"]');
+
+        if (field.getValue()) {
+            settings['aws.cluster_pg'] = field.getValue();
+        } else {
+            delete settings['aws.cluster_pg'];
+        }
+
         settings['aws.instance_initiated_shutdown_behavior'] = me.down('[name="aws.instance_initiated_shutdown_behavior"]').getValue();
         settings['aws.ebs_optimized'] = me.down('[name="aws.ebs_optimized"]').getValue() ? 1 : 0;
         settings['aws.enable_cw_monitoring'] = me.down('[name="aws.enable_cw_monitoring"]').getValue() ? 1 : 0;
@@ -282,7 +293,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Ec2', {
                 proxy: 'object'
             }
         }, {
-            xtype: 'container',
+            xtype: 'fieldcontainer',
             itemId: 'securityGroups',
             flex: 1,
             layout: 'hbox',
@@ -296,7 +307,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Ec2', {
                     icons: ['governance']
                 },
                 width: 375,
-                labelWidth: 180,
+                labelWidth: 200,
                 editable: false,
                 store: [
                     [0, 'Override system SGs by:'],
@@ -325,7 +336,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Ec2', {
             queryCaching: false,
             clearDataBeforeQuery: true,
             store: {
-                model: Scalr.getModel({fields: [ 'id', 'groupName' ]}),
+                fields: [ 'id', 'groupName' ],
                 sorters: {
                     property: 'groupName'
                 },
@@ -333,7 +344,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Ec2', {
                     type: 'cachedrequest',
                     crscope: 'farmDesigner',
                     url: '/tools/aws/ec2/xListPlacementGroups',
-                    prependData: [{id: '', groupName: 'Do not use placement group'}]
+                    prependData: [{id: 0, groupName: 'Do not use placement group'}]
                 }
             },
             emptyText: 'Do not use placement group',

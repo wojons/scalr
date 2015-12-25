@@ -24,6 +24,8 @@ class Scalr_UI_Controller_Tools_Cloudstack_Snapshots extends Scalr_UI_Controller
 
     public function xRemoveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_CLOUDSTACK_SNAPSHOTS, Acl::PERM_CLOUDSTACK_SNAPSHOTS_MANAGE);
+
         $this->request->defineParams(array(
             'snapshotId' => array('type' => 'json'),
             'cloudLocation'

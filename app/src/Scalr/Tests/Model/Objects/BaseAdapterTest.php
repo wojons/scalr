@@ -191,4 +191,32 @@ class BaseAdapterTest extends TestCase
 
         $this->assertEquals(2, $i);
     }
+
+    /**
+     * Provider for testConvertInputValue
+     *
+     * @return array
+     */
+    public function providerConvertInputValue()
+    {
+        return [
+            ['string', ['foo' => 'bar']],
+            ['string', (object)['foo' => 'bar']],
+            ['datetime', 'faketime'],
+            ['UTCDatetime', '946684800']
+        ];
+
+    }
+
+    /**
+     * @test
+     * @param string $filedType
+     * @param mixed  $value     Value what we have to convert
+     * @dataProvider providerConvertInputValue()
+     * @expectedException \UnexpectedValueException
+     */
+    public function testConvertInputValue($filedType, $value)
+    {
+        BaseAdapter::convertInputValue($filedType, $value);
+    }
 }

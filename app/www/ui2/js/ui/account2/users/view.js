@@ -1,7 +1,7 @@
 Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams) {
     var storeTeams = Scalr.data.get('account.teams'),
         storeUsers = Scalr.data.get('account.users'),
-        storeRoles = Scalr.data.get('account.roles'),
+        storeRoles = Scalr.data.get('account.acl'),
         isAccountOwner = Scalr.user['type'] == 'AccountOwner';
 
     var getUserTeamsList = function(userId, links) {
@@ -338,7 +338,8 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 var form = this.getForm(),
                     isNewRecord = !record.store,
                     userType = record.get('type'),
-                    gridTeams = this.down('#userTeamsGrid');
+                    gridTeams = this.down('#userTeamsGrid'),
+                    passwordField = this.down('#password');
 
                 var c = this.query('component[cls~=hideoncreate], #delete');
                 for (var i=0, len=c.length; i<len; i++) {
@@ -363,11 +364,26 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                         this.down('#userTeams').show();
                 }
 
+                this.down('[name="status"]').setReadOnly(Scalr.user.userId == record.get('id'));
                 this.down('#isAccountAdmin').setVisible(userType != 'AccountOwner');
                 form.findField('isAccountAdmin').setValue(userType == 'AccountAdmin' || userType == 'AccountSuperAdmin' ? '1' : '0');
                 form.findField('isAccountSuperAdmin').setValue(userType == 'AccountSuperAdmin');
                 this.down('#save').setText(isNewRecord ? 'Add user' : 'Save');
 
+                if (record.get('id') == Scalr.user.userId) {
+                    if (passwordField.emptyText && passwordField.emptyText != ' ') {
+                        passwordField._emptyText = passwordField.emptyText;
+                        passwordField.emptyText = ' ';
+                    }
+                    passwordField.allowBlank = false;
+                } else {
+                    if (passwordField._emptyText) {
+                        passwordField.emptyText = passwordField._emptyText;
+                        delete passwordField._emptyText;
+                    }
+                    passwordField.allowBlank = true;
+                }
+                passwordField.applyEmptyText();
 
                 this.down('#userTeams').setValue(getUserTeamsList(record.get('id'), true)+ (Scalr.flags['authMode'] == 'scalr' ? ' <a href="#" class="user-teams-edit">Change</a>' : ''));
                 storeUserTeams.loadUser(record);
@@ -425,8 +441,9 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                     }],
                     listeners: {
                         change: function(comp, value) {
-                            var featuresField = comp.up().down('[name="isAccountSuperAdmin"]');
-                            featuresField.setVisible(value == '1' && isAccountOwner);
+                            var featuresField = comp.up().down('[name="isAccountSuperAdmin"]'),
+                                isAccountSuperAdminEnabled = value == '1' && isAccountOwner;
+                            featuresField.setVisible(isAccountSuperAdminEnabled).setDisabled(!isAccountSuperAdminEnabled);
                         }
                     }
                 },{
@@ -459,7 +476,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 readOnly: Scalr.flags['authMode'] == 'ldap',
                 vtype: Scalr.flags['authMode'] == 'ldap' ? '' : 'email'
             }, {
-                xtype: 'passwordfield',
+                xtype: 'scalrpasswordfield',
                 name: 'password',
                 itemId: 'password',
                 fieldLabel: 'Password',
@@ -469,7 +486,6 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 otherPassField: 'cpassword',
                 allowBlank: true,
                 selectOnFocus: true,
-                validateOnChange: false,
                 listeners: {
                     change: function(comp, value) {
                         var hideConfirm = !value || value === '******';
@@ -490,8 +506,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 selectOnFocus: true,
                 submitValue: false,
                 vtype: 'password',
-                otherPassField: 'password',
-                validateOnChange: false
+                otherPassField: 'password'
             },{
                 xtype: 'displayfield',
                 itemId: 'userTeams',
@@ -579,7 +594,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                                 for (var i=0, len=team.roles.length; i<len; i++) {
                                     var role = storeRoles.getById(team.roles[i]);
                                     if (role) {
-                                        html.push('<a href="#/account/roles?roleId=' + role.get('id') + '" class="x-semibold user-permission" style="color:#' + role.get('color') + '">' + role.get('name') + '</a>');
+                                        html.push('<a href="#/account/acl?roleId=' + role.get('id') + '" class="x-semibold user-permission" style="color:#' + role.get('color') + '">' + role.get('name') + '</a>');
                                     }
                                 }
                             }
@@ -664,6 +679,18 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 fieldLabel: 'Status',
                 name: 'status',
                 value: 'Active',
+                plugins: {
+                    ptype: 'fieldicons',
+                    position: 'outer',
+                    icons: [
+                        {id: 'question', tooltip: 'You are not allowed to change your own status'}
+                    ]
+                },
+                listeners: {
+                    writeablechange: function(comp, readOnly) {
+                        this.toggleIcon('question', readOnly);
+                    }
+                },
                 defaults: {
                     width: 100
                 },
@@ -766,10 +793,10 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                                 }
                             }
                         });
-                    }
+                    };
                     if (frm.isValid()) {
                         var passwordField = frm.findField('password');
-                        if (!isNewRecord && passwordField.getValue() != passwordField.placeholder) {
+                        if (!isNewRecord && passwordField.getValue() != '******') {
                             confirmBox = Scalr.utils.ConfirmPassword(sendRequest);
                         } else {
                             sendRequest();

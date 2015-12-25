@@ -1,29 +1,29 @@
 <?php
 
+use Scalr\Model\Entity;
+
 class Scalr_Scaling_Algorithms_DateTime
 {
     public $instancesNumber;
 
     public function __construct()
     {
-        $this->logger = Logger::getLogger(get_class($this));
+        $this->logger = \Scalr::getContainer()->logger(get_class($this));
         $this->db = \Scalr::getDb();
     }
 
     public function makeDecision(DBFarmRole $dbFarmRole, Scalr_Scaling_FarmRoleMetric $farmRoleMetric, $isInvert = false)
     {
-        //
         // Get data from BW sensor
-        //
         $dbFarm = $dbFarmRole->GetFarmObject();
 
-        //$env = $dbFarm->GetEnvironmentObject();
-        //$tz = $env->getPlatformConfigValue(Scalr_Environment::SETTING_TIMEZONE);
+        $tz = $dbFarm->GetSetting(Entity\FarmSetting::TIMEZONE);
 
-        $tz = $dbFarm->GetSetting(DBFarm::SETTING_TIMEZONE);
         $date = new DateTime();
-        if ($tz)
+
+        if ($tz) {
             $date->setTimezone(new DateTimeZone($tz));
+        }
 
         $currentDate = array((int)$date->format("Hi"), $date->format("D"));
 
@@ -36,27 +36,27 @@ class Scalr_Scaling_Algorithms_DateTime
             LIMIT 1
         ");
 
-        if ($scaling_period)
-        {
+        if ($scaling_period) {
             $this->logger->info("TimeScalingAlgo({$dbFarmRole->FarmID}, {$dbFarmRole->ID}) Found scaling period. Total {$scaling_period['instances_count']} instances should be running.");
+
             $this->instancesNumber = $scaling_period['instances_count'];
+
             $this->lastValue = "(" . implode(' / ', $currentDate) . ") {$scaling_period['start_time']} - {$scaling_period['end_time']} = {$scaling_period['instances_count']}";
 
-            if (($dbFarmRole->GetRunningInstancesCount()+$dbFarmRole->GetPendingInstancesCount()) < $this->instancesNumber)
+            if (($dbFarmRole->GetRunningInstancesCount()+$dbFarmRole->GetPendingInstancesCount()) < $this->instancesNumber) {
                 return Scalr_Scaling_Decision::UPSCALE;
-            elseif (($dbFarmRole->GetRunningInstancesCount()+$dbFarmRole->GetPendingInstancesCount()) > $this->instancesNumber)
+            } elseif (($dbFarmRole->GetRunningInstancesCount()+$dbFarmRole->GetPendingInstancesCount()) > $this->instancesNumber) {
                 return Scalr_Scaling_Decision::DOWNSCALE;
-            else
+            } else {
                 return Scalr_Scaling_Decision::NOOP;
-        }
-        else
-        {
-            if ($dbFarmRole->GetRunningInstancesCount() > $dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MIN_INSTANCES)) {
+            }
+        } else {
+            if ($dbFarmRole->GetRunningInstancesCount() > $dbFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MIN_INSTANCES)) {
                 $this->lastValue = "No period defined. Using Min instances setting.";
                 return Scalr_Scaling_Decision::DOWNSCALE;
-            }
-            else
+            } else {
                 return Scalr_Scaling_Decision::NOOP;
+            }
         }
     }
 }

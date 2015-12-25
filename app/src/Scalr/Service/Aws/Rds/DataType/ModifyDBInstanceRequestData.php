@@ -313,7 +313,8 @@ class ModifyDBInstanceRequestData extends AbstractRdsDataType
      * @param   ListDataType|array|string $dBSecurityGroups
      *          A list of DB Security Groups to associate with this DB Instance.
      *          Default: The default DB Security Group for the database engine
-     * @return  CreateDBInstanceRequestData
+     *
+     * @return  ModifyDBInstanceRequestData
      */
     public function setDBSecurityGroups($dBSecurityGroups = null)
     {
@@ -328,7 +329,8 @@ class ModifyDBInstanceRequestData extends AbstractRdsDataType
      *
      * @param   ListDataType|array|string $vpcSecurityGroupIds
      *          A list of EC2 VPC Security Groups to associate with this DB Instance.
-     * @return  CreateDBInstanceRequestData
+     *
+     * @return  ModifyDBInstanceRequestData
      */
     public function setVpcSecurityGroupIds($vpcSecurityGroupIds = null)
     {

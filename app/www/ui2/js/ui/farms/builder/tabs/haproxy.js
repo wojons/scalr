@@ -17,7 +17,13 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Haproxy', {
         var me = this,
             settings = record.get('settings', true),
             haproxySettings = Ext.decode(settings['haproxy.proxies']),
+            errors = record.get('errors', true) || {},
+            invalidIndex,
             hp = me.down('haproxysettings');
+
+        if (Ext.isObject(errors) && Ext.isObject(errors['haproxy.proxies'])) {
+            invalidIndex = errors['haproxy.proxies'].invalidIndex;
+        }
 
         me.roles = [];
         this.up('#farmDesigner').moduleParams.tabParams.farmRolesStore.each(function(r){
@@ -49,7 +55,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Haproxy', {
         hp.setValue({
             'haproxy.proxies': haproxySettings,
             'haproxy.template' : settings['haproxy.template'] || ''
-        });
+        }, invalidIndex);
     },
 
     hideTab: function (record) {
@@ -57,9 +63,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Haproxy', {
             haproxySettings = this.down('haproxysettings').getValue();
 
         settings['haproxy.proxies'] = Ext.encode(haproxySettings['haproxy.proxies']);
-        if (Scalr.flags['betaMode']) {
-            settings['haproxy.template'] = haproxySettings['haproxy.template'];
-        }
+        settings['haproxy.template'] = haproxySettings['haproxy.template'];
         record.set('settings', settings);
     },
 
@@ -109,13 +113,11 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
                         xtype: 'component',
                         cls: 'x-fieldset-subheader',
                         html: 'Config template',
-                        hidden: !Scalr.flags['betaMode'],
                         margin: '24 12 0'
                     },{
                         xtype: 'textarea',
                         name: 'template',
                         height: 200,
-                        hidden: !Scalr.flags['betaMode'],
                         margin: '12 12 0',
                         inputAttrTpl: 'wrap="off"'
                     }]
@@ -154,20 +156,33 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
 
         if (this.mode === 'edit') {
             this.down('#grid').clearSelectedRecord();
-            if (Scalr.flags['betaMode']) {
-                value['haproxy.template'] = this.down('[name="template"]').getValue();
-            }
+            value['haproxy.template'] = this.down('[name="template"]').getValue();
         }
         return value;
     },
 
-    setValue: function(value){
-        this.store.loadData(value['haproxy.proxies'] || []);
-        if (this.mode === 'add') {
-            this.down('#form').loadRecord(this.store.createModel({}));
+    setValue: function(value, selectedIndex){
+        var me = this;
+        me.store.loadData(value['haproxy.proxies'] || []);
+        if (me.mode === 'add') {
+            me.down('#form').loadRecord(me.store.createModel({}));
         } else {
-            this.down('[name="template"]').setValue(value['haproxy.template']);
+            me.down('[name="template"]').setValue(value['haproxy.template']);
         }
+
+        if (Ext.isNumeric(selectedIndex)) {
+            var grid = me.down('#grid');
+            cb = function(){
+                grid.setSelectedRecord(me.store.getAt(selectedIndex));
+                me.down('#form').isValid();
+            };
+            if (me.rendered) {
+                cb();
+            } else {
+                me.on('afterrender', cb);
+            }
+        }
+
     },
 
     getGridConfig: function() {
@@ -239,9 +254,9 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
                     this.setFieldValues({
                         'haproxy.port': record.get('port') || '',
                         'haproxy.description': record.get('description'),
-                        'haproxy.healthcheck.interval': record.get('healthcheck.interval') || 30,
-                        'haproxy.healthcheck.fallthreshold': record.get('healthcheck.fallthreshold') || 5,
-                        'haproxy.healthcheck.risethreshold': record.get('healthcheck.risethreshold') || 3,
+                        'haproxy.healthcheck.interval': !Ext.isEmpty(record.get('healthcheck.interval'), true) ? record.get('healthcheck.interval') : 30,
+                        'haproxy.healthcheck.fallthreshold': !Ext.isEmpty(record.get('healthcheck.fallthreshold'), true) ? record.get('healthcheck.fallthreshold') : 5,
+                        'haproxy.healthcheck.risethreshold': !Ext.isEmpty(record.get('healthcheck.risethreshold'), true) ? record.get('healthcheck.risethreshold') : 3,
                         'haproxy.template': record.get('template') || ''
 
                     });
@@ -265,11 +280,10 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
                             'description': this.down('[name="haproxy.description"]').getValue(),
                             'healthcheck.interval': this.down('[name="haproxy.healthcheck.interval"]').getValue(),
                             'healthcheck.fallthreshold': this.down('[name="haproxy.healthcheck.fallthreshold"]').getValue(),
-                            'healthcheck.risethreshold': this.down('[name="haproxy.healthcheck.risethreshold"]').getValue()
+                            'healthcheck.risethreshold': this.down('[name="haproxy.healthcheck.risethreshold"]').getValue(),
+                            'template': this.down('[name="haproxy.template"]').getValue()
                         };
-                    if (Scalr.flags['betaMode']) {
-                        values['template'] = this.down('[name="haproxy.template"]').getValue();
-                    }
+
                     values.backends = this.down('#backends').getValue();
                     if (values.port) {
                         record.set(values);
@@ -335,7 +349,7 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
                     xtype: 'textfield',
                     name: 'haproxy.port',
                     fieldLabel: 'Port',
-                    maskRe: new RegExp('[0123456789]', 'i'),
+                    vtype: 'num',
                     validator: function(value){
                         return value*1>0 || 'Value is invalid.';
                     },
@@ -418,21 +432,19 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
                                     if (data[type] && data['port']) {
                                         data['backup'] = item.down('[name="haproxy.backup"]').getValue() ? '1' : '0';
                                         data['down'] = item.down('[name="haproxy.down"]').getValue() ? '1' : '0';
-                                        if (Scalr.flags['betaMode']) {
-                                            // OLD WAY USE farm_role_id
-                                            if (type === 'farm_role_id') {
-                                                network = item.down('[name="haproxy.network"]').getValue();
-                                                if (network) {
-                                                    data['network'] = network;
-                                                }
+                                        // OLD WAY USE farm_role_id
+                                        if (type === 'farm_role_id') {
+                                            network = item.down('[name="haproxy.network"]').getValue();
+                                            if (network) {
+                                                data['network'] = network;
                                             }
+                                        }
 
-                                            // NEW WAY USE farm_role_alias
-                                            if (type === 'farm_role_alias') {
-                                                network = item.down('[name="haproxy.network"]').getValue();
-                                                if (network) {
-                                                    data['network'] = network;
-                                                }
+                                        // NEW WAY USE farm_role_alias
+                                        if (type === 'farm_role_alias') {
+                                            network = item.down('[name="haproxy.network"]').getValue();
+                                            if (network) {
+                                                data['network'] = network;
                                             }
                                         }
 
@@ -501,9 +513,7 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
                                                     var ct = comp.up('container');
                                                     ct.down('[name="haproxy.host"]').setVisible(value === 'host');
                                                     ct.down('[name="haproxy.farm_role_alias"]').setVisible(value === 'farm_role_alias');
-                                                    if (Scalr.flags['betaMode']) {
-                                                        ct.up().down('#network').setVisible(value === 'farm_role_alias');
-                                                    }
+                                                    ct.up().down('#network').setVisible(value === 'farm_role_alias');
                                                 }
                                             }
                                         },{
@@ -532,7 +542,7 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
                                             xtype: 'textfield',
                                             name: 'haproxy.port',
                                             emptyText: 'port',
-                                            maskRe: new RegExp('[0123456789]', 'i'),
+                                            vtype: 'num',
                                             allowBlank: false,
                                             fieldLabel: ':',
                                             labelSeparator: '',
@@ -569,7 +579,7 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
                                             iconCls: 'x-grid-icon x-grid-icon-delete',
                                             margin: '4 0 0 4',
                                             handler: function() {
-                                                var item = this.up('container');
+                                                var item = this.up().up();
                                                 item.ownerCt.remove(item);
                                             }
                                         }]
@@ -654,14 +664,18 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
                     title: 'Health check',
                     layout: 'hbox',
                     items: [{
-                        xtype: 'textfield',
+                        xtype: 'numberfield',
                         name: 'haproxy.healthcheck.interval',
                         allowBlank: false,
                         fieldLabel: 'Interval ',
                         flex: 1,
                         labelWidth: 65,
                         minWidth: 100,
-                        maxWidth: 120
+                        maxWidth: 120,
+                        minValue: 5,
+                        maxValue: 600,
+                        vtype: 'num',
+                        hideTrigger:true
                     },{
                         xtype: 'displayfield',
                         margin: '0 0 0 3',
@@ -672,27 +686,35 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
                         info:   'The approximate interval (in seconds) between health checks of an individual instance.<br />The default is 30 seconds and a valid interval must be between 5 seconds and 600 seconds.' +
                                 'Also, the interval value must be greater than the Timeout value'
                     },{
-                        xtype: 'textfield',
+                        xtype: 'numberfield',
                         name: 'haproxy.healthcheck.fallthreshold',
                         allowBlank: false,
                         fieldLabel: 'Fall thld',
                         flex: 1,
                         labelWidth: 70,
                         minWidth: 100,
-                        maxWidth: 150
+                        maxWidth: 150,
+                        minValue: 2,
+                        maxValue: 10,
+                        vtype: 'num',
+                        hideTrigger:true
                     },{
                         xtype: 'displayinfofield',
                         margin: '0 30 0 5',
                         info:   'The number of consecutive health probe failures that move the instance to the unhealthy state.<br />The default is 5 and a valid value lies between 2 and 10.'
                     },{
-                        xtype: 'textfield',
+                        xtype: 'numberfield',
                         name: 'haproxy.healthcheck.risethreshold',
                         allowBlank: false,
                         fieldLabel: 'Rise thld',
                         flex: 1,
                         labelWidth: 70,
                         minWidth: 100,
-                        maxWidth: 150
+                        maxWidth: 150,
+                        minValue: 2,
+                        maxValue: 10,
+                        vtype: 'num',
+                        hideTrigger:true
                     },{
                         xtype: 'displayinfofield',
                         margin: '0 0 0 5',
@@ -704,7 +726,6 @@ Ext.define('Scalr.ui.HaproxySettingsField', {
                     cls: 'x-fieldset-separator-top-bottom',
                     collapsible: true,
                     collapsed: true,
-                    hidden: !Scalr.flags['betaMode'],
                     layout: 'anchor',
                     items: [{
                         xtype: 'textarea',

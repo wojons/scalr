@@ -84,14 +84,14 @@ class SoftwareDependencyTest extends TestCase
         );
 
         $this->assertTrue(
-            class_exists('HttpRequest'),
+            class_exists('\http\Client'),
             'Pecl_Http extension is required for the application. '
-          . 'Please install it http://www.php.net/manual/en/http.install.php'
+          . 'Please install it https://mdref.m6w6.name/http#Installation:'
         );
 
         $this->assertTrue(
-            version_compare(phpversion('http'), '1.7.4', '>='),
-            'Version of the Pecl_Http extension must be greater than or equal 1.7.4.'
+            version_compare(phpversion('http'), '2.5.3', '>='),
+            'Version of the Pecl_Http extension must be at least 2.5.3.'
         );
 
         $this->assertTrue(

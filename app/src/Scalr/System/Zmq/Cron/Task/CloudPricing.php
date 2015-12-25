@@ -2,6 +2,7 @@
 namespace Scalr\System\Zmq\Cron\Task;
 
 use ArrayObject, DateTime, stdClass, DateTimeZone, Exception;
+use http\Client\Request;
 use Scalr\System\Zmq\Cron\AbstractTask;
 use Scalr\Stats\CostAnalytics\Entity\PriceEntity;
 use Scalr\Stats\CostAnalytics\Entity\SettingEntity;
@@ -18,7 +19,7 @@ class CloudPricing extends AbstractTask
 {
 
     /**
-     * @var \HttpRequest
+     * @var Request
      */
     private $request;
 
@@ -59,16 +60,12 @@ class CloudPricing extends AbstractTask
             exit;
         }
 
-        $now = new DateTime('now', new DateTimeZone('UTC'));
-
         $urls = array(
             'https://a0.awsstatic.com/pricing/1/ec2/linux-od.min.js',
         	'https://a0.awsstatic.com/pricing/1/ec2/mswin-od.min.js',
             'https://a0.awsstatic.com/pricing/1/ec2/previous-generation/linux-od.min.js',
             'https://a0.awsstatic.com/pricing/1/ec2/previous-generation/mswin-od.min.js'
         );
-
-        $availableLocations = Aws::getCloudLocations();
 
         foreach ($urls as $link) {
             $json = trim(preg_replace('/^.+?callback\((.+?)\);\s*$/sU', '\\1', $this->getPricingContent($link)));
@@ -96,15 +93,15 @@ class CloudPricing extends AbstractTask
     private function getPricingContent($link)
     {
         $request = $this->getRequest();
-        $request->setUrl($link);
+        $request->setRequestUrl($link);
 
-        return $request->send()->getBody();
+        return \Scalr::getContainer()->http->sendRequest($this->request)->getBody()->toString();
     }
 
     /**
-     * Gets configured HttpRequest
+     * Gets configured http Request
      *
-     * @return \HttpRequest
+     * @return Request
      */
     private function getRequest()
     {
@@ -125,10 +122,10 @@ class CloudPricing extends AbstractTask
                 }
             }
 
-            $this->request = new \HttpRequest(null, HTTP_METH_GET, $opt);
+            $this->request = new Request("GET");
+            $this->request->setOptions($opt);
         } else {
-            $this->request->resetCookies(true);
-            $this->request->clearHistory();
+            $this->request->setOptions([ 'cookiesession' => true ]);
         }
 
         return $this->request;
@@ -194,7 +191,6 @@ class CloudPricing extends AbstractTask
                 ];
             }
 
-            $upd = array();
             $needUpdate = false;
             foreach ($it->sizes as $sz) {
                 foreach ($sz->valueColumns as $v) {

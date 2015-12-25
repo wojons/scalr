@@ -8,14 +8,15 @@ use Scalr\Service\Aws\CloudFront\AbstractCloudFrontDataType;
  *
  * @author    Vitaliy Demidov   <vitaliy@scalr.com>
  * @since     04.02.2013
- * @property  \Scalr\Service\Aws\CloudFront\DataType\ForwardedValuesCookiesData  $cookies Specifies whether you want CloudFront to forward
- *                                                                                        cookies to the origin and, if so, which ones
+ *
+ * @property  \Scalr\Service\Aws\CloudFront\DataType\ForwardedValuesCookiesData  $cookies
+ *            Specifies whether you want CloudFront to forward cookies to the origin and, if so, which ones
+ *
  * @method    string                   getDistributionId()  getDistributionId()      Gets an associated distribution ID.
  * @method    ForwardedValuesData      setDistributionId()  setDistributionId($id)   sets an associated distribution ID.
  */
 class ForwardedValuesData extends AbstractCloudFrontDataType
 {
-
     /**
      * List of external identifier names.
      *
@@ -39,6 +40,13 @@ class ForwardedValuesData extends AbstractCloudFrontDataType
      * @var bool
      */
     public $queryString;
+
+    /**
+     * Headers to forward to origin
+     *
+     * @var array
+     */
+    public $headers = [];
 
     /**
      * Constructor
@@ -71,12 +79,27 @@ class ForwardedValuesData extends AbstractCloudFrontDataType
     {
         $xml = new \DOMDocument('1.0', 'UTF-8');
         $xml->formatOutput = true;
+
         $top = $xml->createElement('ForwardedValues');
+
         $xml->appendChild($top);
+
         $top->appendChild($xml->createElement('QueryString', ($this->queryString ? 'true' : 'false')));
         if ($this->cookies instanceof ForwardedValuesCookiesData) {
             $this->cookies->appendContentToElement($top);
         }
+
+        $headersNode = $xml->createElement('Headers');
+        $top->appendChild($headersNode);
+        $headersNode->appendChild($xml->createElement('Quantity', count($this->headers)));
+        if (!empty($this->headers)) {
+            $items = $xml->createElement('Items');
+            $headersNode->appendChild($items);
+            foreach ($this->headers as $name) {
+                $items->appendChild($xml->createElement('Name', $name));
+            }
+        }
+
         return $returnAsDom ? $xml : $xml->saveXML();
     }
 }

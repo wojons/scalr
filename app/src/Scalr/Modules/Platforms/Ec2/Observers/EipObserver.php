@@ -3,8 +3,10 @@
 namespace Scalr\Modules\Platforms\Ec2\Observers;
 
 use Scalr\Service\Aws\Ec2\DataType\AssociateAddressRequestData;
+use Scalr\Model\Entity;
+use Scalr\Observer\AbstractEventObserver;
 
-class EipObserver extends \EventObserver
+class EipObserver extends AbstractEventObserver
 {
 
     public $ObserverName = 'Elastic IPs';
@@ -75,8 +77,6 @@ class EipObserver extends \EventObserver
      */
     public function OnHostUp(\HostUpEvent $event)
     {
-        if ($event->DBServer->replaceServerID) return;
-
         \Scalr\Modules\Platforms\Ec2\Helpers\EipHelper::setEipForServer($event->DBServer);
     }
 
@@ -90,46 +90,10 @@ class EipObserver extends \EventObserver
         if ($event->DBServer->IsRebooting()) return;
         try {
             $DBFarm = \DBFarm::LoadByID($this->FarmID);
-            if ($event->replacementDBServer) {
-                $ip = $this->DB->GetRow("SELECT * FROM elastic_ips WHERE server_id=?", array(
-                    $event->DBServer->serverId
-                ));
-                if ($ip) {
-                    $aws = $DBFarm->GetEnvironmentObject()->aws($event->DBServer->GetProperty(\EC2_SERVER_PROPERTIES::REGION));
-                    try {
-
-                        $request = new AssociateAddressRequestData(
-                            $event->replacementDBServer->GetProperty(\EC2_SERVER_PROPERTIES::INSTANCE_ID),
-                            $ip['ipaddress']
-                        );
-
-                        if ($DBFarm->GetSetting(\DBFarm::SETTING_EC2_VPC_ID)) {
-                            $request->allocationId = $ip['allocation_id'];
-                            $request->publicIp = null;
-                            $request->allowReassociation = true;
-                        }
-
-                        // Associates elastic ip address with instance
-                        $aws->ec2->address->associate($request);
-                        $this->DB->Execute("UPDATE elastic_ips SET state='1', server_id=? WHERE ipaddress=?", array(
-                            $event->replacementDBServer->serverId,
-                            $ip['ipaddress']
-                        ));
-                        \Scalr::FireEvent($this->FarmID, new \IPAddressChangedEvent(
-                            $event->replacementDBServer, $ip['ipaddress'], $event->replacementDBServer->localIp
-                        ));
-                    } catch (\Exception $e) {
-                        if (!stristr($e->getMessage(), "does not belong to you")) {
-                            throw new \Exception($e->getMessage());
-                        }
-                    }
-                }
-            } else {
-                $this->DB->Execute("UPDATE elastic_ips SET state='0', server_id='' WHERE server_id=?", array(
-                    $event->DBServer->serverId
-                ));
-            }
-        } catch (\Exception $e) {
-        }
+            
+            $this->DB->Execute("UPDATE elastic_ips SET state='0', server_id='' WHERE server_id=?", array(
+                $event->DBServer->serverId
+            ));
+        } catch (\Exception $e) {}
     }
 }

@@ -1,13 +1,13 @@
 Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadParams, moduleParams) {
-	var form = Ext.create('Ext.panel.Panel', {
-		scalrOptions: {
-			modal: true
-		},
-		fieldDefaults: {
-			anchor: '100%',
+    var form = Ext.create('Ext.panel.Panel', {
+        scalrOptions: {
+            modal: true
+        },
+        fieldDefaults: {
+            anchor: '100%',
             labelWidth: 80
-		},
-		width: 960,
+        },
+        width: 960,
         bodyCls: 'x-container-fieldset',
         layout: 'fit',
         items: [{
@@ -48,13 +48,19 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                         colIndex = 0;
                     } else if (!record.get('threshold')) {
                         colIndex = 1;
-                    } else if (record.get('recipientType') == 2 && !record.get('emails')) {
-                        colIndex = 3;
+                    } else if (record.get('recipientType') == 2) {
+                        var widget = grid.columns[3].getWidget(record);//email column
+                        if (widget && !widget.validate()) {
+                            widget.focus();
+                            error = true;
+                            return false;
+                        }
                     }
                     if (colIndex !== undefined) {
                         var widget = grid.columns[colIndex].getWidget(record);
                         widget.validate();
                         widget.focus();
+                        error = true;
                         return false;
                     } else {
                         items.push(record.getData());
@@ -168,6 +174,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                     validator: function(value) {
                         if (value) {
                             var ar = value.split(','), i, errors = [];
+                            ar = Ext.Array.map(ar, Ext.String.trim);
                             for (i = 0; i < ar.length; i++) {
                                 if (! Ext.form.field.VTypes.email(ar[i]))
                                     errors.push(ar[i]);
@@ -265,16 +272,11 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                     items = [],
                     error;
                 store.getUnfiltered().each(function(record){
-                    var colIndex;
-                    if (!record.get('emails')) {
-                        colIndex = 1;
-                    }
-                    if (colIndex !== undefined) {
-                        var widget = grid.columns[colIndex].getWidget(record);
-                        widget.validate();
+                   var widget = grid.columns[1].getWidget(record);//email column
+                    if (widget && !widget.validate()) {
                         widget.focus();
                         error = true;
-                         return false;
+                        return false;
                     } else {
                         items.push(record.getData());
                     }
@@ -319,6 +321,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                     validator: function(value) {
                         if (value) {
                             var ar = value.split(','), i, errors = [];
+                            ar = Ext.Array.map(ar, Ext.String.trim);
                             for (i = 0; i < ar.length; i++) {
                                 if (! Ext.form.field.VTypes.email(ar[i]))
                                     errors.push(ar[i]);
@@ -386,7 +389,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                 }]
             }]
         }],
-		dockedItems: [{
+        dockedItems: [{
             xtype: 'container',
             cls: 'x-container-fieldset',
             style: 'padding-bottom:0;background:#f1f5fa',
@@ -423,22 +426,19 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                 }
             }]
         },{
-			xtype: 'container',
-			dock: 'bottom',
-			cls: 'x-docked-buttons',
-			layout: {
-				type: 'hbox',
-				pack: 'center'
-			},
-			items: [{
-				xtype: 'button',
-				text: 'Save',
-				handler: function() {
+            xtype: 'container',
+            dock: 'bottom',
+            cls: 'x-docked-buttons',
+            layout: {
+                type: 'hbox',
+                pack: 'center'
+            },
+            items: [{
+                xtype: 'button',
+                text: 'Save',
+                handler: function() {
                     var types = ['notifications', 'reports'],
-                        notifications = {
-                            notifications: form.down('#notifications').getValues(),
-                            reports: form.down('#reports').getValues()
-                        };
+                        notifications = {};
                     Ext.each(types, function(type){
                         notifications[type] = form.down('#' + type).getValues();
                         if (!notifications[type]) {
@@ -447,7 +447,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                             return false;
                         }
                     });
-
+                    
                     if (!notifications) return;
 
                     Scalr.Request({
@@ -463,19 +463,20 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                             Ext.each(types, function(type){
                                 form.down('#' + type).store.load({data: data[type]});
                             });
+                            Scalr.event.fireEvent('close');
                         }
                     });
-				}
-			}, {
-				xtype: 'button',
-				text: 'Cancel',
-				handler: function() {
-					Scalr.event.fireEvent('close');
-				}
+                }
+            }, {
+                xtype: 'button',
+                text: 'Cancel',
+                handler: function() {
+                    Scalr.event.fireEvent('close');
+                }
             }]
-		}]
-	});
+        }]
+    });
     form.down('#notifications').store.load({data: moduleParams['notifications']});
     form.down('#reports').store.load({data: moduleParams['reports']});
-	return form;
+    return form;
 });

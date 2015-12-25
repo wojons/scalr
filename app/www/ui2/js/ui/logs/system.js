@@ -6,8 +6,12 @@ Scalr.regPage('Scalr.ui.logs.system', function (loadParams, moduleParams) {
 			type: 'scalr.paging',
 			url: '/logs/xListLogs/'
 		},
-		remoteSort: true
-	});
+		remoteSort: true,
+        sorters: {
+            property: 'time',
+            direction: 'DESC'
+        }
+    });
 
 	var panel = Ext.create('Ext.grid.Panel', {
 		scalrOptions: {

@@ -58,7 +58,7 @@ class OrchestrationRules extends ApiController
      */
     public function describeAction($roleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION);
+        $this->checkPermissions(Acl::RESOURCE_ORCHESTRATION_ACCOUNT);
 
         //Getting the role initiates check permissions
         $this->getRole($roleId);
@@ -104,7 +104,7 @@ class OrchestrationRules extends ApiController
      */
     public function fetchAction($roleId, $ruleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION);
+        $this->checkPermissions(Acl::RESOURCE_ORCHESTRATION_ACCOUNT);
 
         $rule = $this->getRule($ruleId);
 
@@ -127,7 +127,7 @@ class OrchestrationRules extends ApiController
      */
     public function createAction($roleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION);
+        $this->checkPermissions(Acl::RESOURCE_ORCHESTRATION_ACCOUNT, Acl::PERM_ORCHESTRATION_ACCOUNT_MANAGE);
 
         $object = $this->request->getJsonBody();
 
@@ -175,7 +175,7 @@ class OrchestrationRules extends ApiController
      */
     public function modifyAction($roleId, $ruleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION);
+        $this->checkPermissions(Acl::RESOURCE_ORCHESTRATION_ACCOUNT, Acl::PERM_ORCHESTRATION_ACCOUNT_MANAGE);
 
         $object = $this->request->getJsonBody();
 
@@ -217,7 +217,7 @@ class OrchestrationRules extends ApiController
      */
     public function deleteAction($roleId, $ruleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION);
+        $this->checkPermissions(Acl::RESOURCE_ORCHESTRATION_ACCOUNT, Acl::PERM_ORCHESTRATION_ACCOUNT_MANAGE);
 
         $rule = $this->getRule($ruleId, true);
 

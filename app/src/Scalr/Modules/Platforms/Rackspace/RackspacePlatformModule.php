@@ -4,14 +4,17 @@ namespace Scalr\Modules\Platforms\Rackspace;
 
 use \DBServer;
 use \Exception;
-use \DBRole;
 use \BundleTask;
+use Scalr\Model\Entity\CloudInstanceType;
 use Scalr\Modules\Platforms\Rackspace\Adapters\StatusAdapter;
 use Scalr\Modules\AbstractPlatformModule;
 use Scalr\Model\Entity\Image;
+use Scalr\Model\Entity;
 use Scalr\Service\Cloud\Rackspace\Exception\InstanceNotFoundException;
 use Scalr\Service\Cloud\Rackspace\Exception\NotFoundException;
 use Scalr_Service_Cloud_Rackspace_CS;
+use \RACKSPACE_SERVER_PROPERTIES;
+use SERVER_PLATFORMS;
 
 class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\Modules\PlatformModuleInterface
 {
@@ -30,9 +33,10 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
      */
     private function getRsClient(\Scalr_Environment $environment, $cloudLocation)
     {
+        $ccProps = $environment->cloudCredentials("{$cloudLocation}." . SERVER_PLATFORMS::RACKSPACE);
         return \Scalr_Service_Cloud_Rackspace::newRackspaceCS(
-            $environment->getPlatformConfigValue(self::USERNAME, true, $cloudLocation),
-            $environment->getPlatformConfigValue(self::API_KEY, true, $cloudLocation),
+            $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_USERNAME],
+            $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_API_KEY],
             $cloudLocation
         );
     }
@@ -46,13 +50,12 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
         if ($environment === null)
             return array();
 
-        $db = \Scalr::getDb();
-        $locations = $db->GetAll("SELECT DISTINCT(`group`) as `name` FROM client_environment_properties WHERE `name` = ? AND env_id = ?", array(
-            self::API_KEY, $environment->id
-        ));
-        $retval = array();
+        $locations = Entity\Account\EnvironmentProperty::find([['envId' => $environment->id], ['name' => Entity\Account\EnvironmentProperty::RACKSPACE_LOCATIONS]]);
+
+        $retval = [];
+        /* @var $location Entity\Account\EnvironmentProperty */
         foreach ($locations as $location)
-            $retval[$location['name']] = "Rackspace / {$location['name']}";
+            $retval[$location->group] = "Rackspace / {$location->group}";
 
         return $retval;
     }
@@ -73,15 +76,6 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
     public function GetServerID(DBServer $DBServer)
     {
         return $DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::SERVER_ID);
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see \Scalr\Modules\PlatformModuleInterface::GetServerFlavor()
-     */
-    public function GetServerFlavor(DBServer $DBServer)
-    {
-        return $DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::FLAVOR_ID);
     }
 
     /**
@@ -318,7 +312,7 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
             $DBRole = $DBServer->GetFarmRoleObject()->GetRoleObject();
 
             $launchOptions->imageId = $DBRole->__getNewRoleObject()->getImage(\SERVER_PLATFORMS::RACKSPACE, $DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::DATACENTER))->imageId;
-            $launchOptions->serverType = $DBServer->GetFarmRoleObject()->GetSetting(\DBFarmRole::SETTING_RS_FLAVOR_ID);
+            $launchOptions->serverType = $DBServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::RS_FLAVOR_ID);
             $launchOptions->cloudLocation = $DBServer->GetFarmRoleObject()->CloudLocation;
 
             $u_data = '';
@@ -331,7 +325,9 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
             $launchOptions->architecture = 'x86_64';
         }
 
-        $rsClient = $this->getRsClient($DBServer->GetEnvironmentObject(), $launchOptions->cloudLocation);
+        $environment = $DBServer->GetEnvironmentObject();
+
+        $rsClient = $this->getRsClient($environment, $launchOptions->cloudLocation);
         //Cannot launch new instance. Request to Rackspace failed (Code: 413): {"overLimit":{"message":"Too many requests...","code":413,"retryAfter":"2012-03-12T09:44:56.343-05:00"}} (19641119, 4)
 
 
@@ -342,27 +338,42 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
                 $launchOptions->serverType,
                 array(),
                 array(
-                    'path'		=> ($DBServer->osType == 'windows' ? 'C:\\Program Files\\Scalarizr\\etc\\private.d\\.user-data' : '/etc/scalr/private.d/.user-data'),
-                    'contents'	=> base64_encode($launchOptions->userData)
+                    'path'     => ($DBServer->osType == 'windows' ? 'C:\\Program Files\\Scalarizr\\etc\\private.d\\.user-data' : '/etc/scalr/private.d/.user-data'),
+                    'contents' => base64_encode($launchOptions->userData)
                 )
             );
         } catch (Exception $e) {
-             //Logger::getLogger('RACKSPACE')->fatal(json_encode(array($rsClient->lastRequestBody, $rsClient->LastResponseHeaders, $rsClient->LastResponseBody)));
+             //\Scalr::getContainer()->logger('RACKSPACE')->fatal(json_encode(array($rsClient->lastRequestBody, $rsClient->LastResponseHeaders, $rsClient->LastResponseBody)));
              throw new Exception(sprintf(_("Cannot launch new instance. %s (%s, %s)"), $e->getMessage(), $launchOptions->imageId, $launchOptions->serverType));
         }
 
         if ($result->server) {
+            $instanceTypeInfo = $this->getInstanceType(
+                $result->server->flavorId,
+                $environment,
+                $launchOptions->cloudLocation
+            );
+            /* @var $instanceTypeInfo CloudInstanceType */
             $DBServer->SetProperties([
                 \RACKSPACE_SERVER_PROPERTIES::SERVER_ID        => $result->server->id,
                 \RACKSPACE_SERVER_PROPERTIES::IMAGE_ID         => $result->server->imageId,
-                \RACKSPACE_SERVER_PROPERTIES::FLAVOR_ID        => $result->server->flavorId,
                 \RACKSPACE_SERVER_PROPERTIES::ADMIN_PASS       => $result->server->adminPass,
                 \RACKSPACE_SERVER_PROPERTIES::NAME             => $DBServer->serverId,
                 \RACKSPACE_SERVER_PROPERTIES::HOST_ID          => $result->server->hostId,
                 \SERVER_PROPERTIES::ARCHITECTURE               => $launchOptions->architecture,
                 \RACKSPACE_SERVER_PROPERTIES::DATACENTER       => $launchOptions->cloudLocation,
+                \SERVER_PROPERTIES::INFO_INSTANCE_VCPUS        => $instanceTypeInfo ? $instanceTypeInfo->vcpus : null,
             ]);
+
+            $params = ['type' => $result->server->flavorId];
+
+            if ($instanceTypeInfo) {
+                $params['instanceTypeName'] = $instanceTypeInfo->name;
+            }
+
             $DBServer->imageId = $launchOptions->imageId;
+
+            $DBServer->update($params);
             // we set server history here
             $DBServer->getServerHistory();
 
@@ -394,9 +405,10 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
 
         if ($put) {
             $environment = $DBServer->GetEnvironmentObject();
+            $ccProps = $environment->cloudCredentials("{$DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::DATACENTER)}." . SERVER_PLATFORMS::RACKSPACE)->properties;
             $accessData = new \stdClass();
-            $accessData->username = $environment->getPlatformConfigValue(self::USERNAME, true, $DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::DATACENTER));
-            $accessData->apiKey = $environment->getPlatformConfigValue(self::API_KEY, true, $DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::DATACENTER));
+            $accessData->username = $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_USERNAME];
+            $accessData->apiKey = $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_API_KEY];
 
             switch ($DBServer->GetProperty(\RACKSPACE_SERVER_PROPERTIES::DATACENTER))
             {
@@ -452,5 +464,43 @@ class RackspacePlatformModule extends AbstractPlatformModule implements \Scalr\M
         }
 
         return $ret;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Modules\PlatformModuleInterface::getInstanceIdPropertyName()
+     */
+    public function getInstanceIdPropertyName()
+    {
+        return RACKSPACE_SERVER_PROPERTIES::SERVER_ID;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see PlatformModuleInterface::getgetClientByDbServer()
+     *
+     * @return Scalr_Service_Cloud_Rackspace_CS
+     */
+    public function getHttpClient(DBServer $dbServer)
+    {
+        return $this->getRsClient($dbServer->GetEnvironmentObject(), $dbServer->cloudLocation);
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see PlatformModuleInterface::getImageInfo()
+     */
+    public function getImageInfo(\Scalr_Environment $environment, $cloudLocation, $imageId)
+    {
+        $ccProps = $environment->cloudCredentials("{$cloudLocation}." . SERVER_PLATFORMS::RACKSPACE)->properties;
+        $client = \Scalr_Service_Cloud_Rackspace::newRackspaceCS(
+            $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_USERNAME],
+            $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_API_KEY],
+            $cloudLocation
+        );
+
+        $snap = $client->getImageDetails($imageId);
+
+        return $snap ? ["name" => $snap->image->name] : [];
     }
 }

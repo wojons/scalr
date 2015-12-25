@@ -24,7 +24,7 @@ class VpcSecurityGroupMembershipList extends RdsListDataType
 
     /**
      * {@inheritdoc}
-     * @see Scalr\Service\Aws\DataType.ListDataType::getQueryArray()
+     * @see Scalr\Service\Aws\DataType\ListDataType::getQueryArray()
      */
     public function getQueryArray($uriParameterName = 'VpcSecurityGroups', $member = true)
     {

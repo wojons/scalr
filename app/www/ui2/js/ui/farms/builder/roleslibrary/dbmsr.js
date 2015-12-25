@@ -32,11 +32,12 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
 
         refreshEbsEncrypted: function(record, instType) {
             var me = this;
-            record.loadEBSEncryptionSupport(function(encryptionSupported){
-                var field = me.down('[name="db.msr.data_storage.ebs.encrypted"]');
+            record.loadInstanceTypeInfo(function(instanceTypeInfo){
+                var field = me.down('[name="db.msr.data_storage.ebs.encrypted"]'),
+                    ebsEncryptionSupported = instanceTypeInfo ? instanceTypeInfo.ebsencryption || false : true;
                 if (field) {
-                    field.setValue(!encryptionSupported ? false : field.getValue());
-                    field.setReadOnly(!encryptionSupported);
+                    field.setValue(!ebsEncryptionSupported ? false : field.getValue());
+                    field.setReadOnly(!ebsEncryptionSupported);
                 }
             }, instType);
         },
@@ -169,9 +170,6 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
             this.down('[name="db.msr.data_storage.cinder.size"]').setValue(100);
             this.down('[name="db.msr.data_storage.gced.size"]').setValue(100);
             this.down('[name="db.msr.data_storage.gced.type"]').setValue('pd-standard');
-
-            this.down('[name="db.msr.data_storage.ebs.type"]').setDisabled(platform === 'eucalyptus');
-            this.down('[name="db.msr.data_storage.raid.ebs.type"]').setDisabled(platform === 'eucalyptus');
 
             this.down('#disallowWarning').hide();
             this.down('#dataStorageSettings').show();
@@ -522,7 +520,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                             name: 'db.msr.data_storage.ebs.size',
                             allowChangeable: false,
                             fieldLabel: 'Storage size',
-                            width: 145,
+                            width: 155,
                             vtype: 'ebssize',
                             getEbsType: function() {
                                 return this.up('container').down('[name="db.msr.data_storage.ebs.type"]').getValue();

@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\Util\CryptoTool;
+use Scalr\UI\Request\Validator;
 
 class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
 {
@@ -221,17 +222,32 @@ class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
 
     public function xSaveAction()
     {
+        $this->request->defineParams(array(
+            'password' => array('type' => 'string', 'rawValue' => true)
+        ));
+
+        $sendResetLink = $newUser = false;
+
         $user = Scalr_Account_User::init();
-        $validator = new Scalr_Validator();
+        $validator = new Validator();
 
-        if (!$this->getParam('email'))
-            throw new Scalr_Exception_Core('Email must be provided.');
+        $email = $this->getParam('email');
 
-        if ($validator->validateEmail($this->getParam('email'), null, true) !== true)
-            throw new Scalr_Exception_Core('Email should be correct');
+        if (($isEmailValid = $validator->validateEmail($email)) !== true) {
+            throw new Scalr_Exception_Core($isEmailValid);
+        }
 
         if ($this->user->canManageAcl() || $this->user->isTeamOwner()) {
-            $newUser = false;
+            $password = $this->getParam('password');
+            if (empty($password)) {
+                $password = CryptoTool::sault(10);
+                $sendResetLink = true;
+            }
+
+            if (($isPasswordValid = $validator->validatePassword($password)) !== true) {
+                throw new Scalr_Exception_Core($isPasswordValid);
+            }
+
             if ($this->getParam('id')) {
                 $user->loadById((int)$this->getParam('id'));
 
@@ -239,20 +255,12 @@ class Scalr_UI_Controller_Account_Users extends Scalr_UI_Controller
                     throw new Scalr_Exception_InsufficientPermissions();
                 }
 
-                $user->updateEmail($this->getParam('email'));
+                $user->updateEmail($email);
             } else {
                 $this->user->getAccount()->validateLimit(Scalr_Limits::ACCOUNT_USERS, 1);
-                $user->create($this->getParam('email'), $this->user->getAccountId());
+                $user->create($email, $this->user->getAccountId());
                 $user->type = Scalr_Account_User::TYPE_TEAM_USER;
                 $newUser = true;
-            }
-
-            $sendResetLink = false;
-            if (!$this->getParam('password')) {
-                $password = CryptoTool::sault(10);
-                $sendResetLink = true;
-            } else {
-                $password = $this->getParam('password');
             }
 
             if ($password != '******') {

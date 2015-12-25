@@ -15,6 +15,7 @@ use Scalr\Model\Entity\Account\User;
 use Scalr\Model\Entity\Account\User\ApiKeyEntity;
 use Scalr\Model\Entity\Image;
 use Scalr\Tests\TestCase;
+use Scalr_Governance;
 
 /**
  * ApiTestCase
@@ -59,6 +60,20 @@ class ApiTestCase extends TestCase
      * @var User
      */
     protected static $user;
+
+    /**
+     * Scalr Governance
+     *
+     * @var Scalr_Governance
+     */
+    protected $governance;
+
+    /**
+     * Governance configuration
+     *
+     * @var array
+     */
+    protected $governanceConfiguration;
 
     /**
      * For the purpose of data conversion
@@ -140,26 +155,27 @@ class ApiTestCase extends TestCase
     }
 
     /**
-     * Remove API key generated for test
+     * Removes API key generated for test
      *
      * @afterClass
      */
     public static function tearDownAfterClass()
     {
-        foreach (static::$testData as $class => $ids) {
-            $ids = array_unique($ids, SORT_REGULAR);
+        ksort(static::$testData, SORT_REGULAR);
+        foreach (static::$testData as $priority => $data) {
+            foreach ($data as $class => $ids) {
+                $ids = array_unique($ids, SORT_REGULAR);
 
-            foreach ($ids as $entry) {
-                if (!empty($entry)) {
-                    $entity = call_user_func_array([$class, 'findPk'], is_object($entry) ? [$entry] : (array) $entry);
+                foreach ($ids as $entry) {
+                    if (!empty($entry)) {
+                        $entity = call_user_func_array([$class, 'findPk'], is_object($entry) ? [$entry] : (array) $entry);
 
-                    if (!empty($entity)) {
-                        try {
-                            $entity->delete();
-                        } catch (Exception $e) {
-                            error_log($e->getMessage());
-                            error_log($class);
-                            error_log(print_r($entry, true));
+                        if (!empty($entity)) {
+                            try {
+                                $entity->delete();
+                            } catch (Exception $e) {
+//                                error_log("{$class}:\t" . $e->getMessage() . "\n " . str_replace("\n", "\n ", print_r($entry, true)));
+                            }
                         }
                     }
                 }
@@ -169,6 +185,56 @@ class ApiTestCase extends TestCase
         if (!empty(static::$apiKeyEntity)) {
             static::$apiKeyEntity->delete();
         }
+    }
+
+    /**
+     * Gets governance object
+     *
+     * @return  Scalr_Governance
+     */
+    public function getGovernance()
+    {
+        if (empty($this->governance)) {
+            $this->governance = new Scalr_Governance(static::$testEnvId);
+        }
+
+        return $this->governance;
+    }
+
+    /**
+     * Setup governance configuration
+     *
+     * @param   array $governanceConfiguration           Governance configuration
+     * @param   bool  $savePrevious             optional If true, current governance configuration be saved before setting up a new
+     */
+    public function setupGovernanceConfiguration(array $governanceConfiguration, $savePrevious = true)
+    {
+        $governance = $this->getGovernance();
+
+        $this->governanceConfiguration = $savePrevious ? $governance->getValues() : null;
+
+        if(!empty($governanceConfiguration)) {
+            foreach ($governanceConfiguration as $categoryName => $category) {
+                foreach ($category as $name => $value) {
+                    $governance->setValue($categoryName, $name, $value['enabled'], $value['limits']);
+                }
+            }
+            $governance->clearCache();
+        }
+    }
+
+    /**
+     * Restores a previously saved governance configuration
+     *
+     * @throws  \UnderflowException If there was no saved configuration
+     */
+    public function restoreGovernanceConfiguration()
+    {
+        if (!isset($this->governanceConfiguration)) {
+            throw new \UnderflowException("Previous governance configuration has not been saved!");
+        }
+
+        $this->setupGovernanceConfiguration($this->governanceConfiguration, false);
     }
 
     /**
@@ -201,9 +267,9 @@ class ApiTestCase extends TestCase
         $body = $response->getBody();
         $this->assertNotEmpty($body);
 
-        $error = $this->printResponseError($response);
+        $printError = $this->printResponseError($response);
 
-        $this->assertEquals($expectedStatus, $response->response->getStatus(), $error);
+        $this->assertEquals($expectedStatus, $response->response->getStatus(), $printError);
         $this->assertObjectHasAttribute('errors', $body);
         $this->assertNotEmpty($body->errors);
 
@@ -211,12 +277,12 @@ class ApiTestCase extends TestCase
 
         if ($expectedError !== null) {
             $this->assertObjectHasAttribute('code', $error);
-            $this->assertEquals($expectedError, $error->code);
+            $this->assertEquals($expectedError, $error->code, $printError);
         }
 
         if ($expectedMessage !== null) {
             $this->assertObjectHasAttribute('message', $error);
-            $this->assertContains($expectedMessage, $error->message);
+            $this->assertContains($expectedMessage, $error->message, $printError);
         }
     }
 
@@ -326,6 +392,25 @@ class ApiTestCase extends TestCase
         $this->assertObjectHasAttribute('status', $data);
         $this->assertObjectHasAttribute('type', $data);
         $this->assertObjectHasAttribute('statusError', $data);
+    }
+
+    /**
+     * Asserts if variable's object has all properties
+     *
+     * @param object $data     Single image's item
+     */
+    public function assertVariableObjectNotEmpty($data)
+    {
+        $this->assertObjectHasAttribute('name', $data);
+        $this->assertObjectHasAttribute('value', $data);
+        $this->assertObjectHasAttribute('computedValue', $data);
+        $this->assertObjectHasAttribute('declaredIn', $data);
+        $this->assertObjectHasAttribute('hidden', $data);
+        $this->assertObjectHasAttribute('locked', $data);
+        $this->assertObjectHasAttribute('outputFormat', $data);
+        $this->assertObjectHasAttribute('requiredIn', $data);
+        $this->assertObjectHasAttribute('validationPattern', $data);
+        $this->assertObjectHasAttribute('description', $data);
     }
 
     /**
@@ -449,9 +534,9 @@ class ApiTestCase extends TestCase
         $existedImages = [];
 
         foreach (Image::find([
-            ['platform' => \SERVER_PLATFORMS::EC2],
+            ['platform'      => \SERVER_PLATFORMS::EC2],
             ['cloudLocation' => $cloudLocation],
-            ['envId' => static::$testEnvId]
+            ['envId'         => static::$testEnvId]
         ]) as $img) {
             /* @var $img Image */
             $existedImages[$img->id] = $img;
@@ -482,7 +567,19 @@ class ApiTestCase extends TestCase
             $envId = static::$testEnvId;
         }
 
-        return '/api/user/' . static::$apiVersion . '/' . ($envId === false ? '' : ($envId . '/')) . ltrim($uriPart, '/');
+        return '/api/' . static::$apiVersion . '/user/' . ($envId === false ? '' : ($envId . '/')) . ltrim($uriPart, '/');
+    }
+
+    /**
+     * Gets Account API url
+     *
+     * @param   string  $uriPart    Part of the api uri
+     *
+     * @return string Returns User API url
+     */
+    public static function getAccountApiUrl($uriPart)
+    {
+        return '/api/' . static::$apiVersion . '/account/' . ltrim($uriPart, '/');
     }
 
     /**
@@ -539,14 +636,16 @@ class ApiTestCase extends TestCase
     }
 
     /**
-     * Creates and save entity to DB^ keep entity to delete after test
+     * Creates and save entity to DB, keeps entity to delete after test
      *
      * @param AbstractEntity $entity
      * @param array          $data
+     * @param int            $priority
      *
      * @return AbstractEntity
+     * @throws \Scalr\Exception\ModelException
      */
-    public function createEntity(AbstractEntity $entity, array $data)
+    public static function createEntity(AbstractEntity $entity, array $data, $priority = 0)
     {
         foreach ($entity->getIterator() as $property => $_) {
             if (isset($data[$property])) {
@@ -562,8 +661,55 @@ class ApiTestCase extends TestCase
             $key[$position] = $entity->{$property};
         }
 
-        static::$testData[get_class($entity)][] = $key;
+        static::toDelete(get_class($entity), $key, $priority);
 
         return $entity;
+    }
+
+    /**
+     * Add specified entity identifier to removal data
+     *
+     * @param     $class
+     * @param     $identifier
+     * @param int $priority
+     */
+    public static function toDelete($class, $identifier, $priority = 0)
+    {
+        static::$testData[$priority][$class][] = $identifier;
+    }
+
+    /**
+     * Recursively checks that data is empty
+     *
+     * @param   mixed   $data   Data to check
+     *
+     * @return  bool    Returns true if $data are empty or $data is object/array,
+     *                  all child elements of which recursively empty, false otherwise
+     */
+    public static function isRecursivelyEmpty($data)
+    {
+        if (is_object($data)) {
+            foreach ($data as $property) {
+                if (!static::isRecursivelyEmpty($property)) {
+                    return false;
+                }
+            }
+
+            return true;
+        } else if (is_array($data)) {
+            if (!empty($data)) {
+                foreach ($data as $entry) {
+                    if (!static::isRecursivelyEmpty($entry)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            return true;
+        }
+
+        return empty($data);
     }
 }
