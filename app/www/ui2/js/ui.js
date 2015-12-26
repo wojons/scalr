@@ -1481,7 +1481,7 @@ Scalr.application.createMenu = function(scope) {
 
     var userDefinitions = [
         [ 'API access', 'api', '#/core/api', ['account', 'environment']],
-        [ 'APIv2 access', 'api', '#/core/api2', ['account', 'environment'], !Scalr.flags['apiEnabled'] || !Scalr.flags['betaMode']],
+        [ 'APIv2 access', 'api', '#/core/api2', ['account', 'environment'], !Scalr.flags['apiEnabled']],
         [ 'Security', 'security', '#/core/security', ['scalr', 'account', 'environment'], finAdminHide],
         [ 'Settings', 'settings', '#/core/settings', ['environment']],
         [ 'Settings', 'settings', '#/account/core/settings', ['account']],
