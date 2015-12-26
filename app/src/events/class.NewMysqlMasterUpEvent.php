@@ -1,6 +1,6 @@
 <?php
 
-class NewMysqlMasterUpEvent extends Event
+class NewMysqlMasterUpEvent extends AbstractServerEvent
 {
 
     /**

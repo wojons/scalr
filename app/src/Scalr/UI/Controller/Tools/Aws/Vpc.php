@@ -10,6 +10,7 @@ use Scalr\Service\Aws\Ec2\DataType\IpRangeList;
 use Scalr\Service\Aws\Ec2\DataType\IpRangeData;
 use Scalr\Service\Aws\Ec2\DataType\NetworkInterfaceAttributeType;
 use Scalr\Service\Aws\Ec2\DataType\SecurityGroupFilterNameType;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Tools_Aws_Vpc extends Scalr_UI_Controller
 {
@@ -144,7 +145,7 @@ class Scalr_UI_Controller_Tools_Aws_Vpc extends Scalr_UI_Controller
         $retval = array();
         while ($farmRole = $farmRoles->FetchRow()) {
             $dbFarmRole = DBFarmRole::LoadByID($farmRole['farm_roleid']);
-            if ($dbFarmRole->GetFarmObject()->GetSetting(DBFarm::SETTING_EC2_VPC_ID) == $vpcId) {
+            if ($dbFarmRole->GetFarmObject()->GetSetting(Entity\FarmSetting::EC2_VPC_ID) == $vpcId) {
                 $itm = array(
                     'farm_role_id' => $dbFarmRole->ID,
                     'nid' => $farmRole['value'],

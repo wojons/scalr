@@ -1,4 +1,5 @@
 <?php
+
 namespace Scalr\Service\Aws\Rds\DataType;
 
 use Scalr\Service\Aws\DataType\ListDataType;
@@ -102,6 +103,13 @@ class DBInstanceData extends AbstractRdsDataType
     public $characterSetName;
 
     /**
+     * If the DB instance is a member of a DB cluster, contains the name of the DB cluster that the DB instance is a member of.
+     *
+     * @var string
+     */
+    public $dBClusterIdentifier;
+
+    /**
      * Contains the name of the compute and memory capacity class of the DB Instance
      *
      * @var string
@@ -166,6 +174,13 @@ class DBInstanceData extends AbstractRdsDataType
      * @var int
      */
     public $iops;
+
+    /**
+     * If StorageEncrypted is true, the KMS key identifier for the encrypted DB instance.
+     *
+     * @var string
+     */
+    public $kmsKeyId;
 
     /**
      * Specifies the latest time to which a database
@@ -243,6 +258,13 @@ class DBInstanceData extends AbstractRdsDataType
      * @var string
      */
     public $secondaryAvailabilityZone;
+
+    /**
+     * Specifies whether the DB instance is encrypted.
+     *
+     * @var bool
+     */
+    public $storageEncrypted;
 
     /**
      * Specifies the storage type to be associated with the DB instance.

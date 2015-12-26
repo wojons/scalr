@@ -2,8 +2,9 @@
 
 namespace Scalr\Tests\Functional\Ui\Controller\Dashboard\Widget;
 
-use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
+use Scalr\Model\Entity;
 use Scalr\Tests\WebTestCase;
+use SERVER_PLATFORMS;
 
 /**
  * Class StatusTest
@@ -29,7 +30,7 @@ class StatusTest extends WebTestCase
     {
         $uri = '/dashboard/widget/status/xGetContent';
         $locations = $this->getEnvironment()
-                          ->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_TYPE) == Ec2PlatformModule::ACCOUNT_TYPE_GOV_CLOUD
+                          ->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE] == Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE_GOV_CLOUD
             ? ['us-gov-west-1']
             : [
                 'us-east-1',

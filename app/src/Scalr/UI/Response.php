@@ -28,18 +28,6 @@ class Scalr_UI_Response
         return self::$_instance;
     }
 
-    public function pageNotFound()
-    {
-        $this->setHttpResponseCode(404);
-        throw new Scalr_UI_Exception_NotFound();
-    }
-
-    public function pageAccessDenied()
-    {
-        $this->setHttpResponseCode(403);
-        throw new Scalr_Exception_InsufficientPermissions();
-    }
-
     /**
      * Normalizes a header name to X-Capitalized-Names
      *
@@ -119,7 +107,10 @@ class Scalr_UI_Response
 
     public function sendResponse()
     {
-        if (is_readable($this->file) &&
+        $isFileOutput = is_readable($this->file);
+        $response = !$isFileOutput ? $this->getResponse() : '';
+
+        if ($isFileOutput &&
             isset($_SERVER["HTTP_IF_MODIFIED_SINCE"]) &&
             filemtime($this->file) < DateTime::createFromFormat('D, d M Y H:i:s T', $_SERVER["HTTP_IF_MODIFIED_SINCE"])->getTimestamp()) {
                 $this->setHttpResponseCode(304);
@@ -145,7 +136,7 @@ class Scalr_UI_Response
 
         header("HTTP/1.0 {$this->httpResponseCode}");
 
-        is_readable($this->file) ? readfile($this->file) : print($this->getResponse());
+        $isFileOutput ? readfile($this->file) : print($response);
     }
 
     /**
@@ -206,16 +197,18 @@ class Scalr_UI_Response
             $this->jsResponse['scalrDebugLog'] = $this->serverDebugLog;
         }
 
-        $this->setResponse(json_encode($this->jsResponse));
-
         if (count($this->uiDebugLog))
             $this->setHeader('X-Scalr-Debug', json_encode($this->uiDebugLog));
 
+        $responseText = json_encode($this->jsResponse);
+
         if (isset($_REQUEST['X-Requested-With']) && $_REQUEST['X-Requested-With'] == 'XMLHttpRequest') {
-            // hack for ajax file uploads and other cases (use text/plain because text/html cannot parse html tags in result)
-            $this->setHeader('content-type', 'text/plain', true);
+            // hack for ajax file uploads and other cases (use htmlentities because browser is trying to parse html tags in result)
+            $this->setHeader('content-type', 'text/html', true);
+            $this->setResponse(htmlentities($responseText));
         } else {
             $this->setHeader('content-type', 'text/javascript', true);
+            $this->setResponse($responseText);
         }
     }
 
@@ -377,7 +370,30 @@ class Scalr_UI_Response
 
                 $msg = str_replace('<br>', '', $msg);
                 $msg = str_replace('(mysqli): ', '', $msg);
-                Scalr_UI_Response::getInstance()->serverDebugLog[] = array('name' => 'sql', 'value' => $msg);
+                $backtrace = [];
+                $b = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+                while (($item = array_shift($b))) {
+                    if ($item['class'] == 'Scalr\Db\ConnectionPool') {
+                        $item = array_shift($b);
+                        $item['file'] = strstr($item['file'], '/app/');
+
+                        if ($item['file'] == '/app/src/Scalr/Model/AbstractEntity.php') {
+                            while (($item = array_shift($b))) {
+                                if ($item['class'] && $item['class'] != 'Scalr\Model\AbstractEntity') {
+                                    break;
+                                }
+                            }
+                        }
+
+                        $item['file'] = strstr($item['file'], '/app/') ?: $item['file'];
+                        $backtrace[] = "File: {$item['file']} [{$item['line']}]";
+                        $backtrace[] = "Class: {$item['class']}::{$item['function']}";
+                        //$backtrace[] = str_replace("\n", "<br>", print_r($item['args'], true));
+                        break;
+                    }
+                }
+
+                Scalr_UI_Response::getInstance()->serverDebugLog[] = array('name' => 'sql', 'value' => $msg, 'backtrace' => join("<br>", $backtrace));
             };
 
             Scalr::getDb()->debug = -1;

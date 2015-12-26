@@ -1,4 +1,5 @@
 <?php
+
 namespace Scalr\Upgrade\Updates;
 
 use Scalr\Upgrade\SequenceInterface;
@@ -10,6 +11,7 @@ use \DBFarm;
 use \SERVER_PROPERTIES;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
+use Scalr\Model\Entity;
 
 class Update20150123100257 extends AbstractUpdate implements SequenceInterface
 {
@@ -126,7 +128,7 @@ class Update20150123100257 extends AbstractUpdate implements SequenceInterface
                     $this->console->out("- - Farm: %s (%d) Project: %s", $farm->Name, $farm->ID, $project->projectId);
 
                     //Associates farm with default Project
-                    $farm->SetSetting(DBFarm::SETTING_PROJECT_ID, $project->projectId);
+                    $farm->SetSetting(Entity\FarmSetting::PROJECT_ID, $project->projectId);
 
                     unset($farm);
                 }

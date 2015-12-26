@@ -1,6 +1,6 @@
 Scalr.regPage('Scalr.ui.account2.environments.clouds.gce', function (loadParams, moduleParams) {
 	var params = moduleParams['params'];
-	
+
 	var form = Ext.create('Ext.form.Panel', {
         bodyCls: 'x-container-fieldset',
         fieldDefaults: {
@@ -49,8 +49,8 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.gce', function (loadParams,
 		},{
 			xtype: 'textfield',
 			fieldLabel: 'Project ID',
-			name: 'gce.project_id',
-			value: params['gce.project_id']
+			name: 'project_id',
+			value: params['project_id']
         },{
             xtype: 'container',
             layout: 'anchor',
@@ -58,18 +58,18 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.gce', function (loadParams,
             items: [{
                 xtype: 'textfield',
                 fieldLabel: 'Client ID',
-                name: 'gce.client_id',
-                value: params['gce.client_id']
+                name: 'client_id',
+                value: params['client_id']
             },{
                 xtype: 'textfield',
                 fieldLabel: 'Email (Service account name)',
-                name: 'gce.service_account_name',
-                value: params['gce.service_account_name']
+                name: 'service_account_name',
+                value: params['service_account_name']
             },{
                 xtype: 'filefield',
                 fieldLabel: 'Private key',
-                name: 'gce.key',
-                value: params['gce.key'],
+                name: 'key',
+                value: params['key'],
                 listeners: {
                     //Bug: file button will not be disabled when filefield is hidden initially
                     afterrender: function(){
@@ -84,8 +84,8 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.gce', function (loadParams,
             items: [{
                 xtype: 'filefield',
                 fieldLabel: 'JSON key',
-                name: 'gce.json_key',
-                value: params['gce.json_key'],
+                name: 'json_key',
+                value: params['json_key'],
                 listeners: {
                     //Bug: file button will not be disabled when filefield is hidden initially
                     afterrender: function(){
@@ -96,6 +96,6 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.gce', function (loadParams,
         }]
 	});
 
-    form.getForm().findField('mode').setValue(params['gce.json_key'] ? 'jsonkey' : 'manual');
+    form.getForm().findField('mode').setValue(params['json_key'] ? 'jsonkey' : 'manual');
     return form;
 });

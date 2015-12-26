@@ -11,3 +11,7 @@
 	line-height: 16px;
     padding:0;
 }
+
+.x-form-role-scripting .x-mask{
+    background: transparent;
+}

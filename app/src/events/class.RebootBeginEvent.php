@@ -1,6 +1,6 @@
 <?php
 
-class RebootBeginEvent extends Event
+class RebootBeginEvent extends AbstractServerEvent
 {
 
     /**

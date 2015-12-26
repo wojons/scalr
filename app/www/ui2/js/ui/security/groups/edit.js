@@ -17,6 +17,7 @@ Scalr.regPage('Scalr.ui.security.groups.edit', function (loadParams, moduleParam
 			items: [{
 				xtype: 'button',
 				text: 'Save',
+                hidden: !Scalr.isAllowed('SECURITY_SECURITY_GROUPS', 'manage'),
 				handler: function() {
                     var values = this.up('sgeditor').getValues();
                     if (values !== false) {

@@ -47,6 +47,7 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 			{ text: "Status", minWidth: 130, width: 130, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'dnszone'},
             {
 				xtype: 'optionscolumn',
+                hidden: !Scalr.isAllowed('DNS_ZONES', 'manage'),
 				menu: [{
 					text: 'Edit DNS Zone',
 					iconCls: 'x-menu-icon-edit',
@@ -64,12 +65,13 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 			}
 		],
 
-		selModel: {
-			selType: 'selectedmodel',
-			getVisibility: function (record) {
-				return (record.get('status') != 'Pending delete');
-			}
-		},
+		selModel:
+            Scalr.isAllowed('DNS_ZONES', 'manage') ? {
+                selType: 'selectedmodel',
+                getVisibility: function (record) {
+                    return (record.get('status') != 'Pending delete');
+                }
+            } : null,
 
 		listeners: {
 			selectionchange: function(selModel, selections) {
@@ -84,6 +86,7 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 			beforeItems: [{
                 text: 'New DNS zone',
                 cls: 'x-btn-green',
+                hidden: !Scalr.isAllowed('DNS_ZONES', 'manage'),
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/dnszones/create');
 				}
@@ -94,6 +97,7 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
                 cls: 'x-btn-red',
 				tooltip: 'Select one or more zones to delete them',
 				disabled: true,
+                hidden: !Scalr.isAllowed('DNS_ZONES', 'manage'),
 				handler: function() {
                     var grid = this.up('grid'),
                         request = {
@@ -127,6 +131,7 @@ Scalr.regPage('Scalr.ui.dnszones.view', function (loadParams, moduleParams) {
 			}, ' ', {
 				text: 'Default Records',
 				tooltip: 'Manage Default DNS records',
+                hidden: !Scalr.isAllowed('DNS_ZONES', 'manage'),
 				handler: function() {
 					Scalr.event.fireEvent('redirect', '#/dnszones/defaultRecords');
 				}

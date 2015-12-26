@@ -1,3 +1,7 @@
+/*
+ * Information: please add tags like ExtJS version number (e.g. v5.1.0) to all places in code where you do specific override (something doesn't work)
+ */
+
 //constants must be defined before overrides
 Scalr.constants = {
     iopsMin: 100,
@@ -8,7 +12,8 @@ Scalr.constants = {
     ebsGp2MaxStorageSize: 16384,
     ebsIo1MinStorageSize: 4,
     ebsIo1MaxStorageSize: 16384,
-    ebsMaxIopsSizeRatio: 30,
+    ebsMaxIopsSizeRatio: 10,
+    ebsMaxIopsSizeRatioIncreased: 30,
     redisPersistenceTypes: [
         ['aof', 'Append Only File'],
         ['snapshotting', 'Snapshotting'],
@@ -25,6 +30,24 @@ Scalr.constants.ebsTypes = [
     ['io1', 'Provisioned IOPS (' + Scalr.constants.iopsMin + ' - ' + Scalr.constants.iopsMax + '):']
 ];
 
+Scalr.configs = {
+    eventsListConfig: {
+        cls: 'x-boundlist-alt',
+        tpl:
+            '<tpl for=".">' +
+                '<div class="x-boundlist-item" style="height: auto; width: auto;">' +
+                    '<div style="white-space:nowrap">' +
+                        '&nbsp;<img src="'+Ext.BLANK_IMAGE_URL+'" class="scalr-scope-{scope}" data-qtip="{scope:capitalize} scope" style="width:14px"/>&nbsp; '+
+                        '<span class="x-semibold">' +
+                            '<tpl if=\'name == \"*\"\'>' + 'All Events<tpl else>{name}</tpl>' +
+                        '</span>' +
+                    '</div>' +
+                    '<div style="color:#777;margin:4px 0 0 26px;font-size:90%;">{description}</div>' +
+                '</div>' +
+            '</tpl>'
+    }
+};
+
 //bugfix v5.1: mousewheel doesn't fire in firefox
 Ext.$vendorEventRe = /^(Moz.+|MS.+|DOMMouseScroll)/;
 
@@ -39,7 +62,106 @@ Ext.define(null, {
 
     childMenuOffset: [1, 0],
     menuOffset: [0, 1],
-    shadow: false
+    shadow: false,
+
+    //v5.1.0 remove override after switching to 5.1.1
+    onFocusLeave: function(e) {
+        var me = this;
+        me.callSuper(arguments);
+        me.mixins.focusablecontainer.onFocusLeave.call(me, e);
+        /*Changed*/
+        if (me.floating) {
+            me.hide();
+        }
+        /*End*/
+    },
+
+    //v5.1.0 fixes deadloop on environments menu
+    disableShortcutKeys: false,
+    onShortcutKey: function(keyCode, e) {
+        var shortcutChar = String.fromCharCode(e.getCharCode()),
+            items = this.query('>[text]'),
+            len = items.length,
+            item = this.lastFocusedChild,
+            focusIndex = Ext.Array.indexOf(items, item),
+            i = focusIndex;
+        /*Changed*/
+        if (!this.disableShortcutKeys && len > 0) {
+            if (focusIndex < 0) {
+                i = focusIndex = 0;
+            }
+        /*End*/
+            for (; ; ) {
+                if (++i === len) {
+                    i = 0;
+                }
+                item = items[i];
+                if (i === focusIndex) {
+                    return;
+                }
+                if (item.text && item.text[0].toUpperCase() === shortcutChar) {
+                    item.focus();
+                    return;
+                }
+            }
+        /*Changed*/
+        }
+        /*End*/
+    },
+
+    //v5.1.0 fixes error when setting enableFocusableContainer = false (environments menu)
+    onBoxReady: function() {
+        var me = this,
+            listeners = {
+                click: me.onClick,
+                mouseover: me.onMouseOver,
+                scope: me
+            },
+            iconSeparatorCls = me._iconSeparatorCls;
+        if (Ext.supports.Touch) {
+            listeners.pointerdown = me.onMouseOver;
+        }
+        /*Changed*/
+        if (me.focusableKeyNav) {
+        /*End*/
+            me.focusableKeyNav.map.addBinding([
+                {
+                    key: 27,
+                    handler: me.onEscapeKey,
+                    scope: me
+                },
+                {
+                    key: /[\w]/,
+                    handler: me.onShortcutKey,
+                    scope: me,
+                    shift: false,
+                    ctrl: false,
+                    alt: false
+                }
+            ]);
+        /*Changed*/
+        }
+        /*End*/
+        me.callSuper(arguments);
+        if (me.showSeparator) {
+            me.iconSepEl = me.body.insertFirst({
+                role: 'presentation',
+                cls: iconSeparatorCls + ' ' + iconSeparatorCls + '-' + me.ui,
+                html: '&#160;'
+            });
+        }
+        me.mon(me.el, listeners);
+        if (Ext.supports.MSPointerEvents || Ext.supports.PointerEvents) {
+            me.mon(me.el, {
+                scope: me,
+                click: me.preventClick,
+                translate: false
+            });
+        }
+        me.mouseMonitor = me.el.monitorMouseLeave(100, me.onMouseLeave, me);
+    },
+
+
 });
 
 Ext.define(null, {
@@ -65,7 +187,44 @@ Ext.define(null, {
 
 Ext.define(null, {
     override: 'Ext.picker.Date',
-    shadow: false
+    shadow: false,
+
+    createMonthPicker: function() {
+        var me = this,
+            picker = me.monthPicker;
+
+        if (!picker) {
+            me.monthPicker = picker = new Ext.picker.Month({
+                renderTo: me.el,
+                // We need to set the ownerCmp so that owns() can correctly
+                // match up the component hierarchy so that focus does not leave
+                // an owning picker field if/when this gets focus.
+                ownerCmp: me,
+                floating: true,
+                padding: me.padding,
+                shadow: false,
+                small: me.showToday === false,
+                /** Added */
+                minDate: me.minDate,
+                maxDate: me.maxDate,
+                /** End */
+                listeners: {
+                    scope: me,
+                    cancelclick: me.onCancelClick,
+                    okclick: me.onOkClick,
+                    yeardblclick: me.onOkClick,
+                    monthdblclick: me.onOkClick
+                }
+            });
+            if (!me.disableAnim) {
+                // hide the element if we're animating to prevent an initial flicker
+                picker.el.setStyle('display', 'none');
+            }
+            picker.hide();
+            me.on('beforehide', me.doHideMonthPicker, me);
+        }
+        return picker;
+    }
 });
 
 Ext.define(null, {
@@ -126,7 +285,7 @@ Ext.define(null, {
         formEl.createChild({
             tag: 'input',
             type: 'hidden',
-            name: 'X-Scalr-EnvId',
+            name: 'X-Scalr-Envid',
             value: Scalr.user.envId
         });
         return result;
@@ -167,6 +326,7 @@ Ext.define(null, {
             mousedown: function(e) {
                 if (me.clickable) {
                     if (e.getTarget(null, 1, true).is('a')) {
+                        e.stopPropagation();
                         this.delayHide();
                     }
                 }
@@ -385,17 +545,50 @@ Ext.define(null, {
         return legend;
     },
 
-    //fixes collapse, expand, beforecollapse, beforeexpand events double call when clicking on fieldset title with checkbox
+    //bugfix v5.1.0: collapse, expand, beforecollapse, beforeexpand events called twice when clicking on fieldset title with checkbox
+    //affects FarmDesigner -> Enable VPC fieldset
+    suspendCheckChange: 0,
     setExpanded: function() {
-        if (this.checkboxCmp) this.checkboxCmp.suspendEvents(false);
+        this.suspendCheckChange++;
         this.callParent(arguments);
-        if (this.checkboxCmp) this.checkboxCmp.resumeEvents();
+        this.suspendCheckChange--;
+    },
+
+    privates: {
+        onCheckChange: function(cmp, checked) {
+            if (!this.suspendCheckChange) {
+                this.callParent(arguments);
+            }
+        }
     },
 
     setTitle: function (title, description) {
         return this.callParent([title + (description ? '<span class="x-fieldset-header-description">' + description + '</span>' : '')]);
-    }
+    },
 
+    titleAlignCenter: false,
+    createTitleCmp: function() {
+        var titleCmp = this.callParent();
+        if (this.titleAlignCenter) {
+            titleCmp.setStyle('float: none; text-align: center;');
+        }
+        return titleCmp;
+    },
+
+    createCheckboxCmp: function () {
+        var me = this;
+
+        me.callParent();
+
+        me.checkboxCmp.onBoxClick = function () {
+            var checkbox = this;
+            if (!checkbox.disabled && !checkbox.readOnly) {
+                me.onCheckChange(me, !checkbox.checked);
+            }
+        };
+
+        return me.checkboxCmp;
+    }
 });
 
 Ext.define(null, {
@@ -413,6 +606,7 @@ Ext.define(null, {
 
     restoreValueOnBlur: false,//same as forceSelection but allows to set non-existent values
     restoreValueOnBlurValue: null,
+    restoreValueOnBlurDisabledFieldName: 'disabled',
 
     enableKeyEvents: true,
     autoSearch: true,
@@ -481,7 +675,8 @@ Ext.define(null, {
 
     onChange: function(newVal, oldVal) {
         if (this.restoreValueOnBlur) {
-            if (this.findRecordByValue(newVal) || !this.restoreValueOnBlurHasFocus) {
+            var rec = this.findRecordByValue(newVal);
+            if (rec && !rec.get(this.restoreValueOnBlurDisabledFieldName) || !this.restoreValueOnBlurHasFocus || newVal === null) {
                 this.restoreValueOnBlurValue = newVal;
             }
         }
@@ -504,7 +699,8 @@ Ext.define(null, {
         }
 
         if (this.restoreValueOnBlur) {
-            if (!this.disabled && !this.readOnly && !this.findRecordByValue(this.getValue()) && this.restoreValueOnBlurValue !== this.getValue()) {
+            var rec = this.findRecordByValue(me.getValue());
+            if (!me.disabled && !me.readOnly && (!rec || rec.get(me.restoreValueOnBlurDisabledFieldName)) && this.restoreValueOnBlurValue !== me.getValue()) {
                 if (me.queryFilter) {//if we don't clear filter, record may not be found and raw value will be set
                     me.getStore().getFilters().remove(me.queryFilter);
                 }
@@ -597,7 +793,7 @@ Ext.define(null, {
         var getRecord = function (key, enteredValue) {
             var record = null;
 
-            if (key === me.lastEnteredKey && enteredValue.length <= 2) {
+            if (Ext.isObject(me.lastRecord) && key === me.lastEnteredKey && enteredValue.length <= 2) {
                 record = store.findRecord(me.displayField, key, me.lastRecord.index + 1) ||
                 store.findRecord(me.displayField, key);
 
@@ -773,8 +969,15 @@ Ext.define(null, {
                 this.callParent(arguments);
             }
         }
-    }
+    },
 
+    refresh: function() {
+        this.callParent(arguments);
+        //show emptyText above addbutton
+        if (this.findFeature('addbutton') && this.emptyEl) {
+            this.getTargetEl().insertFirst(this.emptyEl);
+        }
+    }
 
 });
 
@@ -868,10 +1071,22 @@ Ext.define(null, {
 });
 
 Ext.apply(Ext.form.field.VTypes, {
+    email: function(value) {
+        // extend last group to {2,16}
+        return /^(")?(?:[^\."])(?:(?:[\.])?(?:[\w\-!#$%&'*+/=?^_`{|}~]))*\1@(\w[\-\w]*\.){1,5}([A-Za-z]){2,16}$/.test(value);
+    },
+
     numMask: /^[0-9]+$/,
     num: function(v) {
         return this.numMask.test(v);
     },
+    numText: 'Value should be valid integer',
+
+    floatMask: /[.0-9]/,
+    float: function(v) {
+        return /^[0-9]+(\.[0-9]+)*$/.test(v);
+    },
+    floatText: 'Value should be valid number',
 
     daterange: function(val, field) {
         var date = field.parseDate(val);
@@ -914,6 +1129,10 @@ Ext.apply(Ext.form.field.VTypes, {
     ebssize: function(value, field) {
         if (!Ext.isEmpty(value)) {
             var ebsType = field.getEbsType ? field.getEbsType() : 'standard';
+            if (!/^[0-9]+$/.test(value)) {
+                this.ebssizeText = 'Value must be an integer';
+                return;
+            }
             value = value*1;
             switch (ebsType) {
                 case 'standard':
@@ -928,7 +1147,8 @@ Ext.apply(Ext.form.field.VTypes, {
                         return false;
                     } else if (field.getEbsIops) {
                         if (Scalr.utils.getMinStorageSizeByIops(field.getEbsIops()) > value) {
-                            this.ebssizeText = 'IOPS:GB ratio must be <= 30 ';
+                            this.ebssizeText = 'IOPS:GB ratio must be <= ' + Scalr.constants.ebsMaxIopsSizeRatioIncreased
+                                + ' for 133 GB and smaller volumes, and <= ' + Scalr.constants.ebsMaxIopsSizeRatio + ' for larger volumes.';
                             return false;
                         }
                     }
@@ -944,30 +1164,25 @@ Ext.apply(Ext.form.field.VTypes, {
         return true;
     },
     ebssizeMask: /[0-9]/,
-/*
-    validator: function(value){
-        var minValue = 1,
-            container = this.up('container');
-        if (container.down('[name="db.msr.data_storage.ebs.type"]').getValue() === 'io1') {
-            minValue = Scalr.utils.getMinStorageSizeByIops(container.down('[name="db.msr.data_storage.ebs.iops"]').getValue());
-        }
-        if (value*1 > Scalr.constants.ebsMaxStorageSize) {
-            return 'Maximum value is ' + Scalr.constants.ebsMaxStorageSize + '.';
-        } else if (value*1 < minValue) {
-            return 'Minimum value is ' + minValue + '.';
-        }
-        return true;
-    },
-
- */
     password: function(value, field) {
         if (field.otherPassField) {
             var otherPassField = field.up('form').down('#' + field.otherPassField);
+            if (!otherPassField['checkValidityOnce']) {
+                otherPassField['checkValidityOnce'] = true;
+                otherPassField.isValid();
+            } else {
+                delete otherPassField['checkValidityOnce'];
+            }
+
             return otherPassField.disabled || value == otherPassField.getValue();
         }
         return true;
     },
-    passwordText: 'Passwords do not match'
+    passwordText: 'Passwords do not match',
+    ip: function(v) {
+        return (/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/).test(v);
+    },
+    ipText: 'Invalid IP address'
 });
 
 
@@ -1149,9 +1364,10 @@ Ext.define(null,{
     },
 
     instanceTypeInfo: function(data) {
-        var res = [];
+        var res = [],
+            ram = data['ram']/1024;
         res.push(data['vcpus'] + ' vCPUs');
-        res.push(Math.round(data['ram']/1024) + 'GB RAM');
+        res.push(Ext.util.Format.round(ram, ram > 1 ? undefined : 3 ) + 'GB RAM');
         if (data['disk']) res.push(data['disk'] + 'GB ' + data['type']);
         if (data['note']) res.push(data['note']);
         return res.join(', ');
@@ -1178,7 +1394,8 @@ Ext.define(null,{
     },
 
     beautifyEngine: function (engineName, engineVersion) {
-        var fullEngineText = Scalr.utils.beautifyEngineName(engineName) + '&nbsp;' + engineVersion;
+        var fullEngineText = Scalr.utils.beautifyEngineName(engineName) + '&nbsp;'
+            + (Ext.isDefined(engineVersion) ? engineVersion : '');
 
         if (engineName.indexOf('-') !== -1) {
             engineName = engineName.substring(0, engineName.indexOf('-'));
@@ -1267,17 +1484,7 @@ Ext.override(Ext.form.field.Base, {
         this.on('specialkey', function(field, e) {
             var key = e.getKey();
 
-            if (key === e.ENTER && !field.isExpanded) {
-                var form = field.up('form');
-                if (form) {
-                    var button = form.down('#buttonSubmit');
-                    if (button) {
-                        button.handler();
-                    }
-                }
-                return;
-            }
-
+            // block action when backspace call return page in browser
             if (key === e.BACKSPACE && (field.readOnly || (!field.editable && field.isExpanded === true))) {
                 e.stopEvent();
                 return;
@@ -1334,8 +1541,10 @@ Ext.override(Ext.form.field.Base, {
      */
     setActiveErrors: function (errors) {
         var me = this;
-
         errors = Ext.Array.map(Ext.Array.from(errors), Ext.String.htmlEncode);
+        if (me.nl2brErrors) {
+            errors = Ext.Array.map(errors, Ext.util.Format.nl2br);
+        }
         me.callParent([errors]);
     }
 });
@@ -1484,6 +1693,20 @@ Ext.define(null, {
                 }
             });
         }, this, {element: 'el'});
+    },
+
+    //bugfix v5.1: old series should be destroyed after setting new series
+    applySeries: function(newSeries, oldSeries) {
+        var result = this.callParent(arguments),
+            oldMap = oldSeries && oldSeries.map ? oldSeries.map : {},
+            i;
+
+        for (i in oldMap) {
+            if (!result.map[oldMap[i].getId()]) {
+                oldMap[i].destroy();
+            }
+        }
+        return result;
     },
 
     /*For Cost Analytics events series */
@@ -1663,7 +1886,7 @@ Ext.define(null, {
         me.onPlaceWatermark(chartRect[2], chartRect[3]);
         this.resizing--;
         this.resumeThicknessChanged();
-    },
+    }
 });
 
 Ext.define(null, {
@@ -1703,6 +1926,45 @@ Ext.define(null, {
         result = this.callParent(arguments);
         this.setMajorTickSteps(majorTickSteps);
         return result;
+    }
+});
+
+Ext.define(null, {
+    override: 'Ext.chart.interactions.ItemHighlight',
+    //bugfix v5.1: show tooltip for highlighted items
+    onMouseMoveGesture: function(e) {
+        var me = this,
+            item, tooltip, chart;
+        if (me.isDragging) {
+            if (me.tipItem) {
+                me.tipItem.series.hideTip(me.tipItem);
+                me.tipItem = null;
+            }
+        /*Changed*/
+        } else {
+            item = me.getItemForEvent(e);
+            chart = me.getChart();
+            if (!me.highlightItem) {
+                if (item !== chart.getHighlightItem()) {
+                    chart.setHighlightItem(item);
+                    me.sync();
+                }
+            }
+        /*End*/
+            if (this.isMousePointer) {
+                if (me.tipItem && (!item || me.tipItem.field !== item.field || me.tipItem.record !== item.record)) {
+                    me.tipItem.series.hideTip(me.tipItem);
+                    me.tipItem = null;
+                }
+                if (item && (tooltip = item.series.getTooltip())) {
+                    if (tooltip.trackMouse || !me.tipItem) {
+                        item.series.showTip(item, e.getXY());
+                    }
+                    me.tipItem = item;
+                }
+            }
+            return false;
+        }
     }
 });
 
@@ -1934,14 +2196,16 @@ Ext.define(null, {
             emptyTextDom = owner.el.down('.' + owner.ownerCt.emptyCls, true);
             bodyDom = emptyTextDom || bodyDom;
         }
-        bodyHeight = bodyDom ? bodyDom.offsetHeight : 0;
+        /*Changed: reserve height for addbutton when emptyText is visible*/
+        bodyHeight = (bodyDom ? bodyDom.offsetHeight : 0) + (emptyTextDom && owner.findFeature('addbutton') ? 40 : 0);
+        /*End*/
         if (ownerContext.headerContext.state.boxPlan.tooNarrow) {
             bodyHeight += Ext.getScrollbarSize().height;
         }
         return bodyHeight;
     }
-});
 
+});
 
 /*
     Ext.form.field.Tag
@@ -1956,6 +2220,10 @@ Ext.define(null, {
  */
 Ext.define(null, {
     override: 'Ext.form.field.Tag',
+
+    listConfig: {
+        navigationModel: 'tagboundlist'
+    },
 
     updateValue: function () {
         var me = this;
@@ -2012,9 +2280,9 @@ Ext.define(null, {
 
         if (me.rendered && emptyText) {
             isEmpty = Ext.isEmpty(me.value) && !me.hasFocus;
-            /* Changed */
+            /** CHANGED */
             if (isEmpty && !hideEmptyText) {
-             /* End */
+            /** END OF CHANGED */
                 inputEl.dom.value = '';
                 emptyEl.setHtml(emptyText);
                 emptyEl.addCls(emptyCls);
@@ -2034,9 +2302,9 @@ Ext.define(null, {
     onTriggerClick: function(preventCollapse) {
         var me = this;
         if (!me.readOnly && !me.disabled) {
-            /* Changed */
+            /** CHANGED */
             if (me.isExpanded && preventCollapse !== true) {
-            /* Changed */
+            /** END OF CHANGED */
                 me.collapse();
             } else {
                 if (me.triggerAction === 'all') {
@@ -2081,12 +2349,60 @@ Ext.define(null, {
             }
             me.inputEl.focus();
             if (me.triggerOnClick) {
-                /* Changed */
+                /** CHANGED */
                 me.onTriggerClick(true);
-                /* Changed */
+                /** END OF CHANGED */
             }
 
         }
+    },
+
+    // Prevents the raw value erasing
+    onFocusLeave: function(e) {
+        /** CHANGED */
+        if (e.target === e.event.delegatedTarget) {
+            return;
+        }
+
+        if (e.event.forwardTab) {
+            this.inputEl.dom.value = '';
+            this.focus();
+            return;
+        }
+        /** END OF CHANGED */
+
+        this.callParent([
+            e
+        ]);
+
+        this.completeEdit();
+    },
+
+    onKeyUp: function(e, t) {
+        var me = this,
+            inputEl = me.inputEl,
+            rawValue = inputEl.dom.value,
+            preventKeyUpEvent = me.preventKeyUpEvent;
+
+        if (me.preventKeyUpEvent) {
+            e.stopEvent();
+            if (preventKeyUpEvent === true || e.getKey() === preventKeyUpEvent) {
+                delete me.preventKeyUpEvent;
+            }
+            return;
+        }
+
+        /** CHANGED */
+        if (me.multiSelect && me.delimiterRegexp && me.delimiterRegexp.test(rawValue)/* ||
+                ((me.createNewOnEnter === true) && e.getKey() === e.ENTER)*/) {
+        /** END OF CHANGED */
+            rawValue = Ext.Array.clean(rawValue.split(me.delimiterRegexp));
+            inputEl.dom.value = '';
+            me.setValue(me.valueStore.getRange().concat(rawValue));
+            inputEl.focus();
+        }
+
+        me.callParent([e,t]);
     },
 
     //error qtip is not visible fix
@@ -2219,6 +2535,16 @@ Ext.define(null, {
 Ext.define(null, {
     override: 'Ext.picker.Month',
 
+    //set defaults for minDate and maxDate
+    initComponent: function () {
+        var me = this;
+
+        me.minDate = me.minDate || Ext.Date.parse('1990', 'Y');
+        me.maxDate = me.maxDate || Ext.Date.parse('2050', 'Y');
+
+        me.callParent(arguments);
+    },
+
     //fix allows to use Ext.picker.Month in monthfield - see analytics.js
     initEvents: function() {
         var me = this;
@@ -2259,13 +2585,38 @@ Ext.define(null, {
             for (m = 0; m < mLen; m++) {
                 el = Ext.fly(monthItems[m]);
                 mr = me.resolveOffset(m, monthOffset);
-                if (value == maxYear && (maxMonth && mr > maxMonth || minMonth && mr < minMonth)) {
+                if ((value == maxYear && (maxMonth && mr > maxMonth)) || (value == minYear && (minMonth && mr < minMonth))) {
                     el.parent().addCls('x-item-disabled');
                 } else {
                     el.parent().removeCls('x-item-disabled');
                 }
 
             }
+
+            /** Added */
+            var activeYear = me.activeYear;
+            var prevEl = me.prevEl;
+            var nextEl = me.nextEl;
+            var disabledCls = 'x-item-disabled';
+            var hasPrevElDisabledCls = prevEl.hasCls(disabledCls);
+            var hasNextElDisabledCls = nextEl.hasCls(disabledCls);
+
+            if (activeYear < minYear) {
+                if (!hasPrevElDisabledCls) {
+                    prevEl.addCls(disabledCls);
+                }
+            } else if (hasPrevElDisabledCls) {
+                prevEl.removeCls(disabledCls);
+            }
+
+            if (activeYear + me.totalYears > maxYear) {
+                if (!hasNextElDisabledCls) {
+                    nextEl.addCls(disabledCls);
+                }
+            } else if (hasNextElDisabledCls) {
+                nextEl.removeCls(disabledCls);
+            }
+            /** End */
 
             yearItems = years.elements;
             yLen      = yearItems.length;
@@ -2282,6 +2633,31 @@ Ext.define(null, {
 
             }
         }
+    },
+
+    // Don not update picker's body if corresponding button is disabled
+    adjustYear: function (offset) {
+        var me = this;
+
+        if (typeof offset !== 'number') {
+            offset = me.totalYears;
+        }
+
+        /** Added */
+        var disabledCls = 'x-item-disabled';
+
+        if ((offset < 0 && me.prevEl.hasCls(disabledCls)) || (offset > 0 && me.nextEl.hasCls(disabledCls))) {
+            return false;
+        }
+        /** End */
+
+        me.activeYear += offset;
+
+        me.updateBody();
+
+        /** Added */
+        return true;
+        /** End */
     },
 
     onBodyClick: function(e, t) {
@@ -2363,6 +2739,17 @@ Ext.define(null, {
     override: 'Ext.grid.feature.Grouping',
     restoreGroupsState: false,
 
+    //clear selectedrecord in collapsed group
+    doCollapseExpand: function(collapsed, groupName, focus) {
+        if (collapsed && this.view.hasSelectedRecordPlugin) {
+            var selectedRecord = this.grid.getSelectedRecord();
+            if (selectedRecord && this.groupCache[groupName] === this.getRecordGroup(selectedRecord)) {
+                this.grid.clearSelectedRecord();
+            }
+        }
+        this.callParent(arguments);
+    },
+
     disable: function() {
         var me = this;
         if (me.restoreGroupsState) {
@@ -2379,7 +2766,9 @@ Ext.define(null, {
         me.callParent(arguments);
         if (me.restoreGroupsState && Ext.isObject(me.__restoreGroupsState)) {
             Ext.Object.each(me.__restoreGroupsState, function(groupName, collapsed){
-                me[collapsed ? 'collapse' : 'expand'](groupName);
+                if (me.groupCache[groupName]) {
+                    me[collapsed ? 'collapse' : 'expand'](groupName);
+                }
             });
         }
     }
@@ -2399,8 +2788,10 @@ Ext.define(null, {
     },
 
     destroy: function() {
+        if (this.ownerGrid) {
+            this.ownerGrid.un('resize', this.onGridResize, this);
+        }
         this.callParent(arguments);
-        this.ownerGrid.un('resize', this.onGridResize, this);
     },
 
     //resize columns to fit panel width when total columns width is smaller than panel width
@@ -2410,13 +2801,12 @@ Ext.define(null, {
     },
 
     expandFlexColumns: function() {
-        Ext.suspendLayouts();
 		var headerCt = this.headerCt,
 			grid = headerCt.ownerCt || null,
             currentColumn = this.dragHd,
             columns = [];
 
-		if (!grid) return;
+		if (!grid || grid.isLocked) return;
 
 		var columnsWidth = 0,
 			panelWidth = grid.view.getWidth();
@@ -2447,8 +2837,6 @@ Ext.define(null, {
             }
             grid.resumeLayouts(true);
 		}
-
-        Ext.resumeLayouts(true);
     },
 
     //bugfix v5.1: unexpected grid reordering after resizing column
@@ -2457,3 +2845,273 @@ Ext.define(null, {
         this.headerCt.tempLock();//check this after upgrade to ExtJS 5.1.1(tempLock is not available there)
     }
 });
+
+
+Ext.define(null, {
+    override: 'Ext.Component',
+    //we use zIndexPriority to show info, warning, error messages and progress bar above popup windows
+    /*Ext.util.Floating.setZIndex*/
+    setZIndex: function(index) {
+        var me = this;
+        /** Changed */
+        me.el.setZIndex(index + ((me.zIndexPriority || 0)*10000));
+        /** End */
+        index += 10;
+        if (me.floatingDescendants) {
+            index = Math.floor(me.floatingDescendants.setBase(index) / 100) * 100 + 10000;
+        }
+        return index;
+    }
+});
+
+Ext.define(null, {
+    override: 'Ext.layout.boxOverflow.Scroller',
+
+    autoHideScrollers: false,
+
+    useDynamicScrollIncrement: false,
+
+    getScrollIncrement: Ext.emptyFn,
+
+    scrollLeft: function () {
+        var me = this;
+
+        me.scrollBy(
+            -(!me.useDynamicScrollIncrement ? me.scrollIncrement : me.getScrollIncrement()),
+            false
+        );
+    },
+
+    scrollRight: function () {
+        var me = this;
+
+        me.scrollBy(
+            !me.useDynamicScrollIncrement ? me.scrollIncrement : me.getScrollIncrement(),
+            false
+        );
+    },
+
+    updateScrollButtons: function() {
+        var me = this,
+            beforeScroller = me.getBeforeScroller(),
+            afterScroller = me.getAfterScroller(),
+            disabledCls;
+
+        if (!beforeScroller || !afterScroller) {
+            return;
+        }
+
+        disabledCls = me.scrollerCls + '-disabled';
+
+        beforeScroller[me.atExtremeBefore()  ? 'addCls' : 'removeCls'](disabledCls);
+        afterScroller[me.atExtremeAfter() ? 'addCls' : 'removeCls'](disabledCls);
+
+        if (me.autoHideScrollers) {
+            afterScroller.setVisible(!me.atExtremeAfter());
+            beforeScroller.setVisible(!me.atExtremeBefore());
+        }
+
+        me.scrolling = false;
+    },
+
+    atExtremeAfter: function () {
+        var me = this;
+
+        if (Ext.firefoxVersion === 0) {
+            return me.callParent();
+        }
+
+        var maxScrollPosition = me.getMaxScrollPosition();
+        var scrollPosition = me.getScrollPosition();
+
+        if (maxScrollPosition - scrollPosition === 1) {
+            return true;
+        }
+
+        return scrollPosition >= maxScrollPosition;
+    },
+});
+
+/*
+ * added in v5.1.0
+ * default sort should be case-insensitive
+ */
+Ext.define(null, {
+    override: 'Ext.data.AbstractStore',
+
+    addFieldTransform: function(sorter) {
+        var me = this;
+        me.callParent(arguments);
+
+        if (! sorter.getTransform()) {
+            sorter.setTransform(function(value) {
+                if (Ext.isString(value)) {
+                    value = value.toLowerCase();
+                }
+
+                return value;
+            });
+        }
+    }
+});
+
+/*
+ * added in v5.1.0, back-ported from v5.1.1
+ */
+Ext.define(null, {
+    override: 'Ext.selection.Model',
+
+    updateSelectedInstances: function(selected) {
+        var me = this,
+            store = me.getStore(),
+            lastSelected = me.lastSelected,
+            removeCount = 0,
+            prune = me.pruneRemovedOnRefresh(),
+            items, length, i, selectedRec, rec,
+            lastSelectedChanged;
+
+        if (store.isBufferedStore) {
+            return;
+        }
+
+        items = selected.getRange();
+        length = items.length;
+
+        if (lastSelected) {
+            me.lastSelected = store.getById(lastSelected.id);
+            lastSelectedChanged = me.lastSelected !== lastSelected;
+        }
+
+        // Flag so that reactors to collectionEndUpdate know that the collection is not really changing
+        me.refreshing = true;
+        for (i = 0; i < length; ++i) {
+            selectedRec = items[i];
+
+            // Is the selected record ID still present in the store?
+            rec = store.getById(selectedRec.id);
+
+            // Yes, ensure the instance is correct
+            if (rec) {
+                if (rec !== selectedRec) {
+                    // Silently replace the stale record instance with the new record by the same ID
+                    selected.replace(rec);
+                }
+            }
+            // No, remove it from the selection if we are configured to prune removed records
+            else if (prune) {
+                selected.remove(selectedRec);
+                ++removeCount;
+            }
+        }
+        me.refreshing = false;
+        me.maybeFireSelectionChange(removeCount > 0);
+        if (lastSelectedChanged) {
+            // Private event for now
+            me.fireEvent('lastselectedchanged', me, me.getSelection(), me.lastSelected);
+        }
+    }
+});
+
+//Begin ExtJS v5.1.0 emptyText fix, remove after switching to v5.1.1
+Ext.define(null, {
+    override: 'Ext.view.AbstractView',
+    addEmptyText: function() {
+        var me = this,
+            store = me.getStore();
+
+        if (me.emptyText && !store.isLoading() && (!me.deferEmptyText || me.refreshCounter > 1 || store.isLoaded())) {
+            me.emptyEl = Ext.core.DomHelper.insertHtml('beforeEnd', me.getTargetEl().dom, me.emptyText);
+        }
+    }
+});
+
+Ext.define(null, {
+    override: 'Ext.grid.plugin.BufferedRenderer',
+
+    refreshView: function() {
+        if (!this.store.getCount()) {
+            return this.doRefreshView([], 0, 0);
+        }
+        this.callParent(arguments);
+    },
+
+    doRefreshView: function(range, startIndex, endIndex, options) {
+        var me = this,
+            view = me.view,
+            navModel = view.getNavigationModel(),
+            focusPosition = navModel.getPosition(),
+            rows = view.all,
+            previousStartIndex = rows.startIndex,
+            previousEndIndex = rows.endIndex,
+            previousFirstItem, previousLastItem,
+            prevRowCount = rows.getCount(),
+            newNodes,
+            viewMoved = startIndex !== rows.startIndex,
+            calculatedTop, scrollIncrement;
+        if (view.refreshCounter) {
+            if (focusPosition && focusPosition.view === view) {
+                focusPosition = focusPosition.clone();
+                navModel.setPosition();
+            } else {
+                focusPosition = null;
+            }
+            view.refreshing = me.refreshing = true;
+            view.clearViewEl(true);
+            view.refreshCounter++;
+            if (range.length) {
+                newNodes = view.doAdd(range, startIndex);
+                if (viewMoved) {
+                    previousFirstItem = rows.item(previousStartIndex, true);
+                    previousLastItem = rows.item(previousEndIndex, true);
+                    if (previousFirstItem) {
+                        scrollIncrement = -previousFirstItem.offsetTop;
+                    } else if (previousLastItem) {
+                        scrollIncrement = previousLastItem.offsetTop + previousLastItem.offsetHeight;
+                    }
+                    if (scrollIncrement) {
+                        me.setBodyTop(me.bodyTop += scrollIncrement);
+                        view.suspendEvent('scroll');
+                        view.setScrollY(me.position = me.scrollTop = me.bodyTop ? me.scrollTop + scrollIncrement : 0);
+                        view.resumeEvent('scroll');
+                    } else
+                    {
+                        me.setBodyTop(me.bodyTop = calculatedTop = startIndex * me.rowHeight);
+                        view.suspendEvent('scroll');
+                        view.setScrollY(me.position = me.scrollTop = Math.max(calculatedTop - me.rowHeight * (calculatedTop < me.bodyTop ? me.leadingBufferZone : me.trailingBufferZone , 0)));
+                        view.resumeEvent('scroll');
+                    }
+                }
+            }
+            /*Changed*/
+            else {
+                if (me.scrollTop) {
+                    me.bodyTop = me.scrollTop = 0;
+                }
+                view.addEmptyText();
+            }
+            /*End*/
+            me.refreshSize();
+            view.refreshSize(rows.getCount() !== prevRowCount);
+            view.fireEvent('refresh', view, range);
+            if (focusPosition) {
+                view.cellFocused = true;
+                navModel.setPosition(focusPosition, null, null, null, true);
+            }
+            view.headerCt.setSortState();
+            view.refreshNeeded = view.refreshing = me.refreshing = false;
+        } else {
+            view.refresh();
+        }
+    },
+
+});
+//End ExtJS 5.1.0 emptyText fix
+
+/*
+ * added in v5.1.0
+ */
+ Ext.apply(Ext.data.SortTypes, {
+     asBool: function(value){
+         return value ? 1 : 0;
+     }
+ });

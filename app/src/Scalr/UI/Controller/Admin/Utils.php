@@ -34,24 +34,4 @@ class Scalr_UI_Controller_Admin_Utils extends Scalr_UI_Controller
     {
         $this->response->page('ui/admin/utils/mapPermissions.js', array('map' => $this->getPermissions(SRCPATH . '/Scalr/UI/Controller')));
     }
-
-    public function debugAction()
-    {
-        $this->response->page('ui/admin/utils/debug.js', Scalr_Session::getInstance()->getDebugMode());
-    }
-
-    /**
-     * @param bool $enabled
-     * @throws Scalr_UI_Exception_NotFound
-     */
-    public function xSaveDebugAction($enabled = false)
-    {
-        Scalr_Session::getInstance()->setDebugMode(['enabled' => $enabled]);
-
-        if ($enabled) {
-            $this->response->data(['js' => $this->response->getModuleName('ui-debug.js')]);
-        }
-
-        $this->response->success('Debug parameters have applied');
-    }
 }

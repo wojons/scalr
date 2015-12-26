@@ -70,7 +70,7 @@ class Events
     /**
      * Gets formated event list
      *
-     * @param $interval              $interval   Interval of the each point on the chart
+     * @param string                 $interval   Interval of the each point on the chart
      * @param \DateTime              $begin      Start date of the period on the chart
      * @param \DateTime              $end        The end date of the period on the chart
      * @param array                  $criteria   optional Filter array ['filterId' => 'value']

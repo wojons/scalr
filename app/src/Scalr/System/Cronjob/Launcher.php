@@ -25,7 +25,7 @@ class Scalr_System_Cronjob_Launcher {
         foreach ($config as $k => $v) {
             $this->{$k} = $v;
         }
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
     }
 
     function launch ($args=null) {
@@ -114,7 +114,7 @@ class Scalr_System_Cronjob_Launcher {
         if (is_subclass_of($jobClassName, "Scalr_System_Cronjob_MultiProcess_Worker")) {
             $jobConfig["worker"] = new $jobClassName;
 
-            if ($jobConfig["distributed"]) {
+            if (!empty($jobConfig["distributed"])) {
                 $jobClassName = "Scalr_System_Cronjob_Distributed";
             } else {
                 $jobClassName = "Scalr_System_Cronjob_MultiProcess";
@@ -133,7 +133,7 @@ class Scalr_System_Cronjob_Launcher {
         $jobConfig = call_user_func(array($jobClassName, "getConfig"));
 
         if (is_subclass_of($jobClassName, "Scalr_System_Cronjob_MultiProcess_Worker")) {
-            if ($jobConfig["distributed"]) {
+            if (!empty($jobConfig["distributed"])) {
                 $inheritConfig = Scalr_System_Cronjob_Distributed::getConfig();
             } else {
                 $inheritConfig = Scalr_System_Cronjob_MultiProcess::getConfig();

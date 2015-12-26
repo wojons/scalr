@@ -5,7 +5,7 @@ namespace Scalr\Tests\Functional\Api\Service\User\V1beta0\Controller;
 use Scalr\Api\DataType\ErrorMessage;
 use Scalr\Api\Rest\Controller\ApiController;
 use Scalr\Api\Rest\Http\Request;
-use Scalr\Api\Service\User\V1beta0\Adapter\RoleScriptAdapter;
+use Scalr\Api\Service\User\V1beta0\Adapter\OrchestrationRules\RoleScriptAdapter;
 use Scalr\Model\Entity\Role;
 use Scalr\Model\Entity\RoleScript;
 use Scalr\Model\Entity\Script;
@@ -48,7 +48,7 @@ class RoleScriptsTest extends ScriptsTestCase
 
     public function ruleToDelete($ruleId)
     {
-        static::$testData['Scalr\Model\Entity\RoleScript'][] = $ruleId;
+        static::toDelete('Scalr\Model\Entity\RoleScript', $ruleId);
     }
 
     /**
@@ -145,6 +145,7 @@ class RoleScriptsTest extends ScriptsTestCase
         $user = $this->getUser();
         $environment = $this->getEnvironment();
         $fictionController = new ApiController();
+        $adapter = $this->getAdapter('OrchestrationRules\RoleScript');
 
         //foreach iterates through values in order of ads
         //we need to remove rules first, then - scripts
@@ -157,12 +158,19 @@ class RoleScriptsTest extends ScriptsTestCase
         /* @var $role Role */
         $role = array_shift($roles);
 
+        if (empty($role)) {
+            $this->markTestSkipped('Not found roles to test role-script');
+        }
+
         /* @var $scalrRole Role */
-        $scalrRole = Role::findOne([[ 'envId' => null, 'accountId' => null ]]);
+        $scalrRole = Role::findOne([
+            ['envId'     => null],
+            ['accountId' => null]
+        ]);
 
         /* @var $script Script */
         $script = static::createEntity(new Script(), [
-            'name' => 'test-role-scripts',
+            'name'        => 'test-role-scripts',
             'description' => 'test-role-scripts',
             ''
         ]);
@@ -182,13 +190,13 @@ class RoleScriptsTest extends ScriptsTestCase
 
         $scalrRoleScriptData = [
             'trigger' => [
-                'type' => RoleScriptAdapter::TRIGGER_SINGLE_EVENT,
+                'triggerType' => RoleScriptAdapter::TRIGGER_SINGLE_EVENT,
                 'event' => [
                     'id' => 'HostInit'
                 ]
             ],
             'target' => [
-                'type' => RoleScriptAdapter::TARGET_TRIGGERING_FARM_ROLE
+                'targetType' => RoleScriptAdapter::TARGET_NAME_TRIGGERING_FARM_ROLE
             ],
             'action' => [
                 'actionType' => RoleScriptAdapter::ACTION_SCRIPT,
@@ -203,14 +211,14 @@ class RoleScriptsTest extends ScriptsTestCase
 
         $localRoleScriptData = [
             'trigger' => [
-                'type' => RoleScriptAdapter::TRIGGER_ALL_EVENTS
+                'triggerType' => RoleScriptAdapter::TRIGGER_ALL_EVENTS
             ],
             'target' => [
-                'type' => RoleScriptAdapter::TARGET_NULL
+                'targetType' => RoleScriptAdapter::TARGET_NAME_NULL
             ],
             'action' => [
                 'actionType' => RoleScriptAdapter::ACTION_URI,
-                'uri' => 'https://example.com'
+                'path' => 'https://example.com'
             ]
         ];
 
@@ -228,7 +236,7 @@ class RoleScriptsTest extends ScriptsTestCase
 
         $this->ruleToDelete($ruleId);
 
-        $this->assertObjectEqualsEntity($scalrRoleScriptData, $rule);
+        $this->assertObjectEqualsEntity($scalrRoleScriptData, $rule, $adapter);
 
         //post local rule
         $response = $this->postRule($role->id, $localRoleScriptData);
@@ -244,7 +252,7 @@ class RoleScriptsTest extends ScriptsTestCase
 
         $this->ruleToDelete($ruleId);
 
-        $this->assertObjectEqualsEntity($localRoleScriptData, $rule);
+        $this->assertObjectEqualsEntity($localRoleScriptData, $rule, $adapter);
 
         //post rule to environment-scoped role
         $response = $this->postRule($scalrRole->id, $scalrRoleScriptData);
@@ -267,7 +275,7 @@ class RoleScriptsTest extends ScriptsTestCase
 
         //post rule with script that does not exists
         $data = $scalrRoleScriptData;
-        $data['action']['scriptVersion']['script']['id'] = Script::findOne([], [ 'id' => true ])->id + 1;
+        $data['action']['scriptVersion']['script']['id'] = Script::findOne([], null, ['id' => true])->id + 1;
 
         $response = $this->postRule($role->id, $data);
 
@@ -310,15 +318,15 @@ class RoleScriptsTest extends ScriptsTestCase
 
         $this->assertEquals(200, $response->status, $this->printResponseError($response));
 
-        $this->assertObjectEqualsEntity($response->getBody()->data, $rule);
+        $this->assertObjectEqualsEntity($response->getBody()->data, $rule, $adapter);
 
         //fetch rule that doe not exists
-        $response = $this->getRule($role->id, RoleScript::findOne([], [ 'id' => '' ])->id + 1);
+        $response = $this->getRule($role->id, RoleScript::findOne([], null, ['id' => false])->id + 1);
 
         $this->assertErrorMessageContains($response, 404, ErrorMessage::ERR_OBJECT_NOT_FOUND);
 
         //fetch rule with missmatch role id
-        $response = $this->getRule(Role::findOne([], [ 'id' => '' ])->id + 1, $rule->id);
+        $response = $this->getRule(Role::findOne([], null, ['id' => false])->id + 1, $rule->id);
 
         $this->assertErrorMessageContains($response, 400, ErrorMessage::ERR_INVALID_VALUE);
 
@@ -363,7 +371,7 @@ class RoleScriptsTest extends ScriptsTestCase
         $this->assertErrorMessageContains($response, 403, ErrorMessage::ERR_PERMISSION_VIOLATION);
 
         //delete script that does not exists
-        $response = $this->deleteRule($role->id, RoleScript::findOne([], [ 'id' => '' ])->id + 1);
+        $response = $this->deleteRule($role->id, RoleScript::findOne([], null, ['id' => false])->id + 1);
 
         $this->assertErrorMessageContains($response, 404, ErrorMessage::ERR_OBJECT_NOT_FOUND);
     }

@@ -1,6 +1,6 @@
 <?php
 
-class CheckFailedEvent extends Event
+class CheckFailedEvent extends AbstractServerEvent
 {
 
     public $DBServer;

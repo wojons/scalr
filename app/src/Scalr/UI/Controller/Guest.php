@@ -1,14 +1,18 @@
 <?php
 
 use Scalr\Modules\PlatformFactory;
-use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 use Scalr\Model\Entity\Tag;
 use Scalr\Model\Entity\Os;
 use Scalr\UI\Request\RawData;
 use Scalr\UI\Request\JsonData;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 use Scalr\Util\CryptoTool;
-use Scalr\Acl\Acl;
+use \Scalr\AuditLogger;
+use Scalr\DataType\ScopeInterface;
+use Scalr\UI\Request\Validator;
+use Scalr\Model\Entity\CloudCredentialsProperty;
+use Scalr\Model\Entity\CloudCredentials;
+use Scalr\Model\Entity\Account\User;
 
 class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 {
@@ -16,6 +20,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 
     public function logoutAction()
     {
+        $this->auditLog("user.auth.logout", ['result' => 'success']);
         Scalr_Session::destroy();
         $this->response->setRedirect('/');
     }
@@ -41,12 +46,13 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
             $this->response->getModuleName("ui-form.js"),
             $this->response->getModuleName("ui-grid.js"),
             $this->response->getModuleName("ui-plugins.js"),
-            $this->response->getModuleName("ui.js")
+            $this->response->getModuleName("ui.js"),
+            $this->response->getModuleName("resourcesearch.js")
         );
 
-        $mode = Scalr_Session::getInstance()->getDebugMode();
-        if (isset($mode['enabled']) && $mode['enabled'])
+        if (Scalr_Session::getInstance()->getDebugMode()) {
             $initParams['extjs'][] = $this->response->getModuleName('ui-debug.js');
+        }
 
         $initParams['css'] = array(
             $this->response->getModuleName("ui.css")
@@ -58,6 +64,10 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
         $this->response->data(array('initParams' => $initParams));
     }
 
+    /**
+     * @param  int $uiStorageTime optional
+     * @return array
+     */
     public function getContext($uiStorageTime = 0)
     {
         $data = array();
@@ -69,12 +79,18 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                 'gravatarHash' => $this->user->getGravatarHash(),
                 'envId' => $this->getEnvironment() ? $this->getEnvironmentId() : 0,
                 'envName'  => $this->getEnvironment() ? $this->getEnvironment()->name : '',
-                'envVars' => $this->getEnvironment() ? $this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_UI_VARS) : '',
+                'envVars' => '',
                 'type' => $this->user->getType(),
                 'settings' => [
-                    Scalr_Account_User::VAR_SSH_CONSOLE_LAUNCHER => $this->user->getVar(Scalr_Account_User::VAR_SSH_CONSOLE_LAUNCHER)
+                    Scalr_Account_User::SETTING_UI_TIMEZONE => $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE)
                 ]
             );
+
+            if ($this->getEnvironment()) {
+                $data['user']['envVars'] = $this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_UI_VARS);
+            } else if ($this->user->getAccountId()) {
+                $data['user']['envVars'] = $this->user->getAccount()->getSetting(Scalr_Account::SETTING_UI_VARS);
+            }
 
             if (($uiStorageTime > 0) && ($uiStorageTime < $this->user->getSetting(Scalr_Account_User::SETTING_UI_STORAGE_TIME)) && !Scalr_Session::getInstance()->isVirtual()) {
                 $data['user']['uiStorage'] = $this->user->getVar(Scalr_Account_User::VAR_UI_STORAGE);
@@ -129,32 +145,44 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 
             //OS
             $data['os'] = [];
-            foreach (Os::find([['status' => Os::STATUS_ACTIVE]]) as $os) {
+            foreach (Os::find() as $os) {
                 /* @var $os Os */
                 $data['os'][] = [
                     'id' => $os->id,
                     'family' => $os->family,
                     'name' => $os->name,
                     'generation' => $os->generation,
-                    'version' => $os->version
+                    'version' => $os->version,
+                    'status' => $os->status
                 ];
             }
+
+            $data['defaults'] = (new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(true), ScopeInterface::SCOPE_ENVIRONMENT))->getUiDefaults();
 
             $data['platforms'] = [];
             $allowedClouds = (array) \Scalr::config('scalr.allowed_clouds');
 
-            foreach (SERVER_PLATFORMS::getList() as $platform => $platformName) {
+            if ($this->user->getAccountId() == 263)
+                array_push($allowedClouds, SERVER_PLATFORMS::VERIZON);
 
-                if ($this->user->getAccountId() == 263)
-                    array_push($allowedClouds, SERVER_PLATFORMS::VERIZON);
+            $platforms = SERVER_PLATFORMS::getList();
+            if (!($this->request->getHeaderVar('Interface-Beta') || $betaMode)) {
+                $platforms = array_intersect_key($platforms, array_flip($allowedClouds));
+            }
 
-                if (!in_array($platform, $allowedClouds) && !$this->request->getHeaderVar('Interface-Beta')) {
+            $environment = $this->getEnvironment();
+            if (!empty($environment)) {
+                $cloudsCredentials = $environment->cloudCredentialsList(array_keys($platforms));
+            }
+
+            foreach ($platforms as $platform => $platformName) {
+                if (!in_array($platform, $allowedClouds) && !$this->request->getHeaderVar('Interface-Beta') && !$betaMode) {
                     continue;
                 }
 
                 $data['platforms'][$platform] = array(
                     'public'  => PlatformFactory::isPublic($platform),
-                    'enabled' => ($this->user->isAdmin() || $this->request->getScope() != 'environment') ? true : !!$this->environment->isPlatformEnabled($platform),
+                    'enabled' => ($this->user->isAdmin() || $this->request->getScope() != 'environment') ? true : (isset($cloudsCredentials[$platform]) && $cloudsCredentials[$platform]->isEnabled()),
                     'name'    => $platformName,
                 );
 
@@ -164,20 +192,21 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                     }
 
                     if (PlatformFactory::isOpenstack($platform) && $data['platforms'][$platform]['enabled']) {
-                        $data['platforms'][$platform]['config'] = array(
-                            OpenstackPlatformModule::EXT_SECURITYGROUPS_ENABLED => PlatformFactory::NewPlatform($platform)->getConfigVariable(OpenstackPlatformModule::EXT_SECURITYGROUPS_ENABLED, $this->getEnvironment(), false),
-                            OpenstackPlatformModule::EXT_LBAAS_ENABLED => PlatformFactory::NewPlatform($platform)->getConfigVariable(OpenstackPlatformModule::EXT_LBAAS_ENABLED, $this->getEnvironment(), false),
-                            OpenstackPlatformModule::EXT_FLOATING_IPS_ENABLED => PlatformFactory::NewPlatform($platform)->getConfigVariable(OpenstackPlatformModule::EXT_FLOATING_IPS_ENABLED, $this->getEnvironment(), false),
-                            OpenstackPlatformModule::EXT_CINDER_ENABLED => PlatformFactory::NewPlatform($platform)->getConfigVariable(OpenstackPlatformModule::EXT_CINDER_ENABLED, $this->getEnvironment(), false),
-                            OpenstackPlatformModule::EXT_SWIFT_ENABLED => PlatformFactory::NewPlatform($platform)->getConfigVariable(OpenstackPlatformModule::EXT_SWIFT_ENABLED, $this->getEnvironment(), false)
-                        );
+                        $ccProps = $cloudsCredentials[$platform]->properties;
+                        $data['platforms'][$platform]['config'] = [
+                            CloudCredentialsProperty::OPENSTACK_EXT_SECURITYGROUPS_ENABLED  => $ccProps[CloudCredentialsProperty::OPENSTACK_EXT_SECURITYGROUPS_ENABLED],
+                            CloudCredentialsProperty::OPENSTACK_EXT_LBAAS_ENABLED           => $ccProps[CloudCredentialsProperty::OPENSTACK_EXT_LBAAS_ENABLED],
+                            CloudCredentialsProperty::OPENSTACK_EXT_FLOATING_IPS_ENABLED    => $ccProps[CloudCredentialsProperty::OPENSTACK_EXT_FLOATING_IPS_ENABLED],
+                            CloudCredentialsProperty::OPENSTACK_EXT_CINDER_ENABLED          => $ccProps[CloudCredentialsProperty::OPENSTACK_EXT_CINDER_ENABLED],
+                            CloudCredentialsProperty::OPENSTACK_EXT_SWIFT_ENABLED           => $ccProps[CloudCredentialsProperty::OPENSTACK_EXT_SWIFT_ENABLED]
+                        ];
                     }
                 }
             }
 
             $data['flags']['uiStorageTime'] = $this->user->getSetting(Scalr_Account_User::SETTING_UI_STORAGE_TIME);
             $data['flags']['uiStorage'] = $this->user->getVar(Scalr_Account_User::VAR_UI_STORAGE);
-            $data['flags']['allowManageAnalytics'] = (bool) Scalr::isAllowedAnalyticsOnHostedScalrAccount($this->environment->clientId);
+            $data['flags']['allowManageAnalytics'] = $this->user->getAccountId() && Scalr::isAllowedAnalyticsOnHostedScalrAccount($this->user->getAccountId());
 
             $data['scope'] = $this->request->getScope();
             if ($this->request->getScope() == 'environment') {
@@ -186,8 +215,9 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
             }
         }
 
-        if ($this->user)
+        if ($this->user) {
             $data['tags'] = Tag::getAll($this->user->getAccountId());
+        }
 
         $data['flags']['authMode'] = $this->getContainer()->config->get('scalr.auth_mode');
         $data['flags']['recaptchaPublicKey'] = $this->getContainer()->config->get('scalr.ui.recaptcha.public_key');
@@ -229,77 +259,52 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
     }
 
     /**
-     * @param string $name
-     * @param string $org
-     * @param $email
-     * @param $password
-     * @param string $agreeTerms
-     * @param string $newBilling
-     * @param string $country
-     * @param string $phone
-     * @param string $lastname
-     * @param string $firstname
-     * @param string $v
-     * @param string $numServers
+     * @param string  $name
+     * @param string  $org
+     * @param string  $email
+     * @param RawData $password
+     * @param string  $agreeTerms
+     * @param string  $newBilling
+     * @param string  $country
+     * @param string  $phone
+     * @param string  $lastname
+     * @param string  $firstname
+     * @param string  $v
+     * @param string  $numServers
      */
-    public function xCreateAccountAction($name = '', $org = '', $email = '', $password = '', $agreeTerms = '', $newBilling = '', $country = '', $phone = '', $lastname = '', $firstname = '', $v = '', $numServers = '', $beta = 0)
+    public function xCreateAccountAction($name = '', $org = '', $email = '', RawData $password = null, $agreeTerms = '', $newBilling = '', $country = '', $phone = '', $lastname = '', $firstname = '', $v = '', $numServers = '', $beta = 0)
     {
         if (!\Scalr::config('scalr.billing.enabled')) {
             header("HTTP/1.0 403 Forbidden");
             exit();
         }
 
-        $Validator = new Scalr_Validator();
+        $validator = new Validator();
 
         if ($v == 2) {
-            if (!$firstname) {
-                $err['firstname'] = _("First name required");
-            }
-
-            if (!$lastname) {
-                $err['lastname'] = _("Last name required");
-            }
-
-//             if (!$org) {
-//                 $err['org'] = _("Organization required");
-//             }
-
+            $validator->validate($firstname, "firstname", Validator::NOEMPTY, [], "First name is required");
+            $validator->validate($lastname, "lastname", Validator::NOEMPTY, [], "Last name is required");
             $name = $firstname . " " . $lastname;
-
         } else {
-            if (!$name) {
-                $err['name'] = _("Account name required");
-            }
+            $validator->validate($name, "name", Validator::NOEMPTY, [], "Account name is required");
         }
 
-        if (!$password) {
-            $password = $this->getCrypto()->sault(10);
+        if ($password == '') {
+            $password = \Scalr::GenerateSecurePassword(User::PASSWORD_ADMIN_LENGTH);
         }
 
-        if (!$email) {
-            $err['email'] = _("E-mail address required");
-        }
+        $validator->validate($email, "email", Validator::EMAIL);
+        $validator->validate($password, "password", Validator::PASSWORD, ['admin']);
+        $validator->addErrorIf(
+            $this->db->GetOne("SELECT EXISTS(SELECT * FROM account_users WHERE email = ?)", [$email]),
+            "email",
+            "E-mail already exists in the database"
+        );
+        $validator->validate($agreeTerms, "agreeTerms", Validator::NOEMPTY, [], "You haven't accepted terms and conditions");
 
-        if ($Validator->validateEmail($email, null, true) !== true) {
-            $err['email'] = _("Invalid E-mail address");
-        }
+        $errors = $validator->getErrors(true);
 
-        if (strlen($password) < 6) {
-            $err['password'] = _("Password should be longer than 6 chars");
-        }
-
-        // Check email
-        $DBEmailCheck = $this->db->GetOne("SELECT COUNT(*) FROM account_users WHERE email=?", array($email));
-
-        if ($DBEmailCheck > 0) {
-            $err['email'] = _("E-mail already exists in database");
-        }
-
-        if (!$agreeTerms) {
-            $err['agreeTerms'] = _("You need to agree with terms and conditions");
-        }
-
-        if (count($err) == 0) {
+        if (empty($errors)) {
             $account = Scalr_Account::init();
             $account->name = $org ? $org : $name;
             $account->status = Scalr_Account::STATUS_ACTIVE;
@@ -417,28 +422,61 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
         } else {
             if ($beta == 1) {
                 header("HTTP/1.0 400 Bad request");
-                print json_encode($err);
+                print json_encode($errors);
                 exit();
             } else {
-                $errors = array_values($err);
-                $error = $errors[0];
+                $error = array_values($errors)[0];
                 $this->response->setRedirect("{$url}/order/?error={$error}");
             }
         }
     }
 
     /**
-     * @param $login
-     * @param $password
-     * @param $accountId
-     * @param $scalrCaptcha
-     * @param $scalrCaptchaChallenge
+     * @param   string          $captcha
+     * @return  bool|string     Return true or string if error
+     * @throws  \Scalr\System\Config\Exception\YamlException
+     */
+    public function validateReCaptcha($captcha)
+    {
+        $curl = curl_init();
+        curl_setopt($curl, CURLOPT_URL, 'https://www.google.com/recaptcha/api/siteverify');
+        curl_setopt($curl, CURLOPT_POST, true);
+        $post = 'secret=' . urlencode($this->getContainer()->config->get('scalr.ui.recaptcha.private_key')) .
+            '&remoteip=' . urlencode($this->request->getRemoteAddr()) .
+            '&response=' . urlencode($captcha);
+
+        curl_setopt($curl, CURLOPT_POSTFIELDS, $post);
+        curl_setopt($curl, CURLOPT_TIMEOUT, 10);
+        curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLINFO_HEADER_OUT, true);
+
+        $response = curl_exec($curl);
+        curl_close($curl);
+        $responseObject = json_decode($response, true);
+
+        if ($responseObject) {
+            if ($responseObject['success'] == true) {
+                return true;
+            } else {
+                return is_array($responseObject['error-codes']) ? join(', ', $responseObject['error-codes']) : 'Error response';
+            }
+        } else {
+            return 'No response';
+        }
+    }
+
+    /**
+     * @param string $login
+     * @param string $password
+     * @param int    $accountId
+     * @param string $scalrCaptcha
      * @return Scalr_Account_User
      * @throws Exception
      * @throws Scalr_Exception_Core
      * @throws \Scalr\System\Config\Exception\YamlException
      */
-    private function loginUserGet($login, $password, $accountId, $scalrCaptcha, $scalrCaptchaChallenge)
+    private function loginUserGet($login, $password, $accountId, $scalrCaptcha)
     {
         if ($login != '' && $password != '') {
             $isAdminLogin = $this->db->GetOne('SELECT * FROM account_users WHERE email = ? AND account_id = 0', array($login));
@@ -481,7 +519,6 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                     $userAvailableAccounts = array();
 
                     if ($ldap->getConfig()->debug) {
-                        $this->response->varDump($groups);
                         $this->response->setHeader('X-Scalr-LDAP-Debug', json_encode($ldap->getLog()));
                     }
 
@@ -509,14 +546,12 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                     }
                     $userAvailableAccounts = array_values($userAvailableAccounts);
 
-                    if (count($userAvailableAccounts) == 0) {
+                    if (empty($userAvailableAccounts)) {
                         throw new Scalr_Exception_Core(
                             'You don\'t have access to any account. '
                           . $ldap->getLog()
                         );
-                    }
-
-                    if (count($userAvailableAccounts) == 1) {
+                    } elseif (count($userAvailableAccounts) == 1) {
                         $accountId = $userAvailableAccounts[0]['id'];
                     } else {
                         $ids = array();
@@ -545,7 +580,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                         $user->fullname = $ldap->getFullName();
                         $user->save();
                     }
-                    
+
                     if ($ldap->getUsername() != $ldap->getEmail()) {
                         $user->setSetting(Scalr_Account_User::SETTING_LDAP_EMAIL, $ldap->getEmail());
                         $user->setSetting(Scalr_Account_User::SETTING_LDAP_USERNAME, $ldap->getUsername());
@@ -576,7 +611,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                     $user = new Scalr_Account_User();
                     $user->loadById($userAvailableAccounts[0]['userId']);
 
-                } else if (count($userAvailableAccounts) > 1) {
+                } elseif (count($userAvailableAccounts) > 1) {
                     if ($accountId) {
                         foreach($userAvailableAccounts as $acc) {
                             if ($acc['id'] == $accountId) {
@@ -597,36 +632,30 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                 }
 
                 if ($user) {
+                    if ($user->status != User::STATUS_ACTIVE) {
+                        throw new Exception('User account has been deactivated. Please contact your account owner.');
+                    }
+
                     // kaptcha
-                    if (($user->loginattempts > 2) && $this->getContainer()->config->get('scalr.ui.recaptcha.private_key')) {
-                        $curl = curl_init();
-                        curl_setopt($curl, CURLOPT_URL, 'http://www.google.com/recaptcha/api/verify');
-                        curl_setopt($curl, CURLOPT_POST, true);
-                        $post = 'privatekey=' . urlencode($this->getContainer()->config->get('scalr.ui.recaptcha.private_key')) .
-                            '&remoteip=' . urlencode($this->request->getRemoteAddr()) .
-                            '&challenge=' . urlencode($scalrCaptchaChallenge) .
-                            '&response=' . urlencode($scalrCaptcha);
-
-                        curl_setopt($curl, CURLOPT_POSTFIELDS, $post);
-                        curl_setopt($curl, CURLOPT_TIMEOUT, 10);
-                        curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
-                        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-                        curl_setopt($curl, CURLINFO_HEADER_OUT, true);
-
-                        $response = curl_exec($curl);
-                        curl_close($curl);
-                        $responseStrings = explode("\n", $response);
-
-                        if ($responseStrings[0] !== 'true') {
+                    if (($user->loginattempts > 3) && $this->getContainer()->config->get('scalr.ui.recaptcha.private_key')) {
+                        if (!$scalrCaptcha || ($r = $this->validateReCaptcha($scalrCaptcha)) !== true) {
                             $this->response->data(array(
                                 'loginattempts' => $user->loginattempts,
-                                'kaptchaError' => $response
+                                'scalrCaptchaError' => isset($r) ? $r : 'empty-value'
                             ));
                             throw new Exception();
                         }
                     }
 
                     if (! $user->checkPassword($password)) {
+                        $attempts = (int) $this->getContainer()->config->get('scalr.security.user.suspension.failed_login_attempts');
+                        if ($attempts > 0 && $user->loginattempts >= $attempts && $user->getEmail() != 'admin') {
+                            $user->status = User::STATUS_INACTIVE;
+                            $user->loginattempts = 0;
+                            $user->save();
+                            throw new Exception('User account has been deactivated. Please contact your account owner.');
+                        }
+
                         if ($this->getContainer()->config->get('scalr.ui.recaptcha.private_key')) {
                             $this->response->data(array(
                                 'loginattempts' => $user->loginattempts
@@ -646,7 +675,6 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                 if (! Scalr_Util_Network::isIpInSubnets($this->request->getRemoteAddr(), $subnets))
                     throw new Exception('The IP address you are attempting to log in from isn\'t authorized');
             }
-
             return $user;
         } else {
             throw new Exception('Incorrect login or password (0)');
@@ -655,7 +683,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 
     /**
      * @param Scalr_Account_User $user
-     * @param bool $keepSession
+     * @param bool               $keepSession
      */
     private function loginUserCreate($user, $keepSession)
     {
@@ -673,58 +701,99 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
     }
 
     /**
-     * @param string $scalrLogin
+     * @param string  $scalrLogin
      * @param RawData $scalrPass
-     * @param bool $scalrKeepSession
-     * @param int $accountId
-     * @param string $tfaGglCode
-     * @param bool $tfaGglReset
-     * @param string $scalrCaptcha
-     * @param string $scalrCaptchaChallenge
+     * @param bool    $scalrKeepSession
+     * @param int     $accountId
+     * @param string  $tfaGglCode
+     * @param bool    $tfaGglReset
+     * @param string  $scalrCaptcha
+     * @param string  $scalrCaptchaChallenge
      */
     public function xLoginAction($scalrLogin, RawData $scalrPass, $scalrKeepSession = false, $accountId = 0, $tfaGglCode = '', $tfaGglReset = false, $scalrCaptcha = '', $scalrCaptchaChallenge = '')
     {
         $user = $this->loginUserGet($scalrLogin, $scalrPass, $accountId, $scalrCaptcha, $scalrCaptchaChallenge);
+
+        $msg = [];
 
         // check for 2-factor auth
         if ($user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL) == 1) {
             if ($tfaGglCode) {
                 if ($tfaGglReset) {
                     $resetCode = $user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL_RESET_CODE);
+
                     if ($resetCode != CryptoTool::hash($tfaGglCode)) {
-                        $this->response->data(array('errors' => array('tfaGglCode' => 'Invalid reset code')));
+                        $this->response->data(["errors" => ["tfaGglCode" => "Invalid reset code"]]);
+
+                        $this->auditLog("user.auth.login", [
+                            'result'        => 'error',
+                            'error_message' => 'Invalid reset code'
+                        ]);
+
                         $this->response->failure();
                         return;
                     } else {
                         $user->setSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL, '');
                         $user->setSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL_KEY, '');
                         $user->setSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL_RESET_CODE, '');
-                        $this->response->success('Two-factor authentication has been disabled.');
+
+                        $msg = ["info" => "Two-factor authentication has been disabled."];
+
+                        $this->response->success($msg["info"]);
                     }
                 } else {
                     $key = $this->getCrypto()->decrypt($user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL_KEY));
+
                     if (! Scalr_Util_Google2FA::verifyKey($key, $tfaGglCode)) {
-                        $this->response->data(array('errors' => array('tfaGglCode' => 'Invalid code')));
+                        $this->response->data(["errors" => ["tfaGglCode" => "Invalid code"]]);
+
+                        $this->auditLog("user.auth.login", [
+                            'result'        => 'error',
+                            'error_message' => 'Invalid code'
+                        ]);
+
                         $this->response->failure();
                         return;
                     }
                 }
             } else {
-                $this->response->data(array('tfaGgl' => true));
+                $this->response->data(["tfaGgl" => true]);
                 $this->response->failure();
                 return;
             }
         }
 
         $this->loginUserCreate($user, $scalrKeepSession);
+
+        try {
+            $envId = $this->getEnvironmentId(true) ?: $user->getDefaultEnvironment()->id;
+        } catch (Exception $e) {
+            $envId = null;
+        }
+
+        $this->auditLog(
+            "user.auth.login",
+            $user,
+            $envId,
+            $this->request->getRemoteAddr(),
+            Scalr_Session::getInstance()->getRealUserId()
+        );
     }
 
     /**
-     * @param $email
+     * @param   string  $email
+     * @param   string  $scalrCaptcha
      */
-    public function xResetPasswordAction($email)
+    public function xResetPasswordAction($email, $scalrCaptcha = '')
     {
         $user = Scalr_Account_User::init()->loadByEmail($email);
+
+        if ($this->getContainer()->config->get('scalr.ui.recaptcha.private_key')) {
+            $r = $this->validateReCaptcha($scalrCaptcha);
+            if ($r !== true) {
+                throw new Scalr_Exception_Core(sprintf('ReCaptcha error: %s', $r));
+            }
+        }
 
         if ($user) {
             $hash = $this->getCrypto()->sault(10);
@@ -740,44 +809,49 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                 array(
                     '{{fullname}}' => $clientinfo['fullname'],
                     '{{link}}'     => Scalr::config('scalr.endpoint.scheme') . "://" . Scalr::config('scalr.endpoint.host') . "/?resetPasswordHash={$hash}",
+                    '{{hash}}'     => $hash
                 ),
                 $clientinfo['email'], $clientinfo['fullname']
             );
-
-            $this->response->success("Confirmation email has been sent to you");
-        } else {
-            $this->response->failure("Specified e-mail not found in our database");
         }
+
+        $this->response->success("Confirmation email has been sent to you");
     }
 
     /**
-     * @param $hash
+     * @param string $hash
      */
     public function xUpdatePasswordValidateAction($hash)
     {
         if ($hash && ($user = Scalr_Account_User::init()->loadBySetting(Scalr_Account::SETTING_OWNER_PWD_RESET_HASH, $hash))) {
-            $this->response->data(['email' => $user->getEmail()]);
+            $this->response->data([
+                'email' => $user->getEmail(),
+                'isAdmin' => $user->isAccountOwner() || $user->isAccountAdmin(),
+                'hash' => $hash
+            ]);
         } else {
             $this->response->failure("Incorrect confirmation link");
         }
     }
 
     /**
-     * @param $hash
-     * @param $password
+     * @param string  $hash
+     * @param RawData $password
      */
-    public function xUpdatePasswordAction($hash, $password)
+    public function xUpdatePasswordAction($hash, RawData $password)
     {
         if ($hash && ($user = Scalr_Account_User::init()->loadBySetting(Scalr_Account::SETTING_OWNER_PWD_RESET_HASH, $hash)) && $password) {
-            $user->updatePassword($password);
-            $user->loginattempts = 0;
-            $user->save();
+            $validator = new Validator();
+            $validator->validate($password, "password", Validator::PASSWORD, $user->isAccountAdmin() || $user->isAccountOwner() ? ['admin'] : []);
+            if ($validator->isValid($this->response)) {
+                $user->updatePassword($password);
+                $user->loginattempts = 0;
+                $user->save();
 
-            $user->setSetting(Scalr_Account::SETTING_OWNER_PWD_RESET_HASH, "");
+                $user->setSetting(Scalr_Account::SETTING_OWNER_PWD_RESET_HASH, "");
 
-            //Scalr_Session::create($user->getAccountId(), $user->getId(), $user->getType());
-
-            $this->response->data(['email' => $user->getEmail(), 'message' => 'Password has been reset. Please log in.']);
+                $this->response->data(['email' => $user->getEmail(), 'message' => 'Password has been reset. Please log in.']);
+            }
         } else {
             $this->response->failure("Incorrect confirmation link");
         }
@@ -813,30 +887,27 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
     }
 
     /**
-     * @param $url
-     * @param $file
-     * @param $lineno
-     * @param RawData $message
+     * @param   string  $url
+     * @param   string  $file
+     * @param   int     $lineno
+     * @param   RawData $message
+     * @param   string  $plugins
      */
-    public function xPostErrorAction($url, $file, $lineno = 0, RawData $message)
+    public function xPostErrorAction($url, $file = '', $lineno = 0, RawData $message, $plugins = '')
     {
         $this->response->success();
 
-        if ($this->user) {
-            $messageArr = explode("\n", $message);
-            if (empty($messageArr[0]))
-                return;
-
-            $this->db->Execute('INSERT INTO ui_errors (tm, file, lineno, url, short, message, browser, account_id, user_id) VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE cnt = cnt + 1, tm = NOW()', array(
+        if ($this->user && $message) {
+            $this->db->Execute('INSERT INTO ui_errors (`tm`, `file`, `lineno`, `url`, `plugins`, `message`, `browser`, `account_id`, `user_id`) VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?, ?)', [
                 $file,
                 $lineno,
                 $url,
-                $messageArr[0],
+                $plugins,
                 $message,
-                $_SERVER['HTTP_USER_AGENT'],
-                $this->user ? $this->user->getAccountId() : '',
-                $this->user ? $this->user->id : ''
-            ));
+                filter_input(INPUT_SERVER, 'HTTP_USER_AGENT'),
+                $this->user->getAccountId(),
+                $this->user->id
+            ]);
         }
     }
 }

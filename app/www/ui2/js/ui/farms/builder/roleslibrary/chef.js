@@ -43,7 +43,8 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.chef', function () {
         },
 
         items: [{
-            xtype: 'chefsettings'
+            xtype: 'chefsettings',
+            mode: 'farmrole'
         }]
     };
 });

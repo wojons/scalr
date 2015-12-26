@@ -1,6 +1,6 @@
 <?php
 
-class ServiceConfigurationPresetChangedEvent extends Event
+class ServiceConfigurationPresetChangedEvent extends AbstractServerEvent
 {
 
     public $ServiceConfiguration;

@@ -12,7 +12,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Costanalytics extends Scalr_UI_Contro
 
     public function getContent($params = array())
     {
-        $this->request->restrictAccess(Acl::RESOURCE_ENVADMINISTRATION_ANALYTICS);
+        $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_ENVIRONMENT);
         
         if (!$params['farmCount'])
             $params['farmCount'] = 5;

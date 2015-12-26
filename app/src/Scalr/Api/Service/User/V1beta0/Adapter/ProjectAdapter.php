@@ -67,7 +67,7 @@ class ProjectAdapter extends ApiEntityAdapter
                 break;
 
             case static::ACT_GET_FILTER_CRITERIA:
-                return [[ 'ccId' => ApiController::getBareId(json_decode(json_encode($from)), 'costCenter') ]];
+                return [[ 'ccId' => ApiController::getBareId($from, 'costCenter') ]];
         }
     }
 
@@ -89,7 +89,7 @@ class ProjectAdapter extends ApiEntityAdapter
 
                 return [
                     AbstractEntity::STMT_FROM => $project->table() . " LEFT JOIN " . $property->table() . " ON {$property->columnProjectId} = {$project->columnProjectId}",
-                    AbstractEntity::STMT_WHERE => "{$property->columnName} = '" . ProjectPropertyEntity::NAME_BILLING_CODE . "' AND {$property->columnValue} = " . $property->qstr('value', $from->billingCode)
+                    AbstractEntity::STMT_WHERE => "({$property->columnName} = '" . ProjectPropertyEntity::NAME_BILLING_CODE . "' AND {$property->columnValue} = " . $property->qstr('value', $from->billingCode) . ")"
                 ];
         }
     }
@@ -144,6 +144,10 @@ class ProjectAdapter extends ApiEntityAdapter
 
         if (empty($cc)) {
             throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Cost center with ID '{$entity->ccId}' not found");
+        }
+
+        if (empty($entity->name)) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Project name can't be empty");
         }
     }
 }

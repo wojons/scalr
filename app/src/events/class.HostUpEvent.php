@@ -1,6 +1,6 @@
 <?php
 
-class HostUpEvent extends Event
+class HostUpEvent extends AbstractServerEvent
 {
 
     /**

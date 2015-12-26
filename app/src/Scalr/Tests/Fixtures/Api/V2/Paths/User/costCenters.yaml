@@ -1,0 +1,32 @@
+paths:
+  - uri: /{envId}/cost-centers/
+    operations:
+      - {method: get,  response: 200, filterable: '&CostCentersData'}
+      - {method: get,  response: 200, filterable: '&CostCentersData'}
+      - {method: get,  response: 200, filterable: '&CostCentersData'}
+      - {method: get,  response: 400, filterable: '&CostCentersData'}
+      - {method: get,  response: 400, filterable: '&CostCentersData'}
+      - {method: get,  response: 200}
+  - uri: /{envId}/cost-centers/{costCenterId}/
+    operations:
+      - {method: get,  response: 200, params: '&{5}CostCentersData'}
+      - {method: get,  response: 200, params: '&{6}CostCentersData', filterable: '&{1}CostCentersData.name'}
+      - {method: get,  response: 200, params: '&{7}CostCentersData', filterable: '&{2}CostCentersData.name'}
+      - {method: get,  response: 403, params: '&{8}CostCentersData'}
+
+CostCentersData:
+  - {id: 118ba2e3-9751-4106-9157-c787c78fb803}
+  - {name: Cost Center Main account (1)}
+  - {billingCode: CC-Main account}
+  - {name: {foo: bar}}
+  - {name: [foo, barr]}
+  - {costCenterId: '&{0}CostCentersData.id'}
+  - {costCenterId: '&{0}CostCentersData.id',}
+  - {costCenterId: '&{0}CostCentersData.id'}
+  - {costCenterId: '&{0}CostCenters.id'}
+
+CostCenters:
+  - {name: testAccount CC, billingCode: CC-account}
+
+
+

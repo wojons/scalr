@@ -2,8 +2,11 @@
 
 namespace Scalr\Model\Entity;
 
+use Exception;
 use Scalr\DataType\ScopeInterface;
 use Scalr\Model\AbstractEntity;
+use Scalr_Scaling_Algorithms_DateTime;
+use Scalr_Scaling_Algorithms_Sensor;
 
 /**
  * Scaling Metrics entity.
@@ -17,6 +20,13 @@ use Scalr\Model\AbstractEntity;
  */
 class ScalingMetric extends AbstractEntity implements ScopeInterface
 {
+    const METRIC_LOAD_AVERAGES_ID     = 1;
+    const METRIC_FREE_RAM_ID          = 2;
+    const METRIC_URL_RESPONSE_TIME_ID = 3;
+    const METRIC_SQS_QUEUE_SIZE_ID    = 4;
+    const METRIC_DATE_AND_TIME_ID     = 5;
+    const METRIC_BANDWIDTH_ID         = 6;
+
     /**
      * File-Read retrieve method
      */
@@ -41,6 +51,11 @@ class ScalingMetric extends AbstractEntity implements ScopeInterface
      * Calculation function "Max"
      */
     const CALC_FUNCTION_MAXIMUM = 'max';
+
+    /**
+     * Calculation function "Min"
+     */
+    const CALC_FUNCTION_MINIMUM = 'min';
 
     /**
      * Sensor scaling algorithm
@@ -134,6 +149,14 @@ class ScalingMetric extends AbstractEntity implements ScopeInterface
     public $alias;
 
     /**
+     * Should it follow inverted logic
+     *
+     * @Column(type="boolean")
+     * @var bool
+     */
+    public $isInvert = false;
+
+    /**
      * Get list with basic info about metrics.
      *
      * @param int $envId Identifier of environment
@@ -145,13 +168,14 @@ class ScalingMetric extends AbstractEntity implements ScopeInterface
         $criteria = [['$or' => [['envId' => $envId],['envId' => null]]]];
         $metrics = self::find($criteria);
 
-        /* @var \Scalr\Model\Entity\ScalingMetric $metric */
         foreach ($metrics as $metric) {
+            /* @var $metric \Scalr\Model\Entity\ScalingMetric */
             $result[$metric->id] = [
-                'id'    => $metric->id,
-                'name'  => $metric->name,
-                'alias' => $metric->alias,
-                'scope' => $metric->getScope(),
+                'id'       => $metric->id,
+                'name'     => $metric->name,
+                'alias'    => $metric->alias,
+                'scope'    => $metric->getScope(),
+                'isInvert' => $metric->isInvert,
             ];
         }
 
@@ -173,7 +197,7 @@ class ScalingMetric extends AbstractEntity implements ScopeInterface
             if (class_exists($className)) {
                 self::$algos[$algoName] = new $className();
             } else {
-                throw new \Exception(sprintf(_("Scaling algorithm '%s' not found"), $algoName));
+                throw new \Exception(sprintf(_("Scaling algorithm '%s' is not found"), $algoName));
             }
         }
 

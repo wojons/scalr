@@ -1,6 +1,7 @@
 <?php
 namespace Scalr\Tests\Service\OpenStack\Client;
 
+use http\Message\Body;
 use Scalr\Service\OpenStack\Exception\RestClientException;
 use Scalr\Service\OpenStack\Type\AppFormat;
 use Scalr\Service\OpenStack\Client\RestClientResponse;
@@ -31,11 +32,11 @@ class RestClientResponseTest extends OpenStackTestCase
      */
     public function testHasError($format, $content)
     {
-        $message = $this->getMock('HttpMessage', array('getBody', 'getResponseCode'), array(''));
+        $message = $this->getMock('\http\Client\Response', array('getBody', 'getResponseCode'), array(''));
         //It returns 500 error
         $message->expects($this->any())->method('getResponseCode')->will($this->returnValue(500));
         //Content should have error message in appropriated application format
-        $message->expects($this->once())->method('getBody')->will($this->returnValue($content));
+        $message->expects($this->once())->method('getBody')->will($this->returnValue((new Body())->append($content)));
 
         $response = new RestClientResponse($message, $format);
 

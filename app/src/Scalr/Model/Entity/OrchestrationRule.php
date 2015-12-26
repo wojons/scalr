@@ -5,14 +5,22 @@ namespace Scalr\Model\Entity;
 use Scalr\DataType\AccessPermissionsInterface;
 use Scalr\DataType\ScopeInterface;
 use Scalr\Model\AbstractEntity;
+use Scalr\Util\CryptoTool;
 
 /**
  * Abstract Orchestration Rule
  *
  * @author N.V.
  */
-abstract class OrchestrationRule extends AbstractEntity
+abstract class OrchestrationRule extends AbstractEntity implements ScopeInterface, AccessPermissionsInterface
 {
+
+    const TARGET_ROLES = 'farmrole';
+    const TARGET_BEHAVIOR = 'behavior';
+
+    const ORCHESTRATION_RULE_TYPE_SCALR = 'scalr';
+    const ORCHESTRATION_RULE_TYPE_LOCAL = 'local';
+    const ORCHESTRATION_RULE_TYPE_CHEF = 'chef';
 
     /**
      * Identifier
@@ -59,7 +67,7 @@ abstract class OrchestrationRule extends AbstractEntity
      *
      * @var string
      */
-    public $version;
+    public $version = -1;
 
     /**
      * How long should Scalr wait before aborting the execution of this Orchestration Rule.
@@ -68,7 +76,7 @@ abstract class OrchestrationRule extends AbstractEntity
      *
      * @var int
      */
-    public $timeout;
+    public $timeout = 1200;
 
     /**
      * Blocking flag
@@ -77,7 +85,7 @@ abstract class OrchestrationRule extends AbstractEntity
      *
      * @var bool
      */
-    public $issync;
+    public $issync = false;
 
     /**
      * Script parameters
@@ -96,7 +104,7 @@ abstract class OrchestrationRule extends AbstractEntity
      *
      * @var int
      */
-    public $orderIndex;
+    public $orderIndex = 10;
 
     /**
      * Script path
@@ -114,7 +122,7 @@ abstract class OrchestrationRule extends AbstractEntity
      *
      * @var string
      */
-    public $runAs;
+    public $runAs = '';
 
     /**
      * Script type

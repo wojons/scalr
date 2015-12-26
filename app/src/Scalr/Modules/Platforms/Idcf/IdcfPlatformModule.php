@@ -2,6 +2,7 @@
 
 namespace Scalr\Modules\Platforms\Idcf;
 
+use Scalr\Model\Entity\CloudCredentialsProperty;
 use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
 
 class IdcfPlatformModule extends CloudstackPlatformModule
@@ -36,12 +37,13 @@ class IdcfPlatformModule extends CloudstackPlatformModule
         $put |= $message instanceof \Scalr_Messaging_Msg_DbMsr_NewMasterUp;
 
         if ($put) {
-            $environment = $DBServer->GetEnvironmentObject();
-            $accessData = new \stdClass();
-            $accessData->apiKey = $this->getConfigVariable(self::API_KEY, $environment);
-            $accessData->secretKey = $this->getConfigVariable(self::SECRET_KEY, $environment);
+            $ccProps = $DBServer->GetEnvironmentObject()->cloudCredentials($DBServer->platform)->properties;
 
-            $apiUrl = $this->getConfigVariable(self::API_URL, $environment);
+            $accessData = new \stdClass();
+            $accessData->apiKey = $ccProps[CloudCredentialsProperty::CLOUDSTACK_API_KEY];
+            $accessData->secretKey = $ccProps[CloudCredentialsProperty::CLOUDSTACK_SECRET_KEY];
+
+            $apiUrl = $ccProps[CloudCredentialsProperty::CLOUDSTACK_API_URL];
             if ($apiUrl == 'https://apis.i.noahcloud.jp/portal/client/api')
                 $accessData->apiUrl = "https://api.noahcloud.jp/portal/client/api";
             else

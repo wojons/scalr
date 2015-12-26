@@ -8,15 +8,34 @@ use Scalr\Util\CryptoTool;
  * @method  string          getCloudynToken() getCloudynToken()       Gets a Cloudyn Token from session
  * @method  Scalr_Session   setCloudynToken() setCloudynToken($token) Sets a Cloudyn Token into session
  * @method  string          getToken()        getToken()              Gets special token for security
- * @method  Scalr_Session   setToken()        setToken()              Sets special token for security
- * @method  array          getDebugMode()    getDebugMode()
- * @method  Scalr_Session   setDebugMode()    setDebugMode()
+ * @method  Scalr_Session   setToken()        setToken($token)        Sets special token for security
+ * @method  array           getDebugMode()    getDebugMode()
+ * @method  Scalr_Session   setDebugMode()    setDebugMode($enabled)
  *
  */
 class Scalr_Session
 {
+    /**
+     * Effective user identifier
+     *
+     * @var int
+     */
     private $userId;
 
+    /**
+     * Real user id which is used to sign in to Scalr
+     *
+     * If real user is the same as effective user this variable will be null
+     *
+     * @var int|null
+     */
+    private $ruid;
+
+    /**
+     * Identifier of the environment
+     *
+     * @var int
+     */
     private $envId;
 
     private $sault;
@@ -26,8 +45,6 @@ class Scalr_Session
     private $token;
 
     private $hashpwd;
-
-    private $virtual;
 
     private $cloudynToken;
 
@@ -40,6 +57,9 @@ class Scalr_Session
      */
     private static $refClass;
 
+    /**
+     * Effective user identifier (euid)
+     */
     const SESSION_USER_ID = 'userId';
 
     const SESSION_ENV_ID  = 'envId';
@@ -48,7 +68,10 @@ class Scalr_Session
 
     const SESSION_SAULT   = 'sault';
 
-    const SESSION_VIRTUAL = 'virtual';
+    /**
+     * Real user identifier (ruid) which is used to sign in to Scalr
+     */
+    const SESSION_RUID = 'ruid';
 
     const SESSION_CLOUDYN_TOKEN = 'cloudynToken';
 
@@ -66,7 +89,7 @@ class Scalr_Session
             self::$_session->hashpwd = CryptoTool::hash(@file_get_contents(APPPATH."/etc/.cryptokey"));
             ini_set('session.cookie_httponly', true);
 
-            if (!preg_match('/^[-,a-zA-Z0-9]{1,128}$/', $_COOKIE[session_name()])) {
+            if (!filter_has_var(INPUT_COOKIE, session_name()) || !preg_match('/^[-,a-z\d]{1,128}$/i', filter_input(INPUT_COOKIE, session_name()))) {
                 self::sessionLog('session is not valid, regenerate');
                 session_id(uniqid());
                 session_start();
@@ -81,17 +104,19 @@ class Scalr_Session
 
             $token = self::$_session->getToken();
             if (empty($token)) {
-                if ($_COOKIE[self::SESSION_TOKEN]) {
+                if ($cookieToken = filter_input(INPUT_COOKIE, self::SESSION_TOKEN)) {
                     $hash = self::getInstance()->hashpwd;
                     // validate token value
-                    if ($_COOKIE['scalr_signature']) {
-                        if (CryptoTool::hash("{$_COOKIE['scalr_signature']}:{$hash}") === $_COOKIE[self::SESSION_TOKEN])
-                            self::$_session->setToken($_COOKIE[self::SESSION_TOKEN]);
+                    if ($signature = filter_input(INPUT_COOKIE, 'scalr_signature')) {
+                        if (CryptoTool::hash("{$signature}:{$hash}") === $cookieToken) {
+                            self::$_session->setToken($cookieToken);
+                        }
                     } else {
                         $id = session_id();
                         self::sessionLog("session_id():84");
-                        if (CryptoTool::hash("{$id}:{$hash}") === $_COOKIE[self::SESSION_TOKEN])
-                            self::$_session->setToken($_COOKIE[self::SESSION_TOKEN]);
+                        if (CryptoTool::hash("{$id}:{$hash}") === $cookieToken) {
+                            self::$_session->setToken($cookieToken);
+                        }
                     }
                 }
             }
@@ -101,29 +126,43 @@ class Scalr_Session
     }
 
     /**
-     * @param $userId
-     * @param bool $virtual Session created by admin
+     * Creates a session
+     *
+     * @param   int  $userId  The effective identifier of the user
+     * @param   int  $ruid    optional Real user identifier which is used to sign in to Scalr (Admin UserId)
      */
-    public static function create($userId, $virtual = false)
+    public static function create($userId, $ruid = null)
     {
         session_start();
+        session_regenerate_id(true);
+
         self::sessionLog("session_start():101");
+
         $_SESSION[__CLASS__][self::SESSION_USER_ID] = $userId;
-        $_SESSION[__CLASS__][self::SESSION_VIRTUAL] = $virtual;
+        $_SESSION[__CLASS__][self::SESSION_RUID] = $ruid;
 
         $sault = CryptoTool::sault();
+
         $_SESSION[__CLASS__][self::SESSION_SAULT] = $sault;
         $_SESSION[__CLASS__][self::SESSION_HASH] = self::createHash($userId, $sault);
 
-        if (! $virtual) {
+        if (!$ruid) {
             $id = session_id();
+
             self::sessionLog("session_id():112");
+
             $hash = self::getInstance()->hashpwd;
-            $token = CryptoTool::hash("{$id}:{$hash}");;
-            $https = ($_SERVER['HTTPS']) ? true : false;
+
+            $token = CryptoTool::hash("{$id}:{$hash}");
+
+            $https = filter_has_var(INPUT_SERVER, 'HTTPS');
+
             $_SESSION[__CLASS__][self::SESSION_TOKEN] = $token;
+
             setcookie('scalr_token', $token, null, '/', null, $https, false);
+
             session_write_close();
+
             self::sessionLog("session_write_close():119");
         }
 
@@ -176,12 +215,12 @@ class Scalr_Session
     protected static function restore($checkKeepSessionCookie = true)
     {
         $session = self::getInstance();
-        
+
         if (session_status() != PHP_SESSION_ACTIVE) {
             session_start();
             self::sessionLog("session_start():171");
         }
-        
+
         $refClass = self::getReflectionClass();
         foreach ($refClass->getConstants() as $constname => $constvalue) {
             if (substr($constname, 0, 8) !== 'SESSION_') continue;
@@ -195,8 +234,18 @@ class Scalr_Session
             $session->userId = 0;
             $session->hash = '';
 
-            if ($checkKeepSessionCookie && self::isCookieKeepSession())
+            if ($checkKeepSessionCookie && self::isCookieKeepSession()) {
                 self::restore(false);
+
+                if ($session->userId) {
+                    // we've recovered session, update last login
+                    /* @var Scalr\Model\Entity\Account\User $user */
+                    if (($user = Scalr\Model\Entity\Account\User::findPk($session->userId))) {
+                        $user->lastLogin = new DateTime();
+                        $user->save();
+                    }
+                }
+            }
         }
 
         session_write_close();
@@ -230,6 +279,7 @@ class Scalr_Session
     public static function destroy()
     {
         session_start();
+        session_regenerate_id(true);
         session_destroy();
         self::sessionLog("session_start/destroy():220");
 
@@ -258,7 +308,7 @@ class Scalr_Session
         }
 
         if ($clearKeepSession) {
-            $setHttpsCookie = ($_SERVER['HTTPS']) ? true : false;
+            $setHttpsCookie = filter_has_var(INPUT_SERVER, 'HTTPS');
 
             @setcookie("scalr_user_id", "", time() - 86400, "/", null, $setHttpsCookie, true);
             @setcookie("scalr_hash", "", time() - 86400, "/", null, $setHttpsCookie, true);
@@ -271,18 +321,18 @@ class Scalr_Session
         self::sessionLog("session_write_close():258");
     }
 
-    public static function sessionLog($log) 
+    public static function sessionLog($log)
     {
-        //@file_put_contents("/var/log/scalr/session.log", "[".microtime(true)."][{$_SERVER['REQUEST_URI']}]" . $log . "\n", FILE_APPEND);    
+        //@file_put_contents("/var/log/scalr/session.log", "[".microtime(true)."][{$_SERVER['REQUEST_URI']}]" . $log . "\n", FILE_APPEND);
     }
-    
+
     public static function keepSession()
     {
         $session = self::getInstance();
 
         $tm = time() + 86400 * 30;
 
-        $setHttpsCookie = ($_SERVER['HTTPS']) ? true : false;
+        $setHttpsCookie = filter_has_var(INPUT_SERVER, 'HTTPS');
         $signature = self::createCookieHash($session->userId, $session->sault, $session->hash);
         $token = CryptoTool::hash("{$signature}:" . $session->hashpwd);
 
@@ -299,12 +349,14 @@ class Scalr_Session
         return $this->userId ? true : false;
     }
 
-    /*
-     * If user's session created by admin from UI
+    /**
+     * Checks whether the session is created by Scalr Admin
+     *
+     * @return   bool Returns true if the session is created by Scalr Admin
      */
     public function isVirtual()
     {
-        return $this->virtual;
+        return $this->ruid > 0;
     }
 
     /**
@@ -341,13 +393,23 @@ class Scalr_Session
     }
 
     /**
-     * Gets an User ID
+     * Gets effective user identifier
      *
-     * @return  int Returns an User ID
+     * @return  int   Returns effective user identifier
      */
     public function getUserId()
     {
         return $this->userId;
+    }
+
+    /**
+     * Gets real user identifier which is used to sign in to Scalr
+     *
+     * @return   int  Returns real user identifier which is used to sign in to Scalr
+     */
+    public function getRealUserId()
+    {
+        return $this->ruid ?: $this->userId;
     }
 
     /**
@@ -360,6 +422,7 @@ class Scalr_Session
         if (self::$refClass === null) {
             self::$refClass = new ReflectionClass(__CLASS__);
         }
+
         return self::$refClass;
     }
 }

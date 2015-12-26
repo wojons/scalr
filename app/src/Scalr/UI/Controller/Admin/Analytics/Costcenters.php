@@ -231,8 +231,8 @@ class Scalr_UI_Controller_Admin_Analytics_Costcenters extends Scalr_UI_Controlle
 
     /**
      * @param string $ccId
-     * @param $subjectType
-     * @param $settings
+     * @param string $subjectType
+     * @param array  $settings
      * @throws \Scalr\Exception\ModelException
      */
     private function saveNotifications($ccId, $subjectType, $settings)
@@ -264,7 +264,7 @@ class Scalr_UI_Controller_Admin_Analytics_Costcenters extends Scalr_UI_Controlle
 
     /**
      * @param string $ccId
-     * @param $settings
+     * @param array  $settings
      * @throws AnalyticsException
      * @throws Scalr_UI_Exception_NotFound
      */

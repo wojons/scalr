@@ -21,16 +21,16 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ami extends Scalr_UI_Controller
     }
 
     /**
-     * @param $cloudLocation
+     * @param string $cloudLocation
      */
     public function xListAction($cloudLocation)
     {
         $aws = $this->getEnvironment()->aws($cloudLocation);
         $existedImages = [];
         foreach (Image::find([
-            ['platform' => SERVER_PLATFORMS::EC2],
+            ['platform'      => SERVER_PLATFORMS::EC2],
             ['cloudLocation' => $cloudLocation],
-            ['envId' => $this->getEnvironmentId()]
+            ['envId'         => $this->getEnvironmentId()]
         ]) as $i) {
             /* @var $i Image */
             $existedImages[$i->id] = $i;

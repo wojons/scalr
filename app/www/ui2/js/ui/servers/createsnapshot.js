@@ -1,4 +1,10 @@
 Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, moduleParams) {
+    var replacementOptions = [];
+
+    if (moduleParams['isReplaceFarmRolePermission']) {
+        replacementOptions.push(['farm', 'ONLY on the current Farm "' + moduleParams['farmName'] + '"'], ['all', 'on ALL managed Farms']);
+    }
+
     return Ext.create('Ext.form.Panel', {
         scalrOptions: {
             'modal': true
@@ -17,7 +23,10 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
             hidden: !moduleParams['showWarningMessage']
         }, {
             xtype: 'container',
-            layout: 'hbox',
+            layout: {
+                type: 'hbox',
+                align: 'stretch'
+            },
             cls: 'x-fieldset-separator-bottom',
             items: [{
                 xtype: 'container',
@@ -29,11 +38,11 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
                     fieldLabel: 'Server ID'
                 }, {
                     xtype: 'displayfield',
-                    value: '<a href="#/farms?farmId='+moduleParams['farmId']+'">' + moduleParams['farmName'] + '</a> (ID: ' + moduleParams['farmId'] + ')',
+                    value: '<a href="#/farms?farmId=' + moduleParams['farmId'] + '">' + moduleParams['farmName'] + '</a> (ID: ' + moduleParams['farmId'] + ')',
                     fieldLabel: 'Farm'
                 },{
                     xtype: 'displayfield',
-                    value: '<a href="#/roles?roleId=' + moduleParams['roleId'] + '">' + moduleParams['roleName'] + '</a>',
+                    value: '<a href="#/roles?roleId=' + moduleParams['roleId'] + '">' + moduleParams['roleName'] + '</a>' + ' #' + moduleParams['serverIndex'],
                     fieldLabel: 'Role name'
                 }]
             }, {
@@ -84,7 +93,7 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
             }, {
                 xtype: 'checkbox',
                 name: 'replaceImage',
-                disabled: moduleParams['isSharedRole'],
+                disabled: !moduleParams['isManageableRole'],
                 boxLabel: 'Replace Image "' +
                 ((moduleParams['roleImageId'] != moduleParams['imageName']) ? (moduleParams['imageName'] + ' [' + moduleParams['roleImageId'] + ']') : moduleParams['roleImageId']) +
                     '" on Role "' + moduleParams['roleName'] + '" with the newly created Image',
@@ -138,6 +147,7 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
                     xtype: 'checkbox',
                     submitValue: false,
                     itemId: 'replaceRole',
+                    disabled: replacementOptions.length == 0,
                     boxLabel: 'Replace Role "' + moduleParams['roleName'] + '" with the newly created Role:',
                     listeners: {
                         change: function (field, value) {
@@ -147,7 +157,7 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
                     }
                 }, {
                     xtype: 'combo',
-                    store: [['farm', 'ONLY on the current Farm "' + moduleParams['farmName'] + '"'], ['all', 'on ALL Farms']],
+                    store: replacementOptions,
                     queryMode: 'local',
                     allowBlank: false,
                     disabled: true,
@@ -165,6 +175,11 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
                 value: 'Running Servers will not be affected'
             }],
             listeners: {
+                boxready: function() {
+                    if (!Scalr.isAllowed('ROLES_ENVIRONMENT', 'manage')) {
+                        this.checkboxCmp.disable();
+                    }
+                },
                 expand: function() {
                     this.up('form').down('#create').setText('Create Image and Role');
                     this.down('[name="name"]').enable();
@@ -184,7 +199,7 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
                     field.enable();
                     field.name = 'name';
 
-                    if (! moduleParams['isSharedRole'])
+                    if (! moduleParams['isManageableRole'])
                         this.prev().down('[name="replaceImage"]').enable();
                 }
             }
@@ -303,8 +318,12 @@ Scalr.regPage('Scalr.ui.servers.createsnapshot', function  (loadParams, modulePa
                             },
                             form: frm,
                             url: '/servers/xServerCreateSnapshot/',
-                            success: function () {
-                                Scalr.event.fireEvent('redirect', '#/bundletasks');
+                            success: function (data) {
+                                if (Scalr.isAllowed('IMAGES_ENVIRONMENT', 'bundletasks')) {
+                                    Scalr.event.fireEvent('redirect', '#/bundletasks?id=' + data.bundleTaskId);
+                                } else {
+                                    Scalr.event.fireEvent('close');
+                                }
                             }
                         });
                     }

@@ -1,6 +1,6 @@
 <?php
 
-class MysqlBackupCompleteEvent extends Event
+class MysqlBackupCompleteEvent extends AbstractServerEvent
 {
 
     /**

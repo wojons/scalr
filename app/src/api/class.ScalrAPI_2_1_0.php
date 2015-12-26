@@ -20,7 +20,7 @@ class ScalrAPI_2_1_0 extends ScalrAPI_2_0_0
         $response = parent::FarmGetDetails($FarmID);
 
         foreach ($response->FarmRoleSet->Item as &$item)
-            $item->{"CloudLocation"} = DBFarmRole::LoadByID($item->ID)->CloudLocation;
+            $item->CloudLocation = DBFarmRole::LoadByID($item->ID)->CloudLocation;
 
         return $response;
     }
@@ -143,11 +143,11 @@ class ScalrAPI_2_1_0 extends ScalrAPI_2_0_0
         $rows = $this->DB->Execute($stmt . $stmtWhere, $args);
         while ($row = $rows->FetchRow()) {
             $itm = new stdClass();
-            $itm->{"Name"} = $row['name'];
-            $itm->{"FarmID"} = $row['farm_id'];
-            $itm->{"FarmRoleID"} = $row['farm_roleid'];
-            $itm->{"IsSSLEnabled"} = $row['is_ssl_enabled'];
-            $itm->{"LastModifiedAt"} = $row['last_modified'];
+            $itm->Name = $row['name'];
+            $itm->FarmID = $row['farm_id'];
+            $itm->FarmRoleID = $row['farm_roleid'];
+            $itm->IsSSLEnabled = $row['is_ssl_enabled'];
+            $itm->LastModifiedAt = $row['last_modified'];
 
             $response->ApacheVhostSet->Item[] = $itm;
         }

@@ -9,14 +9,29 @@ use Scalr\Service\Aws\CloudFront\AbstractCloudFrontDataType;
  * @author    Vitaliy Demidov   <vitaliy@scalr.com>
  * @since     04.02.2013
  *
- * @property  \Scalr\Service\Aws\CloudFront\DataType\DistributionConfigAliasList   $aliases              The data that contains information about CNAMEs
- * @property  \Scalr\Service\Aws\CloudFront\DataType\DistributionConfigOriginList  $origins              A complex type that describes the Amazon S3 bucket or the HTTP server
- *                                                                                                       (for example, a web server) from which CloudFront gets your files.
- *                                                                                                       You must create at least one origin.
- * @property  \Scalr\Service\Aws\CloudFront\DataType\CacheBehaviorData             $defaultCacheBehavior The default cache behavior.
- * @property  \Scalr\Service\Aws\CloudFront\DataType\CacheBehaviorList             $cacheBehaviors       The cache behavior list.
- * @property  \Scalr\Service\Aws\CloudFront\DataType\DistributionConfigLoggingData $logging              It controls whether access logs are written for the
- *                                                                                                       distribution.
+ * @property  \Scalr\Service\Aws\CloudFront\DataType\DistributionConfigAliasList $aliases
+ *            The data that contains information about CNAMEs
+ *
+ * @property  \Scalr\Service\Aws\CloudFront\DataType\DistributionConfigOriginList $origins
+ *             A complex type that describes the Amazon S3 bucket or the HTTP server
+ *             (for example, a web server) from which CloudFront gets your files.
+ *             You must create at least one origin.
+ *
+ * @property  \Scalr\Service\Aws\CloudFront\DataType\CacheBehaviorData $defaultCacheBehavior
+ *            The default cache behavior.
+ *
+ * @property  \Scalr\Service\Aws\CloudFront\DataType\CacheBehaviorList $cacheBehaviors
+ *            The cache behavior list.
+ *
+ * @property  \Scalr\Service\Aws\CloudFront\DataType\DistributionConfigLoggingData $logging
+ *            It controls whether access logs are written for the distribution.
+ *
+ * @property  \Scalr\Service\Aws\CloudFront\DataType\CustomErrorResponseList $customErrorResponses
+ *            Custom error responses
+ *
+ * @property  \Scalr\Service\Aws\CloudFront\DataType\GeoRestrictionData $restrictions
+ *
+ * @property  \Scalr\Service\Aws\CloudFront\DataType\ViewerCertificateData $viewerCertificate
  *
  * @method    string                   getDistributionId()  getDistributionId()      Gets an associated distribution ID.
  * @method    DistributionConfigData   setDistributionId()  setDistributionId($id)   Sets an associated distribution ID.
@@ -46,8 +61,8 @@ class DistributionConfigData extends AbstractCloudFrontDataType
      * @var  array
      */
     protected $_properties = array(
-        'aliases', 'origins', 'defaultCacheBehavior', 'cacheBehaviors',
-        'logging', 'eTag'
+        'aliases', 'origins', 'defaultCacheBehavior', 'cacheBehaviors', 'customErrorResponses',
+        'logging', 'eTag', 'restrictions', 'viewerCertificate'
     );
 
     /**
@@ -95,6 +110,11 @@ class DistributionConfigData extends AbstractCloudFrontDataType
     public $enabled;
 
     /**
+     * ID of an AWS WAF web ACL
+     */
+    public $webAclId;
+
+    /**
      * Constructor
      */
     public function __construct()
@@ -104,6 +124,9 @@ class DistributionConfigData extends AbstractCloudFrontDataType
         $this->callerReference = uniqid();
         $this->aliases = new DistributionConfigAliasList();
         $this->origins = new DistributionConfigOriginList();
+        $this->customErrorResponses = new CustomErrorResponseList();
+        $this->restrictions = new GeoRestrictionData();
+        $this->viewerCertificate = new ViewerCertificateData();
     }
 
     /**
@@ -118,6 +141,20 @@ class DistributionConfigData extends AbstractCloudFrontDataType
             $aliases = new DistributionConfigAliasList($aliases);
         }
         return $this->__call(__FUNCTION__, array($aliases));
+    }
+
+    /**
+     * Sets CustomErrorResponse
+     *
+     * @param   CustomErrorResponseList|CustomErrorResponseData|array  $customErrorResponses
+     * @return  DistributionConfigData
+     */
+    public function setCustomErrorResponses($customErrorResponses)
+    {
+        if ($customErrorResponses !== null && !($customErrorResponses instanceof CustomErrorResponseList)) {
+            $customErrorResponses = new CustomErrorResponseList($customErrorResponses);
+        }
+        return $this->__call(__FUNCTION__, array($customErrorResponses));
     }
 
     /**
@@ -178,17 +215,22 @@ class DistributionConfigData extends AbstractCloudFrontDataType
     {
         $xml = new \DOMDocument('1.0', 'UTF-8');
         $xml->formatOutput = true;
-        $top = $xml->createElementNS('http://cloudfront.amazonaws.com/doc/2012-07-01/', 'DistributionConfig');
+
+        $top = $xml->createElementNS('http://cloudfront.amazonaws.com/doc/2015-07-27/', 'DistributionConfig');
         $xml->appendChild($top);
 
         $top->appendChild($xml->createElement('CallerReference', $this->callerReference));
+
         if ($this->aliases instanceof DistributionConfigAliasList) {
             $this->aliases->appendContentToElement($top);
         }
+
         $top->appendChild($xml->createElement('DefaultRootObject', $this->defaultRootObject));
+
         if ($this->origins instanceof DistributionConfigOriginList) {
             $this->origins->appendContentToElement($top);
         }
+
         if ($this->defaultCacheBehavior instanceof CacheBehaviorData) {
             //This needs in order to change node name as by default method returns "CacheBehavior" name.
             $dcb = $this->defaultCacheBehavior->toXml(true);
@@ -198,15 +240,35 @@ class DistributionConfigData extends AbstractCloudFrontDataType
             }
             $top->appendChild($newnode);
         }
+
         if ($this->cacheBehaviors instanceof CacheBehaviorList) {
             $this->cacheBehaviors->appendContentToElement($top);
         }
+
+        if ($this->customErrorResponses instanceof CustomErrorResponseList) {
+            $this->customErrorResponses->appendContentToElement($top);
+        }
+
         $top->appendChild($xml->createElement('Comment', $this->comment));
+
         if ($this->logging instanceof DistributionConfigLoggingData) {
             $this->logging->appendContentToElement($top);
         }
+
         $top->appendChild($xml->createElement('PriceClass', $this->priceClass));
         $top->appendChild($xml->createElement('Enabled', $this->enabled ? 'true' : 'false'));
+
+        if ($this->viewerCertificate instanceof ViewerCertificateData) {
+            $this->viewerCertificate->appendContentToElement($top);
+        }
+
+        $restrictionsNode = $xml->createElement('Restrictions');
+        $top->appendChild($restrictionsNode);
+        if ($this->restrictions instanceof GeoRestrictionData) {
+            $this->restrictions->appendContentToElement($restrictionsNode);
+        }
+
+        $top->appendChild($xml->createElement('WebACLId', $this->webAclId));
 
         return $returnAsDom ? $xml : $xml->saveXML();
     }

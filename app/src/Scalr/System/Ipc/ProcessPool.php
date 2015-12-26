@@ -153,8 +153,8 @@ class Scalr_System_Ipc_ProcessPool extends Scalr_Util_Observable
             "shutdown"
         ));
 
-        $this->logger = Logger::getLogger(__CLASS__);
-        $this->timeLogger = Logger::getLogger("time");
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
+        $this->timeLogger = \Scalr::getContainer()->logger("time");
         register_shutdown_function(array($this, "_cleanup"));
     }
 

@@ -6,6 +6,7 @@ use Scalr\Stats\CostAnalytics\Entity\TagEntity;
 use Scalr\Stats\CostAnalytics\Iterator\ChartPeriodIterator;
 use Scalr\Stats\CostAnalytics\Entity\AccountTagEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
+use Scalr\Model\Entity;
 
 /**
  * Farms controller
@@ -23,7 +24,7 @@ class Scalr_UI_Controller_Analytics_Farms extends Scalr_UI_Controller
      */
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_ANALYTICS);
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_ANALYTICS_ENVIRONMENT);
     }
 
     /**
@@ -114,7 +115,7 @@ class Scalr_UI_Controller_Analytics_Farms extends Scalr_UI_Controller
      */
     private function getFarmData(DBFarm $dbFarm)
     {
-        $projectId = $dbFarm->GetSetting(\DBFarm::SETTING_PROJECT_ID);
+        $projectId = $dbFarm->GetSetting(Entity\FarmSetting::PROJECT_ID);
 
         $ret = array(
             'farmId'         => $dbFarm->ID,

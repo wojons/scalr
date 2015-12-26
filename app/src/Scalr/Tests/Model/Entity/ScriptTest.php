@@ -18,7 +18,7 @@ class ScriptTest extends TestCase
      */
     public function testGetVersions()
     {
-        $list = Script::find(null, null, 10);
+        $list = Script::find(null, null, null, 10);
 
         $this->assertInternalType('array', $list->getArrayCopy());
         $this->assertInternalType('integer', count($list));

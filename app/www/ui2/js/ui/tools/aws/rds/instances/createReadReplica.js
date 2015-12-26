@@ -1,6 +1,9 @@
 Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createReadReplica', function (loadParams, moduleParams) {
 
-    var instance = moduleParams['instance'];
+    var instance = moduleParams.instance;
+    var engine = instance['Engine'];
+    var isAurora = engine === 'aurora';
+    var hasVpc = !Ext.isEmpty(instance['VpcSecurityGroups']);
 
     var form = Ext.create('Ext.form.Panel', {
         width: 520,
@@ -29,7 +32,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createReadReplica', function (lo
                                 cloudLocation: loadParams.cloudLocation
                             },
                             form: form.getForm(),
-                            success: function () {
+                            success: function (responseData) {
+                                Scalr.event.fireEvent('update', '/tools/aws/rds/instances', 'launch', responseData.instance, responseData.cloudLocation);
                                 Scalr.event.fireEvent('close');
                             }
                         });
@@ -88,7 +92,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createReadReplica', function (lo
                             },
                             url: '/platforms/ec2/xGetVpcList',
                             params: {
-                                cloudLocation: value
+                                cloudLocation: value,
+                                serviceName: 'rds'
                             },
                             success: function (data) {
                                 var vpc = data.vpc;
@@ -318,12 +323,37 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createReadReplica', function (lo
                         ? 'IOPS value must be an increment of 1000'
                         : true;
                 }
+            }, {
+                xtype: 'fieldcontainer',
+                itemId: 'publiclyAccessible',
+                fieldLabel: 'Publicly Accessible',
+                labelWidth: 200,
+                width: 245,
+                hidden: !hasVpc,
+                items: [{
+                    xtype: 'checkboxfield',
+                    name: 'PubliclyAccessible',
+                    inputValue: true,
+                    uncheckedValue: false,
+                    disabled: !hasVpc
+                }],
+                plugins: [{
+                    ptype: 'fieldicons',
+                    align: 'right',
+                    icons: {
+                        id: 'info',
+                        tooltip: 'Select Yes if you want EC2 instances and devices outside of the VPC hosting the DB instance to connect to the DB instance. '
+                            + 'If you select No, Amazon RDS will not assign a public IP address to the DB instance, '
+                            + 'and no EC2 instance or devices outside of the VPC will be able to connect. If you select Yes, '
+                            + 'you must also select one or more VPC security groups that specify which EC2 instances '
+                            + 'and devices can connect to the DB instance.'
+                    }
+                }]
             }]
         }, {
             xtype: 'fieldset',
             title: 'Database',
             name: 'databaseSettings',
-            //hidden: true,
             items: [{
                 submitValue: false,
                 labelWidth: 200,
@@ -339,7 +369,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createReadReplica', function (lo
                 queryMode: 'local',
                 valueField: 'optionGroupName',
                 displayField: 'optionGroupName',
-                editable: false
+                editable: false,
+                hidden: isAurora,
+                disabled: isAurora
             }, {
                 labelWidth: 200,
                 width: 455,
@@ -401,7 +433,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createReadReplica', function (lo
         });
     };
 
-    form.getForm().setValues(moduleParams.instance);
+    form.getForm().setValues(instance);
 
     form.down('[name=cloudLocation]').
         setValue(loadParams.cloudLocation).
@@ -418,6 +450,22 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createReadReplica', function (lo
     getAvailabilityZone(
         loadParams.cloudLocation
     );
+
+    if (isAurora) {
+        form.down('[name=StorageType]').hide();
+
+        form.down('[name=DBInstanceClass]').getStore().filterBy(function (record) {
+            return record.get('field1').indexOf('.r3') !== -1;
+        });
+    } else if (engine === 'mariadb') {
+        form.down('[name=DBInstanceClass]').getStore().filterBy(function (record) {
+            var instanceType = record.get('field1');
+
+            return Ext.Array.some([ 't2', 'm3', 'r3' ], function (type) {
+                return instanceType.indexOf('.' + type) !== -1;
+            });
+        });
+    }
 
     return form;
 });

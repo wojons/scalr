@@ -16,9 +16,9 @@ class Utils
     /**
      * Convert extjs-coded order value to AbstractEntity::find format
      *
-     * @param JsonData $order
-     * @param array $default
-     * @param array $allowed
+     * @param  JsonData $order
+     * @param  array    $default
+     * @param  array    $allowed
      * @return array
      */
     static public function convertOrder(JsonData $order, array $default = [], array $allowed = [])
@@ -27,7 +27,7 @@ class Utils
         foreach ($order as $param) {
             if (isset($param['property']) && isset($param['direction']) && $param['property'] && in_array($param['property'], $allowed)) {
                 $direction = strtolower($param['direction']);
-                $result[$param['property']] = $direction == 'asc' ? 'asc' : '';
+                $result[$param['property']] = $direction == 'asc';
             }
         }
 

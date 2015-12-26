@@ -1,15 +1,16 @@
 Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
 
-	var store = Ext.create('store.store', {
+    var store = Ext.create('store.store', {
 
-		fields: [
+        fields: [
             'id',
             'envId',
             'clientId',
             'name',
-            'filePath',
+            {name: 'filePath', sortType: 'asUCText'},
             'retrieveMethod',
-            'calcFunction'
+            'calcFunction',
+            'isInvert'
         ],
 
         proxy: {
@@ -19,6 +20,15 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
                 type: 'json',
                 rootProperty: 'data',
                 successProperty: 'success'
+            }
+        },
+
+        listeners: {
+            beforeload: function () {
+                grid.down('#add').toggle(false, true);
+            },
+            filterchange: function () {
+                grid.down('#add').toggle(false, true);
             }
         },
 
@@ -37,15 +47,14 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
 
             return me;
         }
-	});
+    });
 
-	var grid = Ext.create('Ext.grid.Panel', {
-
+    var grid = Ext.create('Ext.grid.Panel', {
         cls: 'x-panel-column-left',
         flex: 1,
         scrollable: true,
 
-		store: store,
+        store: store,
 
         plugins: [ 'applyparams', 'focusedrowpointer', {
             ptype: 'selectedrecord',
@@ -66,13 +75,15 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
             deferEmptyText: false
         },
 
-        selModel: {
-            selType: 'selectedmodel',
-            getVisibility: function (record) {
-                var envId = record.get('envId');
-                return envId !== null;
-            }
-        },
+        selModel:
+            Scalr.isAllowed('GENERAL_CUSTOM_SCALING_METRICS', 'manage') ?
+            {
+                selType: 'selectedmodel',
+                getVisibility: function (record) {
+                    var envId = record.get('envId');
+                    return envId !== null;
+                }
+            } : null,
 
         listeners: {
             selectionchange: function(selModel, selections) {
@@ -99,7 +110,6 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
         },
 
         deleteMetric: function (id, name) {
-
             var isDeleteMultiple = Ext.typeOf(id) === 'array';
 
             Scalr.Request({
@@ -165,38 +175,58 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
             return me;
         },
 
-		columns: [
-			{ text: "ID", width: 60, dataIndex: 'id', sortable: true },
-			{ text: 'Metric',
+        columns: [{
+            text: 'ID',
+            width: 60,
+            dataIndex: 'id',
+            sortable: true
+        }, {
+            text: 'Metric',
+            flex: 1,
+            dataIndex: 'name',
+            sortable: true,
+            xtype: 'templatecolumn',
+            tpl: new Ext.XTemplate('{[this.getScope(values.envId)]}&nbsp;&nbsp;{name}', {
+                getScope: function(envId) {
+                    var scope = envId !== null ? 'environment' : 'scalr';
+                    return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-' + scope + '" data-qclass="x-tip-light" data-qtip="' + Scalr.utils.getScopeLegend('metric') + '"/>';
+                }
+            })
+        }, {
+            text: 'File path',
+            flex: 1,
+            dataIndex: 'filePath',
+            sortable: true
+        }, {
+            text: 'Retrieve method',
+            width: 138,
+            dataIndex: 'retrieveMethod',
+            sortable: false,
+            xtype: 'templatecolumn',
+            tpl: '<tpl if="retrieveMethod == \'read\'">File-Read</tpl>' +
+                '<tpl if="retrieveMethod == \'execute\'">File-Execute</tpl>'
+        }, {
+            text: 'Calculation function',
+            flex: 1,
+            dataIndex: 'calcFunction',
+            sortable: false,
+            xtype: 'templatecolumn',
+            tpl: '<tpl if="calcFunction == \'avg\'">Average</tpl>' +
+                '<tpl if="calcFunction == \'sum\'">Sum</tpl>' +
+                '<tpl if="calcFunction == \'max\'">Maximum</tpl>' +
+                '<tpl if="calcFunction == \'min\'">Minimum</tpl>'
+        }, {
+            xtype: 'templatecolumn',
+            text: 'Inverted',
+            dataIndex: 'isInvert',
+            width: 98,
+            sortable: true,
+            tpl: '<tpl if="isInvert"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div><tpl else>&mdash;</tpl>'
+        }],
 
-                flex: 1,
-                dataIndex: 'name',
-                sortable: true,
-                xtype: 'templatecolumn',
-                tpl: new Ext.XTemplate('{[this.getScope(values.envId)]}&nbsp;&nbsp;{name}', {
-                        getScope: function (envId) {
-                            var scope = envId !== null
-                                ? 'environment'
-                                : 'scalr';
-                            return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qclass="x-tip-light" data-qtip="' + Scalr.utils.getScopeLegend('metric') + '"/>';
-                        }
-                })
-            },
-			{ text: "File path", flex: 1, dataIndex: 'filePath', sortable: true },
-			{ text: "Retrieve method", flex: 1, dataIndex: 'retrieveMethod', sortable: false, xtype: 'templatecolumn', tpl:
-				'<tpl if="retrieveMethod == \'read\'">File-Read</tpl>' +
-				'<tpl if="retrieveMethod == \'execute\'">File-Execute</tpl>'
-			},
-			{ text: "Calculation function", flex: 1, dataIndex: 'calcFunction', sortable: false, xtype: 'templatecolumn', tpl:
-				'<tpl if="calcFunction == \'avg\'">Average</tpl>' +
-				'<tpl if="calcFunction == \'sum\'">Sum</tpl>' +
-				'<tpl if="calcFunction == \'max\'">Maximum</tpl>'
-			}
-		],
-
-		dockedItems: [{
-			xtype: 'toolbar',
-			store: store,
+        dockedItems: [{
+            xtype: 'toolbar',
+            store: store,
             dock: 'top',
             ui: 'simple',
             defaults: {
@@ -262,6 +292,7 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
                 itemId: 'add',
                 cls: 'x-btn-green',
                 enableToggle: true,
+                hidden: !Scalr.isAllowed('GENERAL_CUSTOM_SCALING_METRICS', 'manage'),
                 toggleHandler: function (button, state) {
                     if (state) {
                         grid.clearSelectedRecord();
@@ -273,6 +304,7 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
                             .setHeader('New Metric')
                             .hideScopeInfo()
                             .setFieldsReadOnly(false)
+                            .hideInvertedField(false)
                             .show()
                             .down('[name=name]').focus();
 
@@ -287,7 +319,6 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
                 tooltip: 'Refresh',
                 handler: function () {
                     store.load();
-                    grid.down('#add').toggle(false, true);
                 }
             },{
                 itemId: 'delete',
@@ -295,12 +326,13 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
                 cls: 'x-btn-red',
                 disabled: true,
                 tooltip: 'Select one or more metrics to delete them',
+                hidden: !Scalr.isAllowed('GENERAL_CUSTOM_SCALING_METRICS', 'manage'),
                 handler: function () {
                     grid.deleteSelectedMetrics();
                 }
             }]
-		}]
-	});
+        }]
+    });
 
     var form = Ext.create('Ext.form.Panel', {
         hidden: true,
@@ -408,12 +440,22 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
             return me;
         },
 
+        hideInvertedField: function (hidden) {
+            var me = this;
+
+            me.down('[name=isInvert]')
+                .setVisible(!hidden)
+                .setDisabled(hidden);
+
+            return me;
+        },
+
         listeners: {
             afterloadrecord: function (record) {
                 var me = this;
 
                 var scope = me.envIdToScope(record.get('envId'));
-                var readOnly = scope !== me.getScope();
+                var readOnly = scope !== me.getScope() || !Scalr.isAllowed('GENERAL_CUSTOM_SCALING_METRICS', 'manage');
 
                 grid.down('#add').toggle(false, true);
 
@@ -421,12 +463,15 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
                 me.down('#delete').show();
 
                 me
-                    .setHeader('Edit Metric')
+                    .setHeader((Scalr.isAllowed('GENERAL_CUSTOM_SCALING_METRICS', 'manage') ? 'Edit' : 'View') + ' Metric')
                     .toggleScopeInfo(
                         record.get('id'),
                         scope
                     )
-                    .setFieldsReadOnly(readOnly, scope);
+                    .setFieldsReadOnly(readOnly, scope)
+                    .hideInvertedField(
+                        Ext.isEmpty(record.get('envId'))
+                    );
             }
         },
 
@@ -476,8 +521,15 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
                 store: [
                     ['avg','Average'],
                     ['sum','Sum'],
-                    ['max','Maximum']
+                    ['max','Maximum'],
+                    ['min','Minimum']
                 ]
+            }, {
+                xtype: 'checkboxfield',
+                name: 'isInvert',
+                fieldLabel: 'Inverted',
+                labelAlign: 'left',
+                labelWidth: 70
             }]
         }],
 
@@ -486,6 +538,7 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
             itemId: 'buttons',
             dock: 'bottom',
             cls: 'x-docked-buttons',
+            hidden: !Scalr.isAllowed('GENERAL_CUSTOM_SCALING_METRICS', 'manage'),
             layout: {
                 type: 'hbox',
                 pack: 'center'
@@ -522,7 +575,6 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
     });
 
     return Ext.create('Ext.panel.Panel', {
-
         stateful: true,
         stateId: 'grid-scaling-metrics-view',
 

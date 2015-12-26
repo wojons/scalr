@@ -19,10 +19,6 @@ Scalr.regPage('Scalr.ui.sshkeys.view', function (loadParams, moduleParams) {
             'farmName', {
                 name: 'platform',
                 convert: function (value) {
-                    if (value === 'eucalyptus') {
-                        return 'ecs';
-                    }
-
                     return value;
                 }
             }
@@ -59,7 +55,7 @@ Scalr.regPage('Scalr.ui.sshkeys.view', function (loadParams, moduleParams) {
             emptyText: 'No SSH Keys defined'
         },
 
-        selModel: 'selectedmodel',
+        selModel: Scalr.isAllowed('SECURITY_SSH_KEYS', 'manage') ? 'selectedmodel' : null,
 
         listeners: {
             selectionchange: function (selModel, selections) {
@@ -140,12 +136,12 @@ Scalr.regPage('Scalr.ui.sshkeys.view', function (loadParams, moduleParams) {
             header: 'Location',
             minWidth: 110,
             flex: 1,
-            dataIndex: 'platform',
+            dataIndex: 'cloudLocation',
             sortable: true,
             renderer: function (value, meta, record) {
-                var location = record.get('cloudLocation');
-                return '<img class="x-icon-platform-small x-icon-platform-small-' + value +
-                '" data-qtip="' + Scalr.utils.getPlatformName(value) + '" src="' + Ext.BLANK_IMAGE_URL +
+                var platform = record.get('platform'), location = record.get('cloudLocation');
+                return '<img class="x-icon-platform-small x-icon-platform-small-' + platform +
+                '" data-qtip="' + Scalr.utils.getPlatformName(platform) + '" src="' + Ext.BLANK_IMAGE_URL +
                 '"/>&nbsp;<span style="line-height: 18px;">' + (location ? location : 'All locations') + '</span>';
             }
         }, {
@@ -180,8 +176,9 @@ Scalr.regPage('Scalr.ui.sshkeys.view', function (loadParams, moduleParams) {
                 iconCls: 'x-menu-icon-downloadprivatekey',
                 showAsQuickAction: true,
                 menuHandler: function (data) {
+                    var format = Scalr.localStorage.get('system-preferred-sshkey-format') || (Ext.isWindows ? 'ppk' : 'pem');
                     Scalr.utils.UserLoadFile('/sshkeys/' + data.id + '/downloadPrivate?' + Ext.Object.toQueryString({
-                        formatPpk: Ext.os.name === 'Windows'
+                        formatPpk: format == 'ppk'
                     }));
                 }
             }, {
@@ -236,6 +233,7 @@ Scalr.regPage('Scalr.ui.sshkeys.view', function (loadParams, moduleParams) {
                 cls: 'x-btn-red',
                 disabled: true,
                 tooltip: 'Select one or more shh keys to delete them',
+                hidden: !Scalr.isAllowed('SECURITY_SSH_KEYS', 'manage'),
                 handler: function () {
                     grid.deleteSelectedKeypairs();
                 }
@@ -365,6 +363,7 @@ Scalr.regPage('Scalr.ui.sshkeys.view', function (loadParams, moduleParams) {
                 itemId: 'delete',
                 cls: 'x-btn-red',
                 text: 'Delete',
+                hidden: !Scalr.isAllowed('SECURITY_SSH_KEYS', 'manage'),
                 handler: function () {
                     grid.deleteSelectedKeypair();
                 }

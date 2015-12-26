@@ -4,11 +4,9 @@ use Scalr\Stats\CostAnalytics\Entity\PriceHistoryEntity;
 use Scalr\Stats\CostAnalytics\Entity\PriceEntity;
 use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
-use Scalr\Modules\Platforms\Eucalyptus\EucalyptusPlatformModule;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Stats\CostAnalytics\Entity\SettingEntity;
-use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
-use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
+use Scalr\Model\Entity;
 use Scalr\Modules\PlatformModuleInterface;
 use Scalr\Exception\Http\NotFoundException;
 use Scalr\UI\Request\JsonData;
@@ -238,44 +236,55 @@ class Scalr_UI_Controller_Admin_Analytics_Pricing extends Scalr_UI_Controller
     public function xGetPlatformEndpointsAction($platform)
     {
         if (PlatformFactory::isOpenstack($platform)) {
-            $key = $platform . '.' . OpenstackPlatformModule::KEYSTONE_URL;
+            $key = Entity\CloudCredentialsProperty::OPENSTACK_KEYSTONE_URL;
         } else if (PlatformFactory::isCloudstack($platform)) {
-            $key = $platform . '.' . CloudstackPlatformModule::API_URL;
-        } else if ($platform == SERVER_PLATFORMS::EUCALYPTUS) {
-            $key = EucalyptusPlatformModule::EC2_URL;
+            $key = Entity\CloudCredentialsProperty::CLOUDSTACK_API_URL;
         }
 
         if (isset($key)) {
             $pm = PlatformFactory::NewPlatform($platform);
 
+            //TODO: use cloudsCredentials service
             $rs = $this->db->Execute("
-                SELECT DISTINCT cep.`env_id`, cep.`group`
-                FROM client_environment_properties cep
-                JOIN client_environments ce ON ce.id = cep.env_id
+                SELECT DISTINCT ce.`env_id`, cecc.`cloud_credentials_id`
+                FROM client_environments ce
                 JOIN clients c ON c.id = ce.client_id
-                WHERE c.status = ? AND cep.name = ? AND ce.status = ?
+                JOIN environment_cloud_credentials cecc ON ce.`id` = cecc.`env_id`
+                JOIN cloud_credentials_properties ccp ON cecc.`cloud_credentials_id` = ccp.`cloud_credentials_id`
+                WHERE c.status = ? AND ccp.name = ? AND ce.status = ?
                 GROUP BY value
             ", [Scalr_Account::STATUS_ACTIVE, $key, Scalr_Environment::STATUS_ACTIVE]);
 
             $endpoints = [];
-            $lastException = '';
+            $cloudCredsIds = [];
+            $envs = [];
+
             while ($rec = $rs->FetchRow()) {
-                $id = $rec['env_id'];
-                $group = $rec['group'];
-                try {
-                    $env = Scalr_Environment::init()->loadById($id);
-                } catch (Exception $e) {
-                    $lastException = $e->getMessage();
-                    continue;
-                }
+                $cloudCredsId = $rec['cloud_credentials_id'];
+                $envs[$cloudCredsId] = $rec['env_id'];
+                $cloudCredsIds[] = $cloudCredsId;
+            }
 
-                $url = $this->getContainer()->analytics->prices->normalizeUrl($env->getPlatformConfigValue($key, false, $group));
+            $cloudCredentialsEntity = new Entity\CloudCredentials();
+            $idFieldType = $cloudCredentialsEntity->getIterator()->getField('id')->getType();
 
-                if (!array_key_exists($url, $endpoints)) {
-                    $endpoints[$url] = array(
-                        'envId' => $id,
-                        'url'   => $url,
-                    );
+            foreach (array_chunk($cloudCredsIds, 128) as $chunk) {
+                /* @var $cloudCredentials Entity\CloudCredentials */
+                foreach (Entity\CloudCredentials::find([[
+                    'id' => [
+                        '$in' => array_map(function ($entry) use ($cloudCredentialsEntity, $idFieldType) {
+                            return $cloudCredentialsEntity->qstr('id', $idFieldType->toDb($entry));
+                        }, $chunk)
+                    ]
+                ]]) as $cloudCredentials) {
+                    $url = $this->getContainer()->analytics->prices->normalizeUrl($cloudCredentials->properties[$key]);
+
+                    if (!array_key_exists($url, $endpoints)) {
+                        $endpoints[$url] = array(
+                            'envId' => $envs[$cloudCredentials->id],
+                            'url'   => $url,
+                        );
+                    }
                 }
             }
         } else {
@@ -325,17 +334,20 @@ class Scalr_UI_Controller_Admin_Analytics_Pricing extends Scalr_UI_Controller
 
         $pricing = $this->getPlatformPricing($platformName, $result['cloudLocation'], $result['url'], $effectiveDate);
 
-        if ($pricing['prices']) {
+        if (!empty($pricing["prices"])) {
             foreach ($pricing['prices'] as $price) {
-                if (false !== ($pos = array_search($price['type'], $result['types'])))
+                if (false !== ($pos = array_search($price['type'], $result['types']))) {
                     unset($result['types'][$pos]);
+                }
             }
+        } else {
+            $pricing["prices"] = [];
         }
 
         foreach ($result['types'] as $type) {
             $pricing['prices'][] = [
                 'type' => $type,
-                'name' => (isset($typeNames[$type]) ? $typeNames[$type] : $type),
+                'name' => isset($typeNames[$type]) ? $typeNames[$type] : $type,
             ];
         }
 
@@ -376,18 +388,15 @@ class Scalr_UI_Controller_Admin_Analytics_Pricing extends Scalr_UI_Controller
                 $env = Scalr_Environment::init()->loadById($envId);
 
                 if (PlatformFactory::isOpenstack($platform)) {
-                    $key = $platform . '.' . OpenstackPlatformModule::KEYSTONE_URL;
+                    $key = Entity\CloudCredentialsProperty::OPENSTACK_KEYSTONE_URL;
                 } else if (PlatformFactory::isCloudstack($platform)) {
-                    $key = $platform . '.' . CloudstackPlatformModule::API_URL;
-                } else if ($platform == SERVER_PLATFORMS::EUCALYPTUS) {
-                    $key = EucalyptusPlatformModule::EC2_URL;
-                    $url = $this->getContainer()->analytics->prices->normalizeUrl($env->getPlatformConfigValue($key, false, $cloudLocation));
+                    $key = Entity\CloudCredentialsProperty::CLOUDSTACK_API_URL;
                 } else {
                     throw new Exception('This action is not yet supported for the specified cloud platform.');
                 }
 
                 if (empty($url)) {
-                    $url = $this->getContainer()->analytics->prices->normalizeUrl($env->getPlatformConfigValue($key));
+                    $url = $env->cloudCredentials($platform)->properties[$key];
                 }
             } else if ($platform == SERVER_PLATFORMS::EC2 || $platform == SERVER_PLATFORMS::GCE) {
                 $gcenvid = $this->getPlatformEnvId($platform);
@@ -397,7 +406,7 @@ class Scalr_UI_Controller_Admin_Analytics_Pricing extends Scalr_UI_Controller
             if (stristr($e->getMessage(), 'not found')) {
                 //Tries to find url from the cloud_locations table
                 if (empty($url) && (PlatformFactory::isOpenstack($platform) || PlatformFactory::isCloudstack($platform))) {
-                    $clEntity = CloudLocation::findOne([['platform' => $platform], ['cloudLocation' => $cloudLocation]], ['updated' => false]);
+                    $clEntity = CloudLocation::findOne([['platform' => $platform], ['cloudLocation' => $cloudLocation]], null, ['updated' => false]);
                     if ($clEntity instanceof CloudLocation) {
                         $url = $clEntity->url;
                     }
@@ -619,10 +628,10 @@ class Scalr_UI_Controller_Admin_Analytics_Pricing extends Scalr_UI_Controller
         $and = '';
 
         if ($platform == SERVER_PLATFORMS::EC2) {
-            $pname = Ec2PlatformModule::ACCOUNT_TYPE;
-            $and = " AND (p.value = '" . Ec2PlatformModule::ACCOUNT_TYPE_GOV_CLOUD . "' OR p.value = '" . Ec2PlatformModule::ACCOUNT_TYPE_CN_CLOUD . "') ";
+            $pname = Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE;
+            $and = " AND (p.value = '" . Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE_GOV_CLOUD . "' OR p.value = '" . Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE_CN_CLOUD . "') ";
         } else {
-            $pname = GoogleCEPlatformModule::CLIENT_ID;
+            $pname = Entity\CloudCredentialsProperty::GCE_CLIENT_ID;
         }
 
         $statement = "

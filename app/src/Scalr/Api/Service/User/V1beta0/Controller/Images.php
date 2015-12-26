@@ -2,13 +2,12 @@
 
 namespace Scalr\Api\Service\User\V1beta0\Controller;
 
+use Scalr\Acl\Acl;
 use Scalr\Api\Rest\Controller\ApiController;
 use Scalr\Api\Rest\Exception\ApiErrorException;
 use Scalr\Api\DataType\ErrorMessage;
-use Scalr\DataType\ScopeInterface;
 use Scalr\Model\Entity;
 use Scalr\Api\Rest\Http\Request;
-use Scalr\Acl\Acl;
 use Scalr\Service\Aws;
 use Scalr\Exception\NotEnabledPlatformException;
 
@@ -25,7 +24,7 @@ class Images extends ApiController
      */
     public function describeAction()
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_IMAGES);
+        $this->checkScopedPermissions('IMAGES');
 
         $platformFilter = $this->params('cloudPlatform');
         $regionFilter = $this->params('cloudLocation');
@@ -44,18 +43,19 @@ class Images extends ApiController
      */
     private function getDefaultCriteria()
     {
-        return [[ '$or' => [['envId' => $this->getEnvironment()->id], ['envId' => null]] ]];
+        return $this->getScopeCriteria();
     }
 
     /**
      * Gets specified Image taking into account both scope and authentication token
      *
-     * @param      string    $imageId                    The unique identifier of the Image (UUID)
-     * @param      bool      $restrictToEnvironmentScope optional Whether it should additionally check the Image corresponds to Environment scope
+     * @param      string    $imageId                            The unique identifier of the Image (UUID)
+     * @param      bool      $restrictToCurrentScope    optional Whether it should additionally check the Image corresponds to current scope
+     *
      * @return     Entity\Image Returns the Image Entity on success
      * @throws     ApiErrorException
      */
-    public function getImage($imageId, $restrictToEnvironmentScope = false)
+    public function getImage($imageId, $restrictToCurrentScope = false)
     {
         $criteria = $this->getDefaultCriteria();
         $criteria[] = ['hash' => strtolower($imageId)];
@@ -67,7 +67,9 @@ class Images extends ApiController
             throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Requested Image either does not exist or is not owned by your environment.");
         }
 
-        if ($restrictToEnvironmentScope && ($image->getScope() !== $image::SCOPE_ENVIRONMENT || $image->envId !== $this->getEnvironment()->id)) {
+        $this->checkPermissions($image);
+
+        if ($restrictToCurrentScope && $image->getScope() !== $this->getScope()) {
             throw new ApiErrorException(403, ErrorMessage::ERR_SCOPE_VIOLATION,
                 "The image is not either from the environment scope or owned by your environment."
             );
@@ -111,7 +113,7 @@ class Images extends ApiController
      */
     public function fetchAction($imageId)
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_IMAGES);
+        $this->checkScopedPermissions('IMAGES');
 
         return $this->result($this->adapter('image')->toData($this->getImage($imageId)));
     }
@@ -121,7 +123,7 @@ class Images extends ApiController
      */
     public function registerAction()
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_IMAGES, Acl::PERM_FARMS_IMAGES_CREATE);
+        $this->checkPermissions(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_MANAGE);
 
         $object = $this->request->getJsonBody();
 
@@ -130,12 +132,12 @@ class Images extends ApiController
         //Pre validates the request object
         $imageAdapter->validateObject($object, Request::METHOD_POST);
 
-        if (isset($object->scope) && $object->scope !== ScopeInterface::SCOPE_ENVIRONMENT) {
+        if (isset($object->scope) && $object->scope !== $this->getScope()) {
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid scope");
         }
 
         //Read only property. It is needed before toEntity() call to set envId and accountId properties properly
-        $object->scope = ScopeInterface::SCOPE_ENVIRONMENT;
+        $object->scope = $this->getScope();
 
         /* @var $image Entity\Image */
         //Converts object into Role entity
@@ -181,7 +183,7 @@ class Images extends ApiController
      */
     public function modifyAction($imageId)
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_IMAGES, Acl::PERM_FARMS_IMAGES_MANAGE);
+        $this->checkScopedPermissions('IMAGES', 'MANAGE');
 
         $object = $this->request->getJsonBody();
 
@@ -190,7 +192,7 @@ class Images extends ApiController
         //Pre validates the request object
         $imageAdapter->validateObject($object, Request::METHOD_PATCH);
 
-        if (isset($object->scope) && $object->scope !== ScopeInterface::SCOPE_ENVIRONMENT) {
+        if (isset($object->scope) && $object->scope !== $this->getScope()) {
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid scope");
         }
 
@@ -219,7 +221,7 @@ class Images extends ApiController
      */
     public function deregisterAction($imageId)
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_IMAGES, Acl::PERM_FARMS_IMAGES_MANAGE);
+        $this->checkScopedPermissions('IMAGES', 'MANAGE');
 
         //We only allow to delete images that are from the environment scope
         $image = $this->getImage($imageId, true);
@@ -244,7 +246,7 @@ class Images extends ApiController
      */
     public function copyAction($imageId)
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_IMAGES, Acl::PERM_FARMS_IMAGES_MANAGE);
+        $this->checkScopedPermissions('IMAGES', 'MANAGE');
 
         $object = $this->request->getJsonBody();
 

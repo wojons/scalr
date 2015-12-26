@@ -77,15 +77,32 @@ class Scheduler extends AbstractTask
 
                 $offset = $startTime->getOffset() - $currentTime->getOffset();
                 $num = ($currentTime->getTimestamp() - $startTime->getTimestamp() - $offset) / ($task['restart_every'] * 60);
+                $numFloor = floor($num);
 
-                // num should be less than 0.5
-                if (floor($num) != round($num, 0, PHP_ROUND_HALF_UP)) {
+                // we check tasks which are longer than hour
+                if ($task['restart_every'] > 55) {
+                    // check how much intervals were missed
+                    $lastStartTime = new DateTime($task['last_start_time']);
+                    $lastStartTime->setTimezone(new DateTimeZone($task['timezone']));
+
+                    if ((($currentTime->getTimestamp() - $lastStartTime->getTimestamp() - ($lastStartTime->getOffset() - $currentTime->getOffset())) / ($task['restart_every'] * 60)) > 2) {
+                        // we missed one extra (or more) interval, so let's check if currentTime is synchronized with startTime
+                        if (($num - $numFloor) > 0.1) {
+                            $this->getLogger()->debug(sprintf('Delay task (missed interval): %s, num: %f', $task['name'], $num));
+                            continue;
+                        }
+                    }
+                }
+
+                // because of timezone's transitions
+                // num should be less than 0.5 (because of interval * 0.9 in SQL query)
+                if ($numFloor != round($num, 0, PHP_ROUND_HALF_UP)) {
+                    $this->getLogger()->debug(sprintf('Delay task (interval): %s, Offset: %d, num: %f, floor: %f, round: %f', $task['name'], $offset, $num, floor($num), round($num, 0, PHP_ROUND_HALF_UP)));
                     continue;
                 }
             }
 
             $this->log('DEBUG', "Adding task %s to queue", $task['id']);
-
             $queue->append($task['id']);
         }
 
@@ -104,11 +121,17 @@ class Scheduler extends AbstractTask
 
         $this->log("DEBUG", "Trying to execute task:%d", $task->id);
 
+        //Ajdusts both account & environment for the audit log
+        \Scalr::getContainer()->auditlogger
+            ->setAccountId($task->accountId)
+            ->setEnvironmentId($task->envId)
+        ;
+
         if ($task->execute()) {
             $task->updateLastStartTime();
             $this->getLogger()->info("Task %s:%d successfully sent", $task->name, $task->id);
         } else {
-            $this->log('DEBUG', "Could not find any node for task:%d", $task->id);
+            $this->log('DEBUG', "Failed to execute task:%d", $task->id);
         }
 
         return $request;

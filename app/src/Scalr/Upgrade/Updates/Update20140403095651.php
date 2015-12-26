@@ -24,20 +24,20 @@ class Update20140403095651 extends AbstractUpdate implements SequenceInterface
 
     protected function isApplied1($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_ADMINISTRATION_GLOBAL_VARIABLES') && $this->db->GetOne("
+        return defined('Scalr\\Acl\\Acl::RESOURCE_GLOBAL_VARIABLES_ACCOUNT') && $this->db->GetOne("
             SELECT `granted` FROM `acl_role_resources`
             WHERE `resource_id` = ? AND `role_id` = ?
             LIMIT 1
         ", array(
-            Acl::RESOURCE_ADMINISTRATION_GLOBAL_VARIABLES,
+            Acl::RESOURCE_GLOBAL_VARIABLES_ACCOUNT,
             Acl::ROLE_ID_FULL_ACCESS,
         )) == 1;
     }
 
     protected function validateBefore1($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_ADMINISTRATION_GLOBAL_VARIABLES') &&
-        Definition::has(Acl::RESOURCE_ADMINISTRATION_GLOBAL_VARIABLES);
+        return defined('Scalr\\Acl\\Acl::RESOURCE_GLOBAL_VARIABLES_ACCOUNT') &&
+        Definition::has(Acl::RESOURCE_GLOBAL_VARIABLES_ACCOUNT);
     }
 
     protected function run1($stage)
@@ -48,7 +48,7 @@ class Update20140403095651 extends AbstractUpdate implements SequenceInterface
             VALUES (?, ?, 1)
         ", array(
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::RESOURCE_ADMINISTRATION_GLOBAL_VARIABLES
+            Acl::RESOURCE_GLOBAL_VARIABLES_ACCOUNT
         ));
     }
 }

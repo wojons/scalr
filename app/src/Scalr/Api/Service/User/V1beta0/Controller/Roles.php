@@ -34,15 +34,7 @@ class Roles extends ApiController
      */
     private function getDefaultCriteria()
     {
-        $environment = $this->getEnvironment();
-
-        $criteria = [[ '$or' => [
-            ['envId'     => $environment->id],
-            ['accountId' => $environment->accountId],
-            [ '$and'     => [['envId' => null], ['accountId' => null]]]
-        ]]];
-
-        return $criteria;
+        return $this->getScopeCriteria();
     }
 
     /**
@@ -50,9 +42,37 @@ class Roles extends ApiController
      */
     public function describeAction()
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_ROLES);
+        $this->checkScopedPermissions('ROLES');
 
-        return $this->adapter('role')->getDescribeResult($this->getDefaultCriteria());
+        $r = new Entity\Role();
+        $re = new Entity\RoleEnvironment();
+        $ri = new Entity\RoleImage();
+        $criteria = [];
+
+        $criteria[Entity\Role::STMT_DISTINCT] = true;
+        $criteria[Entity\Role::STMT_FROM] = $r->table() . " LEFT JOIN " . $re->table() . " ON {$r->columnId} = {$re->columnRoleId}
+             LEFT JOIN " . $ri->table() . " ON {$r->columnId} = {$ri->columnRoleId}";
+
+        switch ($this->getScope()) {
+            case ScopeInterface::SCOPE_ENVIRONMENT:
+                $criteria[Entity\Role::STMT_WHERE] = "({$r->columnAccountId} IS NULL AND {$ri->columnRoleId} IS NOT NULL
+                     OR {$r->columnAccountId} = '" . $this->getUser()->accountId . "' AND {$r->columnEnvId} IS NULL
+                         AND ({$re->columnEnvId} IS NULL OR {$re->columnEnvId} = '" . $this->getEnvironment()->id . "')
+                     OR {$r->columnEnvId} = '" . $this->getEnvironment()->id . "'
+                    ) AND {$r->columnGeneration} = 2";
+                break;
+
+            case ScopeInterface::SCOPE_ACCOUNT:
+                $criteria[Entity\Role::STMT_WHERE] = "({$r->columnAccountId} IS NULL AND {$ri->columnRoleId} IS NOT NULL OR " .
+                    "{$r->columnAccountId} = '" . $this->getUser()->accountId . "' AND {$r->columnEnvId} IS NULL) AND {$r->columnGeneration} = 2";
+                break;
+
+            case ScopeInterface::SCOPE_SCALR:
+                $criteria = [['envId' => null], ['accountId' => null]];
+                break;
+        }
+
+        return $this->adapter('role')->getDescribeResult($criteria);
     }
 
     /**
@@ -64,7 +84,7 @@ class Roles extends ApiController
      */
     public function describeImagesAction($roleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_IMAGES);
+        $this->checkScopedPermissions('IMAGES');
 
         //Finds out the Role object
         $role = $this->getRole($roleId);
@@ -72,17 +92,21 @@ class Roles extends ApiController
         $criteria = [];
         $requestQuery = $this->params();
 
-        foreach ($requestQuery as $param => $value) {
-            if ($param == 'role') {
-                continue;
-            } else if ($param == 'image') {
-                $criteria[] = ['hash' => $value];
-            } else if ($param != ApiController::QUERY_PARAM_MAX_RESULTS && $param != ApiController::QUERY_PARAM_PAGE_NUM) {
-                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, sprintf("Unsupported filter. Fields which are available for filtering: [%s]", 'role, image'));
-            }
+        if (isset($requestQuery['image'])) {
+            $criteria[] = ['hash' => static::getBareId($requestQuery, 'image')];
         }
 
-        $images = $role->getImages($criteria, null, $this->getMaxResults(), $this->getPageOffset(), true);
+        $requestQuery = array_diff_key($requestQuery, array_flip(['image', 'role', ApiController::QUERY_PARAM_MAX_RESULTS, ApiController::QUERY_PARAM_PAGE_NUM]));
+
+        if (!empty($requestQuery)) {
+            throw new ApiErrorException(
+                400,
+                ErrorMessage::ERR_INVALID_STRUCTURE,
+                sprintf("Unsupported filter(s) [%s]. Fields which are available for filtering: [role, image]", implode(', ', array_keys($requestQuery)))
+            );
+        }
+
+        $images = $role->getImages($criteria, null, null, $this->getMaxResults(), $this->getPageOffset(), true);
 
         $roleImages = [];
 
@@ -100,12 +124,13 @@ class Roles extends ApiController
     /**
      * Gets role from database using User's Environment
      *
-     * @param    int     $roleId                     The identifier of the Role
-     * @param    bool    $restrictToEnvironmentScope optional Whether it should additionally check that role corresponds to Environment scope
+     * @param    int     $roleId                             The identifier of the Role
+     * @param    bool    $restrictToCurrentScope    optional Whether it should additionally check that role corresponds to current scope
+     *
      * @throws   ApiErrorException
      * @return   \Scalr\Model\Entity\Role|null Returns Role entity on success or NULL otherwise
      */
-    public function getRole($roleId, $restrictToEnvironmentScope = false)
+    public function getRole($roleId, $restrictToCurrentScope = false)
     {
         $criteria = $this->getDefaultCriteria();
         $criteria[] = ['id' => $roleId];
@@ -120,9 +145,9 @@ class Roles extends ApiController
         //To be over-suspicious check READ access to Role object
         $this->checkPermissions($role);
 
-        if ($restrictToEnvironmentScope && ($role->getScope() !== $role::SCOPE_ENVIRONMENT || $role->envId !== $this->getEnvironment()->id)) {
+        if ($restrictToCurrentScope && $role->getScope() !== $this->getScope()) {
             throw new ApiErrorException(403, ErrorMessage::ERR_SCOPE_VIOLATION,
-                "The Role is not either from the Environment scope or owned by your Environment."
+                "The Role is not either from the {$this->getScope()} scope or owned by your {$this->getScope()}."
             );
         }
 
@@ -151,9 +176,11 @@ class Roles extends ApiController
         /* @var $image Entity\Image */
         $image = $list->current();
 
-        if (!($image instanceof Entity\Image)) {
+        if (!$image instanceof Entity\Image) {
             throw new \UnexpectedValueException("Unexpected result from the query");
         }
+
+        $this->checkPermissions($image);
 
         return $image;
     }
@@ -166,7 +193,7 @@ class Roles extends ApiController
      */
     public function fetchAction($roleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_ROLES);
+        $this->checkScopedPermissions('ROLES');
 
         return $this->result($this->adapter('role')->toData($this->getRole($roleId)));
     }
@@ -180,7 +207,7 @@ class Roles extends ApiController
      */
     public function fetchImageAction($roleId, $imageId)
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_IMAGES);
+        $this->checkScopedPermissions('IMAGES');
 
         $this->getImage($roleId, $imageId);
 
@@ -199,15 +226,15 @@ class Roles extends ApiController
      */
     public function deregisterImageAction($roleId, $imageId)
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_MANAGE);
+        $this->checkScopedPermissions('ROLES', 'MANAGE');
 
         $image = $this->getImage($roleId, $imageId);
 
         $roleImage = Entity\RoleImage::findOne([
-            ['platform' => $image->platform],
+            ['platform'      => $image->platform],
             ['cloudLocation' => $image->cloudLocation],
-            ['imageId' => $image->id],
-            ['roleId' => $roleId]
+            ['imageId'       => $image->id],
+            ['roleId'        => $roleId]
         ]);
 
         if ($roleImage) {
@@ -234,7 +261,10 @@ class Roles extends ApiController
     protected function setImage()
     {
         $args = func_get_args();
+
+        /* @var $role Entity\Role */
         $role = array_shift($args);
+
         try {
             call_user_func_array([$role, 'setImage'], $args);
         } catch (OsMismatchException $e) {
@@ -253,7 +283,7 @@ class Roles extends ApiController
      */
     public function createAction()
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE);
+        $this->checkPermissions(Acl::RESOURCE_ROLES_ENVIRONMENT, Acl::PERM_ROLES_ENVIRONMENT_MANAGE);
 
         $object = $this->request->getJsonBody();
 
@@ -263,7 +293,7 @@ class Roles extends ApiController
         $roleAdapter->validateObject($object, Request::METHOD_POST);
 
         //Read only property. It is needed before toEntity() call to set envId and accountId properties properly
-        $object->scope = ScopeInterface::SCOPE_ENVIRONMENT;
+        $object->scope = $this->getScope();
 
         /* @var $role Entity\Role */
         //Converts object into Role entity
@@ -291,7 +321,7 @@ class Roles extends ApiController
      */
     public function modifyAction($roleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_MANAGE);
+        $this->checkScopedPermissions('ROLES', 'MANAGE');
 
         $object = $this->request->getJsonBody();
 
@@ -325,7 +355,7 @@ class Roles extends ApiController
      */
     public function deleteAction($roleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_MANAGE);
+        $this->checkScopedPermissions('ROLES', 'MANAGE');
 
         $role = $this->getRole($roleId, true);
 
@@ -343,7 +373,8 @@ class Roles extends ApiController
      */
     public function registerImageAction($roleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_MANAGE);
+        $this->checkScopedPermissions('ROLES', 'MANAGE');
+
         //Gets role checking Environment scope
         $role = $this->getRole($roleId, true);
 
@@ -370,18 +401,18 @@ class Roles extends ApiController
             $imageAdapter->validateObject($object->image);
         }
 
-        $environment = $this->getEnvironment();
-
+        $criteria = $this->getScopeCriteria();
+        $criteria[] = ['hash' => $objectImageId];
         /* @var $image Entity\Image */
-        $image = Entity\Image::findOne([['hash' => $objectImageId], ['$or' => [['envId' => $environment->id], ['envId' => null]]]]);
+        $image = Entity\Image::findOne($criteria);
 
         if (empty($image)) {
             throw new ApiErrorException(404, ErrorMessage::ERR_INVALID_VALUE, "The Image either does not exist or isn't in scope for the current Environment.");
         }
 
         $roleImage = Entity\RoleImage::findOne([
-            ['roleId' => $roleId],
-            ['platform' => $image->platform],
+            ['roleId'        => $roleId],
+            ['platform'      => $image->platform],
             ['cloudLocation' => $image->cloudLocation]
         ]);
 
@@ -409,7 +440,7 @@ class Roles extends ApiController
      */
     public function replaceImageAction($roleId, $imageId)
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_MANAGE);
+        $this->checkScopedPermissions('ROLES', 'MANAGE');
 
         $role = $this->getRole($roleId, true);
 
@@ -438,10 +469,10 @@ class Roles extends ApiController
             $imageAdapter->validateObject($object->image);
         }
 
-        $environment = $this->getEnvironment();
-
+        $criteria = $this->getScopeCriteria();
+        $criteria[] = ['hash' => $objectImageId];
         /* @var $image Entity\Image */
-        $image = Entity\Image::findOne([['hash' => $objectImageId], ['$or' => [['envId' => $environment->id], ['envId' => null]]]]);
+        $image = Entity\Image::findOne($criteria);
 
         if (empty($image)) {
             throw new ApiErrorException(404, ErrorMessage::ERR_INVALID_VALUE, "The Image either does not exist or isn't in scope for the current Environment.");
@@ -469,7 +500,7 @@ class Roles extends ApiController
      */
     public function describeVariablesAction($roleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES);
+        $this->checkScopedPermissions('ROLES', 'MANAGE');
 
         $this->getRole($roleId, true);
 
@@ -502,7 +533,7 @@ class Roles extends ApiController
      */
     public function fetchVariableAction($roleId, $name)
     {
-        $this->checkPermissions(Acl::RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES);
+        $this->checkScopedPermissions('ROLES', 'MANAGE');
 
         $this->getRole($roleId, true);
 
@@ -526,7 +557,7 @@ class Roles extends ApiController
      */
     public function createVariableAction($roleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES);
+        $this->checkScopedPermissions('ROLES', 'MANAGE');
 
         $this->getRole($roleId, true);
 
@@ -590,7 +621,7 @@ class Roles extends ApiController
      */
     public function modifyVariableAction($roleId, $name)
     {
-        $this->checkPermissions(Acl::RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES);
+        $this->checkScopedPermissions('ROLES', 'MANAGE');
 
         $this->getRole($roleId, true);
 
@@ -661,7 +692,7 @@ class Roles extends ApiController
      */
     public function deleteVariableAction($roleId, $name)
     {
-        $this->checkPermissions(Acl::RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES);
+        $this->checkScopedPermissions('ROLES', 'MANAGE');
 
         $this->getRole($roleId, true);
 
@@ -715,8 +746,8 @@ class Roles extends ApiController
     {
         return new \Scalr_Scripting_GlobalVariables(
             $this->getUser()->getAccountId(),
-            $this->getEnvironment()->id,
-            \Scalr_Scripting_GlobalVariables::SCOPE_ROLE
+            $this->getEnvironment() ? $this->getEnvironment()->id : 0,
+            ScopeInterface::SCOPE_ROLE
         );
     }
 }

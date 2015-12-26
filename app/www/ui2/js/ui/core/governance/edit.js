@@ -145,12 +145,28 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                 name: 'aws.additional_security_groups',
                 title: 'Security groups',
                 type: 'securityGroups',
+                maxCount: moduleParams['scalr.aws.ec2.limits.security_groups_per_instance'],
+                separateWindowsSgs: true,
+                extendedAdditionalSgs: true,
                 group: 'EC2',
                 defaults: {
                     value: '',
                     allow_additional_sec_groups: 0
                 },
                 subheader: 'Set security groups list that will be applied to all instances.',
+                warning: 'Please ensure that the security groups that you list already exist within your EC2 setup. Scalr WILL NOT create these groups and instances will fail to launch otherwise.'
+            },{
+                name: 'aws.elb_additional_security_groups',
+                title: 'Security groups',
+                type: 'securityGroups',
+                maxCount: moduleParams['scalr.aws.ec2.limits.security_groups_per_instance'],
+                extendedAdditionalSgs: true,
+                group: 'ELB',
+                defaults: {
+                    value: '',
+                    allow_additional_sec_groups: 0
+                },
+                subheader: 'Set security groups list that will be applied to all ELBs.',
                 warning: 'Please ensure that the security groups that you list already exist within your EC2 setup. Scalr WILL NOT create these groups and instances will fail to launch otherwise.'
             },{
                 name: 'aws.iam',
@@ -187,6 +203,19 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                 },
                 subheader: 'RDS-related restriction.'
             },{
+                name: 'aws.rds_additional_security_groups',
+                title: 'Security groups',
+                type: 'securityGroups',
+                maxCount: 5,
+                extendedAdditionalSgs: true,
+                group: 'RDS',
+                defaults: {
+                    value: '',
+                    allow_additional_sec_groups: 0
+                },
+                subheader: 'Set security groups list that will be applied to all RDS instances.',
+                warning: 'Please ensure that the security groups that you list already exist within your EC2 setup. Scalr WILL NOT create these groups and instances will fail to launch otherwise.'
+            },{
                 name: 'aws.kms_keys',
                 title: 'KMS keys',
                 type: 'encryptionkeys',
@@ -194,6 +223,42 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     value: []
                 },
                 subheader: 'Limit the Encryption Keys that can be used within Scalr.'
+            }]
+        },
+        azure: {
+            title: Scalr.utils.getPlatformName('azure'),
+            options: [{
+                name: 'azure.cloud_location',
+                title: 'Regions',
+                type: 'list',
+                url: '/platforms/azure/xGetResourceGroups',
+                root: 'cloudLocations',
+                defaults: {value: ['eastus'], 'default': 'eastus'},
+                subheader: 'Limit regions that instances can be launch in.'
+            },{
+                name: 'azure.resource-group',
+                title: 'Resource groups',
+                type: 'list',
+                url: '/platforms/azure/xGetResourceGroups',
+                root: 'resourceGroups',
+                defaults: {value: []},
+                subheader: 'Limit resource groups'
+            },{
+                name: 'azure.vm-size',
+                title: 'Instance types',
+                type: 'instancetypebyregion',
+                defaults: {value: {}},
+                subheader: instanceTypeDescription
+            },{
+                name: 'azure.tags',
+                title: 'Tagging',
+                type: 'tags',
+                defaults: {
+                    value: {}
+                },
+                tagsLimit: 0,
+                subheader: 'Define tags that should be automatically assigned to every Azure VM. Enforcing this policy will prevent users from adding additional tags.',
+                warning: 'Global Variable Interpolation is supported for tag values <img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-globalvars" style="vertical-align:top;position:relative;top:2px" />'
             }]
         }
     };
@@ -324,7 +389,7 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     rightcol = panel.down('#rightcol'),
                     record = me.getSelectionModel().getSelection()[0];
                 value = me.getSelectionModel().getSelection()[0].getData();
-                limits = rightcol.getOptionValue(value.config);
+                limits = rightcol.getOptionValue(value.config, enabled);
                 if (! limits)
                     return;
                 value.settings.limits = limits;
@@ -347,6 +412,7 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                             rightcol.currentItem.fireEvent('statuschanged', enabled);
                         }
                         Scalr.governance = data.governance || {};//upadate governance in user context
+                        Scalr.event.fireEvent('update', '/core/governance', value.platform, value.config.name);
                     }
                 });
             }
@@ -400,8 +466,8 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     warning.hide();
                 }
             },
-            getOptionValue: function(config) {
-                return this.currentItem.getValues(config);
+            getOptionValue: function(config, enabled) {
+                return this.currentItem.getValues(config, enabled);
             },
             items: [{
                 xtype: 'component',
@@ -516,44 +582,342 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     xtype: 'container',
                     hidden: true,
                     tab: true,
+                    flex: 1,
+                    itemId: 'list',
+                    layout: 'fit',
+                    maxWidth: maxFormWidth,
+                    setValues: function(data){
+                        var limits = data.settings.limits,
+                            config = data.config,
+                            value = limits.value || [],
+                            defaultValue = limits.default || null,
+                            listField = this.down('#listGrid');
+                        Scalr.CachedRequestManager.get('governance').load(
+                            {
+                                url: config.url
+                            },
+                            function(data, status){
+                                data = data || {};
+                                if (!Ext.Object.getSize(data)) {
+                                    panel.down('#rightcol').disableButtons();
+                                    listField.store.removeAll();
+                                } else {
+                                    var listToLoad = [];
+                                    if (Ext.isArray(data[config.root])) {
+                                        Ext.each(data[config.root], function(item){
+                                            listToLoad.push({
+                                                id: item.id,
+                                                'default': item.id === defaultValue,
+                                                name: item.name,
+                                                enabled: Ext.Array.contains(value, item.id) ? 1 : 0
+                                            });
+                                        });
+                                    } else {
+                                        Ext.Object.each(data[config.root], function(id, name){
+                                            listToLoad.push({
+                                                id: id,
+                                                'default': defaultValue ? id === defaultValue : defaultValue = id,
+                                                name: name,
+                                                enabled: Ext.Array.contains(value, id) ? 1 : 0
+                                            });
+                                        });
+                                    }
+                                    listField.store.load({data: listToLoad});
+                                }
+                            }
+                        );
+
+                    },
+                    getValues: function(){
+                        var listField = this.down('#listGrid'),
+                            value = [], defaultValue;
+                        listField.store.getUnfiltered().each(function(record){
+                            if (record.get('enabled')) {
+                                value.push(record.get('id'));
+                            }
+                            if (record.get('default')) {
+                                defaultValue = record.get('id');
+                            }
+                        });
+                        return {
+                            value: value,
+                            default: defaultValue
+                        };
+                    },
+                    items: [{
+                        xtype: 'grid',
+                        cls: 'x-grid-with-formfields',
+                        itemId: 'listGrid',
+                        store: {
+                            fields: ['id', 'name', {name: 'default', type: 'boolean'}, 'enabled'],
+                            proxy: 'object',
+                            sorters: {
+                                property: 'name'
+                            }
+                        },
+                        trackMouseOver: false,
+                        disableSelection: true,
+                        columns: [{
+                            text: 'Default',
+                            sortable: false,
+                            resizable: false,
+                            width: 76,
+                            dataIndex: 'default',
+                            xtype: 'widgetcolumn',
+                            align: 'center',
+                            widget: {
+                                xtype: 'radio',
+                                name: 'default',
+                                listeners: {
+                                    change: function(comp, value){
+                                        var record = comp.getWidgetRecord();
+                                        if (record) {
+                                            record.set('default', value);
+                                            if (value) {
+                                                record.set('enabled', 1)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },{
+                            text: 'Allowed',
+                            sortable: false,
+                            resizable: false,
+                            dataIndex: 'enabled',
+                            width: 110,
+                            xtype: 'widgetcolumn',
+                            align: 'center',
+                            widget: {
+                                xtype: 'buttongroupfield',
+                                margin: '0 0 0 -6',
+                                defaults: {
+                                    width: 45,
+                                    style: 'padding-left:0;padding-right:0'
+                                },
+                                items: [{
+                                    text: 'On',
+                                    value: 1
+                                },{
+                                    text: 'Off',
+                                    value: 0
+                                }],
+                                listeners: {
+                                    change: function(comp, value){
+                                        var record = comp.getWidgetRecord();
+                                        if (record) {
+                                            record.set('enabled', value);
+                                            if (!value) {
+                                                record.set('default', false);
+                                            }
+                                        }
+                                    },
+                                    beforetoggle: function(btn, value){
+                                        var record = this.getWidgetRecord();
+                                        if (value === 0 && record.get('default')) {
+                                            Scalr.message.InfoTip('Default region can\'t be disabled.', btn.el, {anchor: 'bottom'});
+                                            return false;
+                                        }
+                                    }
+                                }
+                            }
+                        },{
+                            text: 'Name',
+                            sortable: false,
+                            resizable: false,
+                            flex: 1,
+                            dataIndex: 'name'
+                        }]
+                    }]
+                },{
+                    xtype: 'container',
+                    hidden: true,
+                    tab: true,
                     itemId: 'securityGroups',
                     layout: 'anchor',
                     maxWidth: maxFormWidth,
                     defaults: {
                         anchor: '100%'
                     },
-                    setValues: function(data){
-                        var limits = data.settings.limits || {},
-                            field = this.down('[name="value"]');
-                        field.reset();
-                        field.emptyText = data.config.emptyText || ' ';
-                        field.applyEmptyText();
-                        var values = {
-                            'allow_additional_sec_groups': limits['allow_additional_sec_groups'],
-                            value: limits.value || ''
-                        };
-                        this.setFieldValues(values);
+                    applyFieldSettings: function(settings) {
+                        this.settings = settings;
+                        this.down('[name="separateWindowsSgs"]').setVisible(settings.separateWindowsSgs);
                     },
-                    getValues: function(){
-                        var result = this.isValidFields() ? this.getFieldValues() : null;
-                        if (result) {
-                            if (Ext.isArray(result.value)) {
-                                result['value'] = result['value'].join(',');
+                    setValues: function(data){
+                        var limits = data.settings.limits || {};
+                        
+                        this.resetFieldValues();
+                        this.applyFieldSettings(data.config);
+                        
+                        var values = {
+                            allow_additional_sec_groups: limits['allow_additional_sec_groups'],
+                            value: limits['value'] || ''
+                        };
+
+                        if (this.settings.separateWindowsSgs) {
+                            values['windows'] = limits['windows'] || '';
+                            values['separateWindowsSgs'] = limits['windows'] ? true : false
+                        }
+                        
+                        if (this.settings.extendedAdditionalSgs) {
+                            values['additional_sec_groups_list'] = limits['additional_sec_groups_list'] || '';
+                            values['extendedAdditionalSgs'] = limits['additional_sec_groups_list'] ? 'list' : 'any';
+                        }
+                        
+                        this.settings.skipMaxCountCheck = true;
+                        this.setFieldValues(values);
+                        this.settings.skipMaxCountCheck = false;
+                    },
+                    getValues: function(config, enabled){
+                        var values,
+                            field,
+                            result = {};
+
+                        values = this.getFieldValues();
+                        if (enabled !== 0 && !values['allow_additional_sec_groups'] && Ext.isEmpty(values['value'])) {
+                            field = this.down('[name="value"]');
+                            field.markInvalid('This field is required');
+                            field.focus();
+                            return null;
+                        }
+                        
+                        if (Ext.isArray(values['value'])) {
+                            result['value'] = values['value'].join(',');
+                        }
+                        
+                        result['allow_additional_sec_groups'] = values['allow_additional_sec_groups'] ? 1 : 0;
+                        if (this.settings.separateWindowsSgs) {
+                            if (values['separateWindowsSgs']) {
+                                if (!Ext.isEmpty(values['windows'])) {
+                                    result['windows'] = values['windows'].join(',');
+                                } else if (enabled !== 0) {
+                                    field = this.down('[name="windows"]');
+                                    field.markInvalid('This field is required');
+                                    field.focus();
+                                    return null;
+                                }
                             }
-                            result['allow_additional_sec_groups'] = result['allow_additional_sec_groups'] ? 1 : 0;
+                        }
+
+                        if (this.settings.extendedAdditionalSgs) {
+                            if (values['allow_additional_sec_groups'] && values['extendedAdditionalSgs'] === 'list') {
+                                if (!Ext.isEmpty(values['additional_sec_groups_list'])) {
+                                    result['additional_sec_groups_list'] = values['additional_sec_groups_list'].join(',');
+                                } else if (enabled !== 0) {
+                                    field = this.down('[name="additional_sec_groups_list"]');
+                                    field.validate();
+                                    field.focus();
+                                    return null;
+                                }
+                            }
+
                         }
                         return result;
                     },
                     items: [{
+                        xtype: 'checkbox',
+                        name: 'separateWindowsSgs',
+                        boxLabel: 'Use a different set of Security Groups for <b>Windows</b> and <b>Linux</b> instances',
+                        listeners: {
+                            change: function(comp, value) {
+                                var ct = this.up('#securityGroups');
+                                ct.down('[name="windows"]').setVisible(!!value);
+                                ct.down('[name="value"]').toggleIcon('linux', value);
+                            }
+                        }
+                    },{
                         xtype: 'taglistfield',
                         name: 'value',
                         tagRegexText: 'SG names must be alphanumeric, including the following common characters: plus (+), equal (=), comma (,), period (.), at (@), dash (-) and space.',
-                        tagRegex: /^[\w+=,.@\-\s]+$/
+                        tagRegex: /^\**[\w+=,.@\-][\w+=,.@\- *]*$/,
+                        plugins: [{
+                            ptype: 'fieldicons',
+                            position: 'inner',
+                            icons: [{
+                                id: 'linux',
+                                hidden: true,
+                                iconCls: 'osfamily-small x-icon-osfamily-small-oel',
+                                tooltip: 'Security groups that will be applied to all Linux instances'
+                            }]
+                        }],
+                        listeners: {
+                            beforeselect: function(comp, record) {
+                                var settings = comp.up('#securityGroups').settings;
+                                if (!settings.skipMaxCountCheck && settings.maxCount && comp.getValue().length >= settings.maxCount) {
+                                    Scalr.message.InfoTip('Limit of ' + settings.maxCount + ' Security Groups per instance has been reached.', comp.inputEl, {anchor: 'bottom'});
+                                    return false;
+                                }
+                            }
+                        }
+                    },{
+                        xtype: 'taglistfield',
+                        name: 'windows',
+                        hidden: true,
+                        tagRegexText: 'SG names must be alphanumeric, including the following common characters: plus (+), equal (=), comma (,), period (.), at (@), dash (-) and space.',
+                        tagRegex: /^\**[\w+=,.@\-][\w+=,.@\- *]*$/,
+                        plugins: [{
+                            ptype: 'fieldicons',
+                            position: 'inner',
+                            icons: [{
+                                id: 'windows',
+                                iconCls: 'osfamily-small x-icon-osfamily-small-windows',
+                                tooltip: 'Security groups that will be applied to all Windows instances'
+                            }]
+                        }],
+                        listeners: {
+                            beforeselect: function(comp, record) {
+                                var settings = comp.up('#securityGroups').settings;
+                                if (!settings.skipMaxCountCheck && settings.maxCount && comp.getValue().length >= settings.maxCount) {
+                                    Scalr.message.InfoTip('Limit of ' + settings.maxCount + ' Security Groups per instance has been reached.', comp.inputEl, {anchor: 'bottom'});
+                                    return false;
+                                }
+                            }
+                        }
                     },{
                         xtype: 'checkbox',
                         name: 'allow_additional_sec_groups',
                         inputValue: 1,
-                        boxLabel: '&nbsp;Allow user to specify additional security groups'
+                        margin: '12 0 6 0',
+                        boxLabel: 'Allow user to specify additional security groups',
+                        listeners: {
+                            change: function(comp, value) {
+                                this.next().setVisible(comp.up('#securityGroups').settings.extendedAdditionalSgs && !!value);
+                            }
+                        }
+                    },{
+                        xtype: 'container',
+                        layout: 'hbox',
+                        hidden: true,
+                        itemId: 'extendedAdditionalSgsCt',
+                        items: [{
+                            xtype: 'buttongroupfield',
+                            name: 'extendedAdditionalSgs',
+                            defaults: {
+                                width: 100
+                            },
+                            value: 'any',
+                            items: [{
+                                value: 'any',
+                                text: 'Any'
+                            },{
+                                value: 'list',
+                                text: 'From list'
+                            }],
+                            listeners: {
+                                change: function(comp, value) {
+                                    comp.next().setVisible(value === 'list');
+                                }
+                            }
+                        },{
+                            xtype: 'taglistfield',
+                            name: 'additional_sec_groups_list',
+                            flex: 1,
+                            margin: '0 0 0 10',
+                            hidden: true,
+                            allowBlank: false,
+                            tagRegexText: 'SG names must be alphanumeric, including the following common characters: plus (+), equal (=), comma (,), period (.), at (@), dash (-) and space.',
+                            tagRegex: /^\**[\w+=,.@\-][\w+=,.@\- *]*$/,
+                        }]
                     }]
                 },{
                     xtype: 'container',
@@ -622,7 +986,7 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     setValues: function(data){
                         var me = this,
                             limits = data.settings.limits,
-                            grid = me.down('grid');
+                            grid = me.down('instancetypesgrid');
                         callback = function(data, status) {
                             if (data && data.length) {
                                 grid.store.load({
@@ -644,7 +1008,7 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                     },
                     getValues: function(){
                         var limits = {value:[], 'default': null};
-                        this.down('grid').store.getUnfiltered().each(function(record){
+                        this.down('instancetypesgrid').store.getUnfiltered().each(function(record){
                             var id = record.get('id');
                             if (record.get('enabled')) {
                                 limits.value.push(id);
@@ -656,81 +1020,188 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                         return limits;
                     },
                     items: [{
-                        xtype: 'grid',
-                        cls: 'x-grid-with-formfields',
-                        store: {
-                            fields: ['id', {name: 'default', type: 'boolean'}, 'name', 'enabled'],
-                            proxy: 'object'
-                        },
-                        trackMouseOver: false,
-                        disableSelection: true,
-                        viewConfig: {
-                            emptyText: 'Instance types list is empty',
-                            deferEmptyText: false
-                        },
-                        columns: [{
-                            text: 'Default',
-                            sortable: false,
-                            resizable: false,
-                            width: 76,
-                            dataIndex: 'default',
-                            xtype: 'widgetcolumn',
-                            align: 'center',
-                            widget: {
-                                xtype: 'radio',
-                                name: 'default',
-                                listeners: {
-                                    change: function(comp, value){
-                                        var record = comp.getWidgetRecord();
-                                        if (record) {
-                                            record.set('default', value);
-                                            if (value) {
-                                                record.set('enabled', 1)
-                                            }
+                        xtype: 'instancetypesgrid'
+                    }]
+                },{
+                    xtype: 'container',
+                    hidden: true,
+                    tab: true,
+                    itemId: 'instancetypebyregion',
+                    flex: 1,
+                    layout: {
+                        type: 'vbox',
+                        align: 'stretch'
+                    },
+                    maxWidth: 1000,
+                    setValues: function(data){
+                        var limits = data.settings.limits,
+                            config = data.config,
+                            value = limits.value || {},
+                            grid = this.down('#instancetypesgrid'),
+                            regionsField = this.down('#region');
+                        regionsField.reset();
+                        this.policy = Ext.clone(data);
+                        Scalr.CachedRequestManager.get('governance').load(
+                            {
+                                url: '/platforms/azure/xGetResourceGroups'
+                            },
+                            function(data, status){
+                                data = data || {};
+                                if (!Ext.Object.getSize(data)) {
+                                    panel.down('#rightcol').disableButtons();
+                                } else {
+                                    var cloudLocationGrovernance = Scalr.getGovernance('azure', 'azure.cloud_location'),
+                                        cloudLocations = [];
+                                    Ext.Object.each(data.cloudLocations, function(id, name){
+                                        if (cloudLocationGrovernance === undefined || Ext.Array.contains(cloudLocationGrovernance.value, id)) {
+                                            cloudLocations.push({
+                                                id: id,
+                                                name: name,
+                                                limit: value[id] ? value[id].value.length : null
+                                            });
                                         }
-                                    }
+                                    });
+                                    regionsField.store.load({data: cloudLocations});
                                 }
                             }
-                        },{
-                            resizable: false,
-                            sortable: false,
-                            dataIndex: 'enabled',
-                            width: 110,
-                            xtype: 'widgetcolumn',
-                            align: 'center',
-                            widget: {
-                                xtype: 'buttongroupfield',
-                                margin: '0 0 0 -6',
-                                defaults: {
-                                    width: 45,
-                                    style: 'padding-left:0;padding-right:0'
-                                },
-                                items: [{
-                                    text: 'On',
-                                    value: 1
-                                },{
-                                    text: 'Off',
-                                    value: 0
-                                }],
-                                listeners: {
-                                    change: function(comp, value){
-                                        var record = comp.getWidgetRecord();
-                                        if (record) {
-                                            record.set('enabled', value);
-                                            if (!value) {
-                                                record.set('default', false);
-                                            }
+                        );
+                    },
+                    getValues: function(){
+                        var region = this.down('#region').getValue();
+                        if (region) {
+                            this.updateRegionLimits(region);
+                        }
+                        return this.policy.settings.limits;
+                    },
+                    updateRegionLimits: function(region) {
+                        var regionLimits,
+                            grid = this.down('instancetypesgrid');
+                        if (region) {
+                            if (grid.isVisible()) {
+                                regionLimits = {value: []};
+                                grid.store.getUnfiltered().each(function(record) {
+                                    if (record.get('enabled')) {
+                                        regionLimits.value.push(record.get('id'));
+                                        if (record.get('default')) {
+                                            regionLimits['default'] = record.get('id');
                                         }
                                     }
-                                }
+                                });
+                                this.policy.settings.limits.value[region] = regionLimits;
+                            } else {
+                                delete this.policy.settings.limits.value[region];
                             }
-                        },{
-                            dataIndex: 'name',
+                        }
+                    },
+                    items: [{
+                        xtype: 'container',
+                        layout: 'hbox',
+                        items: [{
+                            xtype: 'combo',
+                            itemId: 'region',
+                            valueField: 'id',
+                            displayField: 'name',
+                            editable: false,
+                            maxWidth: 400,
                             flex: 1,
-                            resizable: false,
-                            sortable: false,
-                            text: 'Available instance types'
+                            emptyText: 'Please select region',
+                            store: {
+                                fields: ['id', 'name', 'limit'],
+                                proxy: 'object',
+                                sorters: {
+                                    property: 'name'
+                                }
+                            },
+                            listConfig: {
+                               tpl : '<tpl for=".">'+
+                                          '<div class="x-boundlist-item"><span class="x-semibold">{name}</span> <span style="font-style:italic">&nbsp;({[values.limit ? values.limit + \' instance type(s) allowed\' : \'No limits\']})</span></div>'+
+                                      '</tpl>'
+                            },
+                            name: 'type',
+                            listeners: {
+                                change: function(comp, value, oldValue){
+                                    var tab = comp.up('#instancetypebyregion'),
+                                        enabledField = comp.next('#enabled');
+                                    if (oldValue) {
+                                        tab.updateRegionLimits(oldValue);
+                                    }
+                                    enabledField.setValue(0);
+                                    if (value) {
+                                        enabledField.show().setValue(tab.policy.settings.limits.value[value] ? 1 : 0);
+                                    } else {
+                                        enabledField.hide();
+                                    }
+                                }
+                            }
+                        },{
+                            xtype: 'buttongroupfield',
+                            itemId: 'enabled',
+                            margin: '0 0 12 12',
+                            defaults: {
+                                width: 140
+                            },
+                            items: [{
+                                text: 'No limits',
+                                value: 0
+                            },{
+                                text: 'Configure limits',
+                                value: 1
+                            }],
+                            hidden: true,
+                            listeners: {
+                                change: function(comp, value) {
+                                    var grid = comp.up().next('instancetypesgrid'),
+                                        policy = comp.up('#instancetypebyregion').policy,
+                                        regionLimits,
+                                        region = comp.prev('#region').getValue();
+                                    if (value) {
+                                        regionLimits = policy.settings.limits.value[region] || {};
+                                        callback = function(data, status) {
+                                            if (data && data.length) {
+                                                grid.store.load({
+                                                    data: Ext.Array.map(data, function(item){
+                                                        return {
+                                                            name: (new Ext.XTemplate('<span class="x-semibold">{name}</span> ({[this.instanceTypeInfo(values)]})').apply(item)),
+                                                            id: item.id,
+                                                            'default': regionLimits['default'] === item.id,
+                                                            enabled: Ext.Array.contains(regionLimits.value || [], item.id) ?  1 : 0
+                                                        };
+                                                    })
+                                                });
+                                                grid.show();
+                                            } else {
+                                                panel.down('#rightcol').disableButtons();
+                                            }
+                                        };
+                                        grid.store.removeAll();
+                                        Scalr.loadInstanceTypes(policy.platform, region, callback);
+                                        grid.onRecordUpdate(grid.store);
+                                    } else {
+                                        grid.hide();
+                                        grid.store.removeAll();
+                                        grid.onRecordUpdate(grid.store);
+                                    }
+                                }
+                            }
                         }]
+                    },{
+                        xtype: 'instancetypesgrid',
+                        flex: 1,
+                        hidden: true,
+                        onRecordUpdate: function(store) {
+                            var regionField = this.up('#instancetypebyregion').down('#region'),
+                                regionRecord = regionField.findRecordByValue(regionField.getValue()),
+                                limit = 0;
+                            if (regionRecord) {
+                                store.getUnfiltered().each(function(record){
+                                    if (record.get('enabled')) {
+                                        limit ++;
+                                    }
+                                });
+                                regionRecord.set('limit', limit);
+                            }
+                        }
+
                     }]
                 },{
                     xtype: 'container',
@@ -1658,4 +2129,88 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
 		}
 	});
 	return panel;
+});
+
+Ext.define('Scalr.ui.InstanceTypesGrid', {
+    extend: 'Ext.grid.Panel',
+    alias: 'widget.instancetypesgrid',
+    cls: 'x-grid-with-formfields',
+    store: {
+        fields: ['id', {name: 'default', type: 'boolean'}, 'name', 'enabled'],
+        proxy: 'object'
+    },
+    trackMouseOver: false,
+    disableSelection: true,
+    viewConfig: {
+        emptyText: 'Instance types list is empty',
+        deferEmptyText: false
+    },
+    listeners: {
+        afterrender: function() {
+            this.store.on('update', this.onRecordUpdate || Ext.emptyFn, this);
+        }
+    },
+    columns: [{
+        text: 'Default',
+        sortable: false,
+        resizable: false,
+        width: 76,
+        dataIndex: 'default',
+        xtype: 'widgetcolumn',
+        align: 'center',
+        widget: {
+            xtype: 'radio',
+            name: 'default',
+            listeners: {
+                change: function(comp, value){
+                    var record = comp.getWidgetRecord();
+                    if (record) {
+                        record.set('default', value);
+                        if (value) {
+                            record.set('enabled', 1)
+                        }
+                    }
+                }
+            }
+        }
+    },{
+        resizable: false,
+        sortable: false,
+        dataIndex: 'enabled',
+        width: 110,
+        xtype: 'widgetcolumn',
+        align: 'center',
+        widget: {
+            xtype: 'buttongroupfield',
+            margin: '0 0 0 -6',
+            defaults: {
+                width: 45,
+                style: 'padding-left:0;padding-right:0'
+            },
+            items: [{
+                text: 'On',
+                value: 1
+            },{
+                text: 'Off',
+                value: 0
+            }],
+            listeners: {
+                change: function(comp, value){
+                    var record = comp.getWidgetRecord();
+                    if (record) {
+                        record.set('enabled', value);
+                        if (!value) {
+                            record.set('default', false);
+                        }
+                    }
+                }
+            }
+        }
+    },{
+        dataIndex: 'name',
+        flex: 1,
+        resizable: false,
+        sortable: false,
+        text: 'Available instance types'
+    }]
 });

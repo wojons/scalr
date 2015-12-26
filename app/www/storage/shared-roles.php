@@ -9,21 +9,22 @@ if (!$setupInfo)
     die("Unrecognized setup: update denied. Please use this form http://hub.am/1fDAc2B to be whitelisted.");
 
 $v2 = (boolean) $_GET['v2'];
+$addMongoRole = (boolean) $_GET['addMongoRole'];
 
-$rs20 = $db->Execute("SELECT * FROM roles WHERE env_id IS NULL AND client_id IS NULL AND generation='2' AND os_id NOT IN (
+$rs20 = $db->Execute("SELECT * FROM roles WHERE env_id IS NULL AND client_id IS NULL AND generation='2' AND is_deprecated='0' AND os_id NOT IN (
     SELECT id FROM os WHERE (family='centos' AND generation='5') OR (family='ubuntu' AND generation IN ('8.04','10.04')) OR (family='windows' AND generation='2003')
 )");
 $result = array();
 while ($role = $rs20->FetchRow()) {
     $role['role_security_rules'] = $db->GetAll("SELECT * FROM role_security_rules WHERE role_id = ?", array($role['id']));
     $role['role_properties'] = $db->GetAll("SELECT * FROM role_properties WHERE role_id = ?", array($role['id']));
-    $role['role_parameters'] = $db->GetAll("SELECT * FROM role_parameters WHERE role_id = ?", array($role['id']));
     $role['role_images'] = $db->GetAll("SELECT * FROM role_images WHERE role_id = ?", array($role['id']));
     $role['role_behaviors'] = $db->GetAll("SELECT * FROM role_behaviors WHERE role_id = ?", array($role['id']));
 
     $isOldMySQL = $db->GetOne("SELECT id FROM role_behaviors WHERE role_id = ? AND behavior='mysql' LIMIT 1", array($role['id']));
+    $isMongoDB = $db->GetOne("SELECT id FROM role_behaviors WHERE role_id = ? AND behavior='mongodb' LIMIT 1", array($role['id']));
 
-    if (!$isOldMySQL) {
+    if (!$isOldMySQL && (!$isMongoDB || $addMongoRole) && !$role['is_deprecated']) {
         foreach ($role['role_images'] as $i => $image) {
             if ($v2) {
                 $role['role_images'][$i]['image'] = $db->GetRow('SELECT *, HEX(hash) AS hash FROM images WHERE platform = ? AND cloud_location = ? AND id = ? AND env_id IS NULL', [

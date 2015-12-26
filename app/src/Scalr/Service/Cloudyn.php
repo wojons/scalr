@@ -2,6 +2,10 @@
 
 namespace Scalr\Service;
 
+use http\Client\Response;
+use http\Message;
+use Scalr\System\Http\Client\Request;
+
 /**
  * Cloudyn API
  *
@@ -87,14 +91,14 @@ class Cloudyn
     private $rqid = 0;
 
     /**
-     * @var \HttpRequest
+     * @var Request
      */
     private $request;
 
     /**
-     * @var \HttpMessage
+     * @var Response
      */
-    private $message;
+    private $response;
 
     /**
      * Constructor
@@ -525,17 +529,15 @@ class Cloudyn
             $options['apiversion'] = '0.4';
         }
         $this->request = $this->createNewRequest();
-        $this->request->setUrl($this->getUrl() . $path);
-        $this->request->setMethod(constant('HTTP_METH_' . strtoupper($method)));
+        $this->request->setRequestUrl($this->getUrl() . $path);
+        $this->request->setRequestMethod($method);
         $this->request->setOptions(array(
             'redirect'  => 10,
-            'useragent' => 'Scalr Client (http://scalr.com)',
+            'cookiesession' => true
         ));
-        $this->request->addQueryData($options);
-        //This line is very necessary or HttpResponce will add stored cookies
-        $this->request->resetCookies();
-        $this->message = $this->tryCall($this->request);
-        $json = $this->message->getBody();
+        $this->request->addQuery($options);
+        $this->response = $this->tryCall($this->request);
+        $json = $this->response->getBody()->toString();
         $json = preg_replace('#^[^\{\[]+|[^\}\]]+$#', '', trim($json));
         $obj = json_decode($json);
         if (isset($obj->status) && $obj->status != 'ok' && isset($obj->message)) {
@@ -547,17 +549,17 @@ class Cloudyn
     /**
      * Tries to send request on several attempts.
      *
-     * @param    \HttpRequest    $httpRequest
+     * @param    Request         $httpRequest
      * @param    int             $attempts     Attempts count.
      * @param    int             $interval     An sleep interval between an attempts in microseconds.
      * @throws   CloudynException
-     * @returns  \HttpMessage    Returns HttpMessage if success.
+     * @returns  Response    Returns http Response if success.
      */
     protected function tryCall($httpRequest, $attempts = 1, $interval = 200)
     {
         try {
-            $message = $httpRequest->send();
-        } catch (\HttpException $e) {
+            $message = \Scalr::getContainer()->http->sendRequest($httpRequest);
+        } catch (\http\Exception $e) {
             if (--$attempts > 0) {
                 usleep($interval);
                 $message = $this->tryCall($httpRequest, $attempts, $interval * 2);
@@ -644,19 +646,19 @@ class Cloudyn
     }
 
     /**
-     * Gets a new HttpRequest obejct
+     * Gets a new http Request object
      *
-     * @return \HttpRequest Returns HttpRequest obejct
+     * @return Request Returns http Request object
      */
     public function createNewRequest ()
     {
-        return new \HttpRequest();
+        return new Request();
     }
 
     /**
      * Gets the latest request
      *
-     * @return \HttpRequest Returns the http request object for the latest request.
+     * @return Request Returns the http request object for the latest request.
      */
     public function getRequest ()
     {
@@ -666,10 +668,10 @@ class Cloudyn
     /**
      * Gets the latest response message
      *
-     * @return \HttpMessage Returns the latest http response.
+     * @return Response Returns the latest http response.
      */
-    public function getMessage ()
+    public function getResponse ()
     {
-        return $this->message;
+        return $this->response;
     }
 }

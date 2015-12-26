@@ -57,10 +57,10 @@ from scalrpy.util import helper
 from scalrpy.util import dbmanager
 from scalrpy.util import analytics
 from scalrpy.util import cryptotool
-from scalrpy.util import exceptions
 from scalrpy.util import application
 
 from scalrpy import LOG
+from scalrpy import exceptions
 
 
 helper.patch_gevent()
@@ -105,7 +105,7 @@ def _handle_exception(e, msg):
         LOG.warning(msg)
     elif isinstance(e, socket.error) and e.errno in (110, 111, 113):
         LOG.warning(msg)
-    elif isinstance(e, googleapiclient.errors.HttpError) and e.resp['status'] in ('403'):
+    elif isinstance(e, googleapiclient.errors.HttpError) and e.resp['status'] in ('403',):
         LOG.warning(msg)
     elif isinstance(e, ssl.SSLError):
         LOG.warning(msg)
@@ -113,6 +113,8 @@ def _handle_exception(e, msg):
         pass
     elif 'userDisabled' in str(e):
         LOG.warning(msg)
+    elif isinstance(e, exceptions.MissingCredentialsError):
+        LOG.debug(msg)
     else:
         LOG.exception(msg)
 
@@ -160,11 +162,10 @@ def ec2(cred):
     :returns: list
         [{'region': str, 'timestamp': int, 'nodes': list}]
     """
-
     result = list()
 
-    if cred['account_type'] == 'regular':
-        regions = [
+    regions = {
+        'regular': [
             'us-east-1',
             'us-west-1',
             'us-west-2',
@@ -174,17 +175,12 @@ def ec2(cred):
             'ap-southeast-2',
             'ap-northeast-1',
             'sa-east-1',
-        ]
-    elif cred['account_type'] == 'gov-cloud':
-        regions = [
-            'us-gov-west-1',
-        ]
-    elif cred['account_type'] == 'cn-cloud':
-        regions = [
-            'cn-north-1',
-        ]
-    else:
-        msg = 'Unsupported account type for ec2 platform: {0}'.format(cred['account_type'])
+        ],
+        'gov-cloud': ['us-gov-west-1'],
+        'cn-cloud': ['cn-north-1'],
+    }.get(cred.get('account_type'))
+    if not regions:
+        msg = 'Unsupported account type for ec2 platform: {}'.format(cred.get('account_type'))
         raise Exception(msg)
 
     app.pool.wait()
@@ -201,7 +197,7 @@ def ec2(cred):
                 result.append(region_nodes)
         except gevent.timeout.Timeout:
             async_result.kill()
-            msg = 'platform: {platform}, region: {region}, env_id: {env_id}, reason: timeout'
+            msg = 'platform: {platform}, region: {region}, env_id: {env_id}. Reason: timeout'
             msg = msg.format(platform=cred.platform, region=region, env_id=cred.env_id)
             LOG.warning(msg)
     return result
@@ -261,7 +257,6 @@ def cloudstack(cred):
     :returns: list
         [{'region': str, 'timestamp': int, 'nodes': list}]
     """
-
     result = list()
 
     app.pool.wait()
@@ -271,7 +266,7 @@ def cloudstack(cred):
         result = async_result.get(timeout=app.config['cloud_connection_timeout'])
     except gevent.timeout.Timeout:
         async_result.kill()
-        msg = 'platform: {platform}, env_id: {env_id}, reason: timeout'
+        msg = 'platform: {platform}, env_id: {env_id}. Reason: timeout'
         msg = msg.format(platform=cred.platform, env_id=cred.env_id)
         LOG.warning(msg)
     return result
@@ -287,7 +282,7 @@ def idcf(cred):
 
 
 def _gce_key(cred):
-    if 'json_key' in cred:
+    if cred.get('json_key'):
         key = json.loads(cryptotool.decrypt_scalr(app.crypto_key, cred['json_key']))['private_key']
     else:
         key = cryptotool.decrypt_scalr(app.crypto_key, cred['key'])
@@ -363,7 +358,6 @@ def gce(cred):
     :returns: list
         [{'region': str, 'timestamp': int, 'nodes': list}]
     """
-
     result = list()
 
     project_id = cryptotool.decrypt_scalr(app.crypto_key, cred['project_id'])
@@ -386,7 +380,7 @@ def gce(cred):
                 result.append(zone_nodes)
         except gevent.timeout.Timeout:
             async_result.kill()
-            msg = 'platform: {platform}, zone: {zone}, env_id: {env_id}, reason: timeout'
+            msg = 'platform: {platform}, zone: {zone}, env_id: {env_id}. Reason: timeout'
             msg = msg.format(platform=cred.platform, zone=zone, env_id=cred.env_id)
             LOG.warning(msg)
     return result
@@ -506,7 +500,7 @@ def _openstack(provider, cred):
                 msg = (
                     'platform: {platform}, env_id: {env_id}, url: {url}, '
                     'tenant_name: {tenant_name}, service_name={service_name}, '
-                    'region: {region}, auth_version: {auth_version}, reason: timeout')
+                    'region: {region}, auth_version: {auth_version}. Reason: timeout')
                 msg = msg.format(
                     platform=cred.platform, env_id=cred.env_id, url=url, tenant_name=tenant_name,
                     service_name=service_name, region=region, auth_version=auth_version)
@@ -515,15 +509,6 @@ def _openstack(provider, cred):
 
 
 def openstack(cred):
-    """
-    :returns: list
-        [{'region': str, 'timestamp': int, 'nodes': list}]
-    """
-
-    return _openstack(Provider.OPENSTACK, cred)
-
-
-def ecs(cred):
     """
     :returns: list
         [{'region': str, 'timestamp': int, 'nodes': list}]
@@ -575,7 +560,8 @@ def mirantis(cred):
     """
 
     return _openstack(Provider.OPENSTACK, cred)
-    
+
+
 def vio(cred):
     """
     :returns: list
@@ -634,8 +620,8 @@ def sort_nodes(cloud_data, cred, envs_ids):
     for region_data in cloud_data:
         cloud_location = region_data['region']
         for chunk in helper.chunks(region_data['nodes'], 200):
-            app.analytics.get_server_id_by_instance_id(chunk, envs_ids, platform,
-                                                       cloud_location, url)
+            app.analytics.get_server_id_by_instance_id(chunk, platform, cloud_location,
+                                                       envs_ids=envs_ids, url=url)
         region_data['managed'] = list()
         region_data['not_managed'] = list()
         for node in region_data['nodes']:
@@ -687,8 +673,8 @@ def db_update(sorted_data, envs_ids, cred):
         for region_data in sorted_data:
             try:
                 sid = uuid.uuid4()
-                if platform == 'ec2' and 'account_id' in cred:
-                    cloud_account = cryptotool.decrypt_scalr(app.crypto_key, cred['account_id'])
+                if platform == 'ec2':
+                    cloud_account = cred.get('account_id')
                 else:
                     cloud_account = None
 
@@ -735,38 +721,9 @@ def db_update(sorted_data, envs_ids, cred):
                         server_id=uuid.UUID(managed['server_id']).hex,
                         instance_type=managed['instance_type'],
                         os=managed['os'])
-                    LOG.debug(query)
                     app.analytics_db.execute(query, retries=1)
-
-                ## not_managed
-                #if region_data['not_managed']:
-                #    base_query = (
-                #        "INSERT IGNORE INTO notmanaged "
-                #        "(sid, instance_id, instance_type, os) VALUES %s")
-                #    values_template = "(UNHEX('{sid}'), '{instance_id}', '{instance_type}', {os})"
-                #    i, chunk_size = 0, 20
-                #    while True:
-                #        chunk_not_managed = region_data['not_managed'][
-                #            i * chunk_size:(i + 1) * chunk_size]
-                #        if not chunk_not_managed:
-                #            break
-                #        query = base_query % ','.join(
-                #            [
-                #                values_template.format(
-                #                    sid=sid.hex,
-                #                    instance_id=not_managed['instance_id'],
-                #                    instance_type=not_managed['instance_type'],
-                #                    os=not_managed['os']
-                #                )
-                #                for not_managed in chunk_not_managed
-                #            ]
-                #        )
-                #        app.analytics_db.execute(query, retries=1)
-                #        i += 1
             except:
-                msg = 'Database update failed, reason: {0}'
-                msg = msg.format(helper.exc_info())
-                LOG.exception(msg)
+                helper.handle_error(message='Database update failed')
 
 
 def process_credential(cred, envs_ids=None):
@@ -774,6 +731,7 @@ def process_credential(cred, envs_ids=None):
         envs_ids = [cred.env_id]
 
     try:
+        analytics.Credentials.test(cred, cred.platform)
         cloud_data = eval(cred.platform)(cred)
         if cloud_data:
             sorted_data = sort_nodes(cloud_data, cred, envs_ids)
@@ -800,7 +758,7 @@ class AnalyticsPoller(application.ScalrIterationApplication):
                 'host': None,
                 'port': 3306,
                 'name': None,
-                'pool_size': 25,
+                'pool_size': 50,
             },
         })
         self.config.update({
@@ -818,7 +776,7 @@ class AnalyticsPoller(application.ScalrIterationApplication):
         self.proxy_url = {}
 
     def set_proxy(self):
-        for platform in analytics.platforms:
+        for platform in analytics.PLATFORMS:
             if platform == 'ec2':
                 use_proxy = self.scalr_config.get('aws', {}).get('use_proxy', False)
             else:
@@ -865,22 +823,30 @@ class AnalyticsPoller(application.ScalrIterationApplication):
 
     def do_iteration(self):
         for envs in self.analytics.load_envs():
-            unique = {}
-            for env in envs:
-                creds = self.analytics.get_creds([env])
-                for cred in creds:
-                    if cred.platform == 'ec2' and env.get('ec2.detailed_billing.enabled', '0') == '1':
-                        continue
-                    unique.setdefault(cred.unique, {'envs_ids': [], 'cred': cred})
-                    unique[cred.unique]['envs_ids'].append(env['id'])
-
-            for data in unique.values():
-                while len(self.pool) > self.config['pool_size'] * 5 / 10:
-                    gevent.sleep(0.1)
-                self.pool.apply_async(process_credential,
-                                      args=(data['cred'],),
-                                      kwds={'envs_ids': data['envs_ids']})
-                gevent.sleep(0)  # force switch
+            try:
+                self.analytics.load_env_credentials(envs)
+                unique = {}
+                for env in envs:
+                    try:
+                        credentials = self.analytics.get_credentials([env])
+                        for cred in credentials:
+                            if cred.platform == 'ec2' and env.get('ec2.detailed_billing.enabled', '0') == '1':
+                                continue
+                            unique.setdefault(cred.unique, {'envs_ids': [], 'cred': cred})
+                            unique[cred.unique]['envs_ids'].append(env['id'])
+                    except:
+                        msg = 'Processing environment: {} failed'.format(env['id'])
+                        LOG.exception(msg)
+                for data in unique.values():
+                    while len(self.pool) > self.config['pool_size'] * 5 / 10:
+                        gevent.sleep(0.1)
+                    self.pool.apply_async(process_credential,
+                                          args=(data['cred'],),
+                                          kwds={'envs_ids': data['envs_ids']})
+                    gevent.sleep(0)  # force switch
+            except:
+                msg = 'Processing environments: {} failed'.format([env['id'] for env in envs])
+                LOG.exception(msg)
         self.pool.join()
 
     def on_iteration_error(self):
@@ -895,7 +861,7 @@ def main():
         app.configure()
         app.run()
     except exceptions.AlreadyRunningError:
-        LOG.info(helper.exc_info(where=False))
+        LOG.info(helper.exc_info())
     except (SystemExit, KeyboardInterrupt):
         pass
     except:

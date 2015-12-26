@@ -1,4 +1,8 @@
 <?php
+
+use Scalr\UI\Request\Validator;
+use Scalr\Model\Entity\Account\User;
+
 class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'userId';
@@ -19,7 +23,7 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
             array(),
             array('ui/account2/dataconfig.js'),
             array('ui/account2/users/view.css'),
-            array('account.users', 'account.teams', 'account.roles')
+            array('account.users', 'account.teams', 'account.acl')
         );
     }
 
@@ -31,6 +35,7 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
 
         $processed = array();
         $errors = array();
+        $actionMsg = '';
 
         foreach($this->getParam('ids') as $userId) {
             try {
@@ -39,6 +44,7 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
 
                 switch($this->getParam('action')) {
                     case 'delete':
+                        $actionMsg = 'removed';
                         if ($this->user->canRemoveUser($user)) {
                             $user->delete();
                             $processed[] = $user->getId();
@@ -48,17 +54,28 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
                         break;
 
                     case 'activate':
+                        $actionMsg = 'activated';
                         if ($this->user->getId() !== $user->getId() && $this->user->canEditUser($user)) {
+                            if ($user->status == Scalr_Account_User::STATUS_ACTIVE) {
+                                throw new Scalr_Exception_Core('User(s) has already been activated');
+                            }
+
                             $user->status = Scalr_Account_User::STATUS_ACTIVE;
                             $user->save();
                             $processed[] = $user->getId();
                         } else {
                             throw new Scalr_Exception_Core('Insufficient permissions to activate user');
                         }
+
                         break;
 
                     case 'deactivate':
+                        $actionMsg = 'deactivated';
                         if ($this->user->getId() !== $user->getId() && $this->user->canEditUser($user)) {
+                            if ($user->status == Scalr_Account_User::STATUS_INACTIVE) {
+                                throw new Scalr_Exception_Core('User(s) has already been suspended');
+                            }
+
                             $user->status = Scalr_Account_User::STATUS_INACTIVE;
                             $user->save();
                             $processed[] = $user->getId();
@@ -75,10 +92,10 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
         $num = count($this->getParam('ids'));
 
         if (count($processed) == $num) {
-            $this->response->success('All users processed');
+            $this->response->success("Selected user(s) successfully {$actionMsg}");
         } else {
             array_walk($errors, function(&$item) { $item = '- ' . $item; });
-            $this->response->warning(sprintf("Successfully processed only %d from %d users. \nFollowing errors occurred:\n%s", count($processed), $num, join($errors, '')));
+            $this->response->warning(sprintf("Successfully {$actionMsg} only %d from %d users. \nFollowing errors occurred:\n%s", count($processed), $num, join(array_unique($errors), "\n")));
         }
 
         $this->response->data(array('processed' => $processed));
@@ -92,49 +109,74 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
             'currentPassword' => array('type' => 'string', 'rawValue' => true)
         ));
 
-        $user = Scalr_Account_User::init();
-        $validator = new Scalr_Validator();
+        $newUser = $existingPasswordChanged = $sendResetLink = false;
 
-        if ($this->getParam('id')) {
-            $user->loadById((int)$this->getParam('id'));
+        $user = Scalr_Account_User::init();
+        $validator = new Validator();
+
+        $id = (int) $this->getParam('id');
+
+        if ($id) {
+            $user->loadById($id);
         } else {
             if ($this->getContainer()->config->get('scalr.auth_mode') == 'ldap')
                 throw new Exception("Adding new users is not supported with LDAP user management");
-        }
-        
-        if ($this->getContainer()->config->get('scalr.auth_mode') != 'ldap') {
-            if (! $this->getParam('email'))
-                throw new Scalr_Exception_Core('Email cannot be null');
-    
-            if ($validator->validateEmail($this->getParam('email'), null, true) !== true)
-                throw new Scalr_Exception_Core('Email should be correct');
 
-            if ($this->getParam('id')) {
-                if (!$this->user->canEditUser($user)) {
-                    throw new Scalr_Exception_InsufficientPermissions();
-                }
-                $user->updateEmail($this->getParam('email'));
-            } else {
-                $this->user->getAccount()->validateLimit(Scalr_Limits::ACCOUNT_USERS, 1);
-                $user->create($this->getParam('email'), $this->user->getAccountId());
-    
-                $user->type = Scalr_Account_User::TYPE_TEAM_USER;
-                $newUser = true;
+            $newUser = true;
+        }
+
+        if ($this->getContainer()->config->get('scalr.auth_mode') != 'ldap') {
+            $email = $this->getParam('email');
+
+            if (($isEmailValid = $validator->validateEmail($email)) !== true) {
+                throw new Scalr_Exception_Core($isEmailValid);
             }
 
             $password = $this->getParam('password');
-            if (!$newUser && $password) {
-                $existingPasswordChanged = true;
-            } else if (!$password && ($this->request->hasParam('password') || $newUser)) {
-                $password = $this->getCrypto()->sault(10);
+
+            if (empty($password) && ($this->request->hasParam('password') || $newUser)) {
+                if ($user->id == $this->user->id) {
+                    $this->response->data(['errors' => ['password' => 'You cannot reset password for yourself']]);
+                    $this->response->failure();
+                    return;
+                }
+
+                $password = Scalr::GenerateSecurePassword(($user->isAccountAdmin() || $user->isAccountOwner()) ? User::PASSWORD_ADMIN_LENGTH : User::PASSWORD_USER_LENGTH);
                 $sendResetLink = true;
+            } else {
+                if ($this->request->hasParam('password') && ($isPasswordValid = $validator->validatePassword($password, $user->isAccountAdmin() || $user->isAccountOwner() ? ['admin'] : [])) !== true) {
+                    $this->response->data(['errors' => ['password' => $isPasswordValid]]);
+                    $this->response->failure();
+                    return;
+                }
+
+                if (!empty($password)) {
+                    $existingPasswordChanged = true;
+                }
             }
-            if (($existingPasswordChanged || !$newUser && $sendResetLink) && !$this->user->checkPassword($this->getParam('currentPassword'))) {
+
+            if (!$newUser &&
+                ($sendResetLink || $existingPasswordChanged) &&
+                $this->request->hasParam('password') &&
+                !$this->user->checkPassword($this->getParam('currentPassword'), false)) {
                 $this->response->data(['errors' => ['currentPassword' => 'Invalid password']]);
                 $this->response->failure();
                 return;
             }
-            if ($password) {
+
+            if ($id) {
+                if (!$this->user->canEditUser($user)) {
+                    throw new Scalr_Exception_InsufficientPermissions();
+                }
+
+                $user->updateEmail($email);
+            } else {
+                $this->user->getAccount()->validateLimit(Scalr_Limits::ACCOUNT_USERS, 1);
+                $user->type = Scalr_Account_User::TYPE_TEAM_USER;
+                $user->create($email, $this->user->getAccountId());
+            }
+
+            if (!empty($password)) {
                 $user->updatePassword($password);
             }
         }
@@ -146,9 +188,9 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
 
         if (!$user->isAccountOwner()) {
             if ($this->getParam('isAccountAdmin')) {
-                if ($this->user->isAccountOwner() && $this->getParam('isAccountSuperAdmin')) {
-                    $user->type = Scalr_Account_User::TYPE_ACCOUNT_SUPER_ADMIN;
-                } else if ($user->type != Scalr_Account_User::TYPE_ACCOUNT_SUPER_ADMIN) {
+                if ($this->user->isAccountOwner()) {
+                    $user->type = $this->getParam('isAccountSuperAdmin') ? Scalr_Account_User::TYPE_ACCOUNT_SUPER_ADMIN : Scalr_Account_User::TYPE_ACCOUNT_ADMIN;
+                } else if ($this->user->isAccountAdmin() && $user->type != Scalr_Account_User::TYPE_ACCOUNT_SUPER_ADMIN) {
                     $user->type = Scalr_Account_User::TYPE_ACCOUNT_ADMIN;
                 }
             } else {
@@ -160,6 +202,10 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
         $user->comments = $this->getParam('comments');
 
         $user->save();
+
+        if (!empty($password)) {
+            $user->setSetting(Scalr_Account::SETTING_OWNER_PWD_RESET_HASH, "");
+        }
 
         $user->setAclRoles($this->getParam('teams'));
 
@@ -185,7 +231,7 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
                 );
 
                 $url = Scalr::config('scalr.endpoint.scheme') . "://" . Scalr::config('scalr.endpoint.host');
-                
+
                 $res = $this->getContainer()->mailer->sendTemplate(
                     SCALR_TEMPLATES_PATH . '/emails/referral.eml.php',
                     array(
@@ -205,6 +251,7 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
         } elseif ($sendResetLink) {
             try {
                 $hash = $this->getCrypto()->sault(10);
+                $url = Scalr::config('scalr.endpoint.scheme') . "://" . Scalr::config('scalr.endpoint.host');
 
                 $user->setSetting(Scalr_Account::SETTING_OWNER_PWD_RESET_HASH, $hash);
 
@@ -217,7 +264,7 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
                     SCALR_TEMPLATES_PATH . '/emails/user_account_confirm.eml',
                     array(
                         "{{fullname}}" => $clientinfo['fullname'],
-                        "{{pwd_link}}" => "https://{$_SERVER['HTTP_HOST']}/#/guest/updatePassword/?hash={$hash}"
+                        "{{pwd_link}}" => "{$url}/?resetPasswordHash={$hash}"
                     ),
                     $clientinfo['email'],
                     $clientinfo['fullname']
@@ -264,7 +311,7 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
         }
 
         $user->delete();
-        $this->response->success('User successfully removed');
+        $this->response->success('Selected user successfully removed');
         return;
     }
 }

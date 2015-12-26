@@ -1,5 +1,6 @@
 <?php
 use Scalr\Acl\Acl;
+use Scalr\DataType\CloudPlatformSuspensionInfo;
 
 class Scalr_UI_Controller_Account2 extends Scalr_UI_Controller
 {
@@ -43,6 +44,13 @@ class Scalr_UI_Controller_Account2 extends Scalr_UI_Controller
         foreach ($environments as &$row) {
             $env = Scalr_Environment::init()->loadById($row['id']);
             $row['platforms'] = $env->getEnabledPlatforms();
+            $row['suspendedPlatforms'] = [];
+            foreach ($row['platforms'] as $platform) {
+                $suspensionInfo = new CloudPlatformSuspensionInfo($env->id, $platform);
+                if ($suspensionInfo->isPendingSuspend() || $suspensionInfo->isSuspended()) {
+                    $row['suspendedPlatforms'][] = $platform;
+                }
+            }
             $row['teams'] = array();
             if ($this->getContainer()->config->get('scalr.auth_mode') == 'ldap') {
                 $row['teamIds'] = array();
@@ -123,6 +131,7 @@ class Scalr_UI_Controller_Account2 extends Scalr_UI_Controller
             $resultRow = array(
                 'id' => $team->id,
                 'name' => $team->name,
+                'description' => $team->description,
                 'account_role_id' => $team->accountRoleId
             );
             $users = array_map(function($arr) {
@@ -142,7 +151,7 @@ class Scalr_UI_Controller_Account2 extends Scalr_UI_Controller
         return $result;
     }
 
-    public function getAccountRolesList()
+    public function getAccountAclList()
     {
         if ($this->user->canManageAcl()) {
             return \Scalr::getContainer()->acl->getAccountRolesComputed($this->request->getUser()->getAccountId());
@@ -152,7 +161,7 @@ class Scalr_UI_Controller_Account2 extends Scalr_UI_Controller
 
     }
 
-    public function getBaseRolesList()
+    public function getBaseAclList()
     {
         if (!$this->user->canManageAcl()) {
             throw new Scalr_Exception_InsufficientPermissions();

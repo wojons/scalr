@@ -1,6 +1,6 @@
 <?php
 
-class HostInitFailedEvent extends Event
+class HostInitFailedEvent extends AbstractServerEvent
 {
 
     /**

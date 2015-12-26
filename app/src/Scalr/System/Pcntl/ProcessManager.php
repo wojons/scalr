@@ -52,7 +52,7 @@ class ProcessManager
      */
     function __construct($SignalHandler)
     {
-        $this->Logger = \Logger::getLogger('ProcessManager');
+        $this->Logger = \Scalr::getContainer()->logger('ProcessManager');
 
         if ($SignalHandler instanceof SignalHandler) {
             $SignalHandler->ProcessManager = $this;

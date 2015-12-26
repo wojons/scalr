@@ -24,16 +24,83 @@ class FarmRoleStorage
         return FarmRoleStorageConfig::getByFarmRole($this->farmRole);
     }
 
-    public function setConfigs($configs)
+    /**
+     * Validate storage configs
+     *
+     * @param   array   $configs    Array of storage configs, structure is defined in FarmRoleStorageConfig::apply
+     * @return  array   Array of errors [index => error message] or empty array if configs are valid
+     */
+    public function validateConfigs($configs)
     {
-        if (!empty($configs) && is_array($configs)) {
-            foreach($configs as $value) {
+        $errors = [];
+        $configs = is_array($configs) ? $configs : [];
 
-                if (!is_array($value) || !is_array($value['settings']))
-                    continue;
+        foreach ($configs as $key => $value) {
+            if (!is_array($value) || !is_array($value['settings']))
+                continue;
 
-                $config = new FarmRoleStorageConfig($this->farmRole);
-                $config->create($value);
+            $config = new FarmRoleStorageConfig($this->farmRole);
+            $config->apply($value);
+            if ($config->status != FarmRoleStorageConfig::STATE_PENDING_DELETE) {
+                $result = $config->validate();
+                if ($result !== true) {
+                    $errors[$key] = $result;
+                }
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Save storage configs
+     *
+     * @param   array   $configs    Array of storage config
+     * @param   bool    $validate   optional    If true validate config before save
+     * @throws  FarmRoleStorageException
+     */
+    public function setConfigs($configs, $validate = true)
+    {
+        $configs = is_array($configs) ? $configs : [];
+        $ephemeralEc2 = [];
+        $ephemeralGce = [];
+        foreach($configs as $value) {
+            if (!is_array($value) || !is_array($value['settings']))
+                continue;
+
+            $object = new FarmRoleStorageConfig($this->farmRole);
+            $object->apply($value);
+            if ($validate) {
+                $r = $object->validate();
+                if ($r !== true) {
+                    throw new FarmRoleStorageException($r);
+                }
+            }
+
+            $config = new FarmRoleStorageConfig($this->farmRole);
+            $config->create($object);
+
+            if ($config->type == FarmRoleStorageConfig::TYPE_EC2_EPHEMERAL) {
+                $ephemeralEc2[$config->settings[FarmRoleStorageConfig::SETTING_EC2_EPHEMERAL_NAME]] = $config->id;
+            } else if ($config->type == FarmRoleStorageConfig::TYPE_GCE_EPHEMERAL) {
+                $ephemeralGce[$config->settings[FarmRoleStorageConfig::SETTING_GCE_EPHEMERAL_NAME]] = $config->id;
+            }
+        }
+
+        // validate ephemeral configs
+        foreach (self::getConfigs() as $config) {
+            if ($config->type == FarmRoleStorageConfig::TYPE_EC2_EPHEMERAL) {
+                $name = $config->settings[FarmRoleStorageConfig::SETTING_EC2_EPHEMERAL_NAME];
+
+                if (!isset($ephemeralEc2[$name]) || $ephemeralEc2[$name] != $config->id) {
+                    $config->delete();
+                }
+            } else if ($config->type == FarmRoleStorageConfig::TYPE_GCE_EPHEMERAL) {
+                $name = $config->settings[FarmRoleStorageConfig::SETTING_GCE_EPHEMERAL_NAME];
+
+                if (!isset($ephemeralGce[$name]) || $ephemeralGce[$name] != $config->id) {
+                    $config->delete();
+                }
             }
         }
     }
@@ -105,6 +172,7 @@ class FarmRoleStorage
             $createFreshConfig = true;
             $volume = null;
             $dbVolume = FarmRoleStorageDevice::getByConfigIdAndIndex($config->id, $dbServer->index);
+
             if ($dbVolume) {
                  $volume = $dbVolume->config;
                  $createFreshConfig = false;
@@ -118,10 +186,25 @@ class FarmRoleStorage
                 $volumeConfigTemplate->fstype = $config->fs;
                 $volumeConfigTemplate->mpoint = ($config->mount == 1) ? $config->mountPoint : null;
 
+                if ($config->fs == 'ntfs' && $config->mount == 1 && !empty($config->label)) {
+                    $volumeConfigTemplate->label = $config->label;
+                }
+
                 switch ($config->type) {
+                    case FarmRoleStorageConfig::TYPE_EC2_EPHEMERAL:
+                        $volumeConfigTemplate->name = $config->settings[FarmRoleStorageConfig::SETTING_EC2_EPHEMERAL_NAME];
+                        $volumeConfigTemplate->size = $config->settings[FarmRoleStorageConfig::SETTING_EC2_EPHEMERAL_SIZE];
+
+                        break;
+                    case FarmRoleStorageConfig::TYPE_GCE_EPHEMERAL:
+                        $volumeConfigTemplate->size = $config->settings[FarmRoleStorageConfig::SETTING_GCE_EPHEMERAL_SIZE];
+                        $volumeConfigTemplate->name = $config->settings[FarmRoleStorageConfig::SETTING_GCE_EPHEMERAL_NAME];
+
+                        break;
+
                     case FarmRoleStorageConfig::TYPE_CINDER:
                         $volumeConfigTemplate->size = $config->settings[FarmRoleStorageConfig::SETTING_CINDER_SIZE];
-                        
+
                         if ($config->settings[FarmRoleStorageConfig::SETTING_CINDER_VOLUME_TYPE])
                         	$volumeConfigTemplate->volumeType = $config->settings[FarmRoleStorageConfig::SETTING_CINDER_VOLUME_TYPE];
 
@@ -162,12 +245,12 @@ class FarmRoleStorage
                         $volumeConfigTemplate->size = $config->settings[FarmRoleStorageConfig::SETTING_EBS_SIZE];
                         $volumeConfigTemplate->encrypted = (!empty($config->settings[FarmRoleStorageConfig::SETTING_EBS_ENCRYPTED])) ? 1 : 0;
                         $volumeConfigTemplate->tags = $dbServer->getAwsTags();
-                        
+
                         // IOPS
                         $volumeConfigTemplate->volumeType = $config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE];
                         if ($volumeConfigTemplate->volumeType == 'io1')
                             $volumeConfigTemplate->iops = $config->settings[FarmRoleStorageConfig::SETTING_EBS_IOPS];
-                        
+
                         if ($config->settings[FarmRoleStorageConfig::SETTING_EBS_KMS_KEY_ID])
                             $volumeConfigTemplate->kmsKeyId = $config->settings[FarmRoleStorageConfig::SETTING_EBS_KMS_KEY_ID];
 
@@ -186,7 +269,7 @@ class FarmRoleStorage
                         $volumeConfigTemplate->level = $config->settings[FarmRoleStorageConfig::SETTING_RAID_LEVEL];
                         $volumeConfigTemplate->vg = $config->id;
                         $volumeConfigTemplate->disks = array();
-                        
+
                         for ($i = 1; $i <= $config->settings[FarmRoleStorageConfig::SETTING_RAID_VOLUMES_COUNT]; $i++) {
                             $disk = new \stdClass();
 
@@ -195,12 +278,12 @@ class FarmRoleStorage
                                 $disk->encrypted = (!empty($config->settings[FarmRoleStorageConfig::SETTING_EBS_ENCRYPTED])) ? 1 : 0;
                                 $disk->type = FarmRoleStorageConfig::TYPE_EBS;
                                 $disk->tags = $dbServer->getAwsTags();
-                                
+
                                 // IOPS
                                 $disk->volumeType = $config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE];
                                 if ($disk->volumeType == 'io1')
                                     $disk->iops = $config->settings[FarmRoleStorageConfig::SETTING_EBS_IOPS];
-                                
+
                                 if ($config->settings[FarmRoleStorageConfig::SETTING_EBS_KMS_KEY_ID])
                                     $disk->kmsKeyId = $config->settings[FarmRoleStorageConfig::SETTING_EBS_KMS_KEY_ID];
 

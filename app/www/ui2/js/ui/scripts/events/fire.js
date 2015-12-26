@@ -21,6 +21,8 @@ Scalr.regPage('Scalr.ui.scripts.events.fire', function (loadParams, moduleParams
 					proxy: 'object'
 				},
                 plugins: {ptype: 'fieldinnericonscope', tooltipScopeType: 'event'},
+                matchFieldWidth: true,
+                listConfig: Scalr.configs.eventsListConfig,
                 displayField: 'name',
                 queryMode: 'local',
                 valueField: 'name',

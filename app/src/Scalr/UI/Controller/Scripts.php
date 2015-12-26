@@ -25,9 +25,28 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
         $this->viewAction();
     }
 
+    /**
+     * Check access permissions on account or environment level (depends on request scope)
+     *
+     * @param   string    $permissionMnemonic   Permission to check. Could be FORK or MANAGE
+     */
+    private function restrictScopeAccess($permissionMnemonic = null)
+    {
+        $permission = $permissionMnemonic ?
+            constant(
+                ($this->request->getScope() == ScopeInterface::SCOPE_ACCOUNT ? 'Scalr\Acl\Acl::PERM_SCRIPTS_ACCOUNT_' : 'Scalr\Acl\Acl::PERM_SCRIPTS_ENVIRONMENT_') . $permissionMnemonic
+            ) : NULL;
+
+        if ($this->request->getScope() == ScopeInterface::SCOPE_ACCOUNT) {
+            $this->request->restrictAccess(Acl::RESOURCE_SCRIPTS_ACCOUNT, $permission);
+        } else {
+            $this->request->restrictAccess(Acl::RESOURCE_SCRIPTS_ENVIRONMENT, $permission);
+        }
+    }
+
     public function viewAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_ADMINISTRATION_SCRIPTS);
+        $this->restrictScopeAccess();
 
         $vars = Scalr_Scripting_Manager::getScriptingBuiltinVariables();
         $environments = $this->user->getEnvironments();
@@ -70,7 +89,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
      */
     public function xGetAction($scriptId)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_ADMINISTRATION_SCRIPTS);
+        $this->restrictScopeAccess();
 
         /* @var Script $script */
         $script = Script::findPk($scriptId);
@@ -93,7 +112,8 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
      */
     public function xRemoveAction(JsonData $scriptId)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_ADMINISTRATION_SCRIPTS, Acl::PERM_ADMINISTRATION_SCRIPTS_MANAGE);
+        $this->restrictScopeAccess('MANAGE');
+
         $errors = [];
         $processed = [];
 
@@ -118,9 +138,9 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
 
         $this->response->data(['processed' => $processed]);
         if (count($errors))
-            $this->response->warning("Script(s) successfully removed, but some errors occurred:\n" . implode("\n", $errors));
+            $this->response->warning("Selected script(s) successfully removed, but some errors occurred:\n" . implode("\n", $errors));
         else
-            $this->response->success('Script(s) successfully removed');
+            $this->response->success('Selected script(s) successfully removed');
     }
 
     /**
@@ -131,7 +151,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
      */
     public function xRemoveVersionAction($scriptId, $version)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_ADMINISTRATION_SCRIPTS, Acl::PERM_ADMINISTRATION_SCRIPTS_MANAGE);
+        $this->restrictScopeAccess('MANAGE');
 
         /* @var $script Script */
         $script = Script::findPk($scriptId);
@@ -179,7 +199,8 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
     public function xSaveAction($id, $name, $description, $isSync = 0, $allowScriptParameters = false, $envId = NULL, $timeout = NULL,
                                 $version, RawData $content, $tags, $uploadType = NULL, $uploadUrl = NULL, FileUploadData $uploadFile = NULL, $checkScriptParameters = false)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_ADMINISTRATION_SCRIPTS, Acl::PERM_ADMINISTRATION_SCRIPTS_MANAGE);
+        $this->restrictScopeAccess('MANAGE');
+
         $validator = new Validator();
         $validator->validate($name, 'name', Validator::NOEMPTY);
 
@@ -205,7 +226,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
             }
         }
 
-        $envId = $envId ? $this->user->getDefaultEnvironment($envId)->id : NULL;
+        $envId = $this->getEnvironmentId(true);
 
         $content = str_replace("\r\n", "\n", $content);
         $tagsResult = [];
@@ -245,7 +266,6 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
             $validator->addError('name', 'Script name must be unique within current scope');
         }
 
-
         if (!$validator->isValid($this->response))
             return;
 
@@ -260,9 +280,12 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
 
             if (!$script->accountId && ($this->user->getType() != Scalr_Account_User::TYPE_SCALR_ADMIN))
                 throw new Scalr_Exception_InsufficientPermissions();
+
+            if (!$script->envId && $this->request->getScope() == ScopeInterface::SCOPE_ENVIRONMENT)
+                throw new Scalr_Exception_InsufficientPermissions();
         } else {
             $script = new Script();
-            $script->accountId = $this->user->getAccountId() ? $this->user->getAccountId() : NULL;
+            $script->accountId = $this->user->getAccountId() ?: NULL;
             $script->createdById = $this->user->getId();
             $script->createdByEmail = $this->user->getEmail();
             $script->envId = $envId;
@@ -330,7 +353,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
      */
     public function xForkAction($scriptId, $name)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_ADMINISTRATION_SCRIPTS, Acl::PERM_ADMINISTRATION_SCRIPTS_FORK);
+        $this->restrictScopeAccess('FORK');
 
         if (! $name)
             throw new Scalr_Exception_Core('Name cannot be null');
@@ -342,7 +365,29 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
             throw new Scalr_UI_Exception_NotFound();
 
         $script->checkPermission($this->user, $this->getEnvironmentId(true));
-        $forkedScript = $script->fork($name, $this->user, $this->request->getScope() == ScopeInterface::SCOPE_ENVIRONMENT ? $this->getEnvironmentId(true) : null);
+
+        $criteria = [];
+        $criteria[] = ['name' => $name];
+        switch ($this->request->getScope()) {
+            case Script::SCOPE_ENVIRONMENT:
+                $criteria[] = ['envId' => $this->getEnvironmentId(true)];
+                $criteria[] = ['accountId' => $this->user->getAccountId()];
+                break;
+            case Script::SCOPE_ACCOUNT:
+                $criteria[] = ['envId' => null];
+                $criteria[] = ['accountId' => $this->user->getAccountId()];
+                break;
+            case Script::SCOPE_SCALR:
+                $criteria[] = ['envId' => null];
+                $criteria[] = ['accountId' => null];
+                break;
+        }
+
+        if (Script::findOne($criteria)) {
+            throw new Scalr_Exception_Core('Script name must be unique within current scope');
+        }
+
+        $forkedScript = $script->fork($name, $this->user, $this->getEnvironmentId(true));
         $this->response->success('Script successfully forked');
         $this->response->data(['script' => array_merge($this->getScript($forkedScript), $this->getScriptInfo($forkedScript))]);
     }
@@ -372,7 +417,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
      */
     public function xListAction($scriptId = null, $query = null, $scope = null, JsonData $sort, $start = 0, $limit = 20)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_ADMINISTRATION_SCRIPTS);
+        $this->restrictScopeAccess();
 
         $criteria = [];
         if ($this->user->isScalrAdmin()) {
@@ -421,7 +466,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
             $criteria[] = ['id' => $scriptId];
         }
 
-        $result = Script::find($criteria, \Scalr\UI\Utils::convertOrder($sort, ['name' => 'ASC'], ['id', 'name', 'description', 'isSync', 'dtCreated', 'dtChanged']), $limit, $start, true);
+        $result = Script::find($criteria, null, \Scalr\UI\Utils::convertOrder($sort, ['name' => true], ['id', 'name', 'description', 'isSync', 'dtCreated', 'dtChanged']), $limit, $start, true);
         $data = [];
         foreach ($result as $script) {
             /* @var $script Script */
@@ -445,7 +490,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
      */
     public function executeAction($farmId = 0, $farmRoleId = 0, $serverId = '', $scriptId = 0, $shortcutId = 0)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_ADMINISTRATION_SCRIPTS, Acl::PERM_ADMINISTRATION_SCRIPTS_EXECUTE);
+        $this->request->restrictAccess(Acl::RESOURCE_SCRIPTS_ENVIRONMENT, Acl::PERM_SCRIPTS_ENVIRONMENT_EXECUTE);
         $data = ['scripts' => Script::getList($this->user->getAccountId(), $this->getEnvironmentId())];
 
         if ($shortcutId) {
@@ -499,7 +544,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
      */
     public function xExecuteAction($farmId, $farmRoleId = 0, $serverId = '', $scriptId = 0, $scriptPath = '', $scriptIsSync, $scriptTimeout, $scriptVersion, array $scriptParams = [], $shortcutId = null, $editShortcut = null)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_ADMINISTRATION_SCRIPTS, Acl::PERM_ADMINISTRATION_SCRIPTS_EXECUTE);
+        $this->request->restrictAccess(Acl::RESOURCE_SCRIPTS_ENVIRONMENT, Acl::PERM_SCRIPTS_ENVIRONMENT_EXECUTE);
 
         if ($serverId) {
             $dbServer = DBServer::LoadByID($serverId);

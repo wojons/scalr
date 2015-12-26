@@ -1,6 +1,6 @@
 <?php
 
-class CustomEvent extends Event
+class CustomEvent extends AbstractServerEvent
 {
 
     public $DBServer;

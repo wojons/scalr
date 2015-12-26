@@ -2,22 +2,27 @@
 namespace Scalr\System\Zmq\Cron\Task;
 
 use ArrayObject, DateTime, DateTimeZone, Exception;
+use HttpRequest;
 use Scalr\Exception\ServerNotFoundException;
+use Scalr\Model\Entity\Server\TerminationData;
+use Scalr\Modules\PlatformModuleInterface;
 use Scalr\Service\Exception\InstanceNotFound;
 use Scalr\System\Zmq\Cron\AbstractTask;
 use Scalr\Modules\PlatformFactory;
 use \DBServer;
+use Scalr\Util\CallbackInterface;
 use \SERVER_STATUS;
 use \EC2_SERVER_PROPERTIES;
 use \SERVER_PROPERTIES;
 use \ROLE_BEHAVIORS;
-use \Logger;
 use \LOG_CATEGORY;
 use \FarmLogMessage;
 use \HostDownEvent;
 use stdClass;
 use Scalr\Model\Entity\ServerTerminationError;
 use Scalr\Exception\InvalidCloudCredentialsException;
+use Scalr\DataType\CloudPlatformSuspensionInfo;
+use Scalr\Service\Aws\Ec2\DataType\InstanceAttributeType;
 
 
 /**
@@ -74,18 +79,44 @@ class ServerTerminate extends AbstractTask
         }
 
 
-        if (!in_array($dbServer->status, array(
+        if (!in_array($dbServer->status, [
             SERVER_STATUS::PENDING_TERMINATE,
             SERVER_STATUS::PENDING_SUSPEND,
             SERVER_STATUS::TERMINATED,
             SERVER_STATUS::SUSPENDED
-        ))) {
+        ])) {
             return false;
         }
 
-        //Skip Locked instances
+        // Check and skip locked instances
         if ($dbServer->status == SERVER_STATUS::PENDING_TERMINATE && $dbServer->GetProperty(EC2_SERVER_PROPERTIES::IS_LOCKED) == 1) {
-            return false;
+            if (($checkDateTime = $dbServer->GetProperty(EC2_SERVER_PROPERTIES::IS_LOCKED_LAST_CHECK_TIME)) <= time()) {
+                if (! $dbServer->GetRealStatus(true)->isTerminated()) {
+                    $isLocked = $dbServer->GetEnvironmentObject()->aws($dbServer->GetCloudLocation())->ec2->instance->describeAttribute($dbServer->GetCloudServerID(), InstanceAttributeType::disableApiTermination());
+                    if ($isLocked) {
+                        \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
+                            $dbServer->GetFarmObject()->ID,
+                            sprintf("Server '%s' has disableAPITermination flag and can't be terminated (Platform: %s) (ServerTerminate).",
+                                $dbServer->serverId, $dbServer->platform
+                            ),
+                            $dbServer->serverId
+                        ));
+
+                        $startTime = strtotime($dbServer->dateShutdownScheduled);
+
+                        // 1, 2, 3, 4, 5, 6, 9, 14, ... 60
+                        $diff = round((($checkDateTime < $startTime ? $startTime : $checkDateTime) - $startTime) / 60 * 0.5) * 60;
+                        $diff = $diff == 0 ? 60 : ($diff > 3600 ? 3600 : $diff);
+
+                        $dbServer->SetProperty(EC2_SERVER_PROPERTIES::IS_LOCKED_LAST_CHECK_TIME, time() + $diff);
+                        return false;
+                    } else {
+                        $dbServer->SetProperty(EC2_SERVER_PROPERTIES::IS_LOCKED, $isLocked);
+                    }
+                }
+            } else {
+                return false;
+            }
         }
 
         //Warming up static DI cache
@@ -94,7 +125,7 @@ class ServerTerminate extends AbstractTask
         // Reconfigure observers
         \Scalr::ReconfigureObservers();
 
-        if (in_array($dbServer->status, array(SERVER_STATUS::TERMINATED)) || $dbServer->dateShutdownScheduled <= $dtNow->format('Y-m-d H:i:s')) {
+        if ($dbServer->status == SERVER_STATUS::TERMINATED || $dbServer->dateShutdownScheduled <= $dtNow->format('Y-m-d H:i:s')) {
             try {
                 $p = PlatformFactory::NewPlatform($dbServer->platform);
 
@@ -111,13 +142,45 @@ class ServerTerminate extends AbstractTask
                     $serverHistory = $dbServer->getServerHistory();
 
                     $isTermination = in_array(
-                        $dbServer->status, array(SERVER_STATUS::TERMINATED, SERVER_STATUS::PENDING_TERMINATE)
+                        $dbServer->status, [SERVER_STATUS::TERMINATED, SERVER_STATUS::PENDING_TERMINATE]
                     );
                     $isSuspension = in_array(
-                        $dbServer->status, array(SERVER_STATUS::SUSPENDED, SERVER_STATUS::PENDING_SUSPEND)
+                        $dbServer->status, [SERVER_STATUS::SUSPENDED, SERVER_STATUS::PENDING_SUSPEND]
                     );
 
-                    $status = $dbServer->GetRealStatus();
+                    /* @var $terminationData TerminationData */
+                    $terminationData = null;
+
+                    //NOTE: in any case, after call, be sure to set callback to null
+                    $this->setupClientCallback($p, function ($request, $response) use ($dbServer, &$terminationData) {
+                        $terminationData = new TerminationData();
+                        $terminationData->serverId = $dbServer->serverId;
+
+                        if ($request instanceof \http\Client\Request) {
+                            $terminationData->requestUrl = $request->getRequestUrl();
+                            $terminationData->requestQuery = $request->getQuery();
+                            $terminationData->request = $request->toString();
+                        }
+
+                        if ($response instanceof \http\Client\Response) {
+                            $terminationData->response = $response->toString();
+                            $terminationData->responseCode = $response->getResponseCode();
+                            $terminationData->responseStatus = $response->getResponseStatus();
+                        }
+                    }, $dbServer);
+
+                    try {
+                        $status = $dbServer->GetRealStatus();
+                    } catch (Exception $e) {
+                        //eliminate callback
+                        $this->setupClientCallback($p, null, $dbServer);
+
+                        throw $e;
+                    }
+
+                    //eliminate callback
+                    $this->setupClientCallback($p, null, $dbServer);
+
                     if ($dbServer->isCloudstack()) {
                         //Workaround for when expunge flag not working and servers stuck in Destroyed state.
                         $isTerminated = $status->isTerminated() && $status->getName() != 'Destroyed';
@@ -132,11 +195,10 @@ class ServerTerminate extends AbstractTask
                                     if ($dbServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::RABBITMQ)) {
                                         $serversCount = count($dbServer->GetFarmRoleObject()->GetServersByFilter([], ['status' => [SERVER_STATUS::TERMINATED, SERVER_STATUS::SUSPENDED]]));
                                         if ($dbServer->index == 1 && $serversCount > 1) {
-                                            Logger::getLogger(LOG_CATEGORY::FARM)->warn(
+                                            \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(
                                                 new FarmLogMessage(
-                                                    $dbServer->GetFarmObject()->ID, sprintf(
-                                                        "RabbitMQ role. Main DISK node should be terminated after all other nodes. "
-                                                        . "Waiting... (Platform: %s) (ServerTerminate).",
+                                                    $dbServer->GetFarmObject()->ID,
+                                                    sprintf("RabbitMQ role. Main DISK node should be terminated after all other nodes. Waiting... (Platform: %s) (ServerTerminate).",
                                                         $dbServer->serverId, $dbServer->platform
                                                     ),
                                                     $dbServer->serverId
@@ -149,10 +211,10 @@ class ServerTerminate extends AbstractTask
                                 } catch (Exception $e) {
                                 }
 
-                                Logger::getLogger(LOG_CATEGORY::FARM)->warn(
+                                \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(
                                     new FarmLogMessage(
-                                        $dbServer->GetFarmObject()->ID, sprintf(
-                                            "Terminating server '%s' (Platform: %s) (ServerTerminate).",
+                                        $dbServer->GetFarmObject()->ID,
+                                        sprintf("Terminating server '%s' (Platform: %s) (ServerTerminate).",
                                             $dbServer->serverId, $dbServer->platform
                                         ),
                                         $dbServer->serverId
@@ -194,16 +256,22 @@ class ServerTerminate extends AbstractTask
                                 $errorResolution = true;
                                 $serverHistory->setTerminated();
                                 $dbServer->Remove();
+
+                                if (isset($terminationData)) {
+                                    $terminationData->save();
+                                }
                             }
                         } else if ($dbServer->status == SERVER_STATUS::PENDING_TERMINATE) {
-                            $dbServer->status = SERVER_STATUS::TERMINATED;
-                            $dbServer->Save();
+                            $dbServer->updateStatus(SERVER_STATUS::TERMINATED);
+
                             $errorResolution = true;
                         } else if ($dbServer->status == SERVER_STATUS::PENDING_SUSPEND) {
-                            $dbServer->status = SERVER_STATUS::SUSPENDED;
-                            $dbServer->remoteIp = '';
-                            $dbServer->localIp = '';
-                            $dbServer->Save();
+                            $dbServer->update([
+                                'status'   => SERVER_STATUS::SUSPENDED,
+                                'remoteIp' => '',
+                                'localIp'  => ''
+                            ]);
+
                             $errorResolution = true;
                         }
 
@@ -222,16 +290,27 @@ class ServerTerminate extends AbstractTask
                     $serverHistory->setTerminated();
                 }
                 $dbServer->Remove();
+
+                if (isset($terminationData)) {
+                    $terminationData->save();
+                }
             } catch (Exception $e) {
-                if ($request->serverId && ($e instanceof InvalidCloudCredentialsException ||
-                     stripos($e->getMessage(), "The request you have made requires authentication.") !== false ||
-                     stripos($e->getMessage(), "tenant is disabled") !== false ||
-                     stripos($e->getMessage(), "was not able to validate the provided access credentials") !== false ||
-                     stripos($e->getMessage(), "platform is not enabled") !== false ||
-                     stripos($e->getMessage(), "modify its 'disableApiTermination' instance attribute and try again") !== false ||
-                     stripos($e->getMessage(), "neither api key nor password was provided for the openstack config") !== false ||
-                     stripos($e->getMessage(), "refreshing the OAuth2 token") !== false ||
-                     strpos($e->getMessage(), "Cannot obtain endpoint url. Unavailable service") !== false)) {
+                if ($request->serverId &&
+                    (stripos($e->getMessage(), "modify its 'disableApiTermination' instance attribute and try again") !== false) &&
+                    $dbServer &&
+                    $dbServer->platform == \SERVER_PLATFORMS::EC2)
+                {
+                    // server has disableApiTermination flag on cloud, update server properties
+                    $dbServer->SetProperty(EC2_SERVER_PROPERTIES::IS_LOCKED, 1);
+
+                } else if ($request->serverId && ($e instanceof InvalidCloudCredentialsException ||
+                    CloudPlatformSuspensionInfo::isSuspensionException($e) ||
+                    stripos($e->getMessage(), "tenant is disabled") !== false ||
+                    stripos($e->getMessage(), "was not able to validate the provided access credentials") !== false ||
+                    stripos($e->getMessage(), "platform is not enabled") !== false ||
+                    stripos($e->getMessage(), "neither api key nor password was provided for the openstack config") !== false ||
+                    stripos($e->getMessage(), "refreshing the OAuth2 token") !== false ||
+                    strpos($e->getMessage(), "Cannot obtain endpoint url. Unavailable service") !== false)) {
                     //Postpones unsuccessful task for 30 minutes.
                     $ste = new ServerTerminationError(
                         $request->serverId, (isset($request->attempts) ? $request->attempts + 1 : 1), $e->getMessage()
@@ -243,6 +322,10 @@ class ServerTerminate extends AbstractTask
                     if ($ste->attempts > self::MAX_ATTEMPTS && in_array($dbServer->status, [SERVER_STATUS::PENDING_TERMINATE, SERVER_STATUS::TERMINATED])) {
                         //We are going to remove those with Pending terminate status from Scalr after 1 month of unsuccessful attempts
                         $dbServer->Remove();
+
+                        if (isset($terminationData)) {
+                            $terminationData->save();
+                        }
                     }
 
                     $ste->save();
@@ -255,5 +338,21 @@ class ServerTerminate extends AbstractTask
         }
 
         return $request;
+    }
+
+    /**
+     * Setups callback to API HTTP client configured for specified server
+     *
+     * @param   PlatformModuleInterface $platformModule          Platform module for the server
+     * @param   callable                $callback       optional Settable callback
+     * @param   DBServer                $dbServer       optional Server to configure client
+     */
+    private function setupClientCallback(PlatformModuleInterface $platformModule, callable $callback = null, DBServer $dbServer = null)
+    {
+        $client = $platformModule->getHttpClient($dbServer);
+
+        if ($client instanceof CallbackInterface) {
+            $client->setCallback($callback);
+        }
     }
 }

@@ -33,15 +33,15 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.snapshots.view', function (loadParams, 
 		},
 
 		columns: [
-			{ header: "ID", width: 80, dataIndex: 'snapshotId', sortable: true },
+			{ header: "ID", flex: 1, dataIndex: 'snapshotId', sortable: true },
 			{ header: "Type", flex: 1, dataIndex: 'type', sortable: true},
-			{ header: "Volume ID", width: 90, dataIndex: 'volumeId', sortable: true },
+			{ header: "Volume ID", flex: 1, dataIndex: 'volumeId', sortable: true },
 			{ header: "Volume type", width: 180, dataIndex: 'volumeType', sortable: true },
-			{ header: "Status", flex: 1, dataIndex: 'state', sortable: true },
-			{ header: "Created at", flex: 1, dataIndex: 'createdAt', sortable: true }
+			{ header: "Status", width: 180, dataIndex: 'state', sortable: true },
+			{ header: "Created at", width: 240, dataIndex: 'createdAt', sortable: true }
 		],
 
-        selModel: 'selectedmodel',
+        selModel: Scalr.isAllowed('CLOUDSTACK_SNAPSHOTS', 'manage') ? 'selectedmodel' : null,
 		listeners: {
 			selectionchange: function(selModel, selections) {
 				this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
@@ -58,6 +58,7 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.snapshots.view', function (loadParams, 
                 cls: 'x-btn-red',
 				tooltip: 'Select one or more snapshot(s) to delete them',
 				disabled: true,
+                hidden: !Scalr.isAllowed('CLOUDSTACK_SNAPSHOTS', 'manage'),
 				handler: function() {
 					var request = {
 						confirmBox: {

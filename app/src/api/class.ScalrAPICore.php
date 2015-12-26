@@ -1,5 +1,8 @@
 <?php
 
+use Scalr\Exception\Http\BadRequestException;
+use Scalr\AuditLogger;
+
 abstract class ScalrAPICore
 {
     const HASH_ALGO = 'SHA256';
@@ -85,8 +88,38 @@ abstract class ScalrAPICore
         $pinstance->setAccessible(true);
         $pinstance->setValue($request, $request);
 
+        $container = $this->getContainer();
+
         //Injects request into DI container
-        $this->getContainer()->request = $request;
+        $container->request = $request;
+
+        //Releases auditloger to ensure it will be updated
+        $container->release('auditlogger');
+
+        //Adjusts metadata to invoke audit loger
+        $container->setShared('auditlogger.metadata', function ($cont) {
+            return (object) [
+                'user'        => $this->user,
+                'envId'       => isset($this->Environment) ? $this->Environment->id : null,
+                'remoteAddr'  => $cont->request->getRemoteAddr(),
+                'ruid'        => null,
+                'requestType' => AuditLogger::REQUEST_TYPE_API,
+                'systemTask'  => null,
+            ];
+        });
+    }
+
+    /**
+     * AuditLogger wrapper
+     *
+     * @param  string  $event      Event name, aka tag
+     * @param  mixed   $extra      optional Array of additionally provided information
+     * @param  mixed   $extra,...  optional
+     * @return boolean Whether operation was successful
+     */
+    protected function auditLog($event, ...$extra)
+    {
+        return $this->getContainer()->auditlogger->auditLog($event, ...$extra);
     }
 
     protected function insensitiveUksort($a,$b)
@@ -118,17 +151,17 @@ abstract class ScalrAPICore
         if ($result) {
             //Provides that login is always with domain suffix
             $request['Login'] = $ldap->getUsername();
-            
+
             $this->debug['ldapUsername'] = $request['Login'];
 
             $this->Environment = Scalr_Environment::init()->loadById($request['EnvID']);
-            
+
             $start = microtime(true);
             $groups = $ldap->getUserGroups();
             $tldap += microtime(true) - $start;
 
             header(sprintf('X-Scalr-LDAP-Query-Time: %0.4f sec', $tldap));
-            
+
             $this->debug['ldapGroups'] = json_encode($groups);
 
             //Get User
@@ -141,13 +174,13 @@ abstract class ScalrAPICore
             }
 
             $this->user->applyLdapGroups($groups);
-            
+
             $this->debug['ldapEnvId'] = $this->Environment->id;
-            
+
             $this->user->getPermissions()->setEnvironmentId($this->Environment->id)->validate($this->Environment);
-            
+
             $this->debug['ldapAuth'] = 1;
-            
+
             //We must set environment to DI Container.
             $this->setDiContainer();
         } else {
@@ -166,17 +199,21 @@ abstract class ScalrAPICore
 
     private function AuthenticateRESTv3($request)
     {
-        if (!$request['Signature'])
+        if (empty($request['Signature'])) {
             throw new Exception("Signature is missing");
+        }
 
-        if (!$request['KeyID'])
+        if (empty($request['KeyID'])) {
             throw new Exception("KeyID is missing");
+        }
 
-        if (!$request['Timestamp'] && !$request['TimeStamp'])
+        if (empty($request['Timestamp']) && empty($request['TimeStamp'])) {
             throw new Exception("Timestamp is missing");
+        }
 
-        if ($request['Timestamp'])
+        if (!empty($request['Timestamp'])) {
             $request['TimeStamp'] = $request['Timestamp'];
+        }
 
         //You mustn't do urldecode here in the next API version!
         $string_to_sign = "{$request['Action']}:{$request['KeyID']}:".urldecode($request['TimeStamp']);
@@ -187,8 +224,9 @@ abstract class ScalrAPICore
             $this->user = Scalr_Account_User::init()->loadByApiAccessKey($request['KeyID']);
         } catch (Exception $e) {}
 
-        if (!$this->user)
+        if (!$this->user) {
             throw new Exception("The specified KeyID does not exist");
+        }
 
         $auth_key = $this->user->getSetting(Scalr_Account_User::SETTING_API_SECRET_KEY);
 
@@ -207,10 +245,11 @@ abstract class ScalrAPICore
                     throw new Exception("Incorrect login or password (1)" . "\n" . $ldap->getLog());
                 }
             } else {
-                if (!$request['EnvID']) {
+                if (empty($request['EnvID'])) {
                     $envs = $this->user->getEnvironments();
-                    if (!$envs[0]['id'])
+                    if (empty($envs[0]['id'])) {
                         throw new Exception("User has no access to any environments");
+                    }
 
                     $this->Environment = Scalr_Environment::init()->loadById($envs[0]['id']);
                 }
@@ -321,14 +360,17 @@ abstract class ScalrAPICore
 
     private function AuthenticateREST($request)
     {
-        if (!$request['Signature'])
+        if (empty($request['Signature'])) {
             throw new Exception("Signature is missing");
+        }
 
-        if (!$request['KeyID'])
+        if (empty($request['KeyID'])) {
             throw new Exception("KeyID is missing");
+        }
 
-        if (!$request['Timestamp'] && !$request['TimeStamp'])
+        if (empty($request['Timestamp']) && empty($request['TimeStamp'])) {
             throw new Exception("Timestamp is missing");
+        }
 
         ksort($request);
 
@@ -337,10 +379,10 @@ abstract class ScalrAPICore
             if (!in_array($k, array("Signature"))) {
                 if (is_array($v)) {
                     foreach ($v as $kk => $vv) {
-                        $string_to_sign.= "{$k}[{$kk}]{$vv}";
+                        $string_to_sign .= "{$k}[{$kk}]{$vv}";
                     }
                 } else {
-                    $string_to_sign.= "{$k}{$v}";
+                    $string_to_sign .= "{$k}{$v}";
                 }
             }
         }
@@ -349,30 +391,31 @@ abstract class ScalrAPICore
 
         $this->user = Scalr_Account_User::init()->loadByApiAccessKey($request['KeyID']);
 
-        if (!$this->user)
+        if (!$this->user) {
             throw new Exception("API Key #{$request['KeyID']} not found in database");
+        }
 
         $auth_key = $this->user->getSetting(Scalr_Account_User::SETTING_API_SECRET_KEY);
 
         if ($this->user->getAccountId()) {
-            if (!$request['EnvID']) {
-                $envs = $this->user->getEnvironments();
-                if (!$envs[0]['id'])
-                    throw new Exception("User has no access to any environemnts");
 
-                $this->Environment = Scalr_Environment::init()->loadById($envs[0]['id']);
-            } else {
-                $this->Environment = Scalr_Environment::init()->loadById($request['EnvID']);
+            if (empty($request['EnvID'])) {
+                if (empty($env = $this->user->getEnvironments())) {
+                    throw new Exception("User has no access to any environemnts");
+                }
+                $request['EnvID'] = array_shift($env)['id'];
             }
 
+            $this->Environment = Scalr_Environment::init()->loadById($request['EnvID']);
             $this->user->getPermissions()->setEnvironmentId($this->Environment->id)->validate($this->Environment);
             //We must set environment to DI Container.
             $this->setDiContainer();
         }
 
         $valid_sign = base64_encode(hash_hmac(self::HASH_ALGO, trim($string_to_sign), $auth_key, 1));
-        if ($valid_sign != $request['Signature'])
+        if ($valid_sign != $request['Signature']) {
             throw new Exception("Signature doesn't match");
+        }
     }
 
     public function BuildRestServer($request)
@@ -381,24 +424,32 @@ abstract class ScalrAPICore
             $Reflect = new ReflectionObject($this);
             if ($Reflect->hasMethod($request['Action'])) {
                 //Authenticate
-                if ($request['AuthType'] == 'ldap') {
+                if (isset($request["AuthType"]) && $request['AuthType'] == 'ldap') {
                     $this->AuthenticateLdap($request);
                 } else {
-                    if ($request['AuthVersion'] == 2)
-                        $this->AuthenticateRESTv2($request);
-                    elseif ($request['AuthVersion'] == 3)
-                        $this->AuthenticateRESTv3($request);
-                    else
-                        $this->AuthenticateREST($request);
 
-                    if ($this->user->getSetting(Scalr_Account_User::SETTING_API_ENABLED) != 1)
+                    $authVersion = isset($request['AuthVersion']) ? intval($request['AuthVersion']) : 0;
+                    switch ($authVersion) {
+                        case 2:
+                            $this->AuthenticateRESTv2($request);
+                            break;
+                        case 3:
+                            $this->AuthenticateRESTv3($request);
+                            break;
+                        default:
+                            $this->AuthenticateREST($request);
+                    }
+
+                    if ($this->user->getSetting(Scalr_Account_User::SETTING_API_ENABLED) != 1) {
                         throw new Exception(_("Your API keys are currently disabled. You can enable access at Settings > API access."));
+                    }
 
                     //Check IP Addresses
                     if ($this->user->getVar(Scalr_Account_User::VAR_API_IP_WHITELIST)) {
                         $ips = explode(",", $this->user->getVar(Scalr_Account_User::VAR_API_IP_WHITELIST));
-                        if (!$this->IPAccessCheck($ips))
+                        if (!$this->IPAccessCheck($ips)) {
                             throw new Exception(sprintf(_("Access to the API is not allowed from your IP '%s'"), $_SERVER['REMOTE_ADDR']));
+                        }
                     }
                 }
 
@@ -408,7 +459,7 @@ abstract class ScalrAPICore
                     $limit = $this->Environment->getPlatformConfigValue(Scalr_Environment::SETTING_API_LIMIT_REQPERHOUR, false);
                     $usage = $this->Environment->getPlatformConfigValue(Scalr_Environment::SETTING_API_LIMIT_USAGE, false);
                     if ($usage >= $limit && $hour == date("YmdH")) {
-                        $reset = 60 - (int)date("i");
+                        //$reset = 60 - (int)date("i");
 
                         header("HTTP/1.0 429 Too Many Requests");
                         exit();
@@ -422,28 +473,26 @@ abstract class ScalrAPICore
                     }
 
                     $this->Environment->setPlatformConfig(array(
-                        Scalr_Environment::SETTING_API_LIMIT_USAGE => $usage+1,
+                        Scalr_Environment::SETTING_API_LIMIT_USAGE => $usage + 1,
                         Scalr_Environment::SETTING_API_LIMIT_HOUR => $hour
                     ), false);
                 }
 
                 //Execute API call
                 $ReflectMethod = $Reflect->getMethod($request['Action']);
-                $args = array();
+                $args = [];
                 foreach ($ReflectMethod->getParameters() as $param) {
-                    if (!$param->isOptional() && !isset($request[$param->getName()]))
-                        throw new Exception(sprintf("Missing required parameter '%s'", $param->getName()));
-                    else {
-                        if($param->isArray())
-                            $args[$param->getName()] = (array)$request[$param->getName()];
-                        else
-                            $args[$param->getName()] = $request[$param->getName()];
+                    $paramName = $param->getName();
+                    if (isset($request[$paramName])) {
+                        $args[$paramName] = $param->isArray() ? (array)$request[$paramName] : $request[$paramName];
+                    } elseif (!$param->isOptional()) {
+                        throw new BadRequestException(sprintf("Missing required parameter '%s'", $paramName));
+                    } else {
+                        $args[$paramName] = $param->isArray() ? [] : null;
                     }
                 }
 
                 $result = $ReflectMethod->invokeArgs($this, $args);
-
-
                 $this->LastTransactionID = $result->TransactionID;
 
                 // Create response
@@ -456,14 +505,15 @@ abstract class ScalrAPICore
                 throw new Exception(sprintf("Action '%s' is not defined", $request['Action']));
             }
         } catch (Exception $e) {
-            if (!$this->LastTransactionID)
+            if (empty($this->LastTransactionID)) {
                 $this->LastTransactionID = Scalr::GenerateUID();
+            }
 
-            $retval = "<?xml version=\"1.0\"?>\n".
-            "<Error>\n".
-                "\t<TransactionID>{$this->LastTransactionID}</TransactionID>\n".
-                "\t<Message>{$e->getMessage()}</Message>\n".
-            "</Error>\n";
+            $retval = "<?xml version=\"1.0\"?>\n" .
+                "<Error>\n" .
+                "\t<TransactionID>{$this->LastTransactionID}</TransactionID>\n" .
+                "\t<Message>{$e->getMessage()}</Message>\n" .
+                "</Error>\n";
         }
         if (isset($this->user)) {
             $this->LogRequest(
@@ -476,7 +526,7 @@ abstract class ScalrAPICore
         }
 
         header("Content-type: text/xml");
-        header("Content-length: ".strlen($retval));
+        header("Content-length: " . strlen($retval));
         header("Access-Control-Allow-Origin: *");
 
         print $retval;
@@ -484,29 +534,44 @@ abstract class ScalrAPICore
 
     protected function LogRequest($trans_id, $action, $ipaddr, $request, $response)
     {
-        if ($request['debug'] == 1 || $request['Debug'] == 1 || $request['Action'] == 'DNSZoneRecordAdd') {
+        $request = filter_var_array($request, [
+            'debug' => [
+                'filter' => FILTER_VALIDATE_INT,
+                'flags'  => FILTER_REQUIRE_SCALAR,
+            ],
+            'Debug' => [
+                'filter' => FILTER_VALIDATE_INT,
+                'flags'  => FILTER_REQUIRE_SCALAR,
+            ],
+            'Action' => [
+                'filter' => FILTER_DEFAULT,
+                'flags'  => FILTER_REQUIRE_SCALAR,
+            ]
+        ], true);
+
+        if ($request['debug'] === 1 || $request['Debug'] === 1 || $request['Action'] === 'DNSZoneRecordAdd') {
             try {
-                $this->DB->Execute("INSERT INTO api_log SET
-                    transaction_id	= ?,
-                    dtadded			= ?,
-                    action			= ?,
-                    ipaddress		= ?,
-                    request			= ?,
-                    response		= ?,
-                    clientid		= ?,
-                    env_id			= ?
-                ", array(
+                $this->DB->Execute("
+                    INSERT INTO api_log SET
+                        transaction_id = ?,
+                        dtadded        = ?,
+                        action         = ?,
+                        ipaddress      = ?,
+                        request        = ?,
+                        response       = ?,
+                        clientid       = ?,
+                        env_id         = ?
+                ", [
                     $trans_id,
                     time(),
                     $action,
                     $ipaddr,
                     http_build_query($request),
                     $response,
-                    ($this->user instanceof Scalr_Account_User ? $this->user->getAccountId() : null),
-                    (!empty($this->Environment->id) ? $this->Environment->id : null),
-                ));
-            } catch (Exception $e) {
-            }
+                    $this->user instanceof Scalr_Account_User ? $this->user->getAccountId() : null,
+                    !empty($this->Environment->id) ? $this->Environment->id : null,
+                ]);
+            } catch (Exception $ignore) {}
         }
     }
 
@@ -574,7 +639,7 @@ abstract class ScalrAPICore
     protected function CreateInitialResponse()
     {
         $response = new stdClass();
-        $response->{"TransactionID"} = Scalr::GenerateUID();
+        $response->TransactionID = Scalr::GenerateUID();
 
         return $response;
     }

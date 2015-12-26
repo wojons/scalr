@@ -17,18 +17,13 @@ define("CACHEPATH", "$base/../cache");
 define("SCALR_CONFIG_FILE", APPPATH . '/etc/config.yml');
 define("SCALR_CONFIG_CACHE_FILE", CACHEPATH . '/.config');
 define("SCALR_VERSION", trim(@file_get_contents(APPPATH . "/etc/version")));
+define("SCALR_TEMPLATES_PATH", APPPATH . "/templates/en_US");
+defined("STDOUT") or define("STDOUT", fopen("php://output", "w"));
 
 $ADODB_CACHE_DIR = CACHEPATH . "/adodb";
 
-define("SCALR_TEMPLATES_PATH", APPPATH . "/templates/en_US");
-
 // Require autoload definition
-$classpath = [
-    $base,
-    $base . "/externals/ZF-1.10.8",
-    $base . "/externals/google-api-php-client-git-03162015/src"
-];
-set_include_path(get_include_path() . PATH_SEPARATOR . join(PATH_SEPARATOR, $classpath));
+set_include_path(get_include_path() . PATH_SEPARATOR . $base);
 
 require_once SRCPATH . "/autoload.inc.php";
 
@@ -50,16 +45,13 @@ if (!$id) {
     $id = dechex(abs(crc32($uuid)));
 
     $res = @file_put_contents($idFilePath, $id);
-    if (!$res)
+    if (!$res) {
         exit("ERROR: Unable to write ID file ({$idFilePath}).");
+    }
 }
 
 define("SCALR_ID", $id);
 
+//ADODB requirements
 require_once SRCPATH . '/externals/adodb5-18/adodb-exceptions.inc.php';
 require_once SRCPATH . '/externals/adodb5-18/adodb.inc.php';
-
-// Define log4php contants
-define("LOG4PHP_DIR", SRCPATH . '/externals/apache-log4php-2.0.0-incubating/src/main/php');
-require_once LOG4PHP_DIR . '/Logger.php';
-Logger::configure(APPPATH . '/etc/log4php.xml', 'LoggerConfiguratorXml');

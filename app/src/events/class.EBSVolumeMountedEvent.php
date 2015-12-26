@@ -1,6 +1,6 @@
 <?php
 
-class EBSVolumeMountedEvent extends Event
+class EBSVolumeMountedEvent extends AbstractServerEvent
 {
     public $Mountpoint;
     public $VolumeID;

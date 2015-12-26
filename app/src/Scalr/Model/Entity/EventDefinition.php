@@ -98,8 +98,8 @@ class EventDefinition extends AbstractEntity implements ScopeInterface, AccessPe
     {
         return !!self::findOne([
             ['name' => $name],
-            ['$or' => [['accountId' => NULL], ['accountId' => $accountId]]],
-            ['$or' => [['envId' => NULL], ['envId' => $envId]]]
+            ['$or'  => [['accountId' => null], ['accountId' => $accountId]]],
+            ['$or'  => [['envId' => null], ['envId' => $envId]]]
         ]);
     }
 
@@ -112,8 +112,8 @@ class EventDefinition extends AbstractEntity implements ScopeInterface, AccessPe
     {
         $retval = [];
         foreach (self::find([
-            ['$or' => [['accountId' => NULL], ['accountId' => $accountId]]],
-            ['$or' => [['envId' => NULL], ['envId' => $envId]]]
+            ['$or' => [['accountId' => null], ['accountId' => $accountId]]],
+            ['$or' => [['envId' => null], ['envId' => $envId]]]
         ]) as $ev) {
             /* @var $ev EventDefinition */
             $retval[$ev->name] = [

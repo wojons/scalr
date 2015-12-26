@@ -48,17 +48,17 @@ class Scalr_Util_Arrays
     /**
      * Calculates median
      *
-     * @param   array    $array  Not empty array with numeric values
-     * @return  number   Returns median or false for empty array
-     * @since   5.0 (01.04.2014)
+     * @param  array  $array  Not empty array with numeric values
+     * @return float|int|boolean Returns median or false for an empty array
+     * @since  5.0 (01.04.2014)
      */
-    public static function median($array)
+    public static function median(array $array)
     {
-        $number = count($array);
-
-        if ($number == 0) {
+        if (empty($array)) {
             return false;
         }
+
+        $number = count($array);
 
         $mid = floor($number / 2);
 
@@ -71,5 +71,42 @@ class Scalr_Util_Arrays
         }
 
         return $median;
+    }
+
+    /**
+     * Calculates the percentile
+     *
+     * @param  array $array               Array of numeric values
+     * @param  int   $percentile          The percentile
+     * @param  bool  $round      optional Whether to round up the value
+     * @return boolean|float|int Returns percentile of FALSE if no data provided
+     * @throws \InvalidArgumentException
+     */
+    public static function percentile(array $array, $percentile, $round = true)
+    {
+        if (is_int($percentile) && $percentile > 1 && $percentile <= 100) {
+            $percentile /= 100;
+        } else {
+            throw new \InvalidArgumentException("Percentile must be an integer within a range of 1..100");
+        }
+
+        if (empty($array)) {
+            return false;
+        }
+
+        $count = count($array);
+
+        $allindex = ($count - 1) * $percentile;
+        $intvalindex = intval($allindex);
+        $floatval = $allindex - $intvalindex;
+
+        sort($array, SORT_NUMERIC);
+
+        if (! is_float($floatval) || $count <= $intvalindex + 1){
+            $result = $array[$intvalindex];
+        } else {
+            $result = $floatval * ($array[$intvalindex + 1] - $array[$intvalindex]) + $array[$intvalindex];
+        }
+        return $round ? ceil($result) : $result;
     }
 }

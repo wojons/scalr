@@ -2,6 +2,8 @@
 
 namespace Scalr\Model\Entity;
 
+use Scalr\DataType\ScopeInterface;
+
 /**
  * AccountScript entity
  *
@@ -21,4 +23,23 @@ class AccountScript extends OrchestrationRule
      * @var int
      */
     public $accountId;
+
+
+    /**
+     * {@inheritdoc}
+     * @see OrchestrationRule::hasAccessPermissions()
+     */
+    public function hasAccessPermissions($user, $environment = null, $modify = null)
+    {
+        return $this->accountId == $user->accountId;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see OrchestrationRule::getScope()
+     */
+    public function getScope()
+    {
+        return ScopeInterface::SCOPE_ACCOUNT;
+    }
 }

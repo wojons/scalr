@@ -1,4 +1,5 @@
 <?php
+use http\Client\Request;
 
 /******************************************************************************************
 
@@ -279,7 +280,8 @@ class ChargifyConnector
 	{
 	  	try
 	  	{
-		  	$request = new HttpRequest("https://{$this->active_domain}.chargify.com{$uri}");
+		  	$url = new \http\Url("https://{$this->active_domain}.chargify.com{$uri}", null, \http\Url::PARSE_MBLOC | \http\Url::PARSE_MBUTF8 | \http\Url::PARSE_TOPCT);
+		  	$request = new Request($method, $url);
 		  	$request->setHeaders(array('Content-Type' => 'application/xml'));
 		  	$request->setOptions(array(
 		  		'httpauth'	=> "{$this->active_api_key}:x",
@@ -287,10 +289,9 @@ class ChargifyConnector
 		  		'connecttimeout' => 45
 		  	));
 
-		  	$request->setMethod(constant("HTTP_METH_{$method}"));
-
-		  	if ($data)
-		  		$request->setRawPostData($data);
+		  	if ($data) {
+                $request->getBody()->append($data);
+            }
 	  	}
 	  	catch(Exception $e)
 	  	{
@@ -298,9 +299,8 @@ class ChargifyConnector
 	  		throw $e;
 	  	}
 
+        $response = (new \http\Client())->enqueue($request)->send()->getResponse($request);
 
-	  	$request->send();
-
-	  	return $request;
+	  	return $response;
 	}
 }

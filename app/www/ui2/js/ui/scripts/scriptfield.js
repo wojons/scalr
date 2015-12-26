@@ -107,7 +107,8 @@ Ext.define('Scalr.ui.RoleScriptingGrid', {
             var script,
                 scriptType = record.get('script_type'),
                 scriptField = view.up('scriptfield'),
-                scope = record.get('system') || (scriptField ? scriptField.mode : 'role'),
+                mode = scriptField ? scriptField.mode : 'role',
+                scope = record.get('system') || mode,
                 params;
             switch (scriptType) {
                 case 'scalr':
@@ -132,7 +133,7 @@ Ext.define('Scalr.ui.RoleScriptingGrid', {
             }
 
             return '<span style="float:left;width:46px;font-size:90%;">#'+record.get('order_index')+'</span> '+
-                   '<img data-qclass="x-tip-light" data-qtip="'+Scalr.utils.getScopeLegend('orchestration')+'" src="'+Ext.BLANK_IMAGE_URL+'" class="scalr-scope-'+scope+'"/> &nbsp;'+
+                   '<img data-qclass="x-tip-light" data-qtip="'+Scalr.utils.getScopeLegend('orchestration', false, mode)+'" src="'+Ext.BLANK_IMAGE_URL+'" class="scalr-scope-'+scope+'"/> &nbsp;'+
                    '<b>'+script+'</b>';
         }
     }],
@@ -140,8 +141,8 @@ Ext.define('Scalr.ui.RoleScriptingGrid', {
         var me = this;
         this.features = Ext.clone(this.features);
         this.features.push({
-            id:'grouping',
-            ftype:'grouping',
+            id: 'grouping',
+            ftype: 'grouping',
             startCollapsed: this.groupingStartCollapsed,
             groupHeaderTpl: [
                 '{children:this.getGroupName}',
@@ -149,7 +150,7 @@ Ext.define('Scalr.ui.RoleScriptingGrid', {
                     getGroupName: function(children) {
                         if (children.length > 0) {
                             var name = children[0].get('event');
-                            return '<span style="font-weight:normal">On <span class="x-semibold">' + (name === "*" ? "All events" : name) + '</span> perform: ' + (me.groupingShowTotal ? '&nbsp;' + children.length + ' script' + (children.length > 1? 's' : '') : '') + '</span>';
+                            return '<span class="x-no-text-transform">On <span class="x-semibold">' + (name === "*" ? "All events" : name) + '</span> perform: ' + (me.groupingShowTotal ? '&nbsp;' + children.length + ' script' + (children.length > 1? 's' : '') : '') + '</span>';
                         }
                     }
                 }
@@ -162,7 +163,7 @@ Ext.define('Scalr.ui.RoleScriptingGrid', {
                 handler: this.addButtonHandler
             });
         }
-        if (!this.hideDeleteButton) {
+        if (!this.hideDeleteButton && (me.up('scriptfield').mode !== 'account' || Scalr.isAllowed('ORCHESTRATION_ACCOUNT', 'manage'))) {
             this.columns = Ext.clone(this.columns);
             this.columns.push({
                 xtype: 'templatecolumn',
@@ -203,6 +204,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                 }
             }
         });
+        this.down('#add').setVisible(this.mode !== 'account' || Scalr.isAllowed('ORCHESTRATION_ACCOUNT', 'manage'));
     },
     beforeRender: function() {
         if (this.mode === 'role') {
@@ -310,6 +312,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
             xtype: 'form',
             hidden: true,
             overflowY: 'auto',
+            cls: 'x-form-role-scripting',
             items: [{
                 xtype: 'fieldset',
                 title: 'Trigger event&nbsp;&nbsp;<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-info" data-qtip="A server lifetime event that will trigger automation processes.">',
@@ -358,20 +361,8 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                             ptype: 'fieldinnericonscope',
                             tooltipScopeType: 'event'
                         },
-                        listConfig: {
-                            cls: 'x-boundlist-role-scripting-events',
-                            style: 'white-space:nowrap;',
-                            getInnerTpl: function (displayField, innerIcon) {
-                                return '&nbsp;'+ innerIcon +
-                                    '<tpl if=\'id == \"*\"\'>'+
-                                        'All Events<tpl else>{id} ' +
-                                        '<tpl if="description">' +
-                                            '<span style="color:#999">({description})</span>' +
-                                        '</tpl>' +
-                                    '</tpl>';
-                            }
-                        },
-
+                        matchFieldWidth: true,
+                        listConfig: Scalr.configs.eventsListConfig,
                         listeners: {
                             specialkey: function (field, e) {
                                 if (e.getKey() === e.ESC) {
@@ -523,7 +514,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                                 for (var i = 0, len = fields.length; i < len; i++) {
                                     fields[i].setDisabled(false);
                                 }
-                                if (!record.get('system')) {
+                                if (!record.get('system') && (this.up('scriptfield').mode !== 'account' || Scalr.isAllowed('ORCHESTRATION_ACCOUNT', 'manage'))) {
                                     field = formPanel.getForm().findField('isSync');
                                     if (tab.itemId === 'chef') {
                                         field.setReadOnly(true);
@@ -752,7 +743,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                             anchor: '100%'
                         },
                         tabConfig: {
-                            title: 'Script url'
+                            title: 'URL script'
                         }
                     },{
                         xtype: 'container',
@@ -1075,10 +1066,10 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                         form = this.getForm(),
                         tabs = this.down('#tabs'),
                         system = record.get('system'),
-                        readOnly = !!system,
                         scriptField = this.up('scriptfield'),
                         scriptOs = scriptField.roleOs,
                         scriptMode = scriptField.mode,
+                        readOnly = !!system || (scriptMode === 'account' && !Scalr.isAllowed('ORCHESTRATION_ACCOUNT', 'manage')),
                         scriptStore,
                         scriptType = record.get('script_type'),
                         activeTab,

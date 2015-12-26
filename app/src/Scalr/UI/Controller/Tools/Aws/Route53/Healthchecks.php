@@ -1,5 +1,6 @@
 <?php
 
+use Scalr\Acl\Acl;
 use Scalr\Service\Aws\Route53\DataType\HealthData;
 use Scalr\Service\Aws\Route53\DataType\HealthConfigData;
 use Scalr\Service\Aws\DataType\MarkerType;
@@ -88,6 +89,8 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Healthchecks extends Scalr_UI_Contro
             $hostName = null, $resourcePath = null, $searchString = null
         )
     {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_ROUTE53, Acl::PERM_AWS_ROUTE53_MANAGE);
+
         $healthData = new HealthData();
         $protocol = strtoupper($protocol);
         $healthConfig = new HealthConfigData(
@@ -124,6 +127,8 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Healthchecks extends Scalr_UI_Contro
      */
     public function xDeleteAction(JsonData $healthId, $cloudLocation)
     {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_ROUTE53, Acl::PERM_AWS_ROUTE53_MANAGE);
+
         $aws = $this->environment->aws($cloudLocation);
 
         foreach ($healthId as $id) {

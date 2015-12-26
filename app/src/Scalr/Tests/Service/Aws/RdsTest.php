@@ -1,6 +1,14 @@
 <?php
 namespace Scalr\Tests\Service\Aws;
 
+use Scalr\Service\Aws;
+use Scalr\Service\Aws\Rds;
+use Scalr\Service\Aws\Ec2\DataType\SubnetData;
+use Scalr\Service\Aws\Rds\DataType\CreateDBClusterRequestData;
+use Scalr\Service\Aws\Rds\DataType\CreateDBSubnetGroupRequestData;
+use Scalr\Service\Aws\Rds\DataType\DBClusterData;
+use Scalr\Service\Aws\Rds\DataType\DBClusterSnapshotData;
+use Scalr\Service\Aws\Rds\DataType\DBSubnetGroupData;
 use Scalr\Service\Aws\Rds\DataType\DescribeEventRequestData;
 use Scalr\Service\Aws\Rds\DataType\DBSnapshotData;
 use Scalr\Service\Aws\Rds\DataType\ParameterData;
@@ -11,11 +19,12 @@ use Scalr\Service\Aws\Rds\DataType\DBSecurityGroupData;
 use Scalr\Service\Aws\Rds\DataType\VpcSecurityGroupMembershipData;
 use Scalr\Service\Aws\Rds\DataType\DBParameterGroupStatusData;
 use Scalr\Service\Aws\Rds\DataType\DBSecurityGroupMembershipData;
+use Scalr\Service\Aws\Rds\DataType\ModifyDBInstanceRequestData;
+use Scalr\Service\Aws\Rds\DataType\DBSnapshotList;
 use Scalr\Service\Aws\DataType\ErrorData;
 use Scalr\Service\Aws\Rds\DataType\DBInstanceData;
 use Scalr\Service\Aws\Rds\DataType\CreateDBInstanceRequestData;
 use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\Rds;
 use Scalr\Tests\Service\AwsTestCase;
 
 /**
@@ -34,6 +43,10 @@ class RdsTest extends AwsTestCase
     const NAME_DB_PARAMETER_GROUP = 'dbpg';
 
     const NAME_DB_SNAPSHOT = 'snshot';
+
+    const NAME_DB_CLUSTER = 'dbc';
+
+    const NAME_DB_SUBNET_GROUP = 'dbsubg';
 
     const KEY_TAG = 'tagkey';
 
@@ -247,91 +260,162 @@ class RdsTest extends AwsTestCase
      */
     public function testFunctionalRds($clientType)
     {
-        $this->markTestSkipped();
         $this->skipIfEc2PlatformDisabled();
-
         $aws = $this->getEnvironment()->aws(AwsTestCase::REGION);
         $aws->rds->setApiClientType($clientType);
         $aws->rds->enableEntityManager();
+        $this->removesPreviouslyCreatedData();
 
-        //Removes previously created DB Snapshots if it isn't removed by some reason.
-        $snList = $aws->rds->dbSnapshot->describe();
-        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBSnapshotList'), $snList);
-        foreach ($snList as $v) {
-            if ($v->dbSnapshotIdentifier == self::getTestName(self::NAME_DB_SNAPSHOT)) {
-                $v->delete();
-                for ($to = 1, $t = time(); (time() - $t) < 600 && $v->status == DBSnapshotData::STATUS_DELETING; $to += 10) {
-                    sleep($to);
-                    try {
-                        $v = $v->refresh();
-                    } catch (ClientException $e) {
-                        if ($e->getErrorData()->getCode() == ErrorData::ERR_DB_SNAPSHOT_NOT_FOUND) break;
-                        throw $e;
-                    }
+        //Describes DB Events
+        $req = new DescribeEventRequestData();
+        $req->startTime = new \DateTime('-2 hour', new \DateTimeZone('UTC'));
+        $req->eventCategories = array('deletion', 'availability');
+        $eventList = $aws->rds->event->describe($req);
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\EventList'), $eventList);
+        unset($eventList);
+
+        //test DBParameterGroup
+        //Describes DB Parameters
+        $parList = $aws->rds->dbParameterGroup->describeParameters('default.mysql5.6');
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\ParameterList'), $parList);
+        unset($parList);
+        //Creates a new DBParameterGroup
+        /* @var  $pg DBParameterGroupData */
+        $pg = $aws->rds->dbParameterGroup->create(new DBParameterGroupData(
+            self::getTestName(self::NAME_DB_PARAMETER_GROUP), 'mysql5.6', 'phpunit temporary group'
+        ));
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBParameterGroupData'), $pg);
+        $this->assertEquals(self::getTestName(self::NAME_DB_PARAMETER_GROUP), $pg->dBParameterGroupName);
+        $this->assertEquals('mysql5.6', $pg->dBParameterGroupFamily);
+        $this->assertEquals('phpunit temporary group', $pg->description);
+        $this->assertSame($aws->rds->dbParameterGroup->get(self::getTestName(self::NAME_DB_PARAMETER_GROUP)), $pg);
+
+        //Modifies parameters
+        $ret = $pg->modify([
+            new ParameterData('autocommit', ParameterData::APPLY_METHOD_PENDING_REBOOT, '0'),
+            new ParameterData('automatic_sp_privileges', ParameterData::APPLY_METHOD_PENDING_REBOOT, '0'),
+        ]);
+        $this->assertEquals($pg->dBParameterGroupName, $ret);
+
+        //test modify with fake parameter
+        $this->assertClientException(function () use ($pg) {
+            $pg->modify(
+                new ParameterData('fake', ParameterData::APPLY_METHOD_PENDING_REBOOT, '0')
+            );
+        });
+
+        //Resets parameters
+        $ret = $pg->reset([
+            new ParameterData('auto_increment_offset', ParameterData::APPLY_METHOD_PENDING_REBOOT)
+        ]);
+        $this->assertEquals($pg->dBParameterGroupName, $ret);
+        //Test reset pending changes pd
+        $this->assertClientException(function () use ($pg) {
+            $pg->reset([
+                new ParameterData('automatic_sp_privileges', ParameterData::APPLY_METHOD_PENDING_REBOOT)
+            ]);
+        });
+
+        //test DBSecurityGroup
+        //Creates DB Security Group
+        /* @var  $sg DBSecurityGroupData */
+        $sg = $aws->rds->dbSecurityGroup->create(self::getTestName(self::NAME_SG), 'phpunit temporary security group');
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBSecurityGroupData'), $sg);
+        $this->assertEquals(self::getTestName(self::NAME_SG), $sg->dBSecurityGroupName);
+        $this->assertEquals('phpunit temporary security group', $sg->dBSecurityGroupDescription);
+        $this->assertSame($aws->rds->dbSecurityGroup->get(self::getTestName(self::NAME_SG)), $sg);
+
+        $req = $sg->getIngressRequest();
+        $req->cIDRIP = '0.0.0.1/0';
+        $sg2 = $sg->authorizeIngress($req);
+        $this->assertSame($sg2, $sg);
+        unset($sg2);
+
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBSecurityGroupData'), $sg);
+        $this->assertEquals('0.0.0.1/0', $sg->iPRanges->get(0)->cIDRIP);
+        //Avoids an error - cannot revoke an authorization which is in the authorizing state
+        for ($to = 1, $t = time(); (time() - $t) < 600 && count($sg->iPRanges); $to += 10) {
+            foreach ($sg->iPRanges as $r) {
+                if ($r->status == IPRangeData::STATUS_AUTHORIZED) {
+                    break 2;
                 }
             }
-        }
-        unset($snList);
-
-        //Removes previously created DB Instances if it isn't removed by some reason.
-        $dbInstanceList = $aws->rds->dbInstance->describe();
-        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBInstanceList'), $dbInstanceList);
-        /* @var $i DBInstanceData */
-        foreach ($dbInstanceList as $i) {
-            if ($i->dBInstanceIdentifier == self::getTestName(self::NAME_INSTANCE)) {
-                if (!in_array($i->dBInstanceStatus, array(DBInstanceData::STATUS_DELETING))) {
-                    $i = $i->delete(true);
-                }
-                for ($to = 1, $t = time(); (time() - $t) < 600 && $i->dBInstanceStatus == DBInstanceData::STATUS_DELETING; $to += 10) {
-                    sleep($to);
-                    try {
-                        $i = $i->refresh();
-                    } catch (ClientException $e) {
-                        if ($e->getErrorData()->getCode() == ErrorData::ERR_DB_INSTANCE_NOT_FOUND) break;
-                        throw $e;
-                    }
-                }
-            }
+            sleep($to);
+            $sg = $sg->refresh();
         }
 
-        //Removes previously created DB Security Group if it isn't removed by some reason.
-        $sgList = $aws->rds->dbSecurityGroup->describe();
-        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBSecurityGroupList'), $sgList);
-        /* @var $sg DBSecurityGroupData */
-        foreach ($sgList as $sg) {
-            if ($sg->dBSecurityGroupName == self::getTestName(self::NAME_SG)) {
-                //DB Security Group must not be associated with any DBInstance
-                $ret = $sg->delete();
-                $this->assertTrue($ret);
-            }
-            unset($sg);
-        }
+        //test exist authorization
+        $this->assertClientException(function () use ($sg, $req) {
+            $sg->authorizeIngress($req);
+        });
 
+        $sg2 = $sg->revokeIngress($req);
+        $this->assertSame($sg2, $sg);
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBSecurityGroupData'), $sg);
+        unset($sg2);
+
+        $timeout = 1;
+        while (count($sg->iPRanges) && ($timeout += 10) < 600) {
+            sleep($timeout);
+            $sg = $sg->refresh();
+        }
+        $this->assertEquals(0, count($sg->iPRanges));
+
+        //test failed authorization
+        $this->assertClientException(function () use ($sg) {
+            $req = $sg->getIngressRequest();
+            $req->eC2SecurityGroupName = 'default';
+            $sg->authorizeIngress($req);
+        });
+
+        //test authorization with sg name and ownerId
+        $req = $sg->getIngressRequest();
+        $req->eC2SecurityGroupName = 'default';
+        $req->eC2SecurityGroupOwnerId = $aws->getAccountNumber();
+        $sg2 = $sg->authorizeIngress($req);
+        $this->assertSame($sg2, $sg);
+        unset($sg2);
+
+        //test DBInstance
         //Creates DB Instance
-        $masterUserPassword = substr(uniqid(), 0, 10);
-        $req = new CreateDBInstanceRequestData(
-            self::getTestName(self::NAME_INSTANCE), 5, 'db.t1.micro', 'MySQL', 'masterusername', $masterUserPassword
-        );
+        /* @var  $req CreateDBInstanceRequestData */
+        $req = new CreateDBInstanceRequestData(self::getTestName(self::NAME_INSTANCE), 'db.m1.small', 'mysql');
+        $req->allocatedStorage = 5;
+        $req->masterUsername = 'masterusername';
+        $req->masterUserPassword = substr(uniqid(), 0, 10);
+        $req->dBName = 'testname';
+        $req->port = 3306;
+        /* @var $dbi DBInstanceData */
         $dbi = $aws->rds->dbInstance->create($req);
         unset($req);
         $this->assertInstanceOf($this->getRdsClassName('DataType\\DBInstanceData'), $dbi);
+        $this->assertEquals(self::getTestName(self::NAME_INSTANCE), $dbi->dBInstanceIdentifier);
+        $this->assertEquals('db.m1.small', $dbi->dBInstanceClass);
+        $this->assertEquals('mysql', $dbi->engine);
+        $this->assertSame($aws->rds->dbInstance->get(self::getTestName(self::NAME_INSTANCE)), $dbi);
         for ($to = 1, $t = time(); (time() - $t) < 600 && $dbi->dBInstanceStatus != DBInstanceData::STATUS_AVAILABLE; $to += 10) {
             sleep($to);
             $dbi = $dbi->refresh();
         }
         $this->assertEquals(DBInstanceData::STATUS_AVAILABLE, $dbi->dBInstanceStatus);
 
-        //Creates DB Security Group
-        $sg = $aws->rds->dbSecurityGroup->create(self::getTestName('dsg'), 'phpunit temporary security group');
-        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBSecurityGroupData'), $sg);
-
-        //Modifies DB Instance
-        $req = $dbi->getModifyRequest();
+        //Modifies DBInstance
+        /* @var $req ModifyDBInstanceRequestData */
+        $req = new ModifyDBInstanceRequestData(self::getTestName(self::NAME_INSTANCE));
         $req->masterUserPassword = substr(uniqid(), 0, 10);
         $req->dBSecurityGroups = $sg->dBSecurityGroupName;
+        $req->dBParameterGroupName = $pg->dBParameterGroupName;
         $dbi = $dbi->modify($req);
         $this->assertInstanceOf($this->getRdsClassName('DataType\\DBInstanceData'), $dbi);
         unset($req);
+
+        //test delete using sg and pg
+        $this->assertClientException(function () use ($pg) {
+            $pg->delete();
+        });
+        $this->assertClientException(function () use ($sg) {
+            $sg->delete();
+        });
 
         //Reboots DB Instance
         $dbi = $dbi->reboot();
@@ -343,10 +427,10 @@ class RdsTest extends AwsTestCase
         $this->assertEquals(DBInstanceData::STATUS_AVAILABLE, $dbi->dBInstanceStatus);
 
         // Adds tags to DB Instance
-        $aws->rds->tag->add(
-            $dbi->dBInstanceIdentifier,
-            Rds::DB_INSTANCE_RESOURCE_TYPE,
-            [['key' => self::getTestName(self::KEY_TAG), 'value' => self::VALUE_TAG]]);
+        $aws->rds->tag->add($dbi->dBInstanceIdentifier, Rds::DB_INSTANCE_RESOURCE_TYPE, [[
+            'key' => self::getTestName(self::KEY_TAG),
+            'value' => self::VALUE_TAG
+        ]]);
 
         $tagsList = $aws->rds->tag->describe($dbi->dBInstanceIdentifier, Rds::DB_INSTANCE_RESOURCE_TYPE);
 
@@ -356,12 +440,10 @@ class RdsTest extends AwsTestCase
         $tagData = $tagsList->get(0);
 
         $this->assertInstanceOf($this->getRdsClassName('DataType\\TagsData'), $tagData);
-
-        $tagRemoved = $dbi->removeTags([$tagData->key]);
-
-        $this->assertTrue($tagRemoved);
+        $this->assertTrue($dbi->removeTags([$tagData->key]));
 
         //Created DB Snapshot
+        /* @var $sn DBSnapshotData */
         $sn = $dbi->createSnapshot(self::getTestName(self::NAME_DB_SNAPSHOT));
         $this->assertInstanceOf($this->getRdsClassName('DataType\\DBSnapshotData'), $sn);
         for ($to = 1, $t = time(); (time() - $t) < 600 && $sn->status !== DBSnapshotData::STATUS_AVAILABLE; $to += 10) {
@@ -369,20 +451,7 @@ class RdsTest extends AwsTestCase
             $sn = $sn->refresh();
         }
         $this->assertEquals(DBSnapshotData::STATUS_AVAILABLE, $sn->status);
-
-        //Removes DB Instance
-        $dbi = $dbi->delete(true);
-        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBInstanceData'), $dbi);
-        for ($to = 1, $t = time(); (time() - $t) < 600 && $dbi->dBInstanceStatus == DBInstanceData::STATUS_DELETING; $to += 10) {
-            sleep($to);
-            try {
-                $dbi = $dbi->refresh();
-            } catch (ClientException $e) {
-                if ($e->getErrorData()->getCode() == ErrorData::ERR_DB_INSTANCE_NOT_FOUND) break;
-                throw $e;
-            }
-        }
-        unset($dbi);
+        $this->removeDBInstance($dbi);
 
         //Restores DB Instance From DB Snapshot
         $dbi = $sn->restoreFromSnapshot(self::getTestName(self::NAME_INSTANCE));
@@ -400,145 +469,287 @@ class RdsTest extends AwsTestCase
             try {
                 $sn = $sn->refresh();
             } catch (ClientException $e) {
-                if ($e->getErrorData()->getCode() == ErrorData::ERR_DB_SNAPSHOT_NOT_FOUND) break;
+                if ($e->getErrorData()->getCode() == ErrorData::ERR_DB_SNAPSHOT_NOT_FOUND) {
+                    break;
+                }
                 throw $e;
             }
         }
         unset($sn);
 
         //Removes DB Instance again
-        $dbi = $dbi->delete(true);
+        $this->removeDBInstance($dbi);
+        //Removes DB Security Group
+        $this->assertTrue($sg->delete());
+        //Removes DBParameterGroup
+        $this->assertTrue($pg->delete());
+        $aws->rds->getEntityManager()->detachAll();
+    }
+
+    /**
+     * Catch AWS errors
+     *
+     * @param callable $fn
+     */
+    public function assertClientException(callable $fn)
+    {
+        try {
+            call_user_func($fn);
+            $this->fail('ClientException is expected.');
+        } catch (ClientException $e) {
+            $this->assertContains('AWS Error', $e->getMessage(), '', true);
+        }
+    }
+
+    /**
+     * Remove test instance
+     * @param DBInstanceData $dbi
+     * @throws ClientException
+     */
+    protected function removeDBInstance(DBInstanceData $dbi)
+    {
+        $dbi->delete(true);
         $this->assertInstanceOf($this->getRdsClassName('DataType\\DBInstanceData'), $dbi);
         for ($to = 1, $t = time(); (time() - $t) < 600 && $dbi->dBInstanceStatus == DBInstanceData::STATUS_DELETING; $to += 10) {
             sleep($to);
             try {
                 $dbi = $dbi->refresh();
             } catch (ClientException $e) {
-                if ($e->getErrorData()->getCode() == ErrorData::ERR_DB_INSTANCE_NOT_FOUND) break;
+                if ($e->getErrorData()->getCode() == ErrorData::ERR_DB_INSTANCE_NOT_FOUND) {
+                    break;
+                }
                 throw $e;
             }
         }
-        unset($dbi);
+    }
 
-        //Removes DB Security Group
-        $ret = $sg->delete();
-        $this->assertTrue($ret);
+    /**
+     * Removes previously created test data
+     *
+     * @throws ClientException
+     */
+    protected function removesPreviouslyCreatedData()
+    {
+        $aws = $this->getEnvironment()->aws(AwsTestCase::REGION);
+        //Removes previously created DBInstances if it isn't removed by some reason.
+        $dbInstanceList = $aws->rds->dbInstance->describe(self::getTestName(self::NAME_INSTANCE));
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBInstanceList'), $dbInstanceList);
+        /* @var $i DBInstanceData */
+        foreach ($dbInstanceList as $i) {
+            $this->assertInstanceOf($this->getRdsClassName('DataType\\DBInstanceData'), $i);
+            $this->removeDBInstance($i);
+        }
+        unset($dbInstanceList);
 
-        $aws->rds->getEntityManager()->detachAll();
+        //Removes previously created DBSnapshots if it isn't removed by some reason.
+        /* @var  $snList DBSnapshotList */
+        $snList = $aws->rds->dbSnapshot->describe(self::getTestName(self::NAME_INSTANCE));
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBSnapshotList'), $snList);
+        /* @var  $sn DBSnapshotData */
+        foreach ($snList as $sn) {
+            $this->assertInstanceOf($this->getRdsClassName('DataType\\DBSnapshotData'), $sn);
+            $sn->delete();
+            for ($to = 1, $t = time(); (time() - $t) < 600 && $sn->status == DBSnapshotData::STATUS_DELETING; $to += 10) {
+                sleep($to);
+                try {
+                    $sn = $sn->refresh();
+                } catch (ClientException $e) {
+                    if ($e->getErrorData()->getCode() == ErrorData::ERR_DB_SNAPSHOT_NOT_FOUND) {
+                        break;
+                    }
+                    throw $e;
+                }
+            }
+        }
+        unset($snList);
+
+        //Removes previously created DBSecurityGroup if it isn't removed by some reason.
+        $sgList = $aws->rds->dbSecurityGroup->describe(self::getTestName(self::NAME_SG));
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBSecurityGroupList'), $sgList);
+        /* @var $sg DBSecurityGroupData */
+        foreach ($sgList as $sg) {
+            $this->assertInstanceOf($this->getRdsClassName('DataType\\DBSecurityGroupData'), $sg);
+            //DB Security Group must not be associated with any DBInstance
+            $this->assertTrue($sg->delete());
+        }
+        unset($sgList);
+
+        //Removes previously created DBParameterGroup if it does exist
+        $dbParameterGroupList = $aws->rds->dbParameterGroup->describe();
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBParameterGroupList'), $dbParameterGroupList);
+        /* @var $pg DBParameterGroupData */
+        foreach ($dbParameterGroupList as $pg) {
+            if($pg->dBParameterGroupName == self::getTestName(self::NAME_DB_PARAMETER_GROUP)) {
+                $this->assertInstanceOf($this->getRdsClassName('DataType\\DBParameterGroupData'), $pg);
+                $this->assertTrue($pg->delete());
+            }
+        }
+        unset($dbParameterGroupList);
     }
 
     /**
      * @test
-     * @dataProvider providerClientType
      */
-    public function testFunctionalFast($clientType)
+    public function testClustersFunctional()
     {
         $this->skipIfEc2PlatformDisabled();
 
+        $this->deleteClusterObjects();
         $aws = $this->getEnvironment()->aws(AwsTestCase::REGION);
-        $aws->rds->setApiClientType($clientType);
-        $aws->rds->enableEntityManager();
 
-        $req = new DescribeEventRequestData();
-        $req->startTime = new \DateTime('-2 hour', new \DateTimeZone('UTC'));
-        $req->eventCategories = array('deletion', 'availability');
-        $eventList = $aws->rds->event->describe($req);
-        $this->assertInstanceOf($this->getRdsClassName('DataType\\EventList'), $eventList);
+        $masterUserPassword = substr(uniqid(), 0, 10);
+        $dbClusterId = self::getTestName(self::NAME_INSTANCE);
 
-        //Describes DB Parameters
-        $parList = $aws->rds->dbParameterGroup->describeParameters('default.mysql5.5');
-        $this->assertInstanceOf($this->getRdsClassName('DataType\\ParameterList'), $parList);
-        unset($parList);
+        $subnets = $aws->ec2->subnet->describe();
 
-        //Describes DB Parameter Groups
-        $dbParameterGroupList = $aws->rds->dbParameterGroup->describe();
-        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBParameterGroupList'), $dbParameterGroupList);
-        foreach ($dbParameterGroupList as $v) {
-            //Removes previously created DB Parameter Group if it does exist
-            if ($v->dBParameterGroupName == self::getTestName(self::NAME_DB_PARAMETER_GROUP)) {
-                $v->delete();
+        $subnetIds = [];
+        $zones = [];
+        $vpcId = null;
+
+        foreach ($subnets as $subnet) {
+            /* @var $subnet SubnetData */
+            if (empty($vpcId)) {
+                $vpcId = $subnet->vpcId;
+            }
+
+            if (!in_array($subnet->availabilityZone, $zones) && $subnet->vpcId == $vpcId) {
+                $zones[] = $subnet->availabilityZone;
+                $subnetIds[] = $subnet->subnetId;
+            }
+
+            if (count($subnetIds) > 1) {
+                break;
             }
         }
-        unset($dbParameterGroupList);
 
-        //Creates a new DBParameterGroup
-        $dbParameterGroup = $aws->rds->dbParameterGroup->create(new DBParameterGroupData(
-            self::getTestName(self::NAME_DB_PARAMETER_GROUP), 'mysql5.5', 'phpunit temporary group'
-        ));
-        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBParameterGroupData'), $dbParameterGroup);
-        $this->assertEquals(self::getTestName(self::NAME_DB_PARAMETER_GROUP), $dbParameterGroup->dBParameterGroupName);
-        $this->assertEquals('mysql5.5', $dbParameterGroup->dBParameterGroupFamily);
-        $this->assertEquals('phpunit temporary group', $dbParameterGroup->description);
-        $this->assertSame($dbParameterGroup, $aws->rds->dbParameterGroup->get(self::getTestName(self::NAME_DB_PARAMETER_GROUP)));
+        $groupName = self::getTestName('subnetname');
 
-        //Modifies parameters
-        $ret = $dbParameterGroup->modify(array(
-            new ParameterData('autocommit', ParameterData::APPLY_METHOD_PENDING_REBOOT, '0'),
-            new ParameterData('automatic_sp_privileges', ParameterData::APPLY_METHOD_PENDING_REBOOT, '0'),
-        ));
-        $this->assertEquals($dbParameterGroup->dBParameterGroupName, $ret);
+        $requestSubnet = new CreateDBSubnetGroupRequestData('test', $groupName);
+        $requestSubnet->setSubnetIds($subnetIds);
 
-        //Resets parameters
-        $ret = $dbParameterGroup->reset(array(
-            new ParameterData('auto_increment_offset', ParameterData::APPLY_METHOD_PENDING_REBOOT),
-        ));
-        $this->assertEquals($dbParameterGroup->dBParameterGroupName, $ret);
+        $subnetGroup = $aws->rds->dbSubnetGroup->create($requestSubnet);
+        $this->assertEquals($subnetGroup->dBSubnetGroupName, $groupName);
 
-        //Removes DBParameterGroup
-        $ret = $dbParameterGroup->delete();
-        $this->assertTrue($ret);
+        $request = new CreateDBClusterRequestData($dbClusterId, 'aurora', 'phpunituser', (string) $masterUserPassword ?: null);
+        $request->dBSubnetGroupName = $subnetGroup->dBSubnetGroupName;
 
-        //Removes previously created DB Security Group if it isn't removed by some reason.
-        $sgList = $aws->rds->dbSecurityGroup->describe();
-        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBSecurityGroupList'), $sgList);
-        /* @var $sg DBSecurityGroupData */
-        foreach ($sgList as $sg) {
-            if ($sg->dBSecurityGroupName == self::getTestName(self::NAME_SG)) {
-                //DB Security Group must not be associated with any DBInstance
-                $ret = $sg->delete();
-                $this->assertTrue($ret);
-            }
-            unset($sg);
+        $dbClusterData = $aws->rds->dbCluster->create($request);
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBClusterData'), $dbClusterData);
+        $this->assertEquals($dbClusterData->dBClusterIdentifier, $dbClusterId);
+
+        for ($to = 1, $t = time(); (time() - $t) < 600 && $dbClusterData->status != DBClusterData::STATUS_AVAILABLE; $to += 10) {
+            sleep($to);
+            $dbClusterData = $dbClusterData->refresh();
         }
-        unset($sgList);
 
-        $sg = $aws->rds->dbSecurityGroup->create(self::getTestName(self::NAME_SG), 'phpunit temporary security group');
-        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBSecurityGroupData'), $sg);
+        $this->assertEquals(DBClusterData::STATUS_AVAILABLE, $dbClusterData->status);
 
-        $req = $sg->getIngressRequest();
-        $req->cIDRIP = '0.0.0.1/0';
-        $sg2 = $sg->authorizeIngress($req);
-        $this->assertSame($sg2, $sg);
-        unset($sg2);
-        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBSecurityGroupData'), $sg);
-        $this->assertEquals('0.0.0.1/0', $sg->iPRanges->get(0)->cIDRIP);
+        $snapId = self::getTestName(self::NAME_DB_SNAPSHOT);
 
-        //Avoids an error - cannot revoke an authorization which is in the authorizing state
-        for ($to = 1, $t = time(); (time() - $t) < 600 && count($sg->iPRanges); $to += 10) {
-            foreach ($sg->iPRanges as $r) {
-                if ($r->status == IPRangeData::STATUS_AUTHORIZED) {
-                    break 2;
+        $clusterSnapshot = $aws->rds->dbClusterSnapshot->create($dbClusterId, $snapId);
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBClusterSnapshotData'), $clusterSnapshot);
+        $this->assertEquals($clusterSnapshot->dBClusterIdentifier, $dbClusterId);
+        $this->assertEquals($clusterSnapshot->dBClusterSnapshotIdentifier, $snapId);
+
+        for ($to = 1, $t = time(); (time() - $t) < 600 && $clusterSnapshot->status !== DBClusterSnapshotData::STATUS_AVAILABLE; $to += 10) {
+            sleep($to);
+            $clusterSnapshot = $aws->rds->dbClusterSnapshot->describe($dbClusterId, $snapId)->get();
+        }
+
+        $this->assertEquals(DBClusterSnapshotData::STATUS_AVAILABLE, $clusterSnapshot->status);
+
+        $this->deleteClusterObjects();
+    }
+
+    /**
+     * Cleans up test objects
+     *
+     * @throws ClientException
+     * @throws \Exception
+     */
+    private function deleteClusterObjects()
+    {
+        $rds = $this->getEnvironment()->aws(AwsTestCase::REGION)->rds;
+
+        //Removes previously created DB Cluster Snapshots if they were not removed by some reason.
+        $snList = $rds->dbClusterSnapshot->describe();
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBClusterSnapshotList'), $snList);
+
+        foreach ($snList as $snapshot) {
+            /* @var $snapshot DBClusterSnapshotData */
+            if ($snapshot->dBClusterSnapshotIdentifier == self::getTestName(self::NAME_DB_SNAPSHOT)) {
+                $rds->dbClusterSnapshot->delete($snapshot->dBClusterSnapshotIdentifier);
+
+                for ($to = 1, $t = time(); (time() - $t) < 600 && $snapshot->status == DBClusterSnapshotData::STATUS_DELETING; $to += 10) {
+                    sleep($to);
+
+                    try {
+                        $snapshot = $rds->dbClusterSnapshot->describe(null, $snapshot->dBClusterSnapshotIdentifier)->get(0);
+                    } catch (ClientException $e) {
+                        if ($e->getErrorData()->getCode() == ErrorData::ERR_DB_CLUSTER_SNAPSHOT_NOT_FOUND) {
+                            break;
+                        }
+
+                        throw $e;
+                    }
                 }
             }
-            sleep($to);
-            $sg = $sg->refresh();
         }
 
-        $sg2 = $sg->revokeIngress($req);
-        $this->assertSame($sg2, $sg);
-        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBSecurityGroupData'), $sg);
-        unset($sg2);
+        unset($snList);
 
-        $timeout = 1;
-        while (count($sg->iPRanges) && ($timeout += 10) < 600) {
-            sleep($timeout);
-            $sg = $sg->refresh();
+        //Removes previously created DB Cluster Instances if they were not removed by some reason.
+        $dbClusterList = $rds->dbCluster->describe();
+        $this->assertInstanceOf($this->getRdsClassName('DataType\\DBClusterList'), $dbClusterList);
+
+        foreach ($dbClusterList as $dbCluster) {
+            /* @var $dbCluster DBClusterData */
+            if ($dbCluster->dBClusterIdentifier == self::getTestName(self::NAME_INSTANCE)) {
+                foreach ($dbCluster->dBClusterMembers as $instance) {
+                    $instance = $rds->dbInstance->describe($instance->dBInstanceIdentifier)->get();
+                    /* @var $instance DBInstanceData*/
+                    if ($instance->dBInstanceStatus != DBInstanceData::STATUS_DELETING) {
+                        $instance = $instance->delete(true);
+                    }
+
+                    for ($to = 1, $t = time(); (time() - $t) < 600 && $instance->dBInstanceStatus == DBInstanceData::STATUS_DELETING; $to += 10) {
+                        sleep($to);
+
+                        try {
+                            $instance = $instance->refresh();
+                        } catch (ClientException $e) {
+                            if ($e->getErrorData()->getCode() == ErrorData::ERR_DB_INSTANCE_NOT_FOUND) break;
+                            throw $e;
+                        }
+                    }
+                }
+
+                if ($dbCluster->status != DBClusterData::STATUS_DELETING) {
+                    $dbCluster->delete(true);
+                    sleep(5);
+                    $dbCluster = $dbCluster->refresh();
+                }
+
+                for ($to = 1, $t = time(); (time() - $t) < 600 && isset($dbCluster->status) && $dbCluster->status == DBClusterData::STATUS_DELETING; $to += 10) {
+                    sleep($to);
+
+                    try {
+                        $dbCluster = $dbCluster->refresh();
+                    } catch (ClientException $e) {
+                        if ($e->getErrorData()->getCode() == ErrorData::ERR_DB_CLUSTER_NOT_FOUND) break;
+                        throw $e;
+                    }
+                }
+            }
         }
 
-        $this->assertEquals(0, count($sg->iPRanges));
+        $groupName = self::getTestName('subnetname');
 
-        $ret = $sg->delete();
-        $this->assertTrue($ret);
-        $aws->rds->getEntityManager()->detachAll();
+        $subnetGroup = $rds->dbSubnetGroup->describe($groupName)->get();
+        /* @var $subnetGroup DBSubnetGroupData */
+        if ($subnetGroup) {
+            $rds->dbSubnetGroup->delete($subnetGroup->dBSubnetGroupName);
+        }
     }
+
 }

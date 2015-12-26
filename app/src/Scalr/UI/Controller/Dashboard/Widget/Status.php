@@ -1,6 +1,7 @@
 <?php
 
-use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
+use http\Client\Request;
+use Scalr\Model\Entity;
 use Scalr\DataType\AwsStatus\Endpoint;
 use Scalr\DataType\AwsStatus\GovEndpoint;
 
@@ -17,7 +18,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
         /* @var $endpoint Endpoint */
         $endpoint =
             $this->getEnvironment()
-                 ->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_TYPE) == Ec2PlatformModule::ACCOUNT_TYPE_GOV_CLOUD
+                 ->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE] == Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE_GOV_CLOUD
                 ? new GovEndpoint()
                 : new Endpoint();
 
@@ -40,15 +41,14 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
             $time = filemtime($awsCachePath);
             $data = (array) json_decode(file_get_contents($awsCachePath));
         } else {
-            $req = new HttpRequest();
-            $req->resetCookies();
+            $req = new Request();
             $req->setOptions(array(
                 'redirect'       => 10,
-                'useragent'      => "Scalr ". SCALR_VERSION,
                 'verifypeer'     => false,
                 'verifyhost'     => false,
                 'timeout'        => 30,
-                'connecttimeout' => 30
+                'connecttimeout' => 30,
+                'cookiesession' => true
             ));
             
             if (\Scalr::config('scalr.aws.use_proxy') && in_array(\Scalr::config('scalr.connections.proxy.use_on'), array('both', 'scalr'))) {
@@ -69,16 +69,16 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
                     ]);
                 }
             }
-            $req->setMethod(constant('HTTP_METH_GET'));
-            $req->setUrl($endpoint->statUrl);
+            $req->setRequestMethod("GET");
+            $req->setRequestUrl($endpoint->statUrl);
             try {
-                $req->send();
-                if ($req->getResponseCode() == 200) {
-                    $html = $req->getResponseBody();
+                $response = \Scalr::getContainer()->http->sendRequest($req);
+                if ($response->getResponseCode() == 200) {
+                    $html = $response->getBody()->toString();
                 } else {
                     return [];
                 }
-            } catch (\HttpException $e) {
+            } catch (\http\Exception $e) {
                 return [];
             }
             

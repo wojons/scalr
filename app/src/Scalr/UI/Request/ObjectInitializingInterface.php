@@ -13,8 +13,9 @@ interface ObjectInitializingInterface
     /**
      * Create object from request var
      *
-     * @param mixed $value
-     * @return mixed
+     * @param   mixed   $value              Value of request variable
+     * @param   string  $name   optional    Name of request variable
+     * @return  mixed
      */
-    public static function initFromRequest($value);
+    public static function initFromRequest($value, $name = '');
 }

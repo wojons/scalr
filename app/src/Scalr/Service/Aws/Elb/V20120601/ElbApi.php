@@ -2,9 +2,17 @@
 namespace Scalr\Service\Aws\Elb\V20120601;
 
 use Scalr\Service\Aws\AbstractApi;
+use Scalr\Service\Aws\Elb\DataType\AccessLogData;
+use Scalr\Service\Aws\Elb\DataType\AdditionalAttributesData;
+use Scalr\Service\Aws\Elb\DataType\AdditionalAttributesList;
+use Scalr\Service\Aws\Elb\DataType\AttributesData;
 use Scalr\Service\Aws\Elb\DataType\BackendServerDescriptionData;
+use Scalr\Service\Aws\Elb\DataType\ConnectionDrainingData;
+use Scalr\Service\Aws\Elb\DataType\ConnectionSettingsData;
+use Scalr\Service\Aws\Elb\DataType\CrossZoneLoadBalancingData;
 use Scalr\Service\Aws\Elb\DataType\LbCookieStickinessPolicyList;
 use Scalr\Service\Aws\Elb\DataType\AppCookieStickinessPolicyList;
+use Scalr\Service\Aws\Elb\DataType\ModifyLoadBalancerAttributes;
 use Scalr\Service\Aws\Elb\DataType\PoliciesData;
 use Scalr\Service\Aws\Elb\DataType\LbCookieStickinessPolicyData;
 use Scalr\Service\Aws\Elb\DataType\AppCookieStickinessPolicyData;
@@ -143,6 +151,94 @@ class ElbApi extends AbstractApi
                 );
             }
         }
+        return $result;
+    }
+
+    /**
+     * ModifyLoadBalancerAttributes action
+     *
+     * @param  ModifyLoadBalancerAttributes $attributes           Load Balancer attributes data to modify
+     * @return AttributesData Returns load balancer attributes data.
+     * @throws ElbException
+     * @throws ClientException
+     */
+    public function modifyLoadBalancerAttributes(ModifyLoadBalancerAttributes $attributes)
+    {
+        $result = null;
+
+        $options = $attributes->getQueryArrayBare();
+
+        $response = $this->client->call('ModifyLoadBalancerAttributes', $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+
+            if (!isset($sxml->ModifyLoadBalancerAttributesResult)) {
+                throw new ElbException('Unexpected response ' . $response->getRawContent());
+            }
+
+            $result = $this->handleAttributesResultForLoadBalancer($sxml->ModifyLoadBalancerAttributesResult);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Handles Attributes Result.
+     *
+     * Loads Instance list from Result and updates load balancer entity if it does exist.
+     *
+     * @param   \SimpleXMLElement $attributesResult   Result that contains Attributes obejct
+     * @return  AttributesData      Returns an updated list of attributes for the LoadBalancer.
+     * @throws  ClientException
+     */
+    private function handleAttributesResultForLoadBalancer(\SimpleXMLElement $attributesResult)
+    {
+        $result = new AttributesData();
+        $result->setElb($this->elb)->setLoadBalancerName($attributesResult->LoadBalancerName);
+
+        if (!empty($attributesResult->LoadBalancerAttributes->AdditionalAttributes->member)) {
+            $attrList = new AdditionalAttributesList();
+
+            foreach ($attributesResult->LoadBalancerAttributes->AdditionalAttributes->member as $v) {
+                $attrData = new AdditionalAttributesData();
+                $attrData->value = (string) $v->Value;
+                $attrData->key = (string) $v->Key;
+                $attrList->append($attrData);
+                unset($attrData);
+            }
+
+            $result->setAdditionalAttributes($attrList);
+        }
+
+        if (!empty($attributesResult->LoadBalancerAttributes->AccessLog)) {
+            $sxml = $attributesResult->LoadBalancerAttributes->AccessLog;
+            $accessLog = new AccessLogData((string) $sxml->Enabled == 'true');
+            $accessLog->emitInterval = isset($sxml->EmitInterval) ? (int) $sxml->EmitInterval : null;
+            $accessLog->s3BucketName = isset($sxml->S3BucketName) ? (string) $sxml->S3BucketName : null;
+            $accessLog->s3BucketPrefix = isset($sxml->S3BucketPrefix) ? (string) $sxml->S3BucketPrefix : null;
+            $result->setAccessLog($accessLog);
+        }
+
+        if (!empty($attributesResult->LoadBalancerAttributes->ConnectionDraining)) {
+            $sxml = $attributesResult->LoadBalancerAttributes->ConnectionDraining;
+            $connectionDraining = new ConnectionDrainingData((string) $sxml->Enabled == 'true');
+            $connectionDraining->timeout = isset($sxml->Timeout) ? (int) $sxml->Timeout : null;
+            $result->setConnectionDraining($connectionDraining);
+        }
+
+        if (!empty($attributesResult->LoadBalancerAttributes->ConnectionSettings)) {
+            $sxml = $attributesResult->LoadBalancerAttributes->ConnectionSettings;
+            $connectionSettings = new ConnectionSettingsData((int) $sxml->IdleTimeout);
+            $result->setConnectionSettings($connectionSettings);
+        }
+
+        if (!empty($attributesResult->LoadBalancerAttributes->CrossZoneLoadBalancing)) {
+            $sxml = $attributesResult->LoadBalancerAttributes->CrossZoneLoadBalancing;
+            $crossZoneLoadBalancing = new CrossZoneLoadBalancingData((string) $sxml->Enabled == 'true');
+            $result->setCrossZoneLoadBalancing($crossZoneLoadBalancing);
+        }
+
         return $result;
     }
 

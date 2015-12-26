@@ -1,4 +1,46 @@
 Scalr.regPage('Scalr.ui.tools.aws.ec2.cloudwatch.view', function (loadParams, moduleParams) {
+
+	var metricsNames = {
+		'CPUCreditBalance': 'CPU Credit Balance',
+		'CPUCreditUsage': 'CPU Credit Usage',
+		'FreeLocalStorage': 'Free Local Storage',
+		'NetworkThroughput': 'Network Throughput',
+		'DDLThroughput': 'DDL Throughput',
+		'InsertLatency': 'Insert Latency',
+		'UpdateThroughput': 'Update Throughput',
+		'CommitThroughput': 'Commit Throughput',
+		'InsertThroughput': 'Insert Throughput',
+		'CommitLatency': 'Commit Latency',
+		'ActiveTransactions': 'Active Transactions',
+		'DDLLatency': 'DDL Latency',
+		'UpdateLatency': 'Update Latency',
+		'SelectThroughput': 'Select Throughput',
+		'DMLThroughput': 'DML Throughput',
+		'DeleteLatency': 'Delete Latency',
+		'DMLLatency': 'DML Latency',
+		'SelectLatency': 'Select Latency',
+		'BlockedTransactions': 'Blocked Transactions',
+		'LoginFailures': 'Login Failures',
+		'DeleteThroughput': 'Delete Throughput',
+		'SwapUsage': 'Swap Usage',
+		'FreeStorageSpace': 'Free Storage Space',
+		'FreeableMemory': 'Freeable Memory',
+		'ReadThroughput': 'Read Throughput',
+		'ReadLatency': 'Read Latency',
+		'WriteIOPS': 'Write IOPS',
+		'ReadIOPS': 'Read IOPS',
+		'NetworkReceiveThroughput': 'Network Receive Throughput',
+		'DiskQueueDepth': 'Disk Queue Depth',
+		'WriteLatency': 'Write Latency',
+		'DatabaseConnections': 'Database Connections',
+		'NetworkTransmitThroughput': 'Network Transmit Throughput',
+		'WriteThroughput': 'Write Throughput',
+		'CPUUtilization': 'CPU Utilization',
+		'BufferCacheHitRatio': 'Buffer Cache Hit Ratio',
+		'ResultSetCacheHitRatio': 'Result Set Cache Hit Ratio',
+		'BinLogDiskUsage': 'Bin Log Disk Usage'
+	};
+
 	var title = '';
 	if(loadParams['namespace'] == 'AWS/EC2' || loadParams['namespace'] == 'AWS/RDS') title = loadParams['namespace'].substring(4, 7) + ' instance: ';
 	if (loadParams['namespace'] == 'AWS/EBS') title = loadParams['namespace'].substring(4, 7) + ' volume: ';
@@ -19,7 +61,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.cloudwatch.view', function (loadParams, mo
 		if(range == 86400) startTime.setMonth(startTime.getMonth()-1);
 		if(range == 864000) startTime.setFullYear(startTime.getFullYear()-1);
 		return {
-			startTime: startTime.toUTCString(), 
+			startTime: startTime.toUTCString(),
 			endTime: currentTime.toUTCString()
 		};
 	}
@@ -27,7 +69,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.cloudwatch.view', function (loadParams, mo
 		Ext.each (moduleParams.metric,function(item){
 			panel.child('fieldset').add({
 				xtype: 'panel',
-				title: item.name,
+				title: Ext.isDefined(metricsNames[item.name]) ? metricsNames[item.name] : item.name,
 				width: 700,
 				height: 400,
 				itemId: item.name,
@@ -47,14 +89,14 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.cloudwatch.view', function (loadParams, mo
 								rootProperty: 'data'
 							},
 							extraParams: {
-								metricName: item.name, 
-								startTime: getTime(180).startTime, 
-								endTime: getTime(180).endTime, 
-								type: 'Average', 
-								period: 180, 
-								namespace: loadParams['namespace'], 
-								dType: loadParams['objectId'], 
-								dValue: loadParams['object'], 
+								metricName: item.name,
+								startTime: getTime(180).startTime,
+								endTime: getTime(180).endTime,
+								type: 'Average',
+								period: 180,
+								namespace: loadParams['namespace'],
+								dType: loadParams['objectId'],
+								dValue: loadParams['object'],
 								dateFormat: 'H:i',
 								Unit: item.unit,
 								region: loadParams['region']
@@ -152,7 +194,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.cloudwatch.view', function (loadParams, mo
 			});
 			panel.down('#' + item.name).down('chart').store.load();
 		});
-		
+
 	}
 	var panel = Ext.create('Ext.panel.Panel', {
         scalrOptions: {

@@ -2,22 +2,23 @@
 
 namespace Scalr\Modules\Platforms\GoogleCE;
 
-require_once __DIR__ . '/../../../../externals/google-api-php-client-git-03162015/src/Google/Client.php';
-require_once __DIR__ .'/../../../../externals/google-api-php-client-git-03162015/src/Google/Service/Compute.php';
-
 use \DBServer;
 use \BundleTask;
-use \DBFarmRole;
 use Exception;
-use FarmLogMessage;
-use LOG_CATEGORY;
-use Logger;
+use Google_Client;
+use Scalr\Model\Entity\CloudInstanceType;
 use Scalr\Modules\Platforms\GoogleCE\Adapters\StatusAdapter;
 use Scalr\Modules\AbstractPlatformModule;
 use Scalr\Model\Entity\Image;
+use Scalr\Model\Entity\SshKey;
 use Scalr\Model\Entity\CloudLocation;
+use Scalr\Model\Entity;
 use Scalr\Modules\Platforms\GoogleCE\Exception\InstanceNotFoundException;
 use Scalr\Farm\Role\FarmRoleStorageConfig;
+use \GCE_SERVER_PROPERTIES;
+use Scalr\Farm\Role\FarmRoleStorage;
+use Scalr_Environment;
+use SERVER_PLATFORMS;
 
 class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Modules\PlatformModuleInterface
 {
@@ -33,41 +34,40 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
     public $instancesListCache;
 
-    protected $resumeStrategy = \Scalr_Role_Behavior::RESUME_STRATEGY_INIT;
-    
     /**
      * @param \Scalr_Environment $environment
      * @return \Google_Service_Compute
      */
     public function getClient(\Scalr_Environment $environment)
     {
+        $ccProps = $environment->cloudCredentials(\SERVER_PLATFORMS::GCE)->properties;
+
         $client = new \Google_Client();
         $client->setApplicationName("Scalr GCE");
         $client->setScopes(array('https://www.googleapis.com/auth/compute'));
 
-        $key = base64_decode($environment->getPlatformConfigValue(self::KEY));
+        $key = base64_decode($ccProps[Entity\CloudCredentialsProperty::GCE_KEY]);
         $client->setAssertionCredentials(new \Google_Auth_AssertionCredentials(
-            $environment->getPlatformConfigValue(self::SERVICE_ACCOUNT_NAME),
+            $ccProps[Entity\CloudCredentialsProperty::GCE_SERVICE_ACCOUNT_NAME],
             array('https://www.googleapis.com/auth/compute'),
             $key,
-            $environment->getPlatformConfigValue(self::JSON_KEY) ? null : 'notasecret'
+            $ccProps[Entity\CloudCredentialsProperty::GCE_JSON_KEY] ? null : 'notasecret'
         ));
 
-        $client->setClientId($environment->getPlatformConfigValue(self::CLIENT_ID));
+        $client->setClientId($ccProps[Entity\CloudCredentialsProperty::GCE_CLIENT_ID]);
 
         $gce = new \Google_Service_Compute($client);
 
         //**** Store access token ****//
-        $jsonAccessToken = $environment->getPlatformConfigValue(self::ACCESS_TOKEN);
+        $jsonAccessToken = $ccProps[Entity\CloudCredentialsProperty::GCE_ACCESS_TOKEN];
         $accessToken = @json_decode($jsonAccessToken);
         if ($accessToken && $accessToken->created+$accessToken->expires_in > time())
             $client->setAccessToken($jsonAccessToken);
         else {
-            $gce->zones->listZones($environment->getPlatformConfigValue(self::PROJECT_ID));
+            $gce->zones->listZones($ccProps[Entity\CloudCredentialsProperty::GCE_PROJECT_ID]);
             $token = $client->getAccessToken();
-            $environment->setPlatformConfig(array(
-                self::ACCESS_TOKEN => $token
-            ));
+            $ccProps[Entity\CloudCredentialsProperty::GCE_ACCESS_TOKEN] = $token;
+            $ccProps->save();
         }
 
         return $gce;
@@ -85,7 +85,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         try {
             $client = $this->getClient($environment);
 
-            $zones = $client->zones->listZones($environment->getPlatformConfigValue(self::PROJECT_ID));
+            $zones = $client->zones->listZones($environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID]);
 
             foreach ($zones->getItems() as $zone) {
                 if ($zone->status == 'UP')
@@ -132,15 +132,6 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
     /**
      * {@inheritdoc}
-     * @see \Scalr\Modules\PlatformModuleInterface::GetServerFlavor()
-     */
-    public function GetServerFlavor(DBServer $DBServer)
-    {
-        return $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::MACHINE_TYPE);
-    }
-
-    /**
-     * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::IsServerExists()
      */
     public function IsServerExists(DBServer $DBServer, $debug = false)
@@ -170,7 +161,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         $gce = $this->getClient($DBServer->GetEnvironmentObject());
 
         $result = $gce->instances->get(
-            $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
+            $DBServer->GetEnvironmentObject()->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
             $DBServer->GetCloudLocation(),
             $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME)
         );
@@ -198,7 +189,11 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
                 else
                     $opts = array();
 
-                $result = $gce->instances->listInstances($environment->getPlatformConfigValue(self::PROJECT_ID), $cloudLocation, $opts);
+                $result = $gce->instances->listInstances(
+                    $environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
+                    $cloudLocation,
+                    $opts
+                );
                 if (is_array($result->items))
                     foreach ($result->items as $server)
                         $this->instancesListCache[$environment->id][$cloudLocation][$server->name] = $server->status;
@@ -234,10 +229,11 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         }
         elseif (!$this->instancesListCache[$environment->id][$cloudLocation][$iid]) {
             $gce = $this->getClient($environment);
+            $projectId = $DBServer->GetEnvironmentObject()->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID];
 
             try {
                 $result = $gce->instances->get(
-                    $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
+                    $projectId,
                     $cloudLocation,
                     $DBServer->serverId
                 );
@@ -255,20 +251,20 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
                 if ($operationId) {
                     try {
                         $info = $gce->zoneOperations->get(
-                            $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
+                            $projectId,
                             $cloudLocation,
                             $operationId
                         );
                         if ($info->status != 'DONE')
                             $status = 'PROVISIONING';
                     } catch (Exception $e) {
-                        \Logger::getLogger("GCE")->info("GCE: operation was not found: {$operationId}, ServerID: {$DBServer->serverId}, ServerStatus: {$DBServer->status}");
+                        \Scalr::getContainer()->logger("GCE")->info("GCE: operation was not found: {$operationId}, ServerID: {$DBServer->serverId}, ServerStatus: {$DBServer->status}");
                     }
                 } else {
                     if ($DBServer->status == \SERVER_STATUS::PENDING)
                         $status = 'PROVISIONING';
                     else
-                        \Logger::getLogger("GCE")->error("GCE: OPID: {$operationId}, ServerID: {$DBServer->serverId}, ServerStatus: {$DBServer->status}");
+                        \Scalr::getContainer()->logger("GCE")->error("GCE: OPID: {$operationId}, ServerID: {$DBServer->serverId}, ServerStatus: {$DBServer->status}");
                 }
             }
         } else {
@@ -288,7 +284,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
         try {
             $gce->instances->start(
-                $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
+                $DBServer->GetEnvironmentObject()->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
                 $DBServer->GetCloudLocation(),
                 $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME)
             );
@@ -299,12 +295,12 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
             throw $e;
         }
-        
+
         parent::ResumeServer($DBServer);
 
         return true;
     }
-    
+
     /**
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::SuspendServer()
@@ -315,7 +311,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
         try {
             $gce->instances->stop(
-                $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
+                $DBServer->GetEnvironmentObject()->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
                 $DBServer->GetCloudLocation(),
                 $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME)
             );
@@ -329,7 +325,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
         return true;
     }
-    
+
     /**
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::TerminateServer()
@@ -340,7 +336,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
         try {
             $gce->instances->delete(
-                $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
+                $DBServer->GetEnvironmentObject()->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
                 $DBServer->GetCloudLocation(),
                 $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME)
             );
@@ -377,7 +373,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
         try {
 
-            $projectId = $image->getEnvironment()->getPlatformConfigValue(self::PROJECT_ID);
+            $projectId = $image->getEnvironment()->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID];
             $imageId = str_replace("{$projectId}/images/", "", $image->id);
 
             $gce->images->delete($projectId, $imageId);
@@ -399,80 +395,83 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
     {
         if ($BundleTask->status != \SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS)
             return;
-        
+
         if ($BundleTask->osFamily != 'windows')
             return;
-            
+
         $meta = $BundleTask->getSnapshotDetails();
-        
+
         $env = \Scalr_Environment::init()->loadById($BundleTask->envId);
         $gce = $this->getClient($env);
+        $projectId = $env->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID];
 
         if ($meta['gceSnapshotOpPhase3Id']) {
             try {
-                $op3 = $gce->zoneOperations->get(
-                    $env->getPlatformConfigValue(self::PROJECT_ID),
-                    $meta['gceSnapshotZone'],
+                $op3 = $gce->globalOperations->get(
+                    $projectId,
                     $meta['gceSnapshotOpPhase3Id']
                 );
-                
+
                 if ($op3->status == 'DONE') {
                     $BundleTask->SnapshotCreationComplete($BundleTask->snapshotId, $meta);
                 } else {
                     $BundleTask->Log("CreateImage operation status: {$op3->status}");
                 }
-                
+
             } catch (\Exception $e) {
                 $BundleTask->Log("CheckServerSnapshotStatus(2): {$e->getMessage()}");
                 return;
             }
-            
+
         } else {
             //Check operations status
             try {
                 $op1 = $gce->zoneOperations->get(
-                    $env->getPlatformConfigValue(self::PROJECT_ID), 
-                    $meta['gceSnapshotZone'], 
+                    $projectId,
+                    $meta['gceSnapshotZone'],
                     $meta['gceSnapshotOpPhase1Id']
                 );
-                
+
                 $op2 = $gce->zoneOperations->get(
-                    $env->getPlatformConfigValue(self::PROJECT_ID),
+                    $projectId,
                     $meta['gceSnapshotZone'],
                     $meta['gceSnapshotOpPhase2Id']
                 );
-                
-                
+
+
             } catch (\Exception $e) {
                 $BundleTask->Log("CheckServerSnapshotStatus(1): {$e->getMessage()}");
                 return;
             }
-            
+
             if ($op1->status == 'DONE' && $op2->status == 'DONE') {
-                $postBody = new \Google_Service_Compute_Image();
-                $postBody->setName($BundleTask->roleName . "-" . date("YmdHi"));
-                $postBody->setSourceDisk(
-                    $this->getObjectUrl(
-                        "root-{$BundleTask->serverId}",
-                        'disks',
-                        $env->getPlatformConfigValue(self::PROJECT_ID),
-                        $meta['gceSnapshotZone']
-                    )
-                );
-                
-                $op3 = $gce->images->insert($env->getPlatformConfigValue(self::PROJECT_ID), $postBody);
-                $BundleTask->setMetaData(array(
-                    'gceSnapshotOpPhase3Id' => $op3->name,
-                    'gceSnapshotTargetLink' => $op3->targetLink
-                ));
-                $BundleTask->snapshotId = $env->getPlatformConfigValue(self::PROJECT_ID) . "/global/images/" . $this->getObjectName($op3->targetLink);
-                
-                $BundleTask->Log(sprintf(_("Snapshot initialized (ID: %s). Operation: {$op3->name}"),
-                    $BundleTask->snapshotId
-                ));
-                
-                $BundleTask->Save();
-                
+                try {
+                    $postBody = new \Google_Service_Compute_Image();
+                    $postBody->setName($BundleTask->roleName . "-" . date("YmdHi"));
+                    $postBody->setSourceDisk(
+                        $this->getObjectUrl(
+                            $meta['gceSnapshotDeviceName'],
+                            'disks',
+                            $projectId,
+                            $meta['gceSnapshotZone']
+                        )
+                    );
+
+                    $op3 = $gce->images->insert($projectId, $postBody);
+                    $BundleTask->setMetaData(array(
+                        'gceSnapshotOpPhase3Id' => $op3->name,
+                        'gceSnapshotTargetLink' => $op3->targetLink
+                    ));
+                    $BundleTask->snapshotId = "{$projectId}/global/images/{$this->getObjectName($op3->targetLink)}";
+
+                    $BundleTask->Log(sprintf(_("Snapshot initialized (ID: %s). Operation: {$op3->name}"),
+                        $BundleTask->snapshotId
+                    ));
+
+                    $BundleTask->Save();
+                } catch (\Exception $e) {
+                    $BundleTask->Log("CheckServerSnapshotStatus(3): {$e->getMessage()}");
+                }
             } else {
                 $BundleTask->Log("CheckServerSnapshotStatus(0): {$op1->status}:{$op2->status}");
             }
@@ -489,60 +488,74 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         if ($BundleTask->osFamily == 'windows' || $DBServer->osType == 'windows') {
             $BundleTask->bundleType = \SERVER_SNAPSHOT_CREATION_TYPE::GCE_WINDOWS;
             $BundleTask->status = \SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
-            
+
             $gce = $this->getClient($DBServer->GetEnvironmentObject());
-            
+            $projectId = $DBServer->GetEnvironmentObject()->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID];
+
             //Set root disk auto-remove to false
             try {
+                $instance = $gce->instances->get(
+                    $projectId,
+                    $DBServer->GetCloudLocation(),
+                    $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME)
+                );
+
+                $disks = $instance->getDisks();
+                if (!count($disks)) {
+                    throw new Exception('No disks were found');
+                }
+                $deviceName = $disks[0]['deviceName'];
+
                 $op1 = $gce->instances->setDiskAutoDelete(
-                    $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
+                    $projectId,
                     $DBServer->GetCloudLocation(),
                     $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME),
                     false,
-                    'root'
+                    $deviceName
                 );
-                
+
                 $BundleTask->Log("Calling setDiskAutoDelete(false) for root device. Operation: {$op1->name}");
-                
+
             } catch (\Exception $e) {
                 $BundleTask->Log("Unable to perform setDiskAutoDelete(false) for ROOT device: ". $e->getMessage());
             }
             //TODO: Check operation status
             sleep(2);
-            
+
             // Kill VM
             try {
                 $op2 = $gce->instances->delete(
-                    $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
+                    $projectId,
                     $DBServer->GetCloudLocation(),
                     $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME)
                 );
-                
+
                 $BundleTask->Log("Terminating VM. Operation: {$op2->name}");
-                
+
             } catch (Exception $e) {
                 if (stristr($e->getMessage(), "not found")) {
-                    
+
                 } else {
                     $BundleTask->Log("Unable to terminate VM: ". $e->getMessage());
                 }
             }
-            
+
             $BundleTask->setMetaData(array(
                 'gceSnapshotOpPhase1Id' => $op1->name,
                 'gceSnapshotOpPhase2Id' => $op2->name,
-                'gceSnapshotZone'       => $DBServer->cloudLocationZone
+                'gceSnapshotZone'       => $DBServer->cloudLocationZone,
+                'gceSnapshotDeviceName' => $deviceName
             ));
         } else {
             $BundleTask->status = \SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
             $BundleTask->bundleType = \SERVER_SNAPSHOT_CREATION_TYPE::GCE_STORAGE;
-            
+
             $msg = new \Scalr_Messaging_Msg_Rebundle(
                 $BundleTask->id,
                 $BundleTask->roleName,
                 array()
             );
-    
+
             if (!$DBServer->SendMessage($msg))
             {
                 $BundleTask->SnapshotCreationFailed("Cannot send rebundle message to server. Please check event log for more details.");
@@ -573,12 +586,12 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         $gce = $this->getClient($DBServer->GetEnvironmentObject());
 
         $retval = $gce->instances->getSerialPortOutput(
-            $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
+            $DBServer->GetEnvironmentObject()->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
             $DBServer->GetCloudLocation(),
             $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME)
         );
 
-        return base64_encode($retval->contents);
+        return base64_encode($retval->getContents());
     }
 
     public function getObjectUrl($objectName, $objectType, $projectName, $cloudLocation = null)
@@ -608,18 +621,14 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
      */
     public function GetServerExtendedInformation(DBServer $DBServer, $extended = false)
     {
-        try
-        {
-            try	{
-                $gce = $this->getClient($DBServer->GetEnvironmentObject());
+        try {
+            $gce = $this->getClient($DBServer->GetEnvironmentObject());
 
-                $info = $gce->instances->get(
-                    $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::PROJECT_ID),
-                    $DBServer->GetCloudLocation(),
-                    $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME)
-                );
-            } catch (\Exception $e) {
-            }
+            $info = $gce->instances->get(
+                $DBServer->GetEnvironmentObject()->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
+                $DBServer->GetCloudLocation(),
+                $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::SERVER_NAME)
+            );
 
             if ($info) {
                 $network = $info->getNetworkInterfaces();
@@ -635,8 +644,13 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
                     'Zone'					=> $this->getObjectName($info->zone)
                 );
             }
+        } catch(\Exception $e) {
+            if (stristr($e->getMessage(), "not found")) {
+                return false;
+            } else {
+                throw $e;
+            }
         }
-        catch(\Exception $e){}
 
         return false;
     }
@@ -651,7 +665,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
      */
     public function GetAsyncOperationStatus(\Scalr_Environment $environment, $operationId, $cloudLocation, $scope = 'zones')
     {
-        $projectName = $environment->getPlatformConfigValue(self::PROJECT_ID);
+        $projectName = $environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID];
         $gce = $this->getClient($environment);
 
 
@@ -667,30 +681,43 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
     public function LaunchServer(DBServer $DBServer, \Scalr_Server_LaunchOptions $launchOptions = null)
     {
         $environment = $DBServer->GetEnvironmentObject();
+        $ccProps = $environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties;
 
         $rootDeviceSettings = null;
+        $ssdDisks = array();
+
         if (!$launchOptions) {
             $launchOptions = new \Scalr_Server_LaunchOptions();
             $DBRole = $DBServer->GetFarmRoleObject()->GetRoleObject();
 
             $launchOptions->imageId = $DBRole->__getNewRoleObject()->getImage(\SERVER_PLATFORMS::GCE, $DBServer->GetProperty(\GCE_SERVER_PROPERTIES::CLOUD_LOCATION))->imageId;
-            $launchOptions->serverType = $DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_GCE_MACHINE_TYPE);
+            $launchOptions->serverType = $DBServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::GCE_MACHINE_TYPE);
             $launchOptions->cloudLocation = $DBServer->GetFarmRoleObject()->CloudLocation;
 
             $userData = $DBServer->GetCloudUserData();
 
             $launchOptions->architecture = 'x86_64';
 
-            $networkName = $DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_GCE_NETWORK);
-            $onHostMaintenance = $DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_GCE_ON_HOST_MAINTENANCE);
-            
-            
+            $networkName = $DBServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::GCE_NETWORK);
+            $onHostMaintenance = $DBServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::GCE_ON_HOST_MAINTENANCE);
+
+
             $osType = ($DBRole->getOs()->family == 'windows') ? 'windows' : 'linux';
-            
+
             $rootDevice = json_decode($DBServer->GetFarmRoleObject()->GetSetting(\Scalr_Role_Behavior::ROLE_BASE_ROOT_DEVICE_CONFIG), true);
             if ($rootDevice && $rootDevice['settings'])
                 $rootDeviceSettings = $rootDevice['settings'];
-            
+
+            $storage = new FarmRoleStorage($DBServer->GetFarmRoleObject());
+            $volumes = $storage->getVolumesConfigs($DBServer);
+
+            if (!empty($volumes)) {
+                foreach ($volumes as $volume) {
+                    if ($volume->type == FarmRoleStorageConfig::TYPE_GCE_EPHEMERAL)
+                        array_push($ssdDisks, $volume);
+                }
+            }
+
         } else {
             $userData = array();
             $networkName = 'default';
@@ -705,16 +732,17 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         else
             $keyName = "FARM-{$DBServer->farmId}-".SCALR_ID;
 
-        $sshKey = \Scalr_SshKey::init();
-        if (!$sshKey->loadGlobalByName($keyName, "", $DBServer->envId, \SERVER_PLATFORMS::GCE)) {
+        $sshKey = (new SshKey())->loadGlobalByName($DBServer->envId, \SERVER_PLATFORMS::GCE, "", $keyName);
+        if (!$sshKey) {
+            $sshKey = new SshKey();
             $keys = $sshKey->generateKeypair();
             if ($keys['public']) {
                 $sshKey->farmId = $DBServer->farmId;
                 $sshKey->envId = $DBServer->envId;
-                $sshKey->type = \Scalr_SshKey::TYPE_GLOBAL;
+                $sshKey->type = SshKey::TYPE_GLOBAL;
+                $sshKey->platform = \SERVER_PLATFORMS::GCE;
                 $sshKey->cloudLocation = "";
                 $sshKey->cloudKeyName = $keyName;
-                $sshKey->platform = \SERVER_PLATFORMS::GCE;
                 $sshKey->save();
 
                 $publicKey = $keys['public'];
@@ -722,13 +750,14 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
                 throw new \Exception("Scalr unable to generate ssh keypair");
             }
         } else {
-            $publicKey = $sshKey->getPublic();
+            $publicKey = $sshKey->publicKey;
         }
 
         $gce = $this->getClient($environment);
+        $projectId = $ccProps[Entity\CloudCredentialsProperty::GCE_PROJECT_ID];
 
         // Check firewall
-        $firewalls = $gce->firewalls->listFirewalls($environment->getPlatformConfigValue(self::PROJECT_ID));
+        $firewalls = $gce->firewalls->listFirewalls($projectId);
         $firewallFound = false;
         foreach ($firewalls->getItems() as $f) {
             if ($f->getName() == 'scalr-system') {
@@ -744,7 +773,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
             $firewall->setNetwork($this->getObjectUrl(
                 $networkName,
                 'networks',
-                $environment->getPlatformConfigValue(self::PROJECT_ID)
+                $projectId
             ));
 
             //Get scalr IP-pool IP list and set source ranges
@@ -762,9 +791,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
             // Set target tags
             $firewall->setTargetTags(array('scalr'));
 
-            $gce->firewalls->insert(
-                $environment->getPlatformConfigValue(self::PROJECT_ID), $firewall
-            );
+            $gce->firewalls->insert($projectId, $firewall);
         }
 
         $instance = new \Google_Service_Compute_Instance();
@@ -785,7 +812,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         $network->setNetwork($this->getObjectUrl(
             $networkName,
             'networks',
-            $environment->getPlatformConfigValue(self::PROJECT_ID)
+            $projectId
         ));
 
         $network->setAccessConfigs(array($accessConfig));
@@ -803,7 +830,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         if ($launchOptions->cloudLocation != 'x-scalr-custom') {
             $availZone = $launchOptions->cloudLocation;
         } else {
-            $location = $DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_GCE_CLOUD_LOCATION);
+            $location = $DBServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::GCE_CLOUD_LOCATION);
 
             $availZones = array();
             if (stristr($location, "x-scalr-custom")) {
@@ -839,21 +866,19 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
             $dZones = ""; // Zones distribution
             foreach ($availZoneDistribution as $zone => $num)
                 $dZones .= "({$zone}:{$num})";
-
-            $DBServer->SetProperty("tmp.gce.avail_zone.algo2", "[A:{$aZones}][D:{$dZones}][S:{$availZone}]");
         }
 
         $instance->setZone($this->getObjectUrl(
             $availZone,
             'zones',
-            $environment->getPlatformConfigValue(self::PROJECT_ID)
+            $projectId
         ));
 
 
         $instance->setMachineType($this->getObjectUrl(
             $launchOptions->serverType,
             'machineTypes',
-            $environment->getPlatformConfigValue(self::PROJECT_ID),
+            $projectId,
             $availZone
         ));
 
@@ -862,23 +887,25 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         $image = $this->getObjectUrl(
             $launchOptions->imageId,
             'images',
-            $environment->getPlatformConfigValue(self::PROJECT_ID)
+            $projectId
         );
+
+        $disks = array();
 
         $diskName = "root-{$DBServer->serverId}";
 
         $initializeParams = new \Google_Service_Compute_AttachedDiskInitializeParams();
         $initializeParams->sourceImage = $image;
         $initializeParams->diskName = $diskName;
-        
+
         if ($rootDeviceSettings) {
             $initializeParams->diskType = $this->getObjectUrl(
                 $rootDeviceSettings[FarmRoleStorageConfig::SETTING_GCE_PD_TYPE] ? $rootDeviceSettings[FarmRoleStorageConfig::SETTING_GCE_PD_TYPE] : 'pd-standard',
                 'diskTypes',
-                $environment->getPlatformConfigValue(self::PROJECT_ID),
+                $projectId,
                 $availZone
             );
-            
+
             $initializeParams->diskSizeGb = $rootDeviceSettings[FarmRoleStorageConfig::SETTING_GCE_PD_SIZE];
         }
 
@@ -890,8 +917,34 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         $attachedDisk->setDeviceName("root");
         $attachedDisk->setAutoDelete(true);
         $attachedDisk->setInitializeParams($initializeParams);
+        array_push($disks, $attachedDisk);
 
-        $instance->setDisks(array($attachedDisk));
+        if (count($ssdDisks) > 0) {
+            foreach ($ssdDisks as $disk) {
+                $attachedDisk = new \Google_Service_Compute_AttachedDisk();
+                $attachedDisk->setKind("compute#attachedDisk");
+                $attachedDisk->setBoot(false);
+                $attachedDisk->setMode("READ_WRITE");
+                $attachedDisk->setType("SCRATCH");
+                $attachedDisk->setDeviceName(str_replace("google-", "", $disk->name));
+                $attachedDisk->setInterface('SCSI');
+                $attachedDisk->setAutoDelete(true);
+
+                $initializeParams = new \Google_Service_Compute_AttachedDiskInitializeParams();
+                $initializeParams->diskType = $this->getObjectUrl(
+                    'local-ssd',
+                    'diskTypes',
+                    $projectId,
+                    $availZone
+                );
+
+                $attachedDisk->setInitializeParams($initializeParams);
+                array_push($disks, $attachedDisk);
+            }
+        }
+
+
+        $instance->setDisks($disks);
 
         $instance->setName($DBServer->serverId);
 
@@ -928,14 +981,14 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
             $item->setValue($uData);
             $items[] = $item;
         }
-        
+
         if ($osType == 'windows') {
             // Add Windows credentials
             $item = new \Google_Service_Compute_MetadataItems();
             $item->setKey("gce-initial-windows-user");
             $item->setValue("scalr");
             $items[] = $item;
-            
+
             $item = new \Google_Service_Compute_MetadataItems();
             $item->setKey("gce-initial-windows-password");
             $item->setValue(\Scalr::GenerateRandomKey(16) . rand(0,9));
@@ -954,7 +1007,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
         try {
             $result = $gce->instances->insert(
-                $environment->getPlatformConfigValue(self::PROJECT_ID),
+                $projectId,
                 $availZone,
                 $instance
             );
@@ -963,21 +1016,28 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         }
 
         if ($result->id) {
+            $instanceTypeInfo = $this->getInstanceType(
+                $launchOptions->serverType,
+                $environment,
+                $availZone
+            );
+            /* @var $instanceTypeInfo CloudInstanceType */
             $DBServer->SetProperties([
                 \GCE_SERVER_PROPERTIES::PROVISIONING_OP_ID   => $result->name,
                 \GCE_SERVER_PROPERTIES::SERVER_NAME          => $DBServer->serverId,
                 \GCE_SERVER_PROPERTIES::CLOUD_LOCATION       => $availZone,
                 \GCE_SERVER_PROPERTIES::CLOUD_LOCATION_ZONE  => $availZone,
-                \GCE_SERVER_PROPERTIES::MACHINE_TYPE         => $launchOptions->serverType,
                 \SERVER_PROPERTIES::ARCHITECTURE             => $launchOptions->architecture,
                 'debug.region'                               => $result->region,
                 'debug.zone'                                 => $result->zone,
+                \SERVER_PROPERTIES::INFO_INSTANCE_VCPUS      => $instanceTypeInfo ? $instanceTypeInfo->vcpus : null,
             ]);
 
             $DBServer->setOsType($osType);
             $DBServer->cloudLocation = $availZone;
             $DBServer->cloudLocationZone = $availZone;
             $DBServer->imageId = $launchOptions->imageId;
+            $DBServer->update(['type' => $launchOptions->serverType, 'instanceTypeName' => $launchOptions->serverType]);
             // we set server history here
             $DBServer->getServerHistory();
 
@@ -987,13 +1047,21 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         }
     }
 
+    /**
+     * @param Scalr_Environment $environment
+     * @param DBServer          $DBServer
+     *
+     * @return object
+     */
     public function GetPlatformAccessData($environment, $DBServer)
     {
+        $ccProps = $environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties;
+
         $accessData = new \stdClass();
-        $accessData->clientId = $environment->getPlatformConfigValue(self::CLIENT_ID);
-        $accessData->serviceAccountName = $environment->getPlatformConfigValue(self::SERVICE_ACCOUNT_NAME);
-        $accessData->projectId = $environment->getPlatformConfigValue(self::PROJECT_ID);
-        $accessData->key = $environment->getPlatformConfigValue(self::KEY);
+        $accessData->clientId = $ccProps[Entity\CloudCredentialsProperty::GCE_CLIENT_ID];
+        $accessData->serviceAccountName = $ccProps[Entity\CloudCredentialsProperty::GCE_SERVICE_ACCOUNT_NAME];
+        $accessData->projectId = $ccProps[Entity\CloudCredentialsProperty::GCE_PROJECT_ID];
+        $accessData->key = $ccProps[Entity\CloudCredentialsProperty::GCE_KEY];
 
         return $accessData;
     }
@@ -1047,7 +1115,7 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
 
         $gceClient = $this->getClient($env);
 
-        $projectId = $env->getPlatformConfigValue(self::PROJECT_ID);
+        $projectId = $env->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID];
 
         $ret = [];
         $detailed = [];
@@ -1095,5 +1163,55 @@ class GoogleCEPlatformModule extends AbstractPlatformModule implements \Scalr\Mo
         }
 
         return $ret;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Modules\PlatformModuleInterface::getInstanceIdPropertyName()
+     */
+    public function getInstanceIdPropertyName()
+    {
+        return GCE_SERVER_PROPERTIES::SERVER_NAME;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see PlatformModuleInterface::getgetClientByDbServer()
+     *
+     * @return Google_Client
+     */
+    public function getHttpClient(DBServer $dbServer)
+    {
+        return $this->getClient($dbServer->GetEnvironmentObject())->getClient();
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see PlatformModuleInterface::getImageInfo()
+     */
+    public function getImageInfo(\Scalr_Environment $environment, $cloudLocation, $imageId)
+    {
+        /* @var $client \Google_Service_Compute */
+        $client = $this->getClient($environment);
+        // for global images we use another projectId
+        $ind = strpos($imageId, '/global/');
+        if ($ind !== false) {
+            $projectId = substr($imageId, 0, $ind);
+            $id = str_replace("{$projectId}/global/images/", '', $imageId);
+        } else {
+            $ind = strpos($imageId, '/images/');
+            $projectId = $ind !== false ?
+                substr($imageId, 0, $ind) :
+                $environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID];
+            $id = str_replace("{$projectId}/images/", '', $imageId);
+        }
+
+        $snap = $client->images->get($projectId, $id);
+
+        return [
+            "name"         => $snap->name,
+            "size"         => $snap->diskSizeGb,
+            "architecture" => "x86_64",
+        ];
     }
 }

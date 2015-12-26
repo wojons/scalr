@@ -103,7 +103,7 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
      *
      * @var boolean
      */
-    protected $ignoreChanges = false;
+    protected $ignoreChanges = true;
 
     /**
      * Database instance
@@ -747,5 +747,25 @@ abstract class AbstractUpdate extends AbstractGetter implements UpdateInterface
         $names = '`' . implode('`,`', $tables) . '`';
 
         $this->db->Execute("{$sql} {$names}");
+    }
+
+    /**
+     * List all tables or tables which names match a RegExp
+     *
+     * @param string $match optional Regex to match tables
+     * @return array List of matching tables
+     */
+    public function showTables($match = null)
+    {
+        $tables = [];
+        $stm = "SHOW TABLES";
+        if (! empty($match)) {
+            $stm .= " WHERE Tables_in_" . $this->db->GetOne("SELECT DATABASE()") . " REGEXP " . $this->db->qstr($match);
+        }
+        $res = $this->db->Execute($stm);
+        while ($row = $res->FetchRow()) {
+            list(, $tables[]) = each($row);
+        }
+        return $tables;
     }
 }

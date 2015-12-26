@@ -3,7 +3,8 @@ namespace Scalr\Upgrade\Updates;
 
 use Scalr\Upgrade\SequenceInterface;
 use Scalr\Upgrade\AbstractUpdate;
-use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
+use SERVER_PLATFORMS;
+use Scalr\Model\Entity;
 
 class Update20140123143021 extends AbstractUpdate implements SequenceInterface
 {
@@ -50,18 +51,18 @@ class Update20140123143021 extends AbstractUpdate implements SequenceInterface
             JOIN client_environment_properties p ON e.id = p.env_id
             WHERE p.name = ? AND p.value != ''
         ", array(
-            Ec2PlatformModule::ACCESS_KEY
+            Entity\CloudCredentialsProperty::AWS_ACCESS_KEY
         ));
         while ($rec = $res->FetchRow()) {
             $env = \Scalr_Environment::init()->loadById($rec['id']);
             if (!($env instanceof \Scalr_Environment)) continue;
-            $accountNumber = $env->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID);
+            $accountNumber = $env->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID];
             try {
                 $num = $env->aws('us-east-1')->getAccountNumber();
                 if ($num != $accountNumber) {
                     $this->console->out('Updating account_number for %d environment: "%s" -> "%s"', $env->id, $accountNumber, $num);
                     $env->setPlatformConfig(array(
-                        Ec2PlatformModule::ACCOUNT_ID => $num,
+                        Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID => $num,
                     ));
                 }
             } catch (\Exception $e) {

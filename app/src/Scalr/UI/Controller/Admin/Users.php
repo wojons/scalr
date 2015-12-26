@@ -1,5 +1,8 @@
 <?php
 use Scalr\UI\Request\RawData;
+use Scalr\UI\Request\Validator;
+use Scalr\Model\Entity\Account\User;
+
 class Scalr_UI_Controller_Admin_Users extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'userId';
@@ -26,7 +29,7 @@ class Scalr_UI_Controller_Admin_Users extends Scalr_UI_Controller
         ));
 
         $sql = 'SELECT id, status, email, type, fullname, dtcreated, dtlastlogin, comments FROM account_users WHERE (type = ? OR type = ?) AND :FILTER:';
-        $response = $this->buildResponseFromSql2($sql, array('id', 'status', 'email', 'fullname', 'dtcreated', 'dtlastlogin'), array('email', 'fullname'), array(Scalr_Account_User::TYPE_SCALR_ADMIN, Scalr_Account_User::TYPE_FIN_ADMIN));
+        $response = $this->buildResponseFromSql2($sql, array('id', 'status', 'email', 'type', 'fullname', 'dtcreated', 'dtlastlogin'), array('email', 'fullname'), array(Scalr_Account_User::TYPE_SCALR_ADMIN, Scalr_Account_User::TYPE_FIN_ADMIN));
         foreach ($response["data"] as &$row) {
             $user = Scalr_Account_User::init();
             $user->loadById($row['id']);
@@ -53,24 +56,26 @@ class Scalr_UI_Controller_Admin_Users extends Scalr_UI_Controller
 
         $this->response->page('ui/admin/users/create.js', array(
             'user' => array(
-                'id' => $user->getId(),
-                'email' => $user->getEmail(),
-                'type' => $user->getType(),
-                'fullname' => $user->fullname,
-                'status' => $user->status,
-                'comments' => $user->comments
+                'id'        => $user->getId(),
+                'email'     => $user->getEmail(),
+                'type'      => $user->getType(),
+                'fullname'  => $user->fullname,
+                'status'    => $user->status,
+                'comments'  => $user->comments,
+                'password'  => true,
+                'cpassword' => true
             )
         ));
     }
 
     /**
-     * @param int $id
-     * @param $email
-     * @param $type
+     * @param int     $id
+     * @param string  $email
+     * @param string  $type
      * @param RawData $password
-     * @param $status
-     * @param $fullname
-     * @param $comments
+     * @param string  $status
+     * @param string  $fullname
+     * @param string  $comments
      * @param RawData $currentPassword optional
      * @throws Scalr_Exception_Core
      * @throws Scalr_Exception_InsufficientPermissions
@@ -78,27 +83,36 @@ class Scalr_UI_Controller_Admin_Users extends Scalr_UI_Controller
     public function xSaveAction($id = 0, $email, $type, RawData $password, $status, $fullname, $comments, RawData $currentPassword = null)
     {
         $user = Scalr_Account_User::init();
-        $validator = new Scalr_Validator();
+        $validator = new Validator();
         $isNewUser = empty($id);
         $isExistingPasswordChanged = false;
+        $password = (string) $password;
 
-        if (!$isNewUser && $password != '******' && !$this->user->checkPassword($currentPassword)) {
+        if (!$isNewUser && $password && !$this->user->checkPassword($currentPassword, false)) {
             $this->response->data(['errors' => ['currentPassword' => 'Invalid password']]);
             $this->response->failure();
             return;
         }
 
-        if (! $email)
-            throw new Scalr_Exception_Core('Email cannot be empty');
+        if ($password || $isNewUser) {
+            $validator->validate($password, 'password', Validator::PASSWORD, ['admin']);
+        }
 
-        if ($type == Scalr_Account_User::TYPE_FIN_ADMIN && $validator->validateEmail($email, null, true) !== true)
-            throw new Scalr_Exception_Core('Email is not valid');
+        $validator->validate($email, 'email', Validator::NOEMPTY);
+        if ($type == User::TYPE_FIN_ADMIN) {
+            $validator->validate($email, 'email', Validator::EMAIL);
+        }
 
-        if (! in_array($type, [Scalr_Account_User::TYPE_SCALR_ADMIN, Scalr_Account_User::TYPE_FIN_ADMIN]))
-            throw new Scalr_Exception_Core('Type is not valid');
+        if ($isNewUser) {
+            $validator->addErrorIf($this->db->GetOne("SELECT EXISTS(SELECT 1 FROM `account_users` WHERE email = ?)", [$email]), 'email', 'This email is already in use.');
+        }
 
-        if (! in_array($status, [Scalr_Account_User::STATUS_ACTIVE, Scalr_Account_User::STATUS_INACTIVE]))
-            throw new Scalr_Exception_Core('Status is not valid');
+        $validator->addErrorIf(!in_array($type, [User::TYPE_SCALR_ADMIN, User::TYPE_FIN_ADMIN]), 'type', 'Type is not valid');
+        $validator->addErrorIf(!in_array($status, [User::STATUS_ACTIVE, User::STATUS_INACTIVE]), 'type', 'Status is not valid');
+
+        if (!$validator->isValid($this->response)) {
+            return;
+        }
 
         if (!$isNewUser) {
             $user->loadById($id);
@@ -113,7 +127,7 @@ class Scalr_UI_Controller_Admin_Users extends Scalr_UI_Controller
             $user->type = $type;
         }
 
-        if ($password != '******') {
+        if ($password) {
             $user->updatePassword($password);
             if (!$isNewUser) {
                 $isExistingPasswordChanged = true;
@@ -151,7 +165,7 @@ class Scalr_UI_Controller_Admin_Users extends Scalr_UI_Controller
                 $user->getEmail(), $user->fullname
             );
         }
-        
+
         $this->response->success('User successfully saved');
     }
 

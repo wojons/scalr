@@ -1,6 +1,7 @@
 <?php
 
 use \Scalr\Service\OpenStack\Services\Servers\Type\ServersExtension;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
 {
@@ -182,14 +183,14 @@ class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
             $dbFarmRole = DBFarmRole::LoadByID($farmRoleId);
             $this->user->getPermissions()->validate($dbFarmRole);
 
-            $maxInstances = $dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES);
+            $maxInstances = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MAX_INSTANCES);
             for ($i = 1; $i <= $maxInstances; $i++) {
                 $map[] = array('serverIndex' => $i);
             }
 
             $servers = $dbFarmRole->GetServersByFilter();
             for ($i = 0; $i < count($servers); $i++) {
-                if ($servers[$i]->status != SERVER_STATUS::TERMINATED && $servers[$i]->status != SERVER_STATUS::TROUBLESHOOTING && $servers[$i]->index) {
+                if ($servers[$i]->status != SERVER_STATUS::TERMINATED && $servers[$i]->index) {
                     $map[$servers[$i]->index - 1]['serverIndex'] = $servers[$i]->index;
                     $map[$servers[$i]->index - 1]['serverId'] = $servers[$i]->serverId;
                     $map[$servers[$i]->index - 1]['remoteIp'] = $servers[$i]->remoteIp;

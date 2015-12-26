@@ -1,62 +1,62 @@
 Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
-	var form = Ext.create('Ext.form.Panel', {
+    var form = Ext.create('Ext.form.Panel', {
         scrollable: true,
         //minWidth: 1060,
-		scalrOptions: {
-			maximize: 'all',
+        scalrOptions: {
+            maximize: 'all',
             menuTitle: 'Settings',
             menuHref: '#/core/settings'
-		},
+        },
         fieldDefaults: {
             labelWidth: 80
         },
-		items: [{
-			xtype: 'container',
+        items: [{
+            xtype: 'container',
             cls: 'x-fieldset-separator-bottom',
-			layout: 'hbox',
+            layout: 'hbox',
             defaults: {
                 minWidth: 300,
                 maxWidth: 460,
                 minHeight: 150,
                 flex:1
             },
-			items: [{
-				xtype: 'fieldset',
+            items: [{
+                xtype: 'fieldset',
                 cls: 'x-fieldset-separator-none',
-				title: 'Profile information',
-				items: [{
-					xtype: 'displayfield',
-					name: 'user_email',
-					fieldLabel: 'Email',
-					readOnly: true
-				},{
-					xtype: 'textfield',
-					name: 'user_fullname',
-					fieldLabel: 'Full name',
-					anchor: '100%'
+                title: 'Profile information',
+                items: [{
+                    xtype: 'displayfield',
+                    name: 'userEmail',
+                    fieldLabel: 'Email',
+                    readOnly: true
+                },{
+                    xtype: 'textfield',
+                    name: 'userFullname',
+                    fieldLabel: 'Full name',
+                    anchor: '100%'
                 }]
-			},{
-				xtype: 'fieldset',
+            },{
+                xtype: 'fieldset',
                 title: 'Avatar settings',
                 cls: 'x-fieldset-separator-left',
-				items: [{
+                items: [{
                     xtype: 'image',
-                    style: 'position:absolute;right:24px;top:16px;border-radius:4px',
+                    style: 'position:absolute;right:24px;top:16px;border-radius:0',
                     width: 46,
                     height: 46,
-                    src: Scalr.utils.getGravatarUrl(moduleParams['gravatar_hash'], 'large')
+                    src: Scalr.utils.getGravatarUrl(moduleParams['gravatarHash'], 'large')
                 }, {
                     xtype: 'displayfield',
                     value: '<a href="http://gravatar.com/" target="blank">Change your avatar at Gravatar.com</a>'
                 }, {
                     xtype: 'textfield',
-					name: 'gravatar_email',
-					fieldLabel: 'Gravatar email',
-					vtype: 'email',
+                    name: 'gravatar.email',
+                    fieldLabel: 'Gravatar email',
+                    vtype: 'email',
                     labelWidth: 110,
-					anchor: '100%'
-				}]
-			},{
+                    anchor: '100%'
+                }]
+            },{
                 xtype: 'fieldset',
                 title: 'User interface',
                 cls: 'x-fieldset-separator-left',
@@ -65,88 +65,73 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
                     anchor: '100%'
                 },
                 items: [{
-					xtype: 'buttongroupfield',
-					fieldLabel: 'Dashboard columns',
-					name: 'dashboard_columns',
-					value: moduleParams['dashboard_columns'],
+                    xtype: 'buttongroupfield',
+                    fieldLabel: 'Dashboard columns',
+                    name: 'dashboardColumns',
                     defaults: {
                         flex: 1
                     },
                     layout: 'hbox',
-					items: [{
-						text: '1',
-						value: '1'
-					}, {
-						text: '2',
-						value: '2'
-					}, {
-						text: '3',
-						value: '3'
-					}, {
-						text: '4',
-						value: '4'
-					}, {
-						text: '5',
-						value: '5'
-					}]
-                },{
+                    items: [{
+                        text: '1',
+                        value: '1'
+                    }, {
+                        text: '2',
+                        value: '2'
+                    }, {
+                        text: '3',
+                        value: '3'
+                    }, {
+                        text: '4',
+                        value: '4'
+                    }, {
+                        text: '5',
+                        value: '5'
+                    }]
+                }, {
+                    xtype: 'buttongroupfield',
+                    fieldLabel: 'SSH key format',
+                    name: 'sshkeyFormat',
+                    submitValue: false,
+                    value: Scalr.localStorage.get('system-preferred-sshkey-format', ''),
+                    defaults: {
+                        flex: 1
+                    },
+                    layout: 'hbox',
+                    items: [{
+                        value: '',
+                        text: 'Auto'
+                    }, {
+                        value: 'pem',
+                        text: 'PEM'
+                    }, {
+                        value: 'ppk',
+                        text: 'PPK'
+                    }],
+                    plugins: [{
+                        ptype: 'fieldicons',
+                        align: 'left',
+                        position: 'outer',
+                        icons: {
+                            id: 'info',
+                            tooltip: Ext.String.htmlEncode('Select preferred format for server SSH keys you download. Auto means downloading based on your operating system' +
+                                ' (ppk if you\'re using Windows and pem if you\'re using Linux/OSX).')
+                        }
+                    }]
+                }, {
                     xtype: 'combo',
                     fieldLabel: 'Timezone',
-                    store: moduleParams['timezones_list'],
+                    store: moduleParams['timezonesList'],
                     allowBlank: false,
                     forceSelection: true,
                     editable: false,
-                    name: 'timezone',
+                    name: 'ui.timezone',
                     queryMode: 'local',
-                    anyMatch: true
+                    anyMatch: true,
+                    style: 'margin-bottom: 18px' // temp solution, ExtJS layout issue with bottom margin in v5.1.0
                 }]
-
             }]
-		}, {
-			xtype: 'container',
-			layout: 'hbox',
-            cls: 'x-fieldset-separator-bottom',
-            hidden: true,
-			items: [{
-				xtype: 'fieldset',
-				title: 'Default table length',
-				flex: 1,
-                cls: 'x-fieldset-separator-left',
-                items: [{
-                    xtype: 'buttongroupfield',
-                    fieldLabel: 'Items per page',
-                    labelWidth: 110,
-                    value: Ext.state.Manager.get('grid-ui-page-size', 'auto'),
-                    items: [{
-                        text: 'Auto',
-                        value: 'auto',
-                        width: 65
-                    }, {
-                        text: '10',
-                        value: 10,
-                        width: 45
-                    }, {
-                        text: '25',
-                        value: 25,
-                        width: 45
-                    }, {
-                        text: '50',
-                        value: 50,
-                        width: 45
-                    }, {
-                        text: '100',
-                        value: 100,
-                        width: 55
-                    }],
-                    submitValue: false,
-                    listeners: {
-                        change: function(component, newValue) {
-                            Ext.state.Manager.set('grid-ui-page-size', newValue);
-                        }
-                    }
-				}]
-			}]
-        },{
+        }, {
             xtype: 'fieldset',
             title: 'Bookmarks bar&nbsp;&nbsp;<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-info" data-qtip="Drag and drop Bookmarks to reorder them, or click X to remove a Bookmark." />',
             items: [{
@@ -239,13 +224,13 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
                 xtype: 'checkbox',
                 submitValue: false,
                 name: 'donNotShowFavoritesAddMessage',
-                value: Ext.state.Manager.get('system-favorites-suppress-add-message', false),
+                value: Scalr.localStorage.get('system-favorites-suppress-add-message', false),
                 boxLabel: 'Do not show message after adding new link to Bookmarks bar',
                 margin: 0
             }]
-		},{
-			xtype: 'fieldset',
-			title: 'SSH Launcher settings&nbsp;&nbsp;<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-globalvars" data-qtip="All text fields in SSH applet settings support Global Variable Interpolation" />',
+        },{
+            xtype: 'fieldset',
+            title: 'SSH Launcher settings&nbsp;&nbsp;<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-globalvars" data-qtip="All text fields in SSH applet settings support Global Variable Interpolation" />',
             collapsed: loadParams['ssh'] === undefined,
             collapsible: true,
             layout: 'hbox',
@@ -261,21 +246,6 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
                     emptyText: 'Use default'
                 },
                 items: [{
-                    xtype: 'buttongroupfield',
-                    fieldLabel: 'SSH Launcher',
-                    name: 'ssh.console.launcher',
-                    hidden: !Scalr.flags['betaMode'],
-                    defaults: {
-                        width: 110
-                    },
-                    items: [{
-                        text: 'Applet',
-                        value: 'applet'
-                    },{
-                        text: 'Application',
-                        value: 'application'
-                    }]
-                },{
                     xtype: 'textfield',
                     name: 'ssh.console.username',
                     fieldLabel: 'User name',
@@ -313,7 +283,7 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
                     name: 'ssh.console.key_name',
                     flex: 1,
                     fieldLabel: 'SSH key name',
-                    emptyText: 'FARM-{SCALR_FARM_ID}-{SCALR_CLOUD_LOCATION}-' + moduleParams['scalr.id'],
+                    emptyText: 'FARM-{SCALR_FARM_ID}-{SCALR_CLOUD_LOCATION}-' + moduleParams['scalrId'],
                     hidden: !Scalr.isAllowed('SECURITY_SSH_KEYS'),
                     plugins: [{
                         ptype: 'fieldicons',
@@ -324,7 +294,7 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
                             tooltip: 'Scalr will automatically provide the SSH keys it generates to use with your hosts to the SSH Launcher Applet. '+
                             'If you\'re using Scalr keys, we suggest keeping this default unchanged. <br/>However, if you\'d like to use a custom SSH Key '+
                             '(perhaps because you have configured SSH Key Governance), then you can simply add the key in ~/.ssh/scalr-ssh-keys. ' +
-                            'Scalr will not override it. <br/>View <a href="http:/scalr-wiki.atlassian.net" target="_blank">this Wiki page for important information</a>.'
+                            'Scalr will not override it. <br/>View <a href="http://scalr-wiki.atlassian.net" target="_blank">this Wiki page for important information</a>.'
                         }
                     }]
                 },{
@@ -383,21 +353,21 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
                 xtype: 'component',
                 flex: 1/3
             }]
-		}],
+        }],
 
-		dockedItems: [{
-			xtype: 'container',
-			dock: 'bottom',
-			cls: 'x-docked-buttons-mini',
-			layout: {
-				type: 'hbox',
-				pack: 'center'
-			},
-			items: [{
-				xtype: 'button',
-				text: 'Save',
-				handler: function() {
-					if (form.getForm().isValid()) {
+        dockedItems: [{
+            xtype: 'container',
+            dock: 'bottom',
+            cls: 'x-docked-buttons-mini',
+            layout: {
+                type: 'hbox',
+                pack: 'center'
+            },
+            items: [{
+                xtype: 'button',
+                text: 'Save',
+                handler: function() {
+                    if (form.getForm().isValid()) {
                         var currentFavorites = Scalr.utils.getFavorites(Scalr.scope),
                             newFavorites = [], uniqIds = {};
                         form.down('#bookmarks').store.getUnfiltered().each(function(rec){
@@ -409,42 +379,43 @@ Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
                                 }
                             });
                         });
-                        Ext.state.Manager.set('system-favorites-suppress-add-message', form.getForm().findField('donNotShowFavoritesAddMessage').getValue());
-						Scalr.Request({
-							processBox: {
-								type: 'save'
-							},
-							url: '/core/xSaveSettings/',
-							form: this.up('form').getForm(),
-							scope: this,
-							success: function (data, response, options) {
-								if (this.up('form').down('[name="dashboard_columns"]') != moduleParams['dashboard_columns']) {
-									Scalr.event.fireEvent('update', '/dashboard', data.panel);
-								}
-                                Scalr.storage.set('system-favorites-' + Scalr.scope, newFavorites);
+                        Scalr.localStorage.set('system-favorites-suppress-add-message', form.getForm().findField('donNotShowFavoritesAddMessage').getValue());
+                        Scalr.Request({
+                            processBox: {
+                                type: 'save'
+                            },
+                            url: '/core/xSaveSettings/',
+                            form: this.up('form').getForm(),
+                            scope: this,
+                            success: function (data, response, options) {
+                                if (data.dashboard) {
+                                    Scalr.event.fireEvent('update', '/dashboard', data.dashboard);
+                                }
+
+                                Scalr.localStorage.set('system-preferred-sshkey-format', form.down('[name="sshkeyFormat"]').getValue());
+                                Scalr.localStorage.set('system-favorites-' + Scalr.scope, newFavorites);
                                 Scalr.application.updateContext(function(){
                                     Scalr.event.fireEvent('update', '/account/user/gravatar', data['gravatarHash'] ||'');
                                     Scalr.event.fireEvent('close');
                                 }, true);
-							}
-						});
+                            }
+                        });
                     }
-				}
-			}, {
-				xtype: 'button',
-				text: 'Cancel',
-				handler: function() {
-					Scalr.event.fireEvent('close');
-				}
-			}]
-		}]
-	});
+                }
+            }, {
+                xtype: 'button',
+                text: 'Cancel',
+                handler: function() {
+                    Scalr.event.fireEvent('close');
+                }
+            }]
+        }]
+    });
 
-    moduleParams['ssh.console.launcher'] = moduleParams['ssh.console.launcher'] || 'applet';
     moduleParams['ssh.console.disable_key_auth'] = moduleParams['ssh.console.disable_key_auth'] || '0';
     moduleParams['ssh.console.enable_agent_forwarding'] = moduleParams['ssh.console.enable_agent_forwarding'] || '0';
-	form.getForm().setValues(moduleParams);
-	return form;
+    form.getForm().setValues(moduleParams);
+    return form;
 });
 
 Ext.define('Scalr.ui.ScalrDataViewDragZone', {
@@ -476,7 +447,7 @@ Ext.define('Scalr.ui.ScalrDataViewDragZone', {
 Ext.define('Scalr.ui.ScalrDataViewDropZone', {
     extend: 'Ext.view.DropZone',
 
-	handleNodeDrop : function() {
+    handleNodeDrop : function() {
         this.getIndicator().hide();
     },
 
@@ -570,8 +541,8 @@ Ext.define('Scalr.ui.ScalrDataViewDragDrop', {
     enableDrop: true,
 
     enableDrag: true,
-	offsetY: 0,
-	handleNodeDrop: Ext.emptyFn,
+    offsetY: 0,
+    handleNodeDrop: Ext.emptyFn,
 
     init : function(view) {
         view.on('render', this.onViewRender, this, {single: true});
@@ -618,7 +589,7 @@ Ext.define('Scalr.ui.ScalrDataViewDragDrop', {
             me.dropZone = new Scalr.ui.ScalrDataViewDropZone({
                 view: view,
                 ddGroup: me.dropGroup || me.ddGroup,
-				offsetY: me.offsetY
+                offsetY: me.offsetY
             });
         }
     }

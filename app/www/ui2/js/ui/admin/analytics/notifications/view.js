@@ -84,46 +84,39 @@ Scalr.regPage('Scalr.ui.admin.analytics.notifications.view', function (loadParam
                     }
                 },
                 setValues: function(id, data) {
-                    //this.columns[3].buttons[0].text = id[1] == 'ccs' ? 'CC lead' : 'Project lead';
                     this.store.load({data: data});
                 },
                 getValues: function() {
                     var grid = this,
                         store = grid.store,
                         items = [],
-                        error,
-                        record,
-                        singleEmptyRecord = false;
-                    if (store.getCount() == 1) {
-                        record = store.first();
-                        if (!record.get('uuid') && !record.get('notificationType') && !record.get('threshold')) {
-                            singleEmptyRecord = true;
-                        }
-                    }
-
-                    if (!singleEmptyRecord) {
-                        store.getUnfiltered().each(function(record){
-                            var colIndex;
-                            if (!record.get('notificationType')) {
-                                colIndex = 0;
-                            } else if (!record.get('threshold')) {
-                                colIndex = 1;
-                            } else if (record.get('recipientType') == 2 && !record.get('emails')) {
-                                colIndex = 4;
-                            }
-                            if (colIndex !== undefined) {
-                                var widget = grid.columns[colIndex].getWidget(record);
-                                widget.validate();
+                        error;
+                    store.getUnfiltered().each(function(record){
+                        var colIndex;
+                        if (!record.get('notificationType')) {
+                            colIndex = 0;
+                        } else if (!record.get('threshold')) {
+                            colIndex = 1;
+                        } else if (record.get('recipientType') == 2) {
+                            var widget = grid.columns[4].getWidget(record);//email column
+                            if (widget && !widget.validate()) {
                                 widget.focus();
                                 error = true;
                                 return false;
-                            } else {
-                                var data = record.getData();
-                                delete data.id;
-                                items.push(data);
                             }
-                        });
-                    }
+                        }
+                        if (colIndex !== undefined) {
+                            var widget = grid.columns[colIndex].getWidget(record);
+                            widget.validate();
+                            widget.focus();
+                            error = true;
+                            return false;
+                        } else {
+                            var data = record.getData();
+                            delete data.id;
+                            items.push(data);
+                        }
+                    });
                     return !error ? {items: items} : false;
                 },
                 columns: [{
@@ -289,6 +282,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.notifications.view', function (loadParam
                         validator: function(value) {
                             if (value) {
                                 var ar = value.split(','), i, errors = [];
+                                ar = Ext.Array.map(ar, Ext.String.trim);
                                 for (i = 0; i < ar.length; i++) {
                                     if (! Ext.form.field.VTypes.email(ar[i]))
                                         errors.push(ar[i]);
@@ -384,37 +378,31 @@ Scalr.regPage('Scalr.ui.admin.analytics.notifications.view', function (loadParam
                     var grid = this,
                         store = grid.store,
                         items = [],
-                        error,
-                        record,
-                        singleEmptyRecord = false;
-                    if (store.getCount() == 1) {
-                        record = store.first();
-                        if (!record.get('uuid') && !record.get('subjectType')) {
-                            singleEmptyRecord = true;
-                        }
-                    }
-
-                    if (!singleEmptyRecord) {
-                        store.getUnfiltered().each(function(record){
-                            var colIndex;
-                            if (!record.get('subjectType')) {
-                                colIndex = 0;
-                            } else if (!record.get('emails')) {
-                                colIndex = 3;
-                            }
-                            if (colIndex !== undefined) {
-                                var widget = grid.columns[colIndex].getWidget(record);
-                                widget.validate();
+                        error;
+                    store.getUnfiltered().each(function(record){
+                        var colIndex;
+                        if (!record.get('subjectType')) {
+                            colIndex = 0;
+                        } else {
+                            var widget = grid.columns[3].getWidget(record);//email column
+                            if (widget && !widget.validate()) {
                                 widget.focus();
                                 error = true;
                                 return false;
-                            } else {
-                                var data = record.getData();
-                                delete data.id;
-                                items.push(data);
                             }
-                        });
-                    }
+                        }
+                        if (colIndex !== undefined) {
+                            var widget = grid.columns[colIndex].getWidget(record);
+                            widget.validate();
+                            widget.focus();
+                            error = true;
+                            return false;
+                        } else {
+                            var data = record.getData();
+                            delete data.id;
+                            items.push(data);
+                        }
+                    });
                     return !error ? {items: items} : false;
                 },
                 listeners: {
@@ -559,6 +547,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.notifications.view', function (loadParam
                         validator: function(value) {
                             if (value) {
                                 var ar = value.split(','), i, errors = [];
+                                ar = Ext.Array.map(ar, Ext.String.trim);
                                 for (i = 0; i < ar.length; i++) {
                                     if (! Ext.form.field.VTypes.email(ar[i]))
                                         errors.push(ar[i]);

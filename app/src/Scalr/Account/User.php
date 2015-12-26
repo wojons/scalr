@@ -4,6 +4,7 @@ use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectPropertyEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
+use Scalr\Acl\Acl;
 
 /**
  * @deprecated  This class has been deprecated since version 5.4.0. Please use new Scalr\Model\Entity\Account\User entity.
@@ -25,9 +26,9 @@ class Scalr_Account_User extends Scalr_Model
     const TYPE_ACCOUNT_SUPER_ADMIN = 'AccountSuperAdmin';
     const TYPE_TEAM_USER = 'TeamUser';
 
-    const SETTING_API_ACCESS_KEY 	= 'api.access_key';
-    const SETTING_API_SECRET_KEY 	= 'api.secret_key';
-    const SETTING_API_ENABLED 		= 'api.enabled';
+    const SETTING_API_ACCESS_KEY    = 'api.access_key';
+    const SETTING_API_SECRET_KEY    = 'api.secret_key';
+    const SETTING_API_ENABLED       = 'api.enabled';
 
     const SETTING_UI_ENVIRONMENT = 'ui.environment'; // last used
     const SETTING_UI_TIMEZONE = 'ui.timezone';
@@ -35,10 +36,9 @@ class Scalr_Account_User extends Scalr_Model
     const SETTING_UI_CHANGELOG_TIME = 'ui.changelog.time';
 
     const SETTING_GRAVATAR_EMAIL = 'gravatar.email';
-    
     const SETTING_LDAP_EMAIL = 'ldap.email';
     const SETTING_LDAP_USERNAME = 'ldap.username';
-    
+
     const SETTING_LEAD_VERIFIED = 'lead.verified';
     const SETTING_LEAD_HASH = 'lead.hash';
 
@@ -50,7 +50,6 @@ class Scalr_Account_User extends Scalr_Model
     const VAR_SECURITY_IP_WHITELIST = 'security.ip.whitelist';
     const VAR_API_IP_WHITELIST = 'api.ip.whitelist';
 
-    const VAR_SSH_CONSOLE_LAUNCHER = 'ssh.console.launcher';
     const VAR_SSH_CONSOLE_USERNAME = 'ssh.console.username';
     const VAR_SSH_CONSOLE_IP = 'ssh.console.ip';
     const VAR_SSH_CONSOLE_PORT = 'ssh.console.port';
@@ -88,7 +87,6 @@ class Scalr_Account_User extends Scalr_Model
         $password,
         $accountId;
 
-
     protected $account;
     protected $permissions;
     protected $settingsCache = array();
@@ -111,22 +109,23 @@ class Scalr_Account_User extends Scalr_Model
     }
 
     /**
+     * Loads user by the specified unique setting
      *
-     * @return Scalr_Account_User
+     * @param     string  $name   The setting name
+     * @param     string  $value  The value
+     * @return    Scalr_Account_User
      */
     public function loadBySetting($name, $value)
     {
-        $id = $this->db->GetOne("SELECT user_id FROM account_user_settings WHERE name = ? AND value = ? LIMIT 1",
-            array($name, $value)
-        );
-        if (!$id)
-            return false;
-        else
-            return $this->loadById($id);
+        $id = $this->db->GetOne("SELECT user_id FROM account_user_settings WHERE name = ? AND value = ? LIMIT 1", [$name, $value]);
+
+        return !$id ? false : $this->loadById($id);
     }
 
     /**
-     * @param $accessKey
+     * Loads user by the specified access key
+     *
+     * @param  string    $accessKey  An access key
      * @return Scalr_Account_User
      */
     public function loadByApiAccessKey($accessKey)
@@ -135,27 +134,24 @@ class Scalr_Account_User extends Scalr_Model
     }
 
     /**
+     * Loads user by an email
      *
-     * @return Scalr_Account_User
+     * @param   string   $email The email of the user
+     * @return  Scalr_Account_User
      */
     public function loadByEmail($email, $accountId = null)
     {
-        if ($accountId)
-            $info = $this->db->GetRow("SELECT * FROM account_users WHERE `email` = ? AND account_id = ? LIMIT 1",
-                array($email, $accountId)
-            );
-        else
-            $info = $this->db->GetRow("SELECT * FROM account_users WHERE `email` = ? LIMIT 1",
-                array($email)
-            );
+        if ($accountId) {
+            $info = $this->db->GetRow("SELECT * FROM account_users WHERE `email` = ? AND account_id = ? LIMIT 1", [$email, $accountId]);
+        } else {
+            $info = $this->db->GetRow("SELECT * FROM account_users WHERE `email` = ? LIMIT 1", [$email]);
+        }
 
-        if (!$info)
-            return false;
-        else
-            return $this->loadBy($info);
+        return !$info ? false : $this->loadBy($info);
     }
 
     /**
+     * Gets scalr permission object
      *
      * @return Scalr_Permissions
      */
@@ -171,6 +167,7 @@ class Scalr_Account_User extends Scalr_Model
     {
         $this->id = 0;
         $this->accountId = $accountId;
+        $this->loginattempts = 0;
 
         if ($this->isEmailExists($email))
             throw new Exception('Uh oh. Seems like that email is already in use. Try another?');
@@ -198,7 +195,9 @@ class Scalr_Account_User extends Scalr_Model
     }
 
     /**
-     * @return integer
+     * Gets effective user identifier
+     *
+     * @return  int  Returns identifier of the user
      */
     public function getId()
     {
@@ -236,7 +235,7 @@ class Scalr_Account_User extends Scalr_Model
     {
         return $this->email;
     }
-    
+
     /**
      * Gets LDAP username of the User
      *
@@ -247,7 +246,7 @@ class Scalr_Account_User extends Scalr_Model
         $ldapUsername = $this->getSetting(self::SETTING_LDAP_USERNAME);
         if (!$ldapUsername)
             $ldapUsername = strtok($this->getEmail(), '@');
-        
+
         return $ldapUsername;
     }
 
@@ -354,7 +353,8 @@ class Scalr_Account_User extends Scalr_Model
 
     /**
      * Get user dashboard
-     * @param $envId
+     *
+     * @param  int $envId
      * @return array
      */
     public function getDashboard($envId)
@@ -389,11 +389,11 @@ class Scalr_Account_User extends Scalr_Model
     {
         // check consistency
         $usedWidgets = array();
-        if (is_array($value) &&
-            isset($value['configuration']) && is_array($value['configuration']) &&
-            isset($value['flags']) && is_array($value['flags'])
-        ) {
+
+        if (is_array($value) && isset($value['configuration']) && is_array($value['configuration']) &&
+            isset($value['flags']) && is_array($value['flags'])) {
             $configuration = array();
+
             foreach ($value['configuration'] as $col) {
                 if (is_array($col)) {
                     $column = array();
@@ -404,13 +404,16 @@ class Scalr_Account_User extends Scalr_Model
                             if (in_array($wid['name'], [
                                 'dashboard.usagelaststat',
                                 'dashboard.uservoice'
-                            ]))
+                            ])) {
                                 continue;
+                            }
 
                             $usedWidgets[] = $wid['name'];
+
                             array_push($column, $wid);
                         }
                     }
+
                     array_push($configuration, $column);
                 }
             }
@@ -422,7 +425,7 @@ class Scalr_Account_User extends Scalr_Model
         }
 
         $srlvalue = serialize($value);
-        //UNIQUE KEY `user_id` (`user_id`,`env_id`)
+
         if (! $envId) {
             // if envId is NULL, foreign key doesn't work, remove possible record (todo: refactor)
             $this->db->Execute('DELETE FROM account_user_dashboard WHERE user_id = ? AND env_id IS NULL', [$this->id]);
@@ -433,17 +436,16 @@ class Scalr_Account_User extends Scalr_Model
             SET `user_id` = ?, `env_id` = ?, `value` = ?
             ON DUPLICATE KEY UPDATE
                 `value` = ?
-        ", array(
-            $this->id, $envId, $srlvalue, $srlvalue
-        ));
+        ", [$this->id, $envId, $srlvalue, $srlvalue]);
     }
 
     /**
-     * Add widget to dashboard
-     * @param int $envId
-     * @param array $widgetConfig
-     * @param int $columnNumber
-     * @param int $position
+     * Adds widget to dashboard
+     *
+     * @param int   $envId        The identifier of the environment
+     * @param array $widgetConfig Widget config
+     * @param int   $columnNumber optional the number of the column
+     * @param int   $position     optional the position
      */
     public function addDashboardWidget($envId, $widgetConfig, $columnNumber = 0, $position = 0)
     {
@@ -457,12 +459,15 @@ class Scalr_Account_User extends Scalr_Model
 
     public function updatePassword($pwd)
     {
-        $this->password = $this->getCrypto()->hash(trim($pwd));
+        $this->password = $this->getCrypto()->hash($pwd);
     }
 
     /**
-     * @param $pwd
-     * @return bool
+     * Checks password
+     *
+     * @param  string    $pwd                 A password
+     * @param  bool      $updateLoginAttempt  optional Whether it should update the number of attempts
+     * @return bool Returns true if password is valid
      */
     public function checkPassword($pwd, $updateLoginAttempt = true)
     {
@@ -470,23 +475,29 @@ class Scalr_Account_User extends Scalr_Model
             if ($updateLoginAttempt) {
                 $this->updateLoginAttempt(1);
             }
+
             return false;
-        }
-        else {
+        } else {
             if ($updateLoginAttempt) {
                 $this->updateLoginAttempt();
             }
+
             return true;
         }
     }
 
-    public function updateLoginAttempt($loginattempt = NULL)
+    /**
+     * Increases or resets the number of attempts to sign in
+     *
+     * @param   int|null   $loginattempt  optional The number to increase
+     */
+    public function updateLoginAttempt($loginattempt = null)
     {
         if ($loginattempt) {
-            $this->db->Execute('UPDATE `account_users` SET loginattempts = loginattempts + ? WHERE id = ?', array($loginattempt, $this->id));
+            $this->db->Execute("UPDATE `account_users` SET loginattempts = loginattempts + ? WHERE id = ?", [$loginattempt, $this->id]);
             $this->loginattempts++;
         } else {
-            $this->db->Execute('UPDATE `account_users` SET loginattempts = 0 WHERE id = ?', array($this->id));
+            $this->db->Execute("UPDATE `account_users` SET loginattempts = 0 WHERE id = ?", [$this->id]);
             $this->loginattempts = 0;
         }
     }
@@ -498,18 +509,17 @@ class Scalr_Account_User extends Scalr_Model
 
     public function isEmailExists($email)
     {
-        //TODO please use unique key (account_id,email)
-        return $this->db->getOne('SELECT * FROM `account_users` WHERE email = ? AND account_id = ? LIMIT 1', array($email, $this->accountId)) ? true : false;
+        return $this->db->getOne("SELECT 1 FROM `account_users` WHERE email = ? AND account_id = ? LIMIT 1", [$email, $this->accountId]) ? true : false;
     }
 
     public function getTeams()
     {
-        return $this->db->getAll('
-            SELECT at.id, at.name
+        return $this->db->getAll("
+            SELECT at.id, at.name, at.description
             FROM account_teams at
             JOIN account_team_users tu ON at.id = tu.team_id
             WHERE tu.user_id = ?
-        ', array($this->id));
+        ", [$this->id]);
     }
 
     /**
@@ -520,9 +530,9 @@ class Scalr_Account_User extends Scalr_Model
      */
     public function isInTeam($teamId)
     {
-        return !!$this->db->getOne('
+        return !!$this->db->getOne("
             SELECT 1 FROM account_team_users WHERE user_id = ? AND team_id = ?
-        ', [$this->id, $teamId]);
+        ", [$this->id, $teamId]);
     }
 
     /**
@@ -610,22 +620,24 @@ class Scalr_Account_User extends Scalr_Model
             // create all links between LDAP user and teams ( == LDAP group)
             $groups[] = $this->getAccountId();
 
-            $teams = $this->db->GetCol('SELECT id FROM account_teams
-            WHERE name IN(' . join(',', array_fill(0, count($groups) - 1, '?')) . ') AND account_id = ?', $groups);
+            $teams = $this->db->GetCol("
+                SELECT id FROM account_teams
+                WHERE name IN(" . join(',', array_fill(0, count($groups) - 1, '?')) . ") AND account_id = ?
+            ", $groups);
 
-            // team exists in DB, so we can save link
+            //Team exists in DB, so we can save link
             foreach ($teams as $id) {
                 $team = new Scalr_Account_Team();
                 $team->loadById($id);
 
-                if (! $team->isTeamUser($this->id))
+                if (!$team->isTeamUser($this->id))
                     $team->addUser($this->id);
 
                 unset($currentTeamIds[$id]);
             }
         }
 
-        // remove old teams
+        //Remove old teams
         foreach ($currentTeamIds as $id => $name) {
             $team = new Scalr_Account_Team();
             $team->loadById($id);
@@ -648,37 +660,40 @@ class Scalr_Account_User extends Scalr_Model
         }
 
         if ($this->canManageAcl()) {
-            return $this->db->getAll('SELECT ce.id, ce.name FROM client_environments ce WHERE ce.client_id = ?' . $like, array(
-                $this->getAccountId()
-            ));
+            return $this->db->getAll("SELECT ce.id, ce.name FROM client_environments ce WHERE ce.client_id = ?" . $like, [$this->getAccountId()]);
         } else {
             $teams = array();
-            foreach ($this->getTeams() as $team)
+            foreach ($this->getTeams() as $team) {
                 $teams[] = $team['id'];
+            }
 
             if (count($teams)) {
-                return $this->db->getAll('
+                return $this->db->getAll("
                     SELECT ce.id, ce.name FROM client_environments ce
                     JOIN account_team_envs te ON ce.id = te.env_id
-                    WHERE te.team_id IN (' . implode(',', $teams) . ')'
-                    . $like . '
+                    WHERE te.team_id IN (" . implode(',', $teams) . ")"
+                    . $like . "
                     GROUP BY ce.id
-                ');
+                ");
             }
         }
 
-        return array();
+        return [];
     }
 
     /**
-     * Get default environment (or given) and check access to it
-     * @param integer $envId
-     * @return Scalr_Environment
-     * @throws Scalr_Exception_Core
+     * Gets environment object for the specified identifier.
+     *
+     * In case the identifier is not specified it takes default Environment from the
+     * list of the available for current User.
+     *
+     * @param   int  $envId  optional  The identifier of the Environment
+     * @return  Scalr_Environment  Returns Environment object
+     * @throws  Scalr_Exception_Core
      */
     public function getDefaultEnvironment($envId = 0)
     {
-        if ($envId || ($envId = (int)$this->getSetting(Scalr_Account_User::SETTING_UI_ENVIRONMENT))) {
+        if ($envId || ($envId = (int) $this->getSetting(Scalr_Account_User::SETTING_UI_ENVIRONMENT))) {
             try {
                 $environment = Scalr_Environment::init()->loadById($envId);
                 $this->getPermissions()->validate($environment);
@@ -689,6 +704,7 @@ class Scalr_Account_User extends Scalr_Model
 
         if (empty($environment)) {
             $envs = $this->getEnvironments();
+
             if (count($envs)) {
                 $envId = $envs[0]['id'];
                 $environment = Scalr_Environment::init()->loadById($envId);
@@ -698,6 +714,7 @@ class Scalr_Account_User extends Scalr_Model
         }
 
         $this->getPermissions()->validate($environment);
+
         return $environment;
     }
 
@@ -711,6 +728,7 @@ class Scalr_Account_User extends Scalr_Model
     public function isTeamOwner($teamId = null)
     {
         $ret = false;
+
         if ($teamId) {
             try {
                 $team = Scalr_Account_Team::init();
@@ -755,6 +773,7 @@ class Scalr_Account_User extends Scalr_Model
 
     public function getUserInfo()
     {
+        $info = [];
         $info['id'] = $this->id;
         $info['status'] = $this->status;
         $info['email'] = $this->getEmail();
@@ -925,7 +944,6 @@ class Scalr_Account_User extends Scalr_Model
     public function setSshConsoleSettings($settings)
     {
         $list = array(
-            Scalr_Account_User::VAR_SSH_CONSOLE_LAUNCHER,
             Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME,
             Scalr_Account_User::VAR_SSH_CONSOLE_IP,
             Scalr_Account_User::VAR_SSH_CONSOLE_PORT,
@@ -944,7 +962,6 @@ class Scalr_Account_User extends Scalr_Model
     {
         $result = array();
         $list = array(
-            Scalr_Account_User::VAR_SSH_CONSOLE_LAUNCHER,
             Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME,
             Scalr_Account_User::VAR_SSH_CONSOLE_IP,
             Scalr_Account_User::VAR_SSH_CONSOLE_PORT,
@@ -1002,4 +1019,35 @@ class Scalr_Account_User extends Scalr_Model
         return true;
     }
 
+    /**
+     * Checks whether Farm can be accessed by user
+     *
+     * @param       int         $farmId   ID of Farm
+     * @param       int         $envId    ID of Environment
+     * @param       string      $perm     optional Name of permission
+     * @return      boolean     Returns true if access is granted
+     */
+    public function hasAccessFarm($farmId, $envId, $perm = null)
+    {
+        try {
+            $farm = DBFarm::LoadByID($farmId);
+        } catch (Exception $e) {
+            return false;
+        }
+
+        if ($farm->EnvID != $envId)
+            return false;
+
+        $superposition = $this->getAclRolesByEnvironment($envId);
+        $result = $superposition->isAllowed(Acl::RESOURCE_FARMS, $perm);
+        if (!$result && $farm->teamId && $this->isInTeam($farm->teamId)) {
+            $result = $superposition->isAllowed(Acl::RESOURCE_TEAM_FARMS, $perm);
+        }
+
+        if (!$result && $farm->createdByUserId && $this->id == $farm->createdByUserId) {
+            $result = $superposition->isAllowed(Acl::RESOURCE_OWN_FARMS, $perm);
+        }
+
+        return $result;
+    }
 }

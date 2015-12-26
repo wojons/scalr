@@ -22,7 +22,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.attach', function (loadParams,
                 anyMatch: true,
                 selectSingleRecordOnPartialMatch: true,
 				store: {
-					fields: [ 'id', 'name' ],
+					fields: [ 'id', 'name', 'farmName', 'farmRoleName'],
 					data: moduleParams.servers,
 					proxy: 'object'
 				},
@@ -30,6 +30,16 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.attach', function (loadParams,
 				displayField: 'name',
 				valueField: 'id',
 				queryMode: 'local',
+                cls: 'x-boundlist-alt',
+                tpl:
+                    '<tpl for=".">' +
+                        '<div class="x-boundlist-item" style="height: auto; width: auto">' +
+                            '<div class="x-semibold">{name}</div>' +
+                            '<tpl if="farmName && farmRoleName">' +
+                                '<div <div style="line-height: 28px;">{farmName} &rarr; {farmRoleName}</div>' +
+                            '</tpl>' +
+                        '</div>' +
+                    '</tpl>',
 				listeners: {
 					added: function() {
 						this.setValue(this.store.getAt(0).get('id'));

@@ -1,4 +1,7 @@
 <?php
+
+use Scalr\Model\Entity;
+
 abstract class Scalr_Db_Msr_Info
 {
     protected  $replicationMaster,
@@ -75,10 +78,13 @@ abstract class Scalr_Db_Msr_Info
                         throw $e;
                 }
 
-                $this->dbFarmRole->SetSetting(Scalr_Db_Msr::VOLUME_ID, $storageVolume->id, DBFarmRole::TYPE_LCL);
-            }
-            catch(Exception $e) {
-                $this->logger->error(new FarmLogMessage($this->dbServer->farmId, "Cannot save storage volume: {$e->getMessage()}"));
+                $this->dbFarmRole->SetSetting(Scalr_Db_Msr::VOLUME_ID, $storageVolume->id, Entity\FarmRoleSetting::TYPE_LCL);
+            } catch (Exception $e) {
+                $this->logger->error(new FarmLogMessage(
+                    $this->dbServer->farmId,
+                    "Cannot save storage volume: {$e->getMessage()}",
+                    !empty($this->dbServer->serverId) ? $this->dbServer->serverId : null
+                ));
             }
         }
 
@@ -114,18 +120,22 @@ abstract class Scalr_Db_Msr_Info
                         throw $e;
                 }
 
-                $this->dbFarmRole->SetSetting(Scalr_Db_Msr::SNAPSHOT_ID, $storageSnapshot->id, DBFarmRole::TYPE_LCL);
-            }
-            catch(Exception $e) {
-                $this->logger->error(new FarmLogMessage($event->DBServer->farmId, "Cannot save storage snapshot: {$e->getMessage()}"));
+                $this->dbFarmRole->SetSetting(Scalr_Db_Msr::SNAPSHOT_ID, $storageSnapshot->id, Entity\FarmRoleSetting::TYPE_LCL);
+            } catch (Exception $e) {
+                $this->logger->error(new FarmLogMessage(
+                    $this->dbServer->farmId,
+                    "Cannot save storage snapshot: {$e->getMessage()}",
+                    !empty($this->dbServer->serverId) ? $this->dbServer->serverId : null
+                ));
             }
         }
     }
 
-    public function __construct(DBFarmRole $dbFarmRole, DBServer $dbServer, $type = null) {
+    public function __construct(DBFarmRole $dbFarmRole, DBServer $dbServer, $type = null)
+    {
         $this->dbFarmRole = $dbFarmRole;
         $this->dbServer = $dbServer;
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
 
         $this->replicationMaster = (int)$dbServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER);
 
@@ -157,7 +167,7 @@ abstract class Scalr_Db_Msr_Info
         $fsType = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_FSTYPE);
         if ($fsType)
             $volumeConfig->fstype = $fsType;
-        
+
         $type = $volumeConfig->type;
 
         // For any Block storage APIs
@@ -253,7 +263,7 @@ abstract class Scalr_Db_Msr_Info
             $volumeConfig->volumeType = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_TYPE);
             $volumeConfig->encrypted = (int)$this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_ENCRYPTED);
             $volumeConfig->tags = $this->dbServer->getAwsTags();
-            
+
             if ($volumeConfig->volumeType == 'io1')
                 $volumeConfig->iops = $this->dbFarmRole->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_IOPS);
         }
@@ -296,7 +306,11 @@ abstract class Scalr_Db_Msr_Info
                     }
                 }
             } catch (Exception $e) {
-                $this->logger->error(new FarmLogMessage($this->dbServer->farmId, "Cannot get snaphotConfig for hostInit message: {$e->getMessage()}"));
+                $this->logger->error(new FarmLogMessage(
+                    $this->dbServer->farmId,
+                    "Cannot get snaphotConfig for hostInit message: {$e->getMessage()}",
+                    !empty($this->dbServer->serverId) ? $this->dbServer->serverId : null
+                ));
             }
         }
 

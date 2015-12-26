@@ -7,8 +7,8 @@ class Scalr_UI_Controller_Webhooks_History extends Scalr_UI_Controller
 {
     public function hasAccess()
     {
-        return ($this->request->getScope() == WebhookConfig::SCOPE_ENVIRONMENT && $this->request->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_WEBHOOKS) && !$this->user->isScalrAdmin() ||
-               $this->request->getScope() == WebhookConfig::SCOPE_ACCOUNT && $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_WEBHOOKS) && !$this->user->isScalrAdmin() ||
+        return ($this->request->getScope() == WebhookConfig::SCOPE_ENVIRONMENT && $this->request->isAllowed(Acl::RESOURCE_WEBHOOKS_ENVIRONMENT) && !$this->user->isScalrAdmin() ||
+               $this->request->getScope() == WebhookConfig::SCOPE_ACCOUNT && $this->request->isAllowed(Acl::RESOURCE_WEBHOOKS_ACCOUNT) && !$this->user->isScalrAdmin() ||
                $this->request->getScope() == WebhookConfig::SCOPE_SCALR && $this->user->isScalrAdmin());
     }
 

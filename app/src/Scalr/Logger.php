@@ -1,8 +1,6 @@
 <?php
 namespace Scalr;
 
-use InvalidArgumentException;
-
 /**
  * Logger
  *
@@ -11,6 +9,18 @@ use InvalidArgumentException;
  */
 class Logger
 {
+    /**
+     * Helps to convert a level into integer representation for writing into DB
+     *
+     * @var array
+     */
+    protected static $severities = [
+        "DEBUG" => 1,
+        "INFO"  => 2,
+        "WARN"  => 3,
+        "ERROR" => 4,
+        "FATAL" => 5
+    ];
 
     //Log level
     const LEVEL_OFF       = 2147483647;
@@ -91,7 +101,7 @@ class Logger
      * Sets the name of a logger category
      *
      * @param   string    $name  The name of the category or class
-     * @return  \Scalr\Logger\Logger
+     * @return  Logger
      */
     public function setName($name)
     {
@@ -115,7 +125,7 @@ class Logger
      *
      * @param   int|string   $logLevel  A log level also accepts (FATAL, ERROR, WARN, INFO, DEBUG)
      * @return  Logger
-     * @throws  InvalidArgumentException
+     * @throws  \InvalidArgumentException
      */
     public function setLevel($logLevel)
     {
@@ -125,7 +135,7 @@ class Logger
             $const = 'static::LEVEL_' . strtoupper($logLevel);
 
             if (!defined($const)) {
-               throw new InvalidArgumentException(sprintf("Unknown log level: %s", strip_tags($logLevel)));
+               throw new \InvalidArgumentException(sprintf("Unknown log level: %s", strip_tags($logLevel)));
             }
 
             $this->level = constant($const);
@@ -148,7 +158,7 @@ class Logger
      * Sets the format of the date
      *
      * @param   string    $dateFormat  The format of the date
-     * @return  \Scalr\Logger\Logger
+     * @return  Logger
      */
     public function setDateFormat($dateFormat)
     {
@@ -172,6 +182,43 @@ class Logger
             $level = constant('static::LEVEL_' . $level);
         }
 
+        if ($message instanceof \FarmLogMessage) {
+            $time = time();
+            $tm = date('YmdH');
+            $hash = md5(":{$message->Message}:{$message->FarmID}:{$this->name}:{$tm}", true);
+
+            try {
+                \Scalr::getDb()->Execute("
+                    INSERT INTO logentries SET
+                        `id` = ?,
+                        `serverid` = ?,
+                        `message`  = ?,
+                        `severity` = ?,
+                        `time`     = ?,
+                        `source`   = ?,
+                        `farmid`   = ?
+                    ON DUPLICATE KEY UPDATE cnt = cnt + 1, `time` = ?", [
+                        $hash,
+                        $message->ServerID,
+                        $message->Message,
+                        self::$severities[self::$logLevelName[$level]],
+                        $time,
+                        $this->name,
+                        $message->FarmID,
+                        $time
+                    ]
+                );
+            } catch (\Exception $e) {
+                trigger_error($e->getMessage(), E_USER_WARNING);
+            }
+
+            $message = "[FarmID: {$message->FarmID}] {$message->Message}";
+        }
+
+        if (stripos(PHP_SAPI, "cli") === false) {
+            return;
+        }
+
         if ($level >= $this->level) {
             $args = array_slice(func_get_args(), 2);
 
@@ -179,7 +226,7 @@ class Logger
                 date($this->dateFormat),
                 (!empty($this->name) ? $this->name : ''),
                 posix_getpid(),
-                (isset($this::$logLevelName[$level]) ? $this::$logLevelName[$level] : $level),
+                (isset(static::$logLevelName[$level]) ? static::$logLevelName[$level] : $level),
                 (empty($args) ? $message : vsprintf($message, $args))
             ));
         }
@@ -195,7 +242,7 @@ class Logger
     public function debug($message, $args = null)
     {
         $args = func_get_args();
-        array_unshift($args, $this::LEVEL_DEBUG);
+        array_unshift($args, self::LEVEL_DEBUG);
         call_user_func_array([$this, 'log'], $args);
     }
 
@@ -209,7 +256,7 @@ class Logger
     public function info($message, $args = null)
     {
         $args = func_get_args();
-        array_unshift($args, $this::LEVEL_INFO);
+        array_unshift($args, self::LEVEL_INFO);
         call_user_func_array([$this, 'log'], $args);
     }
 
@@ -223,7 +270,7 @@ class Logger
     public function warn($message, $args = null)
     {
         $args = func_get_args();
-        array_unshift($args, $this::LEVEL_WARN);
+        array_unshift($args, self::LEVEL_WARN);
         call_user_func_array([$this, 'log'], $args);
     }
 
@@ -237,7 +284,7 @@ class Logger
     public function error($message, $args = null)
     {
         $args = func_get_args();
-        array_unshift($args, $this::LEVEL_ERROR);
+        array_unshift($args, self::LEVEL_ERROR);
         call_user_func_array([$this, 'log'], $args);
     }
 
@@ -251,7 +298,7 @@ class Logger
     public function fatal($message, $args = null)
     {
         $args = func_get_args();
-        array_unshift($args, $this::LEVEL_FATAL);
+        array_unshift($args, self::LEVEL_FATAL);
         call_user_func_array([$this, 'log'], $args);
     }
 }

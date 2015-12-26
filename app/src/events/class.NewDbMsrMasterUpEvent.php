@@ -1,6 +1,6 @@
 <?php
 
-class NewDbMsrMasterUpEvent extends Event
+class NewDbMsrMasterUpEvent extends AbstractServerEvent
 {
 
     /**

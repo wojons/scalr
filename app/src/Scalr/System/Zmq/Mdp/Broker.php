@@ -3,7 +3,7 @@ namespace Scalr\System\Zmq\Mdp;
 
 use ZMQ, ZMQContext, ZMQSocket, ZMQPoll, stdClass;
 use Scalr\System\Zmq\Zmsg;
-use Scalr\LoggerTrait;
+use Scalr\LoggerAwareTrait;
 
 /**
  * Majordomo Protocol Broker API
@@ -14,7 +14,7 @@ use Scalr\LoggerTrait;
  */
 class Broker
 {
-    use LoggerTrait;
+    use LoggerAwareTrait;
 
     const HEARTBEAT_LIVENESS = Mdp::HEARTBEAT_LIVENESS;
 
@@ -255,9 +255,10 @@ class Broker
     {
         if (!isset($this->services[$name])) {
             $service = new stdClass();
-            $service->name = $name;
+            $service->name     = $name;
             $service->requests = [];
-            $service->waiting = [];
+            $service->waiting  = [];
+            $service->workers  = 0;
 
             $this->services[$name] = $service;
         }

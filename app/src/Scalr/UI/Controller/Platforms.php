@@ -4,6 +4,8 @@ use Scalr\Modules\PlatformFactory;
 use Scalr\UI\Request\JsonData;
 use Scalr\Farm\Role\FarmRoleStorageConfig;
 use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
+use Scalr\DataType\ScopeInterface;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
 {
@@ -14,7 +16,6 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
 
     public function getCloudLocations($platforms, $allowAll = true)
     {
-        $ePlatforms = array();
         $locations = array();
 
         if (is_string($platforms))
@@ -23,13 +24,11 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
         if ($allowAll)
             $locations[''] = 'All';
 
-        if ($this->getEnvironment())
-            $ePlatforms = $this->getEnvironment()->getEnabledPlatforms();
-        else
-            $ePlatforms = array_keys(SERVER_PLATFORMS::GetList());
-
-        if (implode('', $platforms) != 'all')
-            $ePlatforms = array_intersect($ePlatforms, $platforms);
+        $ePlatforms = !empty($this->getEnvironment())
+                        ? (in_array('all', (array) $platforms)
+                            ? $this->getEnvironment()->getEnabledPlatforms(true)
+                            : $this->getEnvironment()->getEnabledPlatforms(true, $platforms))
+                        : array_keys(SERVER_PLATFORMS::GetList());
 
         foreach ($ePlatforms as $platform) {
             foreach (PlatformFactory::NewPlatform($platform)->getLocations($this->environment) as $key => $loc)
@@ -41,7 +40,7 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
 
     public function getEnabledPlatforms($addLocations = false, $includeGCELocations = true)
     {
-        $ePlatforms = $this->user->isScalrAdmin() ? array_keys(SERVER_PLATFORMS::GetList()) : $this->getEnvironment()->getEnabledPlatforms();
+        $ePlatforms = $this->request->getScope() != ScopeInterface::SCOPE_ENVIRONMENT ? array_keys(SERVER_PLATFORMS::GetList()) : $this->getEnvironment()->getEnabledPlatforms();
         $lPlatforms = SERVER_PLATFORMS::GetList();
         $platforms = array();
 
@@ -50,7 +49,7 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
                 array(
                     'id' => $platform,
                     'name' => $lPlatforms[$platform],
-                    'locations' => (!in_array($platform, array(SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS))) || $includeGCELocations ? PlatformFactory::NewPlatform($platform)->getLocations($this->environment) : array()
+                    'locations' => (!in_array($platform, array(SERVER_PLATFORMS::GCE))) || $includeGCELocations ? PlatformFactory::NewPlatform($platform)->getLocations($this->environment) : array()
                 ) :
                 $lPlatforms[$platform];
 
@@ -80,7 +79,7 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
                 $data['type'] = 'csvol';
                 $data['readOnly'] = true;
             break;
-            
+
             case SERVER_PLATFORMS::GCE:
                 // Get default size
                 $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::GCE);
@@ -97,7 +96,7 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
                     if ($ind !== false) {
                         $projectId = substr($image->id, 0, $ind);
                     } else
-                        $projectId = $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID);
+                        $projectId = $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID];
 
                     $id = str_replace("{$projectId}/images/", '', $image->id);
                 }
@@ -124,6 +123,7 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
                                 $settings[FarmRoleStorageConfig::SETTING_EBS_SIZE] = $blockDeviceMapping->ebs->volumeSize;
                                 $settings[FarmRoleStorageConfig::SETTING_EBS_SNAPSHOT] = $blockDeviceMapping->ebs->snapshotId;
                                 $settings[FarmRoleStorageConfig::SETTING_EBS_IOPS] = $blockDeviceMapping->ebs->iops;
+                                $settings[FarmRoleStorageConfig::SETTING_EBS_DEVICE_NAME] = $blockDeviceMapping->deviceName;
                             }
                         }
                     }
@@ -181,12 +181,12 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
      */
     public function xGetLocationsAction(JsonData $platforms)
     {
-        $allPlatforms = $this->user->isScalrAdmin() ? array_keys(SERVER_PLATFORMS::GetList()) : $this->getEnvironment()->getEnabledPlatforms();
+        $allPlatforms = $this->request->getScope() != ScopeInterface::SCOPE_ENVIRONMENT ? array_keys(SERVER_PLATFORMS::GetList()) : $this->getEnvironment()->getEnabledPlatforms();
         $result = array();
 
         foreach ($platforms as $platform) {
             if (in_array($platform, $allPlatforms)) {
-                $result[$platform] = (!in_array($platform, array(SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::ECS))) ? PlatformFactory::NewPlatform($platform)->getLocations($this->environment) : array();
+                $result[$platform] = (!in_array($platform, array(SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::AZURE))) ? PlatformFactory::NewPlatform($platform)->getLocations($this->environment) : array();
             }
         }
 

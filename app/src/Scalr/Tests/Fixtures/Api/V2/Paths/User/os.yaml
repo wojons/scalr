@@ -1,0 +1,19 @@
+paths:
+  - uri: /{envId}/os/
+    operations:
+     - {method: get,  response: 200, filterable: '&OsData'}
+     - {method: get,  response: 200, filterable: '&OsData'}
+     - {method: get,  response: 200, filterable: '&OsData'}
+     - {method: get,  response: 200, filterable: '&OsData'}
+     - {method: get,  response: 200}
+  - uri: /{envId}/os/{osId}/
+    operations:
+     - {method: get,  response: 200, params: '&{4}OsData'}
+     - {method: get,  response: 404, params: '&{5}OsData'}
+OsData:
+ - {name: Windows 2012}
+ - {id: oracle-6-x}
+ - {family: ubuntu}
+ - {generation: ubuntu}
+ - {osId: ubuntu-13-10}
+ - {osId: fake}

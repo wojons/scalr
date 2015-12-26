@@ -15,8 +15,8 @@ register_shutdown_function(function () {
     }
 
     //Collects access log with processing time
-    $accessLogPath = '/var/log/scalr/ui.log';
-    if (is_writable($accessLogPath)) {
+    $accessLogPath = \Scalr::config('scalr.system.monitoring.access_log_path');
+    if ($accessLogPath && is_writable($accessLogPath)) {
         global $response, $path;
         if (isset($path) && $response instanceof Scalr_UI_Response) {
             @error_log(
@@ -59,7 +59,7 @@ try {
     $time1 = microtime(true);
 
     try {
-        $request = Scalr_UI_Request::initializeInstance(Scalr_UI_Request::REQUEST_TYPE_UI, getallheaders(), $_SERVER, $_REQUEST, $_FILES, $session->getUserId(), null);
+        $request = Scalr_UI_Request::initializeInstance(Scalr_UI_Request::REQUEST_TYPE_UI, Scalr::getAllHeaders(), $_SERVER, $_REQUEST, $_FILES, $session->getUserId(), null);
     } catch (Exception $e) {
         if ($path == 'guest/logout') {
             // hack
@@ -85,9 +85,9 @@ try {
 
     $time3 = microtime(true);
 
-    $mode = $session->getDebugMode();
-    if (isset($mode['enabled']) && $mode['enabled'])
+    if ($session->getDebugMode()) {
         $response->debugEnabled(true);
+    }
 
     $time4 = microtime(true);
 
@@ -140,7 +140,7 @@ try {
     Scalr_UI_Response::getInstance()->failure(sprintf("File '%s' not found", $e->getPath()));
     Scalr_UI_Response::getInstance()->setHttpResponseCode(404);
     Scalr_UI_Response::getInstance()->sendResponse();
-} catch (Exception $e) {;
+} catch (Exception $e) {
     Scalr_UI_Response::getInstance()->failure($e->getMessage());
     Scalr_UI_Response::getInstance()->debugException($e);
     Scalr_UI_Response::getInstance()->sendResponse();

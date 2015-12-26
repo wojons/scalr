@@ -9,21 +9,21 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
         rackspacenguk: ' http://wiki.scalr.com/display/docs/Rackspace+Open+Cloud#RackspaceOpenCloud-Step1:AddYourRackspaceCredentials',
         nebula: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
         ocs: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
-        ecs: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
         mirantis: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
         vio: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
         verizon: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
         cisco: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
         hpcloud: 'http://wiki.scalr.com/display/docs/OpenStack#OpenStack-Step2:AddYourOpenStackCredentials',
-        eucalyptus: 'http://wiki.scalr.com/display/docs/Eucalyptus#Eucalyptus-Step1:AddYourEucalyptusCredentials'
+        azure: 'https://scalr-wiki.atlassian.net/wiki/x/RICyAQ'
     };
 
     var editPlatform = function(params, data) {
         var platformFamily,
             formCt = panel.getComponent('formCt'),
+            formPanel,
             form,
             platformName = Scalr.utils.getPlatformName(params['platform']);
-    
+
         if (Scalr.isCloudstack(params['platform'])) {
             platformFamily = 'cloudstack';
         } else if (Scalr.isOpenstack(params['platform'])) {
@@ -34,18 +34,30 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
         form = Scalr.cache['Scalr.ui.account2.environments.clouds.' + platformFamily];
         formCt.removeAll();
         if (form) {
-            formCt.add(form(params, data));
-            formCt.down('form').insert(0, {
-                xtype: 'displayfield',
-                cls: 'x-form-field-info',
-                margin: '0 0 20 0',
-                value: (Scalr.flags.needEnvConfig ? Scalr.strings['account.need_env_config'].replace('%platform%', platformName) : Scalr.strings['account.cloud_access.info']) + (tutorials[params['platform']] ? '<div style="margin-top:12px;"><a href="' + tutorials[params['platform']] + '" target="_blank" class="x-semibold">Getting started with Scalr and ' + platformName + ' tutorial</a></div>' : '')
-            });
+            formPanel = formCt.add(form(params, data));
+            if (moduleParams['suspendedPlatforms'][params['platform']]) {
+                formCt.down('form').insert(0, {
+                    xtype: 'displayfield',
+                    cls: 'x-form-field-warning',
+                    margin: '0 0 20 0',
+                    value: 'Unable to perform authentication of cloud credentials with the following error:<br/><span style="font-family:OpenSansSemiBold">' + Ext.htmlEncode(moduleParams['suspendedPlatforms'][params['platform']]) + '</span> <div style="margin-top:12px;">Try to re-save current credentials or enter new ones.</div>'
+                });
+            } else {
+                formCt.down('form').insert(0, {
+                    xtype: 'displayfield',
+                    cls: 'x-form-field-info',
+                    margin: '0 0 20 0',
+                    value: (Scalr.flags.needEnvConfig ? Scalr.strings['account.need_env_config'].replace('%platform%', platformName) : Scalr.strings['account.cloud_access.info']) + (tutorials[params['platform']] ? '<div style="margin-top:12px;"><a href="' + tutorials[params['platform']] + '" target="_blank" class="x-semibold">Getting started with Scalr and ' + platformName + ' tutorial</a></div>' : '')
+                });
+            }
         } else {
             formCt.add({xtype: 'component', cls: 'x-container-fieldset', html: 'Under construction...'});
         }
         formCt.down('#delete').setVisible(!!data['params'][params['platform'] + '.is_enabled']);
         panel.down('#buttons').setVisible(!!form);
+        if (formPanel) {
+            formCt.down('#save').setText(formPanel.saveBtnText || 'Save keys');
+        }
 
     };
 	var loadPlatform = function(params) {
@@ -77,13 +89,19 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
                     platform: panel.currentPlatform
                 }, form.getExtraParams ? form.getExtraParams(disablePlatform) : {}),
 				success: function (data) {
+                    if (Ext.isFunction(form.beforeSaveSuccess)) {
+                        if (form.beforeSaveSuccess(data) === false) {
+                            return;
+                        }
+                    }
 					Scalr.event.fireEvent('unlock');
 					if (data.demoFarm) {
 						Scalr.event.fireEvent('redirect', '#/farms?demoFarm=1', true);
 					} else {
+                        delete moduleParams['suspendedPlatforms'][panel.currentPlatform];
 						Scalr.event.fireEvent('update', '/account/environments/edit', loadParams['envId'], data.envAutoEnabled, panel.currentPlatform, data.enabled);
                         editPlatform({envId: loadParams['envId'], platform: panel.currentPlatform}, data);
-					}
+                    }
 				},
                 failure: function (data, response, options) {
                     if (Ext.isFunction(form.onSaveFailure)) {
@@ -119,6 +137,15 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
 		Scalr.Request(r);
 	};
 
+    var closeForm = function() {
+        var form = panel.down('form');
+        if (!Ext.isEmpty(form) && Ext.isFunction(form.onCloseForm)) {
+            form.onCloseForm(loadParams);
+        } else {
+            Scalr.event.fireEvent('close');
+        }
+    };
+
     var publicPlatforms = [],
         privatePlatforms = [],
         platformButtons = [];
@@ -131,21 +158,17 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
             cls: 'x-btn-tab-no-text-transform x-btn-tab-small-light' + (!platformEnabled ? ' scalr-ui-environment-cloud-disabled' : ''),
             ui: 'tab',
             textAlign: 'left',
-            text: value.name,
+            text: value.name + (moduleParams['suspendedPlatforms'][key] ? '<img src="'+Ext.BLANK_IMAGE_URL+'" style="position:absolute;right:6px;top:12px;" class="x-grid-icon x-grid-icon-warning" data-qtip="Warning: Unable to perform authentication of '+value.name+' credentials" data-qclass="x-tip-message x-tip-message-warning x-tip-message-no-icon" />' : ''),
             iconCls: 'x-icon-platform-small x-icon-platform-small-' + key,
             allowDepress: false,
             toggleGroup: 'environment-platforms',
-            //href: '#/account/environments/' + moduleParams['env']['id'] + '/clouds?platform=' + key,
             hrefTarget: '_self',
             disableMouseDownPressed: true,
-            hidden: !platformEnabled && key === 'rackspace',
+            hidden: !platformEnabled && key === 'rackspace' || key === 'azure' && Scalr.flags['hostedScalr'] && !Scalr.flags['betaMode'],
             platform: key,
             handler: function() {
                 loadPlatform({envId: loadParams['envId'], platform: this.platform});
             }
-            /*listeners: {
-                click: function(){panel.scalrOptions.reload = false;}
-            }*/
         });
     });
 
@@ -177,6 +200,7 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
     }
 
 	var panel = Ext.create('Ext.panel.Panel', {
+        cls: 'scalr-ui-panel-account-env-clouds',
 		scalrOptions: {
 			modal: true,
             reload: true
@@ -220,15 +244,16 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
                 },
                 items: [{
                     xtype: 'button',
+                    itemId: 'save',
                     text: 'Save keys',
                     handler: function() {
                         sendForm();
                     }
                 }, {
                     xtype: 'button',
-                    text: 'Cancel',
+                    text: 'Close',
                     handler: function() {
-                        Scalr.event.fireEvent('close');
+                        closeForm();
                     }
                 },{
                     xtype: 'button',
@@ -246,7 +271,7 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
 		tools: [{
 			type: 'close',
 			handler: function () {
-				Scalr.event.fireEvent('close');
+				closeForm();
 			}
 		}],
         listeners: {
@@ -260,6 +285,7 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
 		if (type == '/account/environments/edit') {
             var b = panel.getComponent('tabs').down('[platform="' + platform + '"]');
             if (b) {
+                b.setText(Scalr.utils.getPlatformName(platform));//remove suspendedPlatform warning
                 b[(enabled ? 'removeCls' : 'addCls')]('scalr-ui-environment-cloud-disabled');
             }
 		}

@@ -142,7 +142,7 @@ class ObjectAccess implements ArrayAccess, IteratorAggregate, Countable, JsonSer
      */
     public function offsetSet($offset, $value)
     {
-        $this->data[$offset] = $value;
+        $this->data[$offset === null ? count($this->data) : $offset] = $value;
     }
 
     /**
@@ -176,7 +176,7 @@ class ObjectAccess implements ArrayAccess, IteratorAggregate, Countable, JsonSer
 
     public function __isset($name)
     {
-        return isset($this->data[$name]);
+        return $this->offsetExists($name);
     }
 
     public function __unset($name)

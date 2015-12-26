@@ -6,7 +6,7 @@ use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\Kms\DataType\AliasList;
 
 /**
- * Alias hadler of KMS service
+ * Alias handler of KMS service
  *
  * @author    Vitaliy Demidov   <vitaliy@scalr.com>
  * @since     5.9  (24.06.2015)

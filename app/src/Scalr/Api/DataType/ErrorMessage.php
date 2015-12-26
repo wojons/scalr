@@ -8,7 +8,7 @@ namespace Scalr\Api\DataType;
  * @author   Vitaliy Demidov   <vitaliy@scalr.com>
  * @since    5.4.0  (02.03.2015)
  */
-class ErrorMessage extends AbstractDataType
+class ErrorMessage extends ApiMessage
 {
 
     /**
@@ -130,27 +130,18 @@ class ErrorMessage extends AbstractDataType
     const ERR_OBJECT_NOT_FOUND = 'ObjectNotFound';
 
     /**
-     * Machine-readable error code
+     * Limit exceeded
      *
-     * @var string
+     * HTTP Status Code: 403
+     * Example Message: Farms limit for your account exceeded.
      */
-    public $code;
+    const ERR_LIMIT_EXCEEDED = 'LimitExceeded';
 
     /**
-     * A human readable error message
+     * Object locked
      *
-     * @var string
+     * HTTP Status Code: 409
+     * Example Message: Farm locked by user N with comment 'some comment'. Please unlock it first
      */
-    public $message;
-
-    /**
-     * Constructor
-     * @param   string $code    optional A machine-readable API error
-     * @param   string $message optional A human-readable API error message
-     */
-    public function __construct($code = null, $message = null)
-    {
-        $this->code = $code ?: '';
-        $this->message = $message ?: '';
-    }
+    const ERR_LOCKED = 'Locked';
 }

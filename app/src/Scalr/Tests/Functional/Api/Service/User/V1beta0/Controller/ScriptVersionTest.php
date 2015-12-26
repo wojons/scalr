@@ -7,6 +7,7 @@ use Scalr\Api\DataType\ErrorMessage;
 use Scalr\Api\Rest\Controller\ApiController;
 use Scalr\Api\Rest\Http\Request;
 use Scalr\Api\Service\User\V1beta0\Adapter\ScriptVersionAdapter;
+use Scalr\DataType\ScopeInterface;
 use Scalr\Model\Entity\Script;
 use Scalr\Model\Entity\ScriptVersion;
 use Scalr\Model\Objects\BaseAdapter;
@@ -40,7 +41,7 @@ class ScriptVersionTest extends ScriptsTestCase
      *
      * @return array
      */
-    public function listVersion($scriptId, array $filters = [])
+    public function listVersions($scriptId, array $filters = [])
     {
         $envelope = null;
         $versions = [];
@@ -203,8 +204,8 @@ class ScriptVersionTest extends ScriptsTestCase
         $this->assertErrorMessageContains($response, 400, ErrorMessage::ERR_INVALID_STRUCTURE);
 
         //modify properties that not alterable
-        $scriptAdapter = new ScriptVersionAdapter($fictionController);
-        $adapterRules = $scriptAdapter->getRules();
+        $scriptVersionAdapter = new ScriptVersionAdapter($fictionController);
+        $adapterRules = $scriptVersionAdapter->getRules();
 
         $publicProperties = $adapterRules[BaseAdapter::RULE_TYPE_TO_DATA];
         $alterableProperties = $adapterRules[ApiEntityAdapter::RULE_TYPE_ALTERABLE];
@@ -249,13 +250,39 @@ class ScriptVersionTest extends ScriptsTestCase
         ]);
 
         //test have access to all listed scripts versions
-        $versions = $this->listVersion($script->id);
+        $versions = $this->listVersions($script->id);
 
         foreach ($versions as $version) {
             $this->assertTrue(ScriptVersion::findPk($script->id, $version->version)->hasAccessPermissions($user));
         }
 
         $listUri = static::getUserApiUrl("/scripts/{$script->id}/script-versions/");
+
+        //test list script versions filters
+        $filterable = $scriptVersionAdapter->getRules()[ApiEntityAdapter::RULE_TYPE_FILTERABLE];
+
+        /* @var $version ScriptVersion */
+        foreach ($versions as $version) {
+            foreach ($filterable as $property) {
+                $filterValue = $version->{$property};
+
+                $listResult = $this->listVersions($script->id, [ $property => $filterValue ]);
+
+                if (!static::isRecursivelyEmpty($filterValue)) {
+                    foreach ($listResult as $filtered) {
+                        $this->assertEquals($filterValue, $filtered->{$property}, "Property '{$property}' mismatch");
+                    }
+                }
+            }
+
+            $response = $this->getVersion($script->id, $version->version);
+
+            $this->assertEquals(200, $response->status, $this->printResponseError($response));
+
+            $dbScriptVersions = ScriptVersion::findPk($script->id, $version->version);
+
+            $this->assertObjectEqualsEntity($response->getBody()->data, $dbScriptVersions, $scriptVersionAdapter);
+        }
 
         //test invalid filters
         $response = $this->request($listUri, Request::METHOD_GET, [ 'foo' => 'bar' ]);
@@ -282,5 +309,22 @@ class ScriptVersionTest extends ScriptsTestCase
         $response = $this->deleteVersion($script->id, $script->getLatestVersion()->version + 1);
 
         $this->assertErrorMessageContains($response, 404, ErrorMessage::ERR_OBJECT_NOT_FOUND);
+
+        $scripts = Script::find([['$or' => [['accountId' => $user->accountId], ['accountId' => null]]],['$or' => [['envId' => $environment->id], ['envId' => null]]]]);
+
+        foreach ($scripts as $script) {
+            //test have access to all listed scripts versions
+            $versions = $this->listVersions($script->id);
+
+            foreach ($versions as $version) {
+                $version = ScriptVersion::findPk($script->id, $version->version);
+                $this->assertTrue($version->hasAccessPermissions($user));
+            }
+
+            if ($version->getScope() !== ScopeInterface::SCOPE_ENVIRONMENT) {
+                $response = $this->postVersion($version->scriptId, ['body' => $this->getTestName()]);
+                $this->assertErrorMessageContains($response, 403, ErrorMessage::ERR_PERMISSION_VIOLATION);
+            }
+        }
     }
 }

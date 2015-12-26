@@ -3,9 +3,11 @@
 namespace Scalr\Modules\Platforms\Ec2\Observers;
 
 use Scalr\Service\Aws\Ec2\DataType\CreateVolumeRequestData;
-use \DBFarmRole;
+use Scalr\Model\Entity;
+use DBFarmRole;
+use Scalr\Observer\AbstractEventObserver;
 
-class EbsObserver extends \EventObserver
+class EbsObserver extends AbstractEventObserver
 {
 
     public $ObserverName = 'Elastic Block Storage';
@@ -17,7 +19,7 @@ class EbsObserver extends \EventObserver
 
     /**
      * {@inheritdoc}
-     * @see EventObserver::OnBeforeInstanceLaunch()
+     * @see \Scalr\Observer\AbstractEventObserver::OnBeforeInstanceLaunch()
      */
     public function OnBeforeInstanceLaunch(\BeforeInstanceLaunchEvent $event)
     {
@@ -31,16 +33,16 @@ class EbsObserver extends \EventObserver
         if (!$event->DBServer->IsSupported("0.6")) {
             // Only for old AMIs
             if ($DBFarmRole->GetRoleObject()->hasBehavior(\ROLE_BEHAVIORS::MYSQL) &&
-                $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_DATA_STORAGE_ENGINE) == \MYSQL_STORAGE_ENGINE::EBS) {
+                $DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_DATA_STORAGE_ENGINE) == \MYSQL_STORAGE_ENGINE::EBS) {
 
                 $server = $event->DBServer;
                 $masterServer = $DBFarm->GetMySQLInstances(true);
                 $isMaster = !$masterServer || $masterServer[0]->serverId == $server->serverId;
-                $farmMasterVolId = $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_MASTER_EBS_VOLUME_ID);
+                $farmMasterVolId = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_MASTER_EBS_VOLUME_ID);
                 $createEbs = ($isMaster && !$farmMasterVolId);
 
                 if ($createEbs) {
-                    \Logger::getLogger(\LOG_CATEGORY::FARM)->info(
+                    \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(
                         new \FarmLogMessage($event->DBServer->farmId, sprintf(
                             _("Need EBS volume for MySQL %s instance..."),
                             ($isMaster ? "Master" : "Slave")
@@ -49,14 +51,14 @@ class EbsObserver extends \EventObserver
 
                     $req = new CreateVolumeRequestData(
                         $event->DBServer->GetProperty(\EC2_SERVER_PROPERTIES::AVAIL_ZONE),
-                        $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_EBS_VOLUME_SIZE)
+                        $DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_EBS_VOLUME_SIZE)
                     );
                     $aws = $event->DBServer->GetEnvironmentObject()->aws($DBFarmRole->CloudLocation);
                     $res = $aws->ec2->volume->create($req);
 
                     if (!empty($res->volumeId)) {
-                        $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_MASTER_EBS_VOLUME_ID, $res->volumeId, DBFarmRole::TYPE_LCL);
-                        \Logger::getLogger(\LOG_CATEGORY::FARM)->info(
+                        $DBFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_MASTER_EBS_VOLUME_ID, $res->volumeId, Entity\FarmRoleSetting::TYPE_LCL);
+                        \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(
                             new \FarmLogMessage($event->DBServer->farmId, sprintf(
                                 _("MySQL %S volume created. Volume ID: %s..."),
                                 ($isMaster ? "Master" : "Slave"),
@@ -71,7 +73,7 @@ class EbsObserver extends \EventObserver
 
     /**
      * {@inheritdoc}
-     * @see EventObserver::OnFarmTerminated()
+     * @see \Scalr\Observer\AbstractEventObserver::OnFarmTerminated()
      */
     public function OnFarmTerminated(\FarmTerminatedEvent $event)
     {
@@ -87,7 +89,7 @@ class EbsObserver extends \EventObserver
 
     /**
      * {@inheritdoc}
-     * @see EventObserver::OnEBSVolumeAttached()
+     * @see \Scalr\Observer\AbstractEventObserver::OnEBSVolumeAttached()
      */
     public function OnEBSVolumeAttached(\EBSVolumeAttachedEvent $event)
     {
@@ -108,7 +110,7 @@ class EbsObserver extends \EventObserver
 
     /**
      * {@inheritdoc}
-     * @see EventObserver::OnEBSVolumeMounted()
+     * @see \Scalr\Observer\AbstractEventObserver::OnEBSVolumeMounted()
      */
     public function OnEBSVolumeMounted(\EBSVolumeMountedEvent $event)
     {
@@ -125,7 +127,7 @@ class EbsObserver extends \EventObserver
 
     /**
      * {@inheritdoc}
-     * @see EventObserver::OnHostUp()
+     * @see \Scalr\Observer\AbstractEventObserver::OnHostUp()
      */
     public function OnHostUp(\HostUpEvent $event)
     {
@@ -170,7 +172,7 @@ class EbsObserver extends \EventObserver
 
     /**
      * {@inheritdoc}
-     * @see EventObserver::OnHostInit()
+     * @see \Scalr\Observer\AbstractEventObserver::OnHostInit()
      */
     public function OnHostInit(\HostInitEvent $event)
     {
@@ -180,7 +182,7 @@ class EbsObserver extends \EventObserver
 
         $DBFarmRole = $event->DBServer->GetFarmRoleObject();
 
-        if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_USE_EBS)) {
+        if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_USE_EBS)) {
             if (!$this->DB->GetOne("
                     SELECT id FROM ec2_ebs
                     WHERE farm_roleid=? AND server_index=? AND ismanual='0'
@@ -190,8 +192,8 @@ class EbsObserver extends \EventObserver
                     $event->DBServer->index
                 ))) {
 
-                if (in_array($DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_TYPE), array('standard','io1', 'gp2'))) {
-                    $type = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_TYPE);
+                if (in_array($DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_TYPE), array('standard','io1', 'gp2'))) {
+                    $type = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_TYPE);
                 } else {
                     $type = 'standard';
                 }
@@ -199,20 +201,20 @@ class EbsObserver extends \EventObserver
                 $DBEBSVolume = new \DBEBSVolume();
                 $DBEBSVolume->attachmentStatus = \EC2_EBS_ATTACH_STATUS::CREATING;
                 $DBEBSVolume->isManual = 0;
-                $DBEBSVolume->ec2AvailZone = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_AVAIL_ZONE);
+                $DBEBSVolume->ec2AvailZone = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_AVAIL_ZONE);
                 $DBEBSVolume->ec2Region = $event->DBServer->GetProperty(\EC2_SERVER_PROPERTIES::REGION);
                 $DBEBSVolume->farmId = $DBFarmRole->FarmID;
                 $DBEBSVolume->farmRoleId = $DBFarmRole->ID;
                 $DBEBSVolume->serverId = $event->DBServer->serverId;
                 $DBEBSVolume->serverIndex = $event->DBServer->index;
-                $DBEBSVolume->size = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_SIZE);
+                $DBEBSVolume->size = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_SIZE);
                 $DBEBSVolume->type = $type;
-                $DBEBSVolume->iops = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_IOPS);
-                $DBEBSVolume->snapId = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_SNAPID);
-                $DBEBSVolume->isFsExists = ($DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_SNAPID)) ? 1 : 0;
-                $DBEBSVolume->mount = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_MOUNT);
-                $DBEBSVolume->mountPoint = $DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_MOUNTPOINT);
-                $DBEBSVolume->mountStatus = ($DBFarmRole->GetSetting(DBFarmRole::SETTING_AWS_EBS_MOUNT)) ?
+                $DBEBSVolume->iops = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_IOPS);
+                $DBEBSVolume->snapId = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_SNAPID);
+                $DBEBSVolume->isFsExists = ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_SNAPID)) ? 1 : 0;
+                $DBEBSVolume->mount = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_MOUNT);
+                $DBEBSVolume->mountPoint = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_MOUNTPOINT);
+                $DBEBSVolume->mountStatus = ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_MOUNT)) ?
                     \EC2_EBS_MOUNT_STATUS::AWAITING_ATTACHMENT : \EC2_EBS_MOUNT_STATUS::NOT_MOUNTED;
                 $DBEBSVolume->clientId = $event->DBServer->GetFarmObject()->ClientID;
                 $DBEBSVolume->envId = $event->DBServer->envId;
@@ -224,7 +226,7 @@ class EbsObserver extends \EventObserver
 
     /**
      * {@inheritdoc}
-     * @see EventObserver::OnHostDown()
+     * @see \Scalr\Observer\AbstractEventObserver::OnHostDown()
      */
     public function OnHostDown(\HostDownEvent $event)
     {

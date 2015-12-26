@@ -1,62 +1,78 @@
 Scalr.regPage('Scalr.ui.admin.accounts.edit', function (loadParams, moduleParams) {
-	var form = Ext.create('Ext.form.Panel', {
-		width: 700,
-		title: 'Admin &raquo; Accounts &raquo; ' + (moduleParams['account']['id'] ? ('Edit &raquo; ' + moduleParams['account']['name']) : 'Create'),
-		fieldDefaults: {
-			anchor: '100%',
-			labelWidth: 130
-		},
+    var form = Ext.create('Ext.form.Panel', {
+        width: 700,
+        title: 'Admin &raquo; Accounts &raquo; ' + (moduleParams['account']['id'] ? ('Edit &raquo; ' + moduleParams['account']['name']) : 'Create'),
+        fieldDefaults: {
+            anchor: '100%',
+            labelWidth: 130
+        },
         preserveScrollPosition: true,
-		items: [{
-			xtype: 'fieldset',
-			title: 'General information',
-			items: [{
-				xtype: 'textfield',
-				name: 'name',
-				fieldLabel: 'Name'
-			}, {
-				xtype: 'textarea',
-				name: 'comments',
-				fieldLabel: 'Comments'
-			}]
-		}, {
-			xtype: 'fieldset',
-			title: Scalr.flags['authMode'] == 'ldap' ? 'LDAP information' : 'Owner information',
+        items: [{
+            xtype: 'fieldset',
+            title: 'General information',
+            items: [{
+                xtype: 'textfield',
+                name: 'name',
+                fieldLabel: 'Name'
+            }, {
+                xtype: 'textarea',
+                name: 'comments',
+                fieldLabel: 'Comments'
+            }]
+        }, {
+            xtype: 'fieldset',
+            title: Scalr.flags['authMode'] == 'ldap' ? 'LDAP information' : 'Owner information',
             hidden: Scalr.flags['authMode'] == 'scalr' && !!moduleParams['account']['id'],
-			items: [{
-				xtype: 'textfield',
-				name: 'ownerEmail',
-				fieldLabel: Scalr.flags['authMode'] == 'ldap' ? 'LDAP login' : 'Email'
-			}, {
-				xtype: 'textfield',
-				inputType: 'password',
-				name: 'ownerPassword',
+            disabled: Scalr.flags['authMode'] == 'scalr' && !!moduleParams['account']['id'],
+            items: [{
+                xtype: 'textfield',
+                name: 'ownerEmail',
+                vtype: Scalr.flags['authMode'] == 'scalr' ? 'email' : null,
+                fieldLabel: Scalr.flags['authMode'] == 'ldap' ? 'LDAP login' : 'Email'
+            }, {
+                xtype: 'scalrpasswordfield',
+                name: 'ownerPassword',
+                itemId: 'password',
+                vtype: 'password',
+                otherPassField: 'cpassword',
+                minPasswordLengthAdmin: true,
                 hidden: Scalr.flags['authMode'] == 'ldap',
                 disabled: Scalr.flags['authMode'] == 'ldap',
-				fieldLabel: 'Password'
-			}]
-		}, {
-			xtype: 'fieldset',
-			title: 'Limits',
-			hidden: !moduleParams['account']['id'] || Scalr.flags['authMode'] == 'ldap',
-			items: [{
-				xtype: 'textfield',
-				name: 'limitEnv',
-				fieldLabel: 'Environments'
-			}, {
-				xtype: 'textfield',
-				name: 'limitUsers',
-				fieldLabel: 'Users'
-			}, {
-				xtype: 'textfield',
-				name: 'limitFarms',
-				fieldLabel: 'Farms'
-			}, {
-				xtype: 'textfield',
-				name: 'limitServers',
-				fieldLabel: 'Servers'
-			}]
-		},{
+                fieldLabel: 'Password'
+            }, {
+                xtype: 'scalrpasswordfield',
+                name: 'cpassword',
+                itemId: 'cpassword',
+                allowBlank: false,
+                vtype: 'password',
+                hidden: Scalr.flags['authMode'] == 'ldap',
+                disabled: Scalr.flags['authMode'] == 'ldap',
+                minPasswordLengthAdmin: true,
+                otherPassField: 'password',
+                fieldLabel: 'Confirm password'
+            }]
+        }, {
+            xtype: 'fieldset',
+            title: 'Limits',
+            hidden: !moduleParams['account']['id'] || Scalr.flags['authMode'] == 'ldap',
+            items: [{
+                xtype: 'textfield',
+                name: 'limitEnv',
+                fieldLabel: 'Environments'
+            }, {
+                xtype: 'textfield',
+                name: 'limitUsers',
+                fieldLabel: 'Users'
+            }, {
+                xtype: 'textfield',
+                name: 'limitFarms',
+                fieldLabel: 'Farms'
+            }, {
+                xtype: 'textfield',
+                name: 'limitServers',
+                fieldLabel: 'Servers'
+            }]
+        },{
             xtype: 'container',
             cls: 'x-container-fieldset',
             layout: 'anchor',
@@ -86,18 +102,18 @@ Scalr.regPage('Scalr.ui.admin.accounts.edit', function (loadParams, moduleParams
             }]
         }],
 
-		dockedItems: [{
-			xtype: 'container',
-			dock: 'bottom',
-			cls: 'x-docked-buttons',
-			layout: {
-				type: 'hbox',
-				pack: 'center'
-			},
-			items: [{
-				xtype: 'button',
-				text: 'Save',
-				handler: function() {
+        dockedItems: [{
+            xtype: 'container',
+            dock: 'bottom',
+            cls: 'x-docked-buttons',
+            layout: {
+                type: 'hbox',
+                pack: 'center'
+            },
+            items: [{
+                xtype: 'button',
+                text: 'Save',
+                handler: function() {
                     var form = this.up('form'),
                         params;
                     if (form.getForm().isValid()) {
@@ -119,18 +135,18 @@ Scalr.regPage('Scalr.ui.admin.accounts.edit', function (loadParams, moduleParams
                             }
                         });
                     }
-				}
-			}, {
-				xtype: 'button',
-				text: 'Cancel',
-				handler: function() {
-					Scalr.event.fireEvent('close');
-				}
-			}]
-		}]
-	});
-	
-	form.getForm().setValues(moduleParams['account']);
+                }
+            }, {
+                xtype: 'button',
+                text: 'Cancel',
+                handler: function() {
+                    Scalr.event.fireEvent('close');
+                }
+            }]
+        }]
+    });
+
+    form.getForm().setValues(moduleParams['account']);
     form.getForm().clearInvalid();
 
     if (Scalr.flags['analyticsEnabled']) {
@@ -168,5 +184,5 @@ Scalr.regPage('Scalr.ui.admin.accounts.edit', function (loadParams, moduleParams
             }
         });
     }
-	return form;
+    return form;
 });

@@ -3,6 +3,7 @@
 namespace Scalr\Modules\Platforms\Ec2\Helpers;
 
 use Scalr\Model\Entity\CloudResource;
+use Scalr\Model\Entity;
 use \DBFarmRole;
 
 class ElbHelper
@@ -13,12 +14,12 @@ class ElbHelper
 
     public static function farmUpdateRoleSettings(DBFarmRole $DBFarmRole, $oldSettings, $newSettings)
     {
-        //Conver OLD ELB settings into NEW ELB SETTINGS
-        if ($newSettings[DBFarmRole::SETTING_BALANCING_USE_ELB] == 1 && !$newSettings[DBFarmRole::SETTING_AWS_ELB_ENABLED]) {
-            $newSettings[DBFarmRole::SETTING_AWS_ELB_ENABLED] = 1;
-            $newSettings[DBFarmRole::SETTING_AWS_ELB_ID] = $newSettings[DBFarmRole::SETTING_BALANCING_NAME];
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_AWS_ELB_ENABLED, 1, DBFarmRole::TYPE_CFG);
-            $DBFarmRole->SetSetting(DBFarmRole::SETTING_AWS_ELB_ID, $newSettings[DBFarmRole::SETTING_BALANCING_NAME], DBFarmRole::TYPE_LCL);
+        //Convert OLD ELB settings into NEW ELB SETTINGS
+        if (isset($newSettings[Entity\FarmRoleSetting::BALANCING_USE_ELB]) && $newSettings[Entity\FarmRoleSetting::BALANCING_USE_ELB] == 1 && empty($newSettings[Entity\FarmRoleSetting::AWS_ELB_ENABLED])) {
+            $newSettings[Entity\FarmRoleSetting::AWS_ELB_ENABLED] = 1;
+            $newSettings[Entity\FarmRoleSetting::AWS_ELB_ID] = $newSettings[Entity\FarmRoleSetting::BALANCING_NAME];
+            $DBFarmRole->SetSetting(Entity\FarmRoleSetting::AWS_ELB_ENABLED, 1, Entity\FarmRoleSetting::TYPE_CFG);
+            $DBFarmRole->SetSetting(Entity\FarmRoleSetting::AWS_ELB_ID, $newSettings[Entity\FarmRoleSetting::BALANCING_NAME], Entity\FarmRoleSetting::TYPE_LCL);
         }
 
         //NEW ELB:
@@ -31,12 +32,13 @@ class ElbHelper
              * aws.elb.id":"scalr-97f8a108ce4100-775",
              * aws.elb.remove
              */
-            if ($newSettings[DBFarmRole::SETTING_AWS_ELB_ENABLED] && $newSettings[DBFarmRole::SETTING_AWS_ELB_ID]) {
-                if ($oldSettings[DBFarmRole::SETTING_AWS_ELB_ID] == $newSettings[DBFarmRole::SETTING_AWS_ELB_ID])
+            if (!empty($newSettings[Entity\FarmRoleSetting::AWS_ELB_ENABLED]) && !empty($newSettings[Entity\FarmRoleSetting::AWS_ELB_ID])) {
+                if (!empty($oldSettings[Entity\FarmRoleSetting::AWS_ELB_ID]) && $oldSettings[Entity\FarmRoleSetting::AWS_ELB_ID] == $newSettings[Entity\FarmRoleSetting::AWS_ELB_ID])
                     return true;
 
                 $service = CloudResource::findPk(
-                    $newSettings[DBFarmRole::SETTING_AWS_ELB_ID],
+                    $newSettings[Entity\FarmRoleSetting::AWS_ELB_ID],
+                    CloudResource::TYPE_AWS_ELB,
                     $DBFarm->EnvID,
                     \SERVER_PLATFORMS::EC2,
                     $DBFarmRole->CloudLocation
@@ -45,7 +47,7 @@ class ElbHelper
                     // Setup new service
                     // ADD ELB to role_cloud_services
                     $service = new CloudResource();
-                    $service->id = $newSettings[DBFarmRole::SETTING_AWS_ELB_ID];
+                    $service->id = $newSettings[Entity\FarmRoleSetting::AWS_ELB_ID];
                     $service->type = CloudResource::TYPE_AWS_ELB;
                     $service->platform = \SERVER_PLATFORMS::EC2;
                     $service->cloudLocation = $DBFarmRole->CloudLocation;
@@ -57,7 +59,7 @@ class ElbHelper
                         $service->farmRoleId = $DBFarmRole->ID;
                         $service->farmId = $DBFarmRole->FarmID;
                     } else {
-                        $DBFarmRole->SetSetting(DBFarmRole::SETTING_AWS_ELB_ID, $oldSettings[DBFarmRole::SETTING_AWS_ELB_ID]);
+                        $DBFarmRole->SetSetting(Entity\FarmRoleSetting::AWS_ELB_ID, $oldSettings[Entity\FarmRoleSetting::AWS_ELB_ID]);
                         throw new \Exception("ELB already used on another scalr account/environment");
                     }
                 }
@@ -72,12 +74,12 @@ class ElbHelper
 
                 try {
                     if (count($newInstances) > 0)
-                        $elb->loadBalancer->registerInstances($newSettings[DBFarmRole::SETTING_AWS_ELB_ID], $newInstances);
+                        $elb->loadBalancer->registerInstances($newSettings[Entity\FarmRoleSetting::AWS_ELB_ID], $newInstances);
                 } catch (\Exception $e) {}
 
                 try {
                     //Check and deregister old instances instances
-                    $list = $elb->loadBalancer->describeInstanceHealth($newSettings[DBFarmRole::SETTING_AWS_ELB_ID], array());
+                    $list = $elb->loadBalancer->describeInstanceHealth($newSettings[Entity\FarmRoleSetting::AWS_ELB_ID], array());
                     /* @var $instance \Scalr\Service\Aws\Elb\DataType\InstanceStateData */
                     $instances = array();
                     foreach ($list as $instance) {
@@ -86,7 +88,7 @@ class ElbHelper
                     }
 
                     if (count($instances) > 0)
-                        $elb->loadBalancer->deregisterInstances($newSettings[DBFarmRole::SETTING_AWS_ELB_ID], $instances);
+                        $elb->loadBalancer->deregisterInstances($newSettings[Entity\FarmRoleSetting::AWS_ELB_ID], $instances);
                 } catch (\Exception $e) {}
 
             } else {
@@ -95,9 +97,10 @@ class ElbHelper
 
 
             // Remove OLD ELB
-            if ($oldSettings[DBFarmRole::SETTING_AWS_ELB_ID]) {
+            if (!empty($oldSettings[Entity\FarmRoleSetting::AWS_ELB_ID])) {
                 $oldService = CloudResource::findPk(
-                    $oldSettings[DBFarmRole::SETTING_AWS_ELB_ID],
+                    $oldSettings[Entity\FarmRoleSetting::AWS_ELB_ID],
+                    CloudResource::TYPE_AWS_ELB,
                     $DBFarm->EnvID,
                     \SERVER_PLATFORMS::EC2,
                     $DBFarmRole->CloudLocation
@@ -106,7 +109,7 @@ class ElbHelper
                     $oldService->delete();
 
                 if ($newSettings['aws.elb.remove']) {
-                    $elb->loadBalancer->delete($oldSettings[DBFarmRole::SETTING_AWS_ELB_ID]);
+                    $elb->loadBalancer->delete($oldSettings[Entity\FarmRoleSetting::AWS_ELB_ID]);
                 }
             }
 
@@ -115,11 +118,11 @@ class ElbHelper
             }
 
             // Check and remove OLD ELB settings
-            if ($newSettings['aws.elb.enabled'] && $DBFarmRole->GetSetting(DBFarmRole::SETTING_BALANCING_HOSTNAME)) {
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_NAME, null, DBFarmRole::TYPE_LCL);
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_HOSTNAME, null, DBFarmRole::TYPE_LCL);
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_USE_ELB, null, DBFarmRole::TYPE_LCL);
-                $DBFarmRole->SetSetting(DBFarmRole::SETTING_BALANCING_HC_HASH, null, DBFarmRole::TYPE_LCL);
+            if (!empty($newSettings['aws.elb.enabled']) && $DBFarmRole->GetSetting(Entity\FarmRoleSetting::BALANCING_HOSTNAME)) {
+                $DBFarmRole->SetSetting(Entity\FarmRoleSetting::BALANCING_NAME, null, Entity\FarmRoleSetting::TYPE_LCL);
+                $DBFarmRole->SetSetting(Entity\FarmRoleSetting::BALANCING_HOSTNAME, null, Entity\FarmRoleSetting::TYPE_LCL);
+                $DBFarmRole->SetSetting(Entity\FarmRoleSetting::BALANCING_USE_ELB, null, Entity\FarmRoleSetting::TYPE_LCL);
+                $DBFarmRole->SetSetting(Entity\FarmRoleSetting::BALANCING_HC_HASH, null, Entity\FarmRoleSetting::TYPE_LCL);
                 $DBFarmRole->ClearSettings("lb.avail_zone");
                 $DBFarmRole->ClearSettings("lb.healthcheck");
                 $DBFarmRole->ClearSettings("lb.role.listener");

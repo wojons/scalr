@@ -4,6 +4,7 @@ use Scalr\Acl\Acl;
 use Scalr\Service\Aws\Ec2\DataType as Ec2DataType;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controller
 {
@@ -49,6 +50,8 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
 
     public function xMigrateAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_SNAPSHOTS, Acl::PERM_AWS_SNAPSHOTS_MANAGE);
+
         $aws = $this->request->getEnvironment()->aws($this->getParam('sourceRegion'));
         $newSnapshotId = $aws->ec2->snapshot->copy(
             $this->getParam('sourceRegion'),
@@ -62,6 +65,8 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
 
     public function xCreateAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_SNAPSHOTS, Acl::PERM_AWS_SNAPSHOTS_MANAGE);
+
         $this->request->defineParams(array(
             'volumeId',
             'cloudLocation',
@@ -122,6 +127,8 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
 
     public function xRemoveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_SNAPSHOTS, Acl::PERM_AWS_SNAPSHOTS_MANAGE);
+
         $this->request->defineParams(array(
             'snapshotId' => array('type' => 'json'),
             'cloudLocation'
@@ -148,68 +155,78 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
         $this->response->success($msg);
     }
 
-    public function xListSnapshotsAction()
+    public function xListSnapshotsAction($cloudLocation, $snapshotId = null, $volumeId = null, $showPublicSnapshots = null)
     {
-        $this->request->defineParams(array(
-            'sort' => array('type' => 'json', 'default' => array('property' => 'snapshotId', 'direction' => 'ASC')),
-            'showPublicSnapshots',
-            'cloudLocation', 'volumeId', 'snapshotId'
-        ));
+        $aws = $this->getEnvironment()->aws($cloudLocation);
 
-        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
+        $filter = [];
 
-        $filter = array();
-        if ($this->getParam('snapshotId')) {
+        if (!empty($snapshotId)) {
             $filter[] = array(
                 'name'  => Ec2DataType\SnapshotFilterNameType::snapshotId(),
-                'value' => $this->getParam('snapshotId'),
+                'value' => $snapshotId,
             );
         }
 
-        if ($this->getParam('volumeId')) {
+        if (!empty($volumeId)) {
             $filter[] = array(
                 'name'  => Ec2DataType\SnapshotFilterNameType::volumeId(),
-                'value' => $this->getParam('volumeId'),
+                'value' => $volumeId,
             );
         }
 
-        // Rows
-        $snapList = $aws->ec2->snapshot->describe(null, null, (empty($filter) ? null : $filter));
+        $snaps = [];
+        $nextToken = null;
 
-        $snaps = array();
-        /* @var $snapshot Ec2DataType\SnapshotData */
-        foreach ($snapList as $snapshot) {
-            $item = array(
-                'snapshotId' => $snapshot->snapshotId,
-                'volumeId'   => $snapshot->volumeId,
-                'volumeSize' => $snapshot->volumeSize,
-                'status'     => $snapshot->status,
-                'startTime'  => $snapshot->startTime->format('c'),
-                'progress'   => $snapshot->progress,
-                'volumeSize' => $snapshot->volumeSize,
-            );
-            if ($snapshot->ownerId != $this->getEnvironment()->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID)) {
-                $item['comment'] = $snapshot->description;
-                $item['owner'] = $snapshot->ownerId;
-                if (!$this->getParam('showPublicSnapshots')) continue;
-            } else {
-                if ($snapshot->description) {
-                    $item['comment'] = $snapshot->description;
-                }
-                $item['owner'] = 'Me';
+        do {
+            if (isset($snapList)) {
+                $nextToken = $snapList->getNextToken();
             }
-            $item['progress'] = (int) preg_replace("/[^0-9]+/", "", $item['progress']);
-            unset($item['description']);
-            $snaps[] = $item;
-        }
 
-        $response = $this->buildResponseFromData($snaps, array('snapshotId', 'volumeId', 'comment', 'owner'));
+            $snapList = $aws->ec2->snapshot->describe(null, null, (empty($filter) ? null : $filter), null, $nextToken);
+
+            /* @var $snapshot Ec2DataType\SnapshotData */
+            foreach ($snapList as $snapshot) {
+                $item = [
+                    'snapshotId' => $snapshot->snapshotId,
+                    'volumeId'   => $snapshot->volumeId,
+                    'volumeSize' => (int) $snapshot->volumeSize,
+                    'status'     => $snapshot->status,
+                    'startTime'  => $snapshot->startTime->format('c'),
+                    'progress'   => $snapshot->progress
+                ];
+
+                if ($snapshot->ownerId != $this->getEnvironment()->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID]) {
+                    $item['comment'] = $snapshot->description;
+                    $item['owner'] = $snapshot->ownerId;
+
+                    if (!$showPublicSnapshots) {
+                        continue;
+                    }
+                } else {
+                    if ($snapshot->description) {
+                        $item['comment'] = $snapshot->description;
+                    }
+
+                    $item['owner'] = 'Me';
+                }
+
+                $item['progress'] = (int) preg_replace("/[^0-9]+/", "", $item['progress']);
+                unset($item['description']);
+                $snaps[] = $item;
+            }
+
+        } while ($snapList->getNextToken() !== null);
+
+        $response = $this->buildResponseFromData($snaps, ['snapshotId', 'volumeId', 'comment', 'owner']);
+
         foreach ($response['data'] as &$row) {
             $row['startTime'] = Scalr_Util_DateTime::convertTz($row['startTime']);
+
             if (empty($row['comment'])) {
-                $row['comment'] = $this->db->GetOne("SELECT comment FROM ebs_snaps_info WHERE snapid=? LIMIT 1", array(
+                $row['comment'] = $this->db->GetOne("SELECT comment FROM ebs_snaps_info WHERE snapid=? LIMIT 1", [
                     $row['snapshotId']
-                ));
+                ]);
             }
         }
 

@@ -1,5 +1,8 @@
 <?php
-    class Scalr_Role_Behavior_Nginx extends Scalr_Role_Behavior implements Scalr_Role_iBehavior
+use Scalr\Exception\InvalidEntityConfigurationException;
+use Scalr\Model\Entity\FarmRole;
+
+class Scalr_Role_Behavior_Nginx extends Scalr_Role_Behavior implements Scalr_Role_iBehavior
     {
         const ROLE_PROXIES = 'nginx.proxies';
 
@@ -51,5 +54,33 @@
             }
 
             return $message;
+        }
+
+        /**
+         * {@inheritdoc}
+         * @see Scalr_Role_Behavior::setupBehavior()
+         */
+        public static function setupBehavior(FarmRole $farmRole)
+        {
+            $proxies = (array) @json_decode($farmRole->settings[Scalr_Role_Behavior_Nginx::ROLE_PROXIES], true);
+            foreach ($proxies as $proxyIndex => $proxy) {
+                if ($proxy['ssl'] == 1) {
+                    if (empty($proxy['ssl_certificate_id'])) {
+                        throw new InvalidEntityConfigurationException("SSL certificate is required for proxy {$proxyIndex}");
+                    }
+
+                    if ($proxy['port'] == $proxy['ssl_port']) {
+                        throw new InvalidEntityConfigurationException("HTTP and HTTPS ports cannot be the same for proxy {$proxyIndex}");
+                    }
+                }
+
+                if (count($proxy['backends']) > 0) {
+                    foreach ($proxy['backends'] as $backend) {
+                        if (empty($backend['farm_role_id']) && empty($backend['farm_role_alias']) && empty($backend['host'])) {
+                            throw new InvalidEntityConfigurationException("Destination is required for proxy {$proxyIndex}");
+                        }
+                    }
+                }
+            }
         }
     }

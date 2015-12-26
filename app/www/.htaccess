@@ -83,10 +83,8 @@ RewriteRule ^(v[0-9]+)/.*$ /api.php?version=$1&%{QUERY_STRING}  [L]
 
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^api/(user|account|admin)\.(.+?)\.(yml|yaml)$ /public/describeApiSpec?service=$1&version=$2&%{QUERY_STRING}  [L]
+RewriteRule ^api/(v\d.*?)/(user|account|admin)/.*$ /restapi.php  [L]
 RewriteRule ^api/(user|account|admin)/.*$ /restapi.php  [L]
-
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteRule ^api/(.+?)\.(yml|yaml)$ /public/describeApiSpec?version=$1%{QUERY_STRING}  [L]
 
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

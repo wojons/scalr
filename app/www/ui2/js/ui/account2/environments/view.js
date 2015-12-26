@@ -3,7 +3,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
         isAccountSuperAdmin = Scalr.user['type'] === 'AccountSuperAdmin',
 		storeTeams = Scalr.data.get('account.teams'),
 		storeEnvironments = Scalr.data.get('account.environments'),
-        readOnlyAccess = !Scalr.utils.canManageAcl() && !Scalr.isAllowed('ENVADMINISTRATION_ENV_CLOUDS');
+        readOnlyAccess = !Scalr.utils.canManageAcl() && !Scalr.isAllowed('ENV_CLOUDS_ENVIRONMENT');
 
     var getTeamNames = function(teams, links) {
 		var list = [];
@@ -11,8 +11,14 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
             if (Scalr.flags['authMode'] === 'ldap') {
                 list = teams;
                 var len = list.length, maxLen = 2;
+                list = list.slice(0, maxLen);
+                Ext.each(list, function(groupName, i){
+                    var record = storeTeams.findRecord('name', groupName, 0, false, false, true);
+                    if (record && record.get('description')) {
+                        list[i] = '<span data-qtip="'+Ext.htmlEncode(record.get('description'))+'">' + groupName + '</span>';
+                    }
+                });
                 if (len > maxLen) {
-                    list = list.slice(0, maxLen);
                     list.push('and ' + (len - list.length) + ' more');
                 }
             } else {
@@ -98,7 +104,7 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                     '<table>',
                         '<tr>',
                             '<td colspan="3">',
-                                '<div class="x-fieldset-subheader" style="margin-bottom:10px">{name} </div>',
+                                '<div class="x-fieldset-subheader" style="margin-bottom:10px">{name} {[this.getSuspendedPlatformsWarning(values.suspendedPlatforms)]}</div>',
                             '</td>',
                         '</tr>',
                         '<tr>',
@@ -132,6 +138,17 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                 '</div>',
             '</tpl>',
 			{
+                getSuspendedPlatformsWarning: function(suspendedPlatforms) {
+                    var result = '';
+                    if (Ext.isArray(suspendedPlatforms) && suspendedPlatforms.length) {
+                        result = '&nbsp;<img src="'+Ext.BLANK_IMAGE_URL+'" style="vertical-align:top" class="x-grid-icon x-grid-icon-warning" ';
+                        var list = Ext.Array.map(suspendedPlatforms, function(platform){
+                            return Scalr.utils.getPlatformName(platform);
+                        });
+                        result += 'data-qtip="Warning: Unable to perform authentication of <b>' + list.join('</b>, <b>') + '</b> credentials" data-qclass="x-tip-message x-tip-message-warning x-tip-message-no-icon" />';
+                    }
+                    return result;
+                },
 				getPlatformNames: function(platforms){
 					var list = [];
 					if (platforms && platforms.length) {
@@ -218,10 +235,14 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 			},
 			loadrecord: function(record) {
                 var platforms = record.get('platforms') || [],
+                    suspendedPlatforms = record.get('suspendedPlatforms') || [],
                     platformCt = form.down('#platforms');
                 Ext.Array.each(platformCt.query('[xtype="button"]'), function(btn){
-                    var platformEnabled = Ext.Array.contains(platforms, btn.platform);
+                    var platformEnabled = Ext.Array.contains(platforms, btn.platform),
+                        isPlatformSuspended = Ext.Array.contains(suspendedPlatforms, btn.platform);
                     this[(platformEnabled ? 'removeCls' : 'addCls')]('scalr-ui-environment-cloud-disabled');
+                    this[(isPlatformSuspended ? 'addCls' : 'removeCls')]('scalr-ui-environment-cloud-suspended');
+                    this.setTooltip(isPlatformSuspended ? {text: 'Unable to perform authentication of <b>' + Scalr.utils.getPlatformName(btn.platform) + '</b> credentials. <br/>Click to verify your current cloud settings.', cls: 'x-tip-message x-tip-message-warning x-tip-message-no-icon'} : '');
                 });
                 platformCt.toggleMask(platforms.length === 0);
 			}
@@ -401,9 +422,9 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                     xtype: 'taglistfield',
                     name: 'teams',
                     hideTrigger: false,
-                    store: storeTeams,
+                    store: envTeamsStore,
                     valueField: 'name',
-                    displayField: 'name',
+                    displayField: 'extName',
                     getSubmitData: function() {
                         var me = this,
                             data = null;
@@ -624,7 +645,11 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                 if (readOnlyAccess) {
                     Scalr.message.InfoTip('Insufficient permissions to configure cloud.', this.el);
                 } else {
-                    Scalr.event.fireEvent('redirect', '#/account/environments/' + form.getForm().getRecord().get('id') + '/clouds', true, {platform: this.platform});
+                    if (this.platform == 'azure' && Scalr.flags['hostedScalr'] && !Scalr.flags['betaMode']) {
+                        Scalr.message.InfoTip('Microsoft Azure is not available on Hosted Scalr. Please consider using Scalr Enterprise Edition instead.', this.el);
+                    } else {
+                        Scalr.event.fireEvent('redirect', '#/account/environments/' + form.getForm().getRecord().get('id') + '/clouds', true, {platform: this.platform});
+                    }
                 }
 			}
 		});
@@ -648,18 +673,26 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
 					var b = form.down('#platforms').down('[platform="' + platform + '"]');
 					if (b) {
 						b[(enabled ? 'removeCls' : 'addCls')]('scalr-ui-environment-cloud-disabled');
+                        b.removeCls('scalr-ui-environment-cloud-suspended');
 					}
 				}
 			}
 			var record = store.getById(envId);
 			if (record) {
-				var platforms = record.get('platforms') || [];
+				var platforms = record.get('platforms') || [],
+                    suspendedPlatforms = record.get('suspendedPlatforms') || [];
 				if (!enabled){
 					Ext.Array.remove(platforms, platform);
 				} else if (!Ext.Array.contains(platforms, platform)) {
 					platforms.push(platform);
 				}
 				record.set('platforms', platforms);
+
+                if (Ext.isArray(suspendedPlatforms)) {
+                    Ext.Array.remove(suspendedPlatforms, platform);
+                    record.set('suspendedPlatforms', suspendedPlatforms);
+                }
+
                 if (envAutoEnabled) {
                     record.set('status', 'Active');
                 }

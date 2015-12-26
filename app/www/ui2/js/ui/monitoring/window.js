@@ -37,67 +37,68 @@ Ext.define('Scalr.ui.monitoring.statistics', {
     tpl: [
         '<div class="scalr-ui-monitoring-main-container">',
 
-        '<tpl if="this.compareMode">',
-        '<tpl for=".">',
-        '<div class="scalr-ui-monitoring-container-for-statistics" data-index="{itemIndex}">',
-        '<div class="scalr-ui-monitoring-title">{title}</div>',
-        '<tpl for="statistics">',
-        '<tpl if="path">',
-        '<div class="scalr-ui-monitoring-statistics-container">',
-        '<div class="scalr-ui-monitoring-image-container scalr-ui-monitoring-refresh-this" data-metric="{metric}" data-disk="{disk}" data-graph="{graph}">',
-        '<img src="{path}" alt="{watchername}">',
-        '</div>',
-        '<div class="scalr-ui-monitoring-add-to-dashboard-tool-container">',
-        '<div class="scalr-ui-monitoring-add-to-dashboard-tool" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-index="{index}" data-title="{title}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" data-qtip="Add to dashboard"></div>',
-        '</div>',
+            '<tpl if="this.compareMode">',
+                '<tpl for=".">',
+                    '<div class="scalr-ui-monitoring-container-for-statistics" data-index="{itemIndex}">',
+                        '<div class="scalr-ui-monitoring-title">{title}</div>',
+                        '<tpl for="statistics">',
+                            '<tpl if="path">',
+                                '<div class="scalr-ui-monitoring-statistics-container">',
+                                    '<div class="scalr-ui-monitoring-image-container scalr-ui-monitoring-refresh-this" data-metric="{metric}" data-disk="{disk}" data-graph="{graph}">',
+                                        '<img src="{path}" alt="{watchername}">',
+                                    '</div>',
+                                    '<div class="x-tool-monitoring-addtodashboard">',
+                                        '<div class="x-tool-monitoring-addtodashboard-inner" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-farmname="{farmName}" data-rolename="{farmRoleName}" data-index="{index}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" data-qtip="Add to dashboard"></div>',
+                                    '</div>',
 
-        '<tpl if="disk">',
-        '<div class="scalr-ui-monitoring-disk-name-container scalr-ui-monitoring-{disk}" data-disk="{disk}">',
-        '<div class="scalr-ui-monitoring-disk-name">{disk}</div>',
-        '</div>',
-        '</tpl>',
+                                    '<tpl if="disk">',
+                                        '<div class="scalr-ui-monitoring-disk-name-container scalr-ui-monitoring-{disk}" data-disk="{disk}">',
+                                            '<div class="scalr-ui-monitoring-disk-name">{disk}</div>',
+                                        '</div>',
+                                    '</tpl>',
 
-        '</div>',
-        '<tpl else>',
-        '<div class="scalr-ui-monitoring-statistics-container">',
-        '<div class="scalr-ui-monitoring-image-container scalr-ui-monitoring-refresh-this" data-metric="{metric}" data-disk="{disk}" data-graph="{graph}">{message}</div>',
-        '<div class="scalr-ui-monitoring-add-to-dashboard-tool-container">',
-        '<div class="scalr-ui-monitoring-add-to-dashboard-tool" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-index="{index}" data-title="{title}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" data-qtip="Add to dashboard"></div>',
-        '</div>',
-        '</div>',
-        '</tpl>',
-        '</tpl>',
-        '</div>',
-        '</tpl>',
+                                '</div>',
+                            '<tpl else>',
+                                '<div class="scalr-ui-monitoring-statistics-container">',
+                                    '<div class="scalr-ui-monitoring-image-container scalr-ui-monitoring-refresh-this" data-metric="{metric}" data-disk="{disk}" data-graph="{graph}">{message}</div>',
+                                    '<div class="x-tool-monitoring-addtodashboard">',
+                                        '<div class="x-tool-monitoring-addtodashboard-inner" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-farmname="{farmName}" data-rolename="{farmRoleName}" data-index="{index}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" data-qtip="Add to dashboard"></div>',
+                                    '</div>',
+                                '</div>',
+                            '</tpl>',
+                        '</tpl>',
+                    '</div>',
+                '</tpl>',
 
-        '<tpl else>',
-        '<tpl for=".">',
-        '<tpl if="path">',
-        '<div class="scalr-ui-monitoring-statistics-container-compare-mode-off">',
-        '<div class="scalr-ui-monitoring-image-container-compare-mode-off scalr-ui-monitoring-refresh-this" data-metric="{metric}" data-disk="{disk}" data-graph="{graph}">',
-        '<img class="scalr-ui-monitoring-statistics-image-compare-mode-off" src="{path}">',
-        '</div>',
-        '<div class="scalr-ui-monitoring-add-to-dashboard-tool-container">',
-        '<div class="scalr-ui-monitoring-add-to-dashboard-tool" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-index="{index}" data-title="{title}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" data-qtip="Add to dashboard"></div>',
-        '</div>',
+            '<tpl else>',
 
-        '<tpl if="disk">',
-        '<div class="scalr-ui-monitoring-disk-name-container scalr-ui-monitoring-{disk}" data-disk="{disk}">',
-        '<div class="scalr-ui-monitoring-disk-name">{disk}</div>',
-        '</div>',
-        '</tpl>',
+                '<tpl for=".">',
+                    '<tpl if="path">',
+                        '<div class="scalr-ui-monitoring-statistics-container-compare-mode-off">',
+                            '<div class="scalr-ui-monitoring-image-container-compare-mode-off scalr-ui-monitoring-refresh-this" data-metric="{metric}" data-disk="{disk}" data-graph="{graph}">',
+                                '<img class="scalr-ui-monitoring-statistics-image-compare-mode-off" src="{path}">',
+                            '</div>',
+                            '<div class="x-tool-monitoring-addtodashboard">',
+                                '<div class="x-tool-monitoring-addtodashboard-inner" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-index="{index}" data-farmname="{farmName}" data-rolename="{farmRoleName}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" data-qtip="Add to dashboard"></div>',
+                            '</div>',
 
-        '</div>',
-        '<tpl else>',
-        '<div class="scalr-ui-monitoring-statistics-container-compare-mode-off">',
-        '<div class="scalr-ui-monitoring-image-container-compare-mode-off scalr-ui-monitoring-refresh-this" data-metric="{metric}" data-disk="{disk}" data-graph="{graph}"><div class="scalr-ui-monitoring-message">{message}</div></div>',
-        '<div class="scalr-ui-monitoring-add-to-dashboard-tool-container">',
-        '<div class="scalr-ui-monitoring-add-to-dashboard-tool" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-index="{index}" data-title="{title}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" data-qtip="Add to dashboard"></div>',
-        '</div>',
-        '</div>',
-        '</tpl>',
-        '</tpl>',
-        '</tpl>',
+                            '<tpl if="disk">',
+                                '<div class="scalr-ui-monitoring-disk-name-container scalr-ui-monitoring-{disk}" data-disk="{disk}">',
+                                    '<div class="scalr-ui-monitoring-disk-name">{disk}</div>',
+                                '</div>',
+                            '</tpl>',
+
+                        '</div>',
+                    '<tpl else>',
+                        '<div class="scalr-ui-monitoring-statistics-container-compare-mode-off">',
+                            '<div class="scalr-ui-monitoring-image-container-compare-mode-off scalr-ui-monitoring-refresh-this" data-metric="{metric}" data-disk="{disk}" data-graph="{graph}"><div class="scalr-ui-monitoring-message">{message}</div></div>',
+                            '<div class="x-tool-monitoring-addtodashboard">',
+                                '<div class="x-tool-monitoring-addtodashboard-inner" data-farmid="{farmId}" data-roleid="{farmRoleId}" data-index="{index}" data-farmname="{farmName}" data-rolename="{farmRoleName}" data-metric="{metric}" data-hash="{hash}" data-disk="{disk}" data-graph="{graph}" data-qtip="Add to dashboard"></div>',
+                            '</div>',
+                        '</div>',
+                    '</tpl>',
+                '</tpl>',
+            '</tpl>',
         '</div>'
     ],
 
@@ -109,13 +110,19 @@ Ext.define('Scalr.ui.monitoring.statistics', {
             me.up('panel').setLoading(false);
         }
 
-        me.setLoading(!isLoading ? false : '');
+        me.setLoading(!isLoading ? false : {
+            msg: '',
+            style: 'background-color: inherit'
+        });
 
         if (!Ext.isEmpty(me.el)) {
             me.el.setVisible(!isLoading);
         } else {
             var panel = me.up('panel');
-            panel.setLoading('', panel.body);
+            panel.setLoading({
+                msg: '',
+                style: 'background-color: inherit'
+            }, panel.body);
 
             me.unsetPanelLoading = true;
         }
@@ -245,18 +252,18 @@ Ext.define('Scalr.ui.monitoring.statistics', {
                                         //me.data[itemIndex].path = image;
                                         //me.data[itemIndex].metric = metric;
                                         //me.data[itemIndex].title = title
-                                        me.data.push({path: image, metric: metric, farmId: params.farmId, farmRoleId: params.farmRoleId, index: params.index, title: title, hash: hash});
+                                        me.data.push({path: image, metric: metric, farmId: params.farmId, farmRoleId: params.farmRoleId, farmName: params.farmName, farmRoleName: params.farmRoleName, index: params.index, hash: hash});
                                     } else {
-                                        me.data[itemIndex].statistics.push({path: image, metric: metric, farmId: params.farmId, farmRoleId: params.farmRoleId, index: params.index, title: title, hash: hash});
+                                        me.data[itemIndex].statistics.push({path: image, metric: metric, farmId: params.farmId, farmRoleId: params.farmRoleId, farmName: params.farmName, farmRoleName: params.farmRoleName, index: params.index, hash: hash});
                                         me.data[itemIndex].itemIndex = itemIndexInCache;
                                     }
                                 } else {
                                     for (var disk in image) {
                                         for (var graph in image[disk]) {
                                             if (!compareMode) {
-                                                me.data.push({path: image[disk][graph], metric: metric, disk: disk, graph: graph, farmId: params.farmId, farmRoleId: params.farmRoleId, index: params.index, title: title, hash: hash});
+                                                me.data.push({path: image[disk][graph], metric: metric, disk: disk, graph: graph, farmId: params.farmId, farmRoleId: params.farmRoleId, farmName: params.farmName, farmRoleName: params.farmRoleName, index: params.index, hash: hash});
                                             } else {
-                                                me.data[itemIndex].statistics.push({path: image[disk][graph], metric: metric, disk: disk, graph: graph, farmId: params.farmId, farmRoleId: params.farmRoleId, index: params.index, title: title, hash: hash});
+                                                me.data[itemIndex].statistics.push({path: image[disk][graph], metric: metric, disk: disk, graph: graph, farmId: params.farmId, farmRoleId: params.farmRoleId, farmName: params.farmName, farmRoleName: params.farmRoleName, index: params.index, hash: hash});
                                                 me.data[itemIndex].itemIndex = itemIndexInCache;
                                             }
                                         }
@@ -314,30 +321,41 @@ Ext.define('Scalr.ui.monitoring.statistics', {
 
     addTools: function () {
         var me = this;
-        var addToDashboardButtons = me.el.query('.scalr-ui-monitoring-add-to-dashboard-tool');
+        var addToDashboardButtons = me.el.query('.x-tool-monitoring-addtodashboard-inner', false);
 
         Ext.each(addToDashboardButtons, function (button) {
-            var farmId = button.getAttribute('data-farmid');
-            var farmRoleId = button.getAttribute('data-roleid');
-            var index = button.getAttribute('data-index');
             var hash = button.getAttribute('data-hash');
+            var isVisible = !Ext.isEmpty(hash);
+
+            button.setVisible(isVisible);
+
+            if (!isVisible) {
+                return;
+            }
+
             var metric = button.getAttribute('data-metric');
             var period = me.statisticsType;
-            var title = button.getAttribute('data-title');
 
             var params = {
-                farmId: farmId,
+                farmId: button.getAttribute('data-farmid'),
                 hash: hash,
                 metrics: metric,
                 period: period
             };
 
+            var title = button.getAttribute('data-farmname');
+            var farmRoleId = button.getAttribute('data-roleid');
+
             if (farmRoleId) {
                 params.farmRoleId = farmRoleId;
+                title = title + ' &rarr; ' + button.getAttribute('data-rolename');
             }
+
+            var index = button.getAttribute('data-index');
 
             if (index) {
                 params.index = index;
+                title = title + ' &rarr; #' + index;
             }
 
             if (metric === 'io') {
@@ -346,18 +364,12 @@ Ext.define('Scalr.ui.monitoring.statistics', {
 
                 params.disk = disk;
                 params.graph = graph;
-                title += ' / ' + me.metricsTitles[metric] + ' \u2192 ' + disk + ' (' + period + ')';
+                title += ' / ' + me.metricsTitles[metric] + ' &rarr; ' + disk + ' (' + period + ')';
             } else {
                 title += ' / ' + me.metricsTitles[metric] + ' (' + period + ')';
             }
 
             params.title = title;
-
-            var dataForRequest = Ext.encode({
-                params: params,
-                name: 'dashboard.monitoring',
-                url: ''
-            });
 
             Ext.get(button).on('click', function () {
                 Scalr.Request({
@@ -366,7 +378,13 @@ Ext.define('Scalr.ui.monitoring.statistics', {
                         msg: 'Adding widget to dashboard...'
                     },
                     url: '/dashboard/xUpdatePanel',
-                    params: {'widget': dataForRequest},
+                    params: {
+                        widget: Ext.encode({
+                            params: params,
+                            name: 'dashboard.monitoring',
+                            url: ''
+                        })
+                    },
                     success: function (data) {
                         Scalr.event.fireEvent('update', '/dashboard', data.panel);
                     }
@@ -551,10 +569,22 @@ Ext.define('Scalr.ui.ChartPreview', {
 
                         Ext.each(metricsList, function (metric) {
                             if (metrics.hasOwnProperty(metric)) {
-                                var title = me.statisticsTitles[metric];
-                                var image = metrics[metric].img;
+                                var graphsParams = {
+                                    title: me.statisticsTitles[metric],
+                                    metric: metric,
+                                    height: size.height,
+                                    width: size.width
+                                };
 
-                                me.data.push({success: true, title: title, image: image, metric: metric, height: size.height, width: size.width});
+                                if (!Ext.isEmpty(metrics[metric].msg)) {
+                                    graphsParams.success = false;
+                                    graphsParams.message = metrics[metric].msg;
+                                } else {
+                                    graphsParams.success = true;
+                                    graphsParams.image = metrics[metric].img;
+                                }
+
+                                me.data.push(graphsParams);
                             }
                         });
 
@@ -610,10 +640,10 @@ Ext.define('Scalr.ui.ChartPreview', {
                                                 }
                                             ],
                                             listeners: {
-                                                boxready: function () {
+                                                boxready: function (buttonGroup) {
                                                     var panel = this.up('panel');
                                                     var image = panel.down('#chartPreviewMaximizedImage');
-                                                    var period = paramsForRequest.period;
+                                                    var period = buttonGroup.getValue();
 
                                                     image.cache[period] = data['metric'][metric].img;
                                                 },

@@ -1,5 +1,8 @@
 <?php
+
 namespace Scalr\Service\Aws\DataType;
+
+use http\Client\Request;
 
 /**
  * Error Data
@@ -11,6 +14,11 @@ class ErrorData
 {
 
     const ERR_ACCESS_DENIED = 'AccessDenied';
+
+    /**
+     * The authorization header is malformed
+     */
+    const ERR_AUTHORIZATION_HEADER_MALFORMED = 'AuthorizationHeaderMalformed';
 
     /**
      * The request signature does not conform to AWS standards.
@@ -233,6 +241,11 @@ class ErrorData
     const ERR_DB_INSTANCE_NOT_FOUND = 'DBInstanceNotFound';
 
     /**
+     * DBClusterIdentifier does not refer to an existing DB Instance.
+     */
+    const ERR_DB_CLUSTER_NOT_FOUND = 'DBClusterNotFound';
+
+    /**
      * DBSnapshotIdentifier is already used by an existing snapshot
      */
     const ERR_DB_SNAPSHOT_ALREADY_EXISTS = 'DBSnapshotAlreadyExists';
@@ -276,6 +289,11 @@ class ErrorData
      * DBSnapshotIdentifier does not refer to an existing DB Snapshot.
      */
     const ERR_DB_SNAPSHOT_NOT_FOUND = 'DBSnapshotNotFound';
+
+    /**
+     * DBClusterSnapshotIdentifier does not refer to an existing DB Snapshot.
+     */
+    const ERR_DB_CLUSTER_SNAPSHOT_NOT_FOUND = 'DBClusterSnapshotNotFound';
 
     /**
      * The specified instance does not exist.
@@ -330,7 +348,7 @@ class ErrorData
     /**
      * Raw request message
      *
-     * @var \HttpRequest
+     * @var Request
      */
     public $request;
 

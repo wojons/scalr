@@ -25,18 +25,16 @@ class Events extends ApiController
      */
     private function getDefaultCriteria()
     {
-        $criteria = [['$or' => [
+        $parts = [
             ['$and' => [['envId' => null], ['accountId' => null]]],
             ['$and' => [['envId' => null], ['accountId' => $this->getUser()->accountId]]]
-        ]]];
+        ];
 
         if ($this->getScope() === ScopeInterface::SCOPE_ENVIRONMENT) {
-            $criteria[0]['$or'][] = [
-                '$and' => [['envId' => $this->getEnvironment()->id], ['accountId' => $this->getUser()->accountId]]
-            ];
+            $parts[] = ['$and' => [['envId' => $this->getEnvironment()->id], ['accountId' => $this->getUser()->accountId]]];
         }
 
-        return $criteria;
+        return [[ '$or' => $parts ]];
     }
 
     /**
@@ -122,7 +120,7 @@ class Events extends ApiController
      */
     public function createAction()
     {
-        $this->checkPermissions(Acl::RESOURCE_GENERAL_CUSTOM_EVENTS);
+        $this->checkPermissions(Acl::RESOURCE_GENERAL_CUSTOM_EVENTS, Acl::PERM_GENERAL_CUSTOM_EVENTS_MANAGE);
 
         $object = $this->request->getJsonBody();
 
@@ -137,14 +135,42 @@ class Events extends ApiController
 
         $object->scope = $this->getScope();
 
-        $criteria = $this->getDefaultCriteria();
-        $criteria[] = ['name' => $object->id];
+        $criteria = [[ 'name' => $object->id ]];
+
+        switch ($this->getScope()) {
+            case ScopeInterface::SCOPE_ACCOUNT:
+                $criteria[] = [ '$or' => [[ '$and' => [['envId' => null], ['accountId' => null]] ], ['accountId' => $this->getUser()->getAccountId()]] ];
+                break;
+
+            case ScopeInterface::SCOPE_ENVIRONMENT:
+                $criteria[] = ['$and' => [['envId' => $this->getEnvironment()->id], ['accountId' => $this->getUser()->getAccountId()]]];
+                break;
+
+            default:
+                throw new ApiErrorException(500, ErrorMessage::ERR_NOT_IMPLEMENTED, sprintf("The Scope '%s' has not been implemented yet", $this->getScope()));
+        }
 
         /* @var $oldEvent Entity\EventDefinition */
         $oldEvent = Entity\EventDefinition::findOne($criteria);
 
         if (!empty($oldEvent)) {
-            throw new ApiErrorException(409, ErrorMessage::ERR_UNICITY_VIOLATION, sprintf('Event with id %s already exists', $object->id));
+            if ($this->getScope() == ScopeInterface::SCOPE_ACCOUNT && $this->request->get('replace', false)) {
+                $replacements = Entity\EventDefinition::find([
+                    ['name'      => $object->id],
+                    ['accountId' => $this->getUser()->getAccountId()],
+                    ['envId'     => ['$ne' => null]]
+                ]);
+
+                if ($replacements->count()) {
+                    foreach ($replacements as $lowerEvent) {
+                        $lowerEvent->delete();
+                    }
+                } else {
+                    throw new ApiErrorException(409, ErrorMessage::ERR_UNICITY_VIOLATION, sprintf('Event with id %s already exists', $object->id));
+                }
+            } else {
+                throw new ApiErrorException(409, ErrorMessage::ERR_UNICITY_VIOLATION, sprintf('Event with id %s already exists', $object->id));
+            }
         }
 
         /* @var $event Entity\EventDefinition */
@@ -175,7 +201,7 @@ class Events extends ApiController
      */
     public function modifyAction($eventId)
     {
-        $this->checkPermissions(Acl::RESOURCE_GENERAL_CUSTOM_EVENTS);
+        $this->checkPermissions(Acl::RESOURCE_GENERAL_CUSTOM_EVENTS, Acl::PERM_GENERAL_CUSTOM_EVENTS_MANAGE);
 
         $object = $this->request->getJsonBody();
 
@@ -208,7 +234,7 @@ class Events extends ApiController
      */
     public function deleteAction($eventId)
     {
-        $this->checkPermissions(Acl::RESOURCE_GENERAL_CUSTOM_EVENTS);
+        $this->checkPermissions(Acl::RESOURCE_GENERAL_CUSTOM_EVENTS, Acl::PERM_GENERAL_CUSTOM_EVENTS_MANAGE);
 
         $event = $this->getEvent($eventId, true);
 

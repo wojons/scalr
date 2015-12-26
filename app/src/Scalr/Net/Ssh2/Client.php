@@ -104,7 +104,7 @@
             $this->termWidth = (is_int($term_width) && $term_width > 0) ? $term_width : self::TERM_WIDTH;
             $this->timeout = self::STREAM_TIMEOUT;
 
-            $this->logger = Logger::getLogger('SSH2');
+            $this->logger = \Scalr::getContainer()->logger('SSH2');
         }
 
         public function getLogin()

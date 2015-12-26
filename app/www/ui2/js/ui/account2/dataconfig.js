@@ -3,26 +3,26 @@ Scalr.data.add([{
 	dataUrl: '/account/xGetData',
 	dataLoaded: false,
 	fields: [
-		{name: 'id', type: 'string'}, 
-		'status', 
-		'email', 
-		'fullname', 
-		'dtcreated', 
+		{name: 'id', type: 'string'},
+		'status',
+		'email',
+		'fullname',
+		'dtcreated',
 		{
-			name: 'dtlastlogin', 
+			name: 'dtlastlogin',
 			sortType: function(s) {
 				if(!s) return 0;
 				var res;
 				if(Ext.isDate(s)){
 					res = s.getTime();
 				}
-				res = Date.parse(String(s)) || 0; 
+				res = Date.parse(String(s)) || 0;
 				return res;
 			}
 		},
 		'dtlastloginhr',
-		'comments', 
-		'is2FaEnabled', 
+		'comments',
+		'is2FaEnabled',
 		'password',
 		'gravatarhash',
         'type'
@@ -58,7 +58,11 @@ Scalr.data.add([{
 	name: 'account.teams',
 	dataUrl: '/account/xGetData',
 	dataLoaded: false,
-	fields: [{name: 'id', type: 'string'}, 'name', 'users', 'account_role_id'],
+	fields: [{name: 'id', type: 'string'}, 'name', 'users', 'account_role_id', 'description', {name: 'extName',
+        convert: function(v, record){
+            return record.data.name + (record.data.description ? ' (' + record.data.description + ')' : '');
+        }
+    }],
 	listeners: {
 		update: function(){
 			Scalr.data.fireRefresh(['account.users', 'account.environments']);
@@ -88,7 +92,7 @@ Scalr.data.add([{
 	name: 'account.environments',
 	dataUrl: '/account/xGetData',
 	dataLoaded: false,
-	fields: [{name: 'id', type: 'string'}, 'name', 'dtAdded', 'platforms', 'status', 'ccId', 'teams', 'teamIds'],
+	fields: [{name: 'id', type: 'string'}, 'name', 'dtAdded', 'platforms', 'suspendedPlatforms', 'status', 'ccId', 'teams', 'teamIds'],
 	listeners: {
 		update: function(){
 			Scalr.data.fireRefresh('account.teams');
@@ -101,7 +105,7 @@ Scalr.data.add([{
 		}
 	}
 },{
-	name: 'account.roles',
+	name: 'account.acl',
 	dataUrl: '/account/xGetData',
 	dataLoaded: false,
 	fields: [{name: 'id', type: 'string'}, 'name', 'resources', {name: 'baseRoleId', type: 'string'}, 'color'],
@@ -130,7 +134,7 @@ Scalr.data.add([{
 		}
 	}
 },{
-	name: 'base.roles',
+	name: 'base.acl',
 	dataUrl: '/account/xGetData',
 	dataLoaded: false,
 	fields: [{name: 'id', type: 'string'}, 'name', 'resources']

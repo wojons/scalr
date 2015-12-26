@@ -39,11 +39,13 @@ class VolumeHandler extends AbstractEc2Handler
      *
      * @param   ListDataType|array|string               $volumeIdList optional The list of Volume ID
      * @param   VolumeFilterList|VolumeFilterData|array $filter       optional The filter list
+     * @param   string                                  $nextToken           The next paginated set of results to return
+     * @param   int                                     $maxResults          The maximum number of paginated volumes items per response.
      * @return  VolumeList       Returns the list of the volumes
      * @throws  ClientException
      * @throws  Ec2Exception
      */
-    public function describe($volumeIdList = null, $filter = null)
+    public function describe($volumeIdList = null, $filter = null, $nextToken = null, $maxResults = null)
     {
         if ($volumeIdList !== null && !($volumeIdList instanceof ListDataType)) {
             $volumeIdList = new ListDataType($volumeIdList);
@@ -51,7 +53,7 @@ class VolumeHandler extends AbstractEc2Handler
         if ($filter !== null && !($filter instanceof VolumeFilterList)) {
             $filter = new VolumeFilterList($filter);
         }
-        return $this->getEc2()->getApiHandler()->describeVolumes($volumeIdList, $filter);
+        return $this->getEc2()->getApiHandler()->describeVolumes($volumeIdList, $filter, $nextToken, $maxResults);
     }
 
     /**

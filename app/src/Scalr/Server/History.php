@@ -7,6 +7,8 @@ use ReflectionClass;
 use ReflectionProperty;
 
 /**
+ * @deprecated
+ *
  * Server History Entity class
  *
  * @since    4.5.0 (28.10.2013)

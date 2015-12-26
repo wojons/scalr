@@ -20,22 +20,27 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.cloudstack', function (load
 			xtype: 'textfield',
 			fieldLabel: 'API URL',
 			name: 'api_url',
-			value: params['api_url']
+			value: params['api_url'],
+            validator: function(value) {
+                return /^https?:\/\//.test(value) || 'API URL must begin with http:// or https://';
+            }
 		}, {
 			xtype: 'textfield',
 			fieldLabel: 'API key',
 			name: 'api_key',
-			value: params['api_key']
+			value: params['api_key'],
+            allowBlank: false
 		}, {
 			xtype: 'textfield',
 			fieldLabel: 'Secret key',
 			name: 'secret_key',
 			value: params['secret_key'],
+            allowBlank: false,
             selectOnFocus: true
 		},{
             xtype: 'fieldset',
             hidden: Ext.Object.getSize(cloudInfo) === 0,
-            style: 'background:#e1ebf4;border-radius:2px;',
+            style: 'background:#e1ebf4;border-radius:0;',
             cls: 'x-fieldset-separator-none',
             title: 'Cloud details',
             margin: '24 0 0 0',

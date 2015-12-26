@@ -4,7 +4,7 @@ namespace Scalr\System\Zmq\Mdp;
 use ZMQ, ZMQContext, ZMQSocket, ZMQPoll;
 use Scalr\System\Zmq\Zmsg;
 use Scalr\System\Zmq\Exception\MdpException;
-use Scalr\LoggerTrait;
+use Scalr\LoggerAwareTrait;
 
 /**
  * Majordomo Protocol Client API
@@ -15,7 +15,7 @@ use Scalr\LoggerTrait;
  */
 class Client
 {
-    use LoggerTrait;
+    use LoggerAwareTrait;
 
     /**
      * Timeout msecs

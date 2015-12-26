@@ -95,10 +95,11 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                 me.refreshDisksCheckboxes(record, 'lvm_settings', 'db.msr.storage.lvm.volumes');
 
                 if (fullname === 'settings.aws.instance_type' && record.get('new')) {
-                    record.loadEBSEncryptionSupport(function(encryptionSupported){
-                        var field = me.down('[name="db.msr.data_storage.ebs.encrypted"]');
+                    record.loadInstanceTypeInfo(function(instanceTypeInfo){
+                        var field = me.down('[name="db.msr.data_storage.ebs.encrypted"]'),
+                            ebsEncryptionSupported = instanceTypeInfo ? instanceTypeInfo.ebsencryption || false : true;
                         if (field) {
-                            field.setReadOnly(!encryptionSupported);
+                            field.setReadOnly(!ebsEncryptionSupported);
                         }
                     });
 
@@ -184,7 +185,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
         }
 
         if (settings['db.msr.storage.grow_config']) {
-            growConfigExt = Ext.decode(settings['db.msr.storage.grow_config']);
+            growConfigExt = Ext.decode(settings['db.msr.storage.grow_config'], true);
             Ext.Object.each(growConfigMapping, function(nameInt, nameExt){
                 if (growConfigExt[nameExt] !== undefined) {
                     growConfig[nameInt] = growConfigExt[nameExt];
@@ -208,7 +209,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                         editable: false,
                         queryMode: 'local',
                         name: 'db.msr.data_storage.ebs.type',
-                        width: 340,
+                        width: 360,
                         value: growConfig['db.msr.data_storage.ebs.type'] || currentEbsStorageSettings['db.msr.data_storage.ebs.type'],
                         listeners: {
                             change: function (comp, value) {
@@ -280,7 +281,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                     }]
                 }]
             },
-            formWidth:480,
+            formWidth: 520,
             ok: 'Save',
             closeOnSuccess: true,
             success: function (formValues, form) {
@@ -291,7 +292,11 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                             growConfig[nameExt] = formValues[nameInt];
                         }
                     });
-                    settings['db.msr.storage.grow_config'] = Ext.Object.getSize(growConfig) > 0 ? Ext.encode(growConfig) : '';
+                    if (Ext.Object.getSize(growConfig) > 0) {
+                        settings['db.msr.storage.grow_config'] = Ext.encode(growConfig);
+                    } else {
+                        delete settings['db.msr.storage.grow_config'];
+                    }
                     me.down('#changeEbsStorageSettingsInfo').setValue(growConfig);
                     return true;
                 }
@@ -305,9 +310,10 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
             platform = record.get('platform');
 
         if (platform === 'ec2' && record.get('new')) {
-            record.loadEBSEncryptionSupport(function(encryptionSupported){
-                var field = me.down('[name="db.msr.data_storage.ebs.encrypted"]');
-                field.setReadOnly(!encryptionSupported);
+            record.loadInstanceTypeInfo(function(instanceTypeInfo){
+                var field = me.down('[name="db.msr.data_storage.ebs.encrypted"]'),
+                    ebsEncryptionSupported = instanceTypeInfo ? instanceTypeInfo.ebsencryption || false : true;
+                field.setReadOnly(!ebsEncryptionSupported);
                 handler();
             });
         } else {
@@ -387,7 +393,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
 
         this.down('[name="db.msr.data_storage.cinder.size"]').setValue(settings['db.msr.data_storage.cinder.size'] || 1);
 
-        this.down('[name="db.msr.data_storage.gced.size"]').setValue(settings['db.msr.data_storage.gced.size'] || 1);
+        this.down('[name="db.msr.data_storage.gced.size"]').setValue(settings['db.msr.data_storage.gced.size'] || '');
         this.down('[name="db.msr.data_storage.gced.type"]').setValue(settings['db.msr.data_storage.gced.type'] || 'pd-standard');
 
         //data bundle
@@ -406,7 +412,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
 
         if (!Ext.Array.contains(['cloudstack', 'idcf'], platform)) {
             this.down('[name="db.msr.data_backup.every"]').setValue(settings['db.msr.data_backup.every']);
-            this.down('[name="db.msr.data_backup.server_type"]').setValue(settings['db.msr.data_backup.server_type']);
+            this.down('[name="db.msr.data_backup.server_type"]').setValue(settings['db.msr.data_backup.server_type'] || 'master-if-no-slaves');
             this.down('[name="db.msr.data_backup.timeframe.start_hh"]').setValue(settings['db.msr.data_backup.timeframe.start_hh']);
             this.down('[name="db.msr.data_backup.timeframe.start_mm"]').setValue(settings['db.msr.data_backup.timeframe.start_mm']);
             this.down('[name="db.msr.data_backup.timeframe.end_hh"]').setValue(settings['db.msr.data_backup.timeframe.end_hh']);
@@ -448,7 +454,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
             field.setVisible(notANewRecord && settings['db.msr.data_storage.engine'] === 'ebs');
             field.setDisabled((tabParams.farm.status || 0) > 0);
             field.setTooltip((tabParams.farm.status || 0) > 0 ? 'For running farm please use Database manager page in farm actions menu.' : '');
-            this.down('#changeEbsStorageSettingsInfo').setValue(Ext.decode(settings['db.msr.storage.grow_config']));
+            this.down('#changeEbsStorageSettingsInfo').setValue(Ext.decode(settings['db.msr.storage.grow_config'], true));
 
 
         }
@@ -459,14 +465,14 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
         this.down('[name="db.msr.data_storage.raid.level"]').setDisabled(notANewRecord);
         this.down('[name="db.msr.data_storage.raid.volumes_count"]').setDisabled(notANewRecord);
         this.down('[name="db.msr.data_storage.raid.volume_size"]').setDisabled(notANewRecord);
-        this.down('[name="db.msr.data_storage.raid.ebs.type"]').setDisabled(notANewRecord || platform === 'eucalyptus');
+        this.down('[name="db.msr.data_storage.raid.ebs.type"]').setDisabled(notANewRecord);
         this.down('[name="db.msr.data_storage.raid.ebs.iops"]').setDisabled(notANewRecord);
 
         // Engine & EBS Settings
         this.down('[name="db.msr.data_storage.engine"]').setDisabled(notANewRecord);
         this.down('[name="db.msr.data_storage.ebs.size"]').setDisabled(notANewRecord);
-        this.down('[name="db.msr.data_storage.ebs.encrypted"]').setDisabled(notANewRecord || platform === 'eucalyptus');
-        this.down('[name="db.msr.data_storage.ebs.type"]').setDisabled(notANewRecord || platform === 'eucalyptus');
+        this.down('[name="db.msr.data_storage.ebs.encrypted"]').setDisabled(notANewRecord);
+        this.down('[name="db.msr.data_storage.ebs.type"]').setDisabled(notANewRecord);
         this.down('[name="db.msr.data_storage.ebs.iops"]').setDisabled(notANewRecord);
         this.down('[name="db.msr.data_storage.fstype"]').setDisabled(notANewRecord);
 
@@ -718,8 +724,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                 xtype: 'checkbox',
                 hideLabel: true,
                 name: 'db.msr.storage.recreate_if_missing',
-                boxLabel: 'Re-create storage if one or more volumes missing',
-                hidden: !Scalr.flags['betaMode']
+                boxLabel: 'Re-create storage if one or more volumes missing'
             }]
         }, {
             xtype:'fieldset',
@@ -807,8 +812,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                             var res = inputEl.query('a');
                             if (res.length && e.within(res[0])) {
                                 var settings = me.up('#dbmsr').currentRole.get('settings', true);
-                                settings['db.msr.storage.grow_config'] = '';
-                                me.setValue(settings['db.msr.storage.grow_config']);
+                                delete settings['db.msr.storage.grow_config'];
+                                me.setValue('');
 
                             }
                             e.preventDefault();
@@ -882,7 +887,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                     name: 'db.msr.data_storage.ebs.size',
                     fieldLabel: 'Storage size',
                     labelWidth: 185,
-                    width: 185 + 55,
+                    width: 185 + 65,
                     value: '10',
                     vtype: 'ebssize',
                     getEbsType: function() {
@@ -941,7 +946,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                     hideLabel: true,
                     name: 'db.msr.data_storage.ebs.snaps.rotate',
                     width: 50,
-                    margin: '0 6 0 0'
+                    margin: '0 6 0 0',
+                    vtype: 'num'
                 }, {
                     xtype: 'label',
                     text: 'times before being removed.'
@@ -994,7 +1000,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                     fieldLabel: 'Size',
 	                width: 225,
 	                name: 'db.msr.data_storage.gced.size',
-	                value: 100
+	                value: 100,
+                    vtype: 'num'
 	            },{
 	                xtype: 'label',
 	                text: 'GB',
@@ -1178,7 +1185,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
             }, {
                 xtype: 'textfield',
                 width: 50,
-                name: 'db.msr.data_bundle.every'
+                name: 'db.msr.data_bundle.every',
+                vtype: 'num'
             }, {
                 xtype: 'label',
                 margin: '0 6',
@@ -1205,7 +1213,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
             }, {
                 xtype: 'textfield',
                 name: 'db.msr.data_bundle.timeframe.start_hh',
-                width: 50
+                width: 50,
+                vtype: 'num'
             }, {
                 xtype: 'label',
                 text: ':',
@@ -1213,7 +1222,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
             }, {
                 xtype: 'textfield',
                 name: 'db.msr.data_bundle.timeframe.start_mm',
-                width: 50
+                width: 50,
+                vtype: 'num'
             }, {
                 xtype: 'label',
                 html: '&ndash;',
@@ -1221,7 +1231,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
             }, {
                 xtype: 'textfield',
                 name: 'db.msr.data_bundle.timeframe.end_hh',
-                width: 50
+                width: 50,
+                vtype: 'num'
             }, {
                 xtype: 'label',
                 text: ':',
@@ -1229,7 +1240,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
             },{
                 xtype: 'textfield',
                 name: 'db.msr.data_bundle.timeframe.end_mm',
-                width: 50
+                width: 50,
+                vtype: 'num'
             }, {
                 xtype: 'displayinfofield',
                 margin: '0 0 0 6',
@@ -1281,7 +1293,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                 xtype: 'textfield',
                 width: 50,
                 margin: '0 6 0 0',
-                name: 'db.msr.data_backup.every'
+                name: 'db.msr.data_backup.every',
+                vtype: 'num'
             }, {
                 xtype: 'label',
                 text: 'hours'
@@ -1299,7 +1312,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
             }, {
                 xtype: 'textfield',
                 name: 'db.msr.data_backup.timeframe.start_hh',
-                width: 50
+                width: 50,
+                vtype: 'num'
             }, {
                 xtype: 'label',
                 text: ':',
@@ -1307,7 +1321,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
             }, {
                 xtype: 'textfield',
                 name: 'db.msr.data_backup.timeframe.start_mm',
-                width: 50
+                width: 50,
+                vtype: 'num'
             }, {
                 xtype: 'label',
                 html: '&ndash;',
@@ -1315,7 +1330,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
             }, {
                 xtype: 'textfield',
                 name: 'db.msr.data_backup.timeframe.end_hh',
-                width: 50
+                width: 50,
+                vtype: 'num'
             }, {
                 xtype: 'label',
                 text: ':',
@@ -1323,7 +1339,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
             },{
                 xtype: 'textfield',
                 name: 'db.msr.data_backup.timeframe.end_mm',
-                width: 50
+                width: 50,
+                vtype: 'num'
             }, {
                 xtype: 'displayinfofield',
                 margin: '0 0 0 6',
@@ -1337,7 +1354,6 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
             displayField: 'name',
             editable: false,
             queryMode: 'local',
-            value: 'master-if-no-slaves',
             name: 'db.msr.data_backup.server_type',
             labelWidth: 185,
             width: 185 + 245

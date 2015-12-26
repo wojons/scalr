@@ -42,7 +42,7 @@ class UsersTest extends ApiTestCase
         // create
         $content = $this->request('/account/users/xSave', array(
             'email' => self::getTestName(self::USER_NAME) . '@scalr.com',
-            'password' => '123',
+            'password' => '1234567',
             'status'   => 'Active',
             'fullname' => 'phpunit test user',
             'comments' => 'For testing'

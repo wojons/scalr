@@ -4,7 +4,6 @@ namespace Scalr\Service\Aws;
 use Scalr\Service\Aws\Ec2\DataType\AccountAttributeSetList;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\DataType\ListDataType;
-use Scalr\Service\Eucalyptus;
 use Scalr\Service\Aws\Ec2\DataType\RegionInfoList;
 use Scalr\Service\Aws;
 
@@ -31,7 +30,7 @@ use Scalr\Service\Aws;
  * @property  \Scalr\Service\Aws\Ec2\Handler\InternetGatewayHandler  $internetGateway  Gets an InternetGateway service interface handler.
  * @property  \Scalr\Service\Aws\Ec2\Handler\RouteTableHandler       $routeTable       Gets an RouteTable service interface handler.
  *
- * @method    \Scalr\Service\Aws\Ec2\V20140615\Ec2Api getApiHandler() getApiHandler()  Gets an Ec2Api handler
+ * @method    \Scalr\Service\Aws\Ec2\V20150415\Ec2Api getApiHandler() getApiHandler()  Gets an Ec2Api handler
  */
 class Ec2 extends AbstractService implements ServiceInterface
 {
@@ -42,7 +41,7 @@ class Ec2 extends AbstractService implements ServiceInterface
     const API_VERSION_20121201 = '20121201';
 
     /**
-     * API Version 20130201
+     * API Version 20130201x
      */
     const API_VERSION_20130201 = '20130201';
 
@@ -57,9 +56,14 @@ class Ec2 extends AbstractService implements ServiceInterface
     const API_VERSION_20140615 = '20140615';
 
     /**
+     * API Version 20150415
+     */
+    const API_VERSION_20150415 = '20150415';
+
+    /**
      * Current version of the API
      */
-    const API_VERSION_CURRENT = self::API_VERSION_20140615;
+    const API_VERSION_CURRENT = self::API_VERSION_20150415;
 
     /**
      * {@inheritdoc}
@@ -95,6 +99,7 @@ class Ec2 extends AbstractService implements ServiceInterface
             self::API_VERSION_20130201,
             self::API_VERSION_20140201,
             self::API_VERSION_20140615,
+            self::API_VERSION_20150415,
         );
     }
 
@@ -104,7 +109,7 @@ class Ec2 extends AbstractService implements ServiceInterface
      */
     public function getCurrentApiVersion()
     {
-        return $this->getAws() instanceof Eucalyptus ? self::API_VERSION_20130201 : self::API_VERSION_CURRENT;
+        return self::API_VERSION_CURRENT;
     }
 
     /**
@@ -119,11 +124,7 @@ class Ec2 extends AbstractService implements ServiceInterface
             $region = $args[0];
         } else {
             $aws = $this->getAws();
-            if ($aws instanceof Eucalyptus) {
-                return rtrim($aws->getUrl('ec2'), '/ ');
-            } else {
-                $region = $aws->getRegion();
-            }
+            $region = $aws->getRegion();
         }
 
         if (strpos($region, 'cn-') === 0) {

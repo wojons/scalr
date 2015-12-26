@@ -1,6 +1,6 @@
 <?php
 
-class RoleOptionChangedEvent extends Event
+class RoleOptionChangedEvent extends AbstractServerEvent
 {
 
     public $DBFarmRole;

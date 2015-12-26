@@ -264,14 +264,23 @@ class AuthToken implements \Serializable
             ));
         }
 
-        if (!isset($data[0]->publicURL)) {
-            throw new OpenStackException(sprintf(
-                'Cannot obtain endpoint url. Unavailable service "%s" of "%s" version for the region "%s".',
-                $type, $version, $region
-            ));
+        if (isset($data['public'])) {
+            // If Keystone v3 was used, then we should have public endpoint
+            $url = $data['public']->url;
+        } else {
+            // Otherwise just take the first one with publicURL property (this is how it worked for Keystone v2)
+            if (!isset($data[0]->publicURL)) {
+                throw new OpenStackException(sprintf(
+                    'Cannot obtain endpoint url. Unavailable service "%s" of "%s" version for the region "%s".',
+                    $type, $version, $region
+                ));
+            } else {
+                $srvEndpoint = array_shift($data);
+                $url = $srvEndpoint->publicURL;
+            }
         }
 
-        return trim($data[0]->publicURL);
+        return trim($url);
     }
 
     /**

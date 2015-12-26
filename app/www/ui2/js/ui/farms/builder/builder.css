@@ -120,6 +120,12 @@
 .x-dataview-farmroles .x-dataview-tab:hover .delete-role{
     display: block;
 }
+
+.x-dataview-farmroles .x-grid-empty {
+    background: transparent;
+    color: #fff;
+}
+
 /*farm role editor*/
 .x-comboradiolist .x-menu-item-disabled-forced .x-menu-item-text{
     padding-right: 24px;
@@ -154,16 +160,16 @@
 
 
 .x-farmrole-editor-maintab .x-btn-collapse, .x-farmrole-editor-maintab .x-btn-collapse .x-btn-inner {
-	width: 21px;
-	height: 21px!important;
+	width: 24px !important;
+	height: 22px !important;
 }
 .x-farmrole-editor-maintab .x-btn-collapse .x-btn-inner {
-	background: url('/ui2/js/extjs-5.0/theme/images/icon/collapse-sprite.png') no-repeat 0 0;
+	background: url('/ui2/js/extjs-5.0/theme/images/icon/collapse-sprite.png?1.1') no-repeat 0 0;
 	cursor: pointer;
 }
 
 .x-farmrole-editor-maintab .x-btn-collapse.x-btn-pressed .x-btn-inner {
-	background-position: 0px -21px;
+	background-position: 0px -24px;
 }
 
 .x-farmrole-editor-maintab .x-btn-collapse.x-btn-over .x-btn-inner {
@@ -224,6 +230,10 @@
 
 .x-roleslibary-list .x-icon-platform-small {
     margin-left: 6px;
+}
+
+.x-roleslibary-list .x-grid-row-green-text .x-grid-cell-inner{
+    color: green;
 }
 
 /*roleslibrary nothing found text*/
@@ -353,9 +363,9 @@
         background-size: 48px 48px;
     }
 
-    .x-btn-collapse .x-btn-inner {
-        background-size: 21px 42px;
-        background-image: url('/ui2/js/extjs-5.0/theme/images/icon/collapse-sprite-retina.png');
+    .x-farmrole-editor-maintab .x-btn-collapse .x-btn-inner {
+        background-size: 26px 48px;
+        background-image: url('/ui2/js/extjs-5.0/theme/images/icon/collapse-sprite-retina.png?1.1');
     }
 
 }

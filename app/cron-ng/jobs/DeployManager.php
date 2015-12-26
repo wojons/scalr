@@ -26,9 +26,9 @@ class Scalr_Cronjob_DeployManager extends Scalr_System_Cronjob_MultiProcess_Defa
 
     public function __construct()
     {
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
 
-        $this->timeLogger = Logger::getLogger('time');
+        $this->timeLogger = \Scalr::getContainer()->logger('time');
 
         $this->db = $this->getContainer()->adodb;
     }

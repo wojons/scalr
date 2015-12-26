@@ -1,10 +1,12 @@
 <?php
+
 namespace Scalr\Stats\CostAnalytics;
 
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectPropertyEntity;
 use Scalr\Model\Collections\ArrayCollection;
 use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
+use Scalr\Model\Entity;
 
 /**
  * Cost analytics projects
@@ -214,7 +216,7 @@ class Projects
             JOIN farm_settings s ON s.farmid = f.id
             WHERE s.name = ? AND s.value = ?
         ", [
-            \DBFarm::SETTING_PROJECT_ID,
+            Entity\FarmSetting::PROJECT_ID,
             $projectId
         ]);
 
@@ -248,7 +250,7 @@ class Projects
         $where = " WHERE p.project_id = UNHEX('". $projectId . "') AND EXISTS (
                 SELECT * FROM farms f
                 LEFT JOIN farm_settings fs ON f.id = fs.farmid
-                WHERE fs.name = '". \DBFarm::SETTING_PROJECT_ID . "'
+                WHERE fs.name = '". Entity\FarmSetting::PROJECT_ID . "'
                 AND REPLACE(fs.value, '-', '') = HEX(p.project_id)
                 $and)";
 

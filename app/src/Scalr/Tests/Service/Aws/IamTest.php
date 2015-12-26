@@ -24,6 +24,8 @@ class IamTest extends AwsTestCase
 
     const ROLE_NAME = 'role';
 
+    const SERVER_CERTIFICATE_NAME = 'server_certificate';
+
     const INSTANCE_PROFILE_NAME = 'iprofile';
 
     /**
@@ -67,6 +69,7 @@ class IamTest extends AwsTestCase
         $aws = $this->getEnvironment()->aws(AwsTestCase::REGION);
         $roleName = self::getTestName(self::ROLE_NAME);
         $instanceProfileName = self::getTestName(self::INSTANCE_PROFILE_NAME);
+        $serverCertificateName = self::getTestName(self::SERVER_CERTIFICATE_NAME);
 
         try {
             //Removing previously created instance profiles
@@ -107,6 +110,19 @@ class IamTest extends AwsTestCase
         }
         unset($roleList);
 
+        //Removing previously uploaded certificates
+        $certificatesList = $aws->iam->serverCertificate->describe();
+        $this->assertInstanceOf($this->getAwsClassName('Iam\\DataType\\ServerCertificateMetadataList'), $certificatesList);
+        foreach ($certificatesList as $certificate) {
+            /* @var $role \Scalr\Service\Aws\Iam\DataType\RoleData */
+            if ($certificate->serverCertificateName == $serverCertificateName) {
+                $res = $certificate->delete($serverCertificateName);
+                $this->assertTrue($res);
+                break;
+            }
+        }
+        unset($certificatesList);
+
         //Creating role
         $role = $aws->iam->role->create($roleName, $assumeRolePolicyDocument);
         $this->assertInstanceOf($this->getAwsClassName('Iam\\DataType\\RoleData'), $role);
@@ -136,6 +152,15 @@ class IamTest extends AwsTestCase
         $this->assertEquals($role->roleName, $profile2->getRoles()->get(0)->roleName);
         unset($profile2);
 
+        //Uploading server certificate
+        $serverCertificate = $aws->iam->serverCertificate->upload(
+            $this->getFixtureFileContent('upload_server_certificate'),
+            $this->getFixtureFileContent('upload_server_certificate_key'),
+            $serverCertificateName,
+            null
+        );
+        $this->assertInstanceOf($this->getAwsClassName('Iam\\DataType\\ServerCertificateMetadataData'), $serverCertificate);
+
         //Removing a role from instance profile
         $ret = $profile->removeRole($role->roleName);
         $this->assertTrue($ret);
@@ -156,6 +181,10 @@ class IamTest extends AwsTestCase
 
         //Removing role
         $res = $role->delete();
+        $this->assertTrue($res);
+
+        //Removing certificate
+        $res = $serverCertificate->delete($serverCertificateName);
         $this->assertTrue($res);
     }
 }

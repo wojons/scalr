@@ -1,6 +1,6 @@
 <?php
 
-class CheckRecoveredEvent extends Event
+class CheckRecoveredEvent extends AbstractServerEvent
 {
     public $DBServer;
     public $check;

@@ -1,6 +1,6 @@
 <?php
 
-class MySQLReplicationRecoveredEvent extends Event
+class MySQLReplicationRecoveredEvent extends AbstractServerEvent
 {
 
     /**

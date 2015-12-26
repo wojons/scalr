@@ -128,7 +128,13 @@ class Update20141020093250 extends AbstractUpdate implements SequenceInterface
 
             foreach ($this->db->GetAll('SELECT * FROM role_images WHERE role_id = ?', [$role['id']]) as $im) {
                 /* @var Image $image */
-                $image = Image::findOne([['id' => $im['image_id']], ['platform' => $im['platform']], ['cloudLocation' => $im['cloud_location']], ['envId' => NULL]]);
+                $image = Image::findOne([
+                    ['id'            => $im['image_id']],
+                    ['platform'      => $im['platform']],
+                    ['cloudLocation' => $im['cloud_location']],
+                    ['envId'         => null]
+                ]);
+
                 if ($image) {
                     if ($architecture)
                         $image->architecture = $architecture;

@@ -2,6 +2,8 @@
 use Scalr\UI\Request\Validator;
 use Scalr\UI\Request\RawData;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
+use \Scalr\AuditLogger;
+use Scalr\Model\Entity\Account\User;
 
 
 class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
@@ -26,6 +28,23 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
     public function viewAction()
     {
         $this->response->page('ui/admin/accounts/view.js');
+    }
+
+    /**
+     * @param   int     $accountId
+     * @throws  Exception
+     */
+    public function xUnlockOwnerAction($accountId)
+    {
+        $account = Scalr_Account::init()->loadById($accountId);
+        $owner = $account->getOwner();
+        if ($owner->status == User::STATUS_INACTIVE) {
+            $owner->status = User::STATUS_ACTIVE;
+            $owner->save();
+            $this->response->success('Account owner was unlocked');
+        } else {
+            throw new Exception('Account owner is not suspended');
+        }
     }
 
     public function xListAccountsAction()
@@ -69,7 +88,9 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
             $account = Scalr_Account::init()->loadById($row['id']);
 
             try {
-                $row['ownerEmail'] = $account->getOwner()->getEmail();
+                $owner = $account->getOwner();
+                $row['ownerEmail'] = $owner->getEmail();
+                $row['ownerLocked'] = $owner->status == User::STATUS_INACTIVE;
             } catch (Exception $e){
                 $row['ownerEmail'] = '*No owner*';
             }
@@ -178,51 +199,44 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
     {
         $this->request->defineParams(array(
             'id' => array('type' => 'int'),
-            'name' => array('type' => 'string', 'validator' => array(
-                Scalr_Validator::NOHTML => true,
-                Scalr_Validator::REQUIRED => true
-            )),
+            'name' => array('type' => 'string'),
+            'ownerEmail' => array('type' => 'string'),
+            'ownerPassword' => array('type' => 'string', 'rawValue' => true),
             'comments' => array('type' => 'string'),
             'ccs' => array('type' => 'json'),
         ));
 
         $account = Scalr_Account::init();
+        $validator = new Validator;
 
-        if ($this->getContainer()->config->get('scalr.auth_mode') == 'ldap') {
-            $this->request->defineParams(array(
-                'ownerEmail' => array('type' => 'string', 'validator' => array(
-                    Scalr_Validator::REQUIRED => true
-                ))
-            ));
-        }
+        $id            = (int) $this->getParam('id');
+        $name          = $this->getParam('name');
+        $ownerEmail    = $this->getParam('ownerEmail');
+        $ownerPassword = $this->getParam('ownerPassword');
 
-        if ($this->getParam('id')) {
-            $account->loadById($this->getParam('id'));
+        $validator->validate($name, "name", Validator::NOEMPTY, [], "Name is required");
+        $validator->validate($id, "id", Validator::INTEGERNUM);
+
+        if ($id) {
+            $account->loadById($id);
         } else {
             $account->status = Scalr_Account::STATUS_ACTIVE;
 
             if ($this->getContainer()->config->get('scalr.auth_mode') == 'scalr') {
-                $this->request->defineParams(array(
-                    'ownerEmail' => array('type' => 'string', 'validator' => array(
-                        Scalr_Validator::REQUIRED => true,
-                        Scalr_Validator::EMAIL => true
-                    )),
-                    'ownerPassword' => array('type '=> 'string', 'validator' => array(
-                        Scalr_Validator::MINMAX => array('min' => 6)
-                    ))
-                ));
+                $validator->validate($ownerEmail, "ownerEmail", Validator::EMAIL);
+                $validator->validate($ownerPassword, "ownerPassword", Validator::PASSWORD, ["admin"]);
+            } elseif ($this->getContainer()->config->get('scalr.auth_mode') == 'ldap') {
+                $validator->validate($ownerEmail, "ownerEmail", Validator::NOEMPTY, [], "Email is required");
             }
         }
 
-        if (! $this->request->validate()->isValid()) {
-            $this->response->failure();
-            $this->response->data($this->request->getValidationErrors());
+        if (!$validator->isValid($this->response)) {
             return;
         }
 
         $this->db->BeginTrans();
         try {
-            $account->name = $this->getParam('name');
+            $account->name = $name;
             $account->comments = $this->getParam('comments');
 
             $account->save();
@@ -236,10 +250,8 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
                 Scalr_Limits::ACCOUNT_USERS => $this->getParam('limitUsers')
             ));
 
-            if (!$this->getParam('id')) {
-                $bNewAccount = true;
-
-                $user = $account->createUser($this->getParam('ownerEmail'), $this->getParam('ownerPassword'), Scalr_Account_User::TYPE_ACCOUNT_OWNER);
+            if (!$id) {
+                $user = $account->createUser($ownerEmail, $ownerPassword, Scalr_Account_User::TYPE_ACCOUNT_OWNER);
 
                 if ($this->getContainer()->analytics->enabled) {
                     
@@ -255,18 +267,18 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
                 $account->createEnvironment("default");
             }
 
-            if ($this->getContainer()->config->get('scalr.auth_mode') == 'ldap' && $this->getParam('id')) {
-                if ($this->getParam('ownerEmail') != $account->getOwner()->getEmail()) {
+            if ($this->getContainer()->config->get('scalr.auth_mode') == 'ldap' && $id) {
+                if ($ownerEmail != $account->getOwner()->getEmail()) {
                     $prev = $account->getOwner();
                     $prev->type = Scalr_Account_User::TYPE_TEAM_USER;
                     $prev->save();
 
                     $user = new Scalr_Account_User();
-                    if ($user->loadByEmail($this->getParam('ownerEmail'), $account->id)) {
+                    if ($user->loadByEmail($ownerEmail, $account->id)) {
                         $user->type = Scalr_Account_User::TYPE_ACCOUNT_OWNER;
                         $user->save();
                     } else {
-                        $account->createUser($this->getParam('ownerEmail'), $this->getParam('ownerPassword'), Scalr_Account_User::TYPE_ACCOUNT_OWNER);
+                        $account->createUser($ownerEmail, $ownerPassword, Scalr_Account_User::TYPE_ACCOUNT_OWNER);
                     }
                 }
             }
@@ -319,8 +331,26 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
             $user = new Scalr_Account_User();
             $user->loadById($this->getParam('userId'));
         }
+        if ($user->status != User::STATUS_ACTIVE) {
+            throw new Exception('User account has been deactivated. You cannot login into it.');
+        }
 
-        Scalr_Session::create($user->getId(), true);
+        Scalr_Session::create($user->getId(), $this->user->getId());
+
+        try {
+            $envId = $this->getEnvironmentId(true) ?: $user->getDefaultEnvironment()->id;
+        } catch (Exception $e) {
+            $envId = null;
+        }
+
+        $this->auditLog(
+            "user.auth.login",
+            $user,
+            $envId,
+            $this->request->getRemoteAddr(),
+            $this->user->getId()
+        );
+
         $this->response->success();
     }
 
@@ -334,28 +364,25 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
         $account->loadById($accountId);
         $this->response->page('ui/admin/accounts/changeOwnerPassword.js', array(
             'accountName' => $account->name,
-            'email' => $account->getOwner()->getEmail()
+            'email'       => $account->getOwner()->getEmail()
         ));
     }
 
     /**
-     * @param int $accountId
-     * @param RawData $password
-     * @param RawData $cpassword
-     * @param RawData $currentPassword
+     * @param  int     $accountId
+     * @param  RawData $password
+     * @param  RawData $currentPassword
      * @throws Exception
      */
-    public function xSaveOwnerPasswordAction($accountId, $password, $cpassword, $currentPassword)
+    public function xSaveOwnerPasswordAction($accountId, RawData $password, RawData $currentPassword)
     {
         $account = new Scalr_Account();
         $account->loadById($accountId);
+        $password = (string) $password;
 
         $validator = new Validator();
-        $validator->addErrorIf(!$this->user->checkPassword($currentPassword), ['currentPassword'], 'Invalid password');
-
-        $validator->validate($password, 'password', Validator::NOEMPTY);
-        $validator->validate($cpassword, 'cpassword', Validator::NOEMPTY);
-        $validator->addErrorIf(($password && $cpassword && ($password != $cpassword)), ['password','cpassword'], 'Two passwords are not equal');
+        $validator->addErrorIf(!$this->user->checkPassword($currentPassword), "currentPassword", "Invalid password");
+        $validator->validate($password, "password", Validator::PASSWORD, ['admin']);
 
         if ($validator->isValid($this->response)) {
             $user = $account->getOwner();

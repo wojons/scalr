@@ -19,6 +19,11 @@ use Scalr\Model\Entity\Script;
 class ScriptVersion extends AbstractEntity implements ScopeInterface, AccessPermissionsInterface
 {
     /**
+     * Latest script version
+     */
+    const LATEST_SCRIPT_VERSION = -1;
+
+    /**
      * Script's ID
      *
      * @Id

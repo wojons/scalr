@@ -19,7 +19,11 @@ Scalr.regPage('Scalr.ui.services.mongodb.status', function (loadParams, modulePa
             extraParams: loadParams,
             url: '/services/mongodb/xGetClusterLog/'
         },
-        remoteSort: true
+        remoteSort: true,
+        sorters: [{
+            property: 'id',
+            direction: 'DESC'
+        }]
     });
 
     var panel = Ext.create('Ext.form.Panel', {
@@ -265,7 +269,7 @@ Scalr.regPage('Scalr.ui.services.mongodb.status', function (loadParams, modulePa
                 columns: [{
                     text: 'Date',
                     dataIndex: 'dtadded',
-                    width: 160
+                    width: 180
                 }, {
                     text: 'Severity',
                     dataIndex: 'severity',

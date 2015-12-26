@@ -20,12 +20,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Advanced', {
         'base.upd.repository': '',
         'base.upd.schedule': '',
         'base.abort_init_on_script_fail': 0,
-        'base.reboot_after_hostinit_phase': 0,
+        'base.reboot_after_hostinit_phase': function() {return Scalr.getDefaultValue('REBOOT_AFTER_HOST_INIT')},
         'base.disable_firewall_management': 0
-    },
-
-    isEnabled: function (record) {
-        return this.callParent(arguments) && record.get('platform') != 'rds';
     },
 
     showTab: function (record) {
@@ -45,10 +41,10 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Advanced', {
         this.setFieldValues({
             'base.keep_scripting_logs_time': Math.round(settings['base.keep_scripting_logs_time']/3600) || 1,
 
-            'system.timeouts.reboot': settings['system.timeouts.reboot'] || 360,
-            'system.timeouts.launch': settings['system.timeouts.launch'] || 2400,
-            'base.api_port': settings['base.api_port'] || 8010,
-            'base.messaging_port': settings['base.messaging_port'] || 8013,
+            'system.timeouts.reboot': Ext.isEmpty(settings['system.timeouts.reboot'], true) ? 360 : settings['system.timeouts.reboot'],
+            'system.timeouts.launch': Ext.isEmpty(settings['system.timeouts.launch'], true) ? 2400 : settings['system.timeouts.launch'],
+            'base.api_port': Ext.isEmpty(settings['base.api_port'], true) ? 8010 : settings['base.api_port'],
+            'base.messaging_port': Ext.isEmpty(settings['base.messaging_port'], true) ? 8013 : settings['base.messaging_port'],
 
             'dns.create_records': settings['dns.create_records'] == 1,
             'dns.int_record_alias': settings['dns.int_record_alias'] || ('int-' + record.get('alias')),
@@ -149,12 +145,14 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Advanced', {
             xtype: 'textfield',
             maxWidth: 300,
             fieldLabel: 'Scalarizr API port',
-            name: 'base.api_port'
+            name: 'base.api_port',
+            vtype: 'num'
         },{
             xtype: 'textfield',
             maxWidth: 300,
             fieldLabel: 'Scalarizr control port',
-            name: 'base.messaging_port'
+            name: 'base.messaging_port',
+            vtype: 'num'
         },{
             xtype: 'checkbox',
             name: 'base.disable_firewall_management',
@@ -196,12 +194,15 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Advanced', {
             xtype: 'checkbox',
             name: 'base.reboot_after_hostinit_phase',
             boxLabel: 'Reboot after HostInit Scripts have executed',
-            plugins: {
+            plugins: [{
                 ptype: 'fieldicons',
-                icons: [
-                    {id: 'szrversion', tooltipData: {version: '3.5.12'}}
-                ]
-            }
+                icons: [{
+                    id: 'szrversion',
+                    tooltipData: {
+                        version: '3.5.12'
+                    }
+                }]
+            }]
         }]
     }, {
         xtype: 'fieldset',
@@ -219,7 +220,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Advanced', {
                 xtype: 'textfield',
                 name: 'system.timeouts.reboot',
                 margin: '0 5',
-                width: 70
+                width: 70,
+                vtype: 'num'
             }, {
                 xtype: 'label',
                 text: 'seconds.'
@@ -237,7 +239,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Advanced', {
                 xtype: 'textfield',
                 name: 'system.timeouts.launch',
                 margin: '0 5',
-                width: 70
+                width: 70,
+                vtype: 'num'
             }, {
                 xtype: 'label',
                 text: 'seconds.'

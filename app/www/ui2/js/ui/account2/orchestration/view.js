@@ -22,7 +22,7 @@ Scalr.regPage('Scalr.ui.account2.orchestration.view', function (loadParams, modu
             }
         });
     }
-    
+
 	var panel = Ext.create('Ext.panel.Panel', {
 		scalrOptions: {
             menuTitle: 'Orchestration',
@@ -49,6 +49,7 @@ Scalr.regPage('Scalr.ui.account2.orchestration.view', function (loadParams, modu
 			xtype: 'container',
 			dock: 'bottom',
 			cls: 'x-docked-buttons-mini',
+            hidden: !Scalr.isAllowed('ORCHESTRATION_ACCOUNT', 'manage'),
             weight: 10,
 			layout: {
 				type: 'hbox',

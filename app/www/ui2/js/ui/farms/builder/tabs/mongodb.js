@@ -194,7 +194,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Mongodb', {
             plugins: [{
                 ptype: 'comboaddnew',
                 url: '/services/ssl/certificates/create',
-                disabled: !Scalr.isAllowed('SERVICES_SSL')
+                disabled: !Scalr.isAllowed('SERVICES_SSL', 'manage')
             }],
             listeners: {
                 addnew: function(item) {

@@ -4,6 +4,7 @@ use Scalr\Acl\Acl;
 use Scalr\Modules\PlatformFactory;
 use Scalr\UI\Request\JsonData;
 use Scalr\Model\Entity\SshKey;
+use Scalr\Model\Entity\Farm;
 
 class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
 {
@@ -22,13 +23,7 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
      */
     public function getSshKeyObject($key)
     {
-        if ($key->farmId) {
-            try {
-                $farm = DBFarm::LoadByID($key->farmId);
-                $farmName = $farm->Name;
-            } catch (Exception $e) {}
-        }
-
+        /* @var $farm Farm */
         return [
             'id' => $key->id,
             'type' => $key->type,
@@ -36,7 +31,7 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
             'platform' => $key->platform,
             'cloudLocation' => $key->cloudLocation,
             'farmId' => $key->farmId,
-            'farmName' => $farmName,
+            'farmName' => ($key->farmId && ($farm = Farm::findPk($key->farmId))) ? $farm->name : '',
             'status' => $key->isUsed() ? 'In use' : 'Not used'
         ];
     }
@@ -67,15 +62,15 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
      */
     public function downloadPrivateAction($sshKeyId = null, $farmId = null, $platform = null, $cloudLocation = null, $formatPpk = false)
     {
-        /** @var SshKey $sshKey */
+        /* @var $sshKey SshKey */
         if ($sshKeyId) {
             $sshKey = SshKey::findPk($sshKeyId);
         } else {
             $sshKey = (new SshKey())->loadGlobalByFarmId(
                 $this->getEnvironmentId(),
-                $farmId,
+                $platform,
                 $cloudLocation,
-                $platform
+                $farmId
             );
 
             if (!$sshKey && $platform == SERVER_PLATFORMS::EC2) {
@@ -92,7 +87,7 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
         if (!$sshKey)
             throw new Exception('SSH key not found in database');
 
-        $this->user->getPermissions()->validate($sshKey);
+        $this->checkPermissions($sshKey);
 
         $extension = $formatPpk ? 'ppk' : 'pem';
         $fileName = ($sshKey->cloudLocation) ? "{$sshKey->cloudKeyName}.{$sshKey->cloudLocation}.{$extension}" : "{$sshKey->cloudKeyName}.{$extension}";
@@ -116,12 +111,12 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
      */
     public function downloadPublicAction($sshKeyId)
     {
-        /** @var SshKey $sshKey */
+        /* @var $sshKey SshKey */
         $sshKey = SshKey::findPk($sshKeyId);
         if (!$sshKey)
             throw new Exception("SSH key not found in database");
 
-        $this->user->getPermissions()->validate($sshKey);
+        $this->checkPermissions($sshKey);
 
         if (!$sshKey->publicKey)
             $sshKey->generatePublicKey();
@@ -142,75 +137,94 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
     /**
      * Remove SSH keys
      *
-     * @param JsonData $sshKeyId json array of sshKeyId to remove
-     * @throws Scalr_Exception_InsufficientPermissions
-     * @throws Scalr_UI_Exception_NotFound
+     * @param   JsonData    $sshKeyId   json array of sshKeyId to remove
      */
     public function xRemoveAction(JsonData $sshKeyId)
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SECURITY_SSH_KEYS, Acl::PERM_SECURITY_SSH_KEYS_MANAGE);
+
         $errors = [];
+        $processed = [];
 
         foreach ($sshKeyId as $id) {
             try {
-                $sshKey = Scalr_SshKey::init()->loadById($id);
-                $this->user->getPermissions()->validate($sshKey);
+                /* @var $sshKey SshKey */
+                $sshKey = SshKey::findPk($id);
+                if ($sshKey) {
+                    $this->checkPermissions($sshKey, true);
 
-                if ($sshKey->type == Scalr_SshKey::TYPE_GLOBAL) {
-                    if ($sshKey->platform == SERVER_PLATFORMS::EC2) {
-                        $aws = $this->getEnvironment()->aws($sshKey->cloudLocation);
-                        $aws->ec2->keyPair->delete($sshKey->cloudKeyName);
-                        $sshKey->delete();
-                    } elseif (PlatformFactory::isOpenstack($sshKey->platform)) {
-                        $os = $this->getEnvironment()->openstack($sshKey->platform, $sshKey->cloudLocation);
-                        $os->servers->keypairs->delete($sshKey->cloudKeyName);
-                        $sshKey->delete();
+                    if ($sshKey->type == SshKey::TYPE_GLOBAL) {
+                        if ($sshKey->platform == SERVER_PLATFORMS::EC2) {
+                            $aws = $this->getEnvironment()->aws($sshKey->cloudLocation);
+                            $aws->ec2->keyPair->delete($sshKey->cloudKeyName);
+                            $sshKey->delete();
+                        } elseif (PlatformFactory::isOpenstack($sshKey->platform)) {
+                            $os = $this->getEnvironment()->openstack($sshKey->platform, $sshKey->cloudLocation);
+                            $os->servers->keypairs->delete($sshKey->cloudKeyName);
+                            $sshKey->delete();
+                        } else {
+                            $sshKey->delete();
+                        }
+
+                        $processed[] = $sshKey->id;
                     } else {
-                        $sshKey->delete();
+                        //TODO:
                     }
                 } else {
-                    //TODO:
+                    $errors[] = sprintf('SshKey [%d] was not found', $id);
+                }
+            } catch (\Scalr\Service\OpenStack\Exception\OpenStackException $e) {
+                if (strstr($e->getMessage(), 'not found') || strstr($e->getMessage(), 'not be found')) {
+                    $sshKey->delete();
+                    $processed[] = $sshKey->id;
+                } else {
+                    $errors[] = $e->getMessage();
                 }
             } catch (Exception $e) {
                 $errors[] = $e->getMessage();
             }
         }
 
-        if (count($errors))
-            $this->response->warning("SSH key(s) successfully removed, but some errors occurred:\n" . implode("\n", $errors));
-        else
-            $this->response->success('SSH key(s) successfully removed');
-    }
+        $this->response->data(['processed' => $processed]);
 
+        if (count($errors)) {
+            $this->response->warning((count($processed) ? "SSH key(s) successfully removed, but some errors occurred:\n" : '') . implode("\n", $errors));
+        } else {
+            $this->response->success('SSH key(s) successfully removed');
+        }
+    }
 
     /**
      * Regenerate SSH key
      *
-     * @param int $sshKeyId
-     * @throws Scalr_Exception_InsufficientPermissions
-     * @throws Scalr_UI_Exception_NotFound
+     * @param   int     $sshKeyId
+     * @throws  Exception
      */
     public function regenerateAction($sshKeyId)
     {
+        $this->request->restrictAccess(Acl::RESOURCE_SECURITY_SSH_KEYS, Acl::PERM_SECURITY_SSH_KEYS_MANAGE);
+
         $env = $this->getEnvironment();
 
-        $sshKey = Scalr_SshKey::init()->loadById($sshKeyId);
-        $this->user->getPermissions()->validate($sshKey);
+        /* @var $sshKey SshKey */
+        $sshKey = SshKey::findPk($sshKeyId);
+        $this->checkPermissions($sshKey, true);
 
-        if ($sshKey->type == Scalr_SshKey::TYPE_GLOBAL) {
+        if ($sshKey->type == SshKey::TYPE_GLOBAL) {
             if ($sshKey->platform == SERVER_PLATFORMS::EC2) {
                 $aws = $env->aws($sshKey->cloudLocation);
                 $aws->ec2->keyPair->delete($sshKey->cloudKeyName);
                 $result = $aws->ec2->keyPair->create($sshKey->cloudKeyName);
+                $oldKey = $sshKey->publicKey;
 
                 if (!empty($result->keyMaterial)) {
-                    $sshKey->setPrivate($result->keyMaterial);
+                    $sshKey->privateKey = $result->keyMaterial;
                     $pubKey = $sshKey->generatePublicKey();
                     if (!$pubKey) {
                         throw new Exception("Keypair generation failed");
                     }
-                    $oldKey = $sshKey->getPublic();
 
-                    $sshKey->setPublic($pubKey);
+                    $sshKey->publicKey = $pubKey;
                     $sshKey->save();
 
                     $dbFarm = DBFarm::LoadByID($sshKey->farmId);
@@ -233,63 +247,15 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
     }
 
     /**
-     * @deprecated
-     * Get list of roles for listView
+     * @param   string      $query
+     * @param   string      $sshKeyId
+     * @param   int         $farmId
+     * @param   string      $platform
+     * @param   string      $cloudLocation
+     * @param   JsonData    $sort
+     * @param   int         $start
+     * @param   int         $limit
      */
-    public function xListSshKeysAction()
-    {
-        $this->request->defineParams(array(
-            'sshKeyId' => array('type' => 'int'),
-            'farmId'   => array('type' => 'int'),
-            'sort'     => array('type' => 'json')
-        ));
-
-        $sql = "
-            SELECT k.id, count(fr.id) AS status, f.name AS farmName
-            FROM ssh_keys k
-            LEFT JOIN farms f ON k.farm_id = f.id
-            LEFT JOIN farm_roles fr ON k.farm_id = fr.farmid AND k.platform = fr.platform AND (k.cloud_location = fr.cloud_location OR k.cloud_location = '')
-            WHERE k.env_id = ?
-            AND :FILTER:
-        ";
-        $params = array($this->getEnvironmentId());
-
-        if ($this->getParam('sshKeyId')) {
-            $sql .= " AND k.id = ?";
-            $params[] = $this->getParam('sshKeyId');
-        }
-
-        if ($this->getParam('farmId')) {
-            $sql .= " AND k.farm_id = ?";
-            $params[] = $this->getParam('farmId');
-        }
-
-        $sql .= ' GROUP BY k.id';
-
-        $response = $this->buildResponseFromSql(
-            $sql,
-            array('k.id', 'k.type', 'k.cloud_location', 'status'),
-            array('k.cloud_key_name', 'k.cloud_location', 'k.farm_id', 'k.id'),
-            $params
-        );
-
-        foreach ($response["data"] as &$row) {
-            $sshKey = Scalr_SshKey::init()->loadById($row['id']);
-            $row = array(
-                'id'				=> $sshKey->id,
-                'type'				=> ($sshKey->type == Scalr_SshKey::TYPE_GLOBAL) ? "{$sshKey->type} ({$sshKey->platform})" : $sshKey->type,
-                'cloud_key_name'	=> $sshKey->cloudKeyName,
-                'farm_id'		    => $sshKey->farmId,
-                'cloud_location'    => $sshKey->cloudLocation,
-                'status'            => $row['status'] ? 'In use' : 'Not used',
-                'farmName'          => $row['farmName'],
-                'platform'          => $sshKey->platform
-            );
-        }
-
-        $this->response->data($response);
-    }
-
     public function xListAction($query = null, $sshKeyId = null, $farmId = null, $platform = null, $cloudLocation = null, JsonData $sort, $start = 0, $limit = 20)
     {
         $criteria = [[
@@ -297,7 +263,7 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
         ]];
 
         if ($this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_SERVERS)) {
-            if (!$this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
+            if (!$this->request->isAllowed(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_MANAGE)) {
                 $criteria[] = [
                     'farmId' => [
                         '$ne' => NULL
@@ -310,7 +276,7 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
             list($farmSql, $farmArgs) = $this->request->prepareFarmSqlQuery($farmSql, $farmArgs, '', Acl::PERM_FARMS_SERVERS);
             $farms = $this->db->GetCol($farmSql, $farmArgs);
 
-            if ($this->request->isAllowed(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE)) {
+            if ($this->request->isAllowed(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_MANAGE)) {
                 $criteria[] = [
                     '$or' => [[
                         'farmId' => NULL
@@ -321,11 +287,16 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
                     ]]
                 ];
             } else {
-                $criteria[] = [
-                    'farmId' => [
-                        '$in' => $farms
-                    ]
-                ];
+                if (count($farms)) {
+                    $criteria[] = [
+                        'farmId' => [
+                            '$in' => $farms
+                        ]
+                    ];
+                } else {
+                    // user doesn't have access to any farm. try to find better solution
+                    $criteria[] = [ 'farmId' => -1 ];
+                }
             }
         }
 
@@ -357,7 +328,7 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
             }
         }
 
-        $result = SshKey::find($criteria, \Scalr\UI\Utils::convertOrder($sort, ['id' => 'ASC'], ['id', 'cloudKeyName', 'platform', 'cloudLocation']), $limit, $start, true);
+        $result = SshKey::find($criteria, null, \Scalr\UI\Utils::convertOrder($sort, ['id' => true], ['id', 'cloudKeyName', 'platform', 'cloudLocation']), $limit, $start, true);
         $data = [];
         foreach ($result as $key) {
             /* @var SshKey $key */

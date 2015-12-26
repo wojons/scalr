@@ -1,5 +1,6 @@
 <?php
 
+use Scalr\Acl\Acl;
 use Scalr\Service\Aws\Route53\DataType\ChangeRecordSetsRequestData;
 use Scalr\Service\Aws\Route53\DataType\ChangeRecordSetList;
 use Scalr\Service\Aws\Route53\DataType\ChangeRecordSetData;
@@ -159,6 +160,8 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
             $ttl, $weight, $setIdentifier, $region, $failover, $cloudLocation, JsonData $resourceRecord
         )
     {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_ROUTE53, Acl::PERM_AWS_ROUTE53_MANAGE);
+
         $rrsRequest = new ChangeRecordSetsRequestData();
         $rrsCnahgeList = new ChangeRecordSetList();
 
@@ -220,6 +223,8 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
      */
     public function xDeleteAction(JsonData $recordSets, $zoneId, $cloudLocation)
     {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_ROUTE53, Acl::PERM_AWS_ROUTE53_MANAGE);
+
         $rrsRequest = new ChangeRecordSetsRequestData();
         $rrsCnahgeList = new ChangeRecordSetList();
 

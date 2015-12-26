@@ -18,10 +18,11 @@ class FileUploadData implements ObjectInitializingInterface
     protected $fileName;
 
     /**
-     * @param mixed $value
-     * @return null|FileUploadData
+     * {@inheritdoc}
+     * @see     ObjectInitializingInterface::initFromRequest()
+     * @return  null|FileUploadData
      */
-    public static function initFromRequest($value)
+    public static function initFromRequest($value, $name = '')
     {
         return $value ? new self($value) : NULL;
     }

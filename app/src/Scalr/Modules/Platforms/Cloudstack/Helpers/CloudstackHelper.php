@@ -7,8 +7,8 @@ use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
 use Scalr\Service\CloudStack\DataType\ListIpAddressesData;
 use Scalr\Service\CloudStack\DataType\AssociateIpAddressData;
 use Scalr\Service\CloudStack\CloudStack;
+use Scalr\Model\Entity;
 use \DBFarm;
-use \SERVER_PLATFORMS;
 use \DBFarmRole;
 
 class CloudstackHelper
@@ -25,24 +25,22 @@ class CloudstackHelper
         $ips = $platform->GetServerIPAddresses($dbServer);
         if ($ips['remoteIp']) {
             $remoteIp = $ips['remoteIp'];
-            $dbServer->GetFarmRoleObject()->SetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE, 'Direct', DBFarmRole::TYPE_LCL);
-        }
-        else {
+            $dbServer->GetFarmRoleObject()->SetSetting(Entity\FarmRoleSetting::CLOUDSTACK_NETWORK_TYPE, 'Direct', Entity\FarmRoleSetting::TYPE_LCL);
+        } else {
             if ($dbServer->farmRoleId) {
                 $dbFarmRole = $dbServer->GetFarmRoleObject();
-                $networkType = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_TYPE);
+                $networkType = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::CLOUDSTACK_NETWORK_TYPE);
                 if ($networkType == 'Direct') {
                     $remoteIp = $ips['localIp'];
                 } else {
-                    $useStaticNat = $dbFarmRole->GetSetting(DBFarmRole::SETIING_CLOUDSTACK_USE_STATIC_NAT);
-                    $networkId = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_NETWORK_ID);
+                    $useStaticNat = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::CLOUDSTACK_USE_STATIC_NAT);
+                    $networkId = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::CLOUDSTACK_NETWORK_ID);
                     if (!$useStaticNat && $networkId != 'SCALR_MANUAL') {
-                        $sharedIp = $dbFarmRole->GetSetting(DBFarmRole::SETTING_CLOUDSTACK_SHARED_IP_ADDRESS);
+                        $sharedIp = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::CLOUDSTACK_SHARED_IP_ADDRESS);
                         if (!$sharedIp) {
-                            $env = $dbServer->GetEnvironmentObject();
-                            $remoteIp = $platform->getConfigVariable(
-                                CloudstackPlatformModule::SHARED_IP . "." . $dbServer->GetProperty(\CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION), $env, false
-                            );
+                            $dbServer->GetEnvironmentObject()->cloudCredentials($dbServer->platform)->properties[
+                                Entity\CloudCredentialsProperty::CLOUDSTACK_SHARED_IP . ".{$dbServer->GetProperty(\CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION)}"
+                            ];
                         } else {
                             $remoteIp = $sharedIp;
                         }
@@ -79,10 +77,10 @@ class CloudstackHelper
                 $info = $info[0];
                 if ($info->issystem && $info->isstaticnat) {
                     $cs->firewall->disableStaticNat($info->id);
-                    \Logger::getLogger('Cloudstack_Helper')->warn("[STATIC_NAT] Removed old IP static NAT from IP: {$info->id}");
+                    \Scalr::getContainer()->logger('Cloudstack_Helper')->warn("[STATIC_NAT] Removed old IP static NAT from IP: {$info->id}");
                 }
             } catch (\Exception $e) {
-                \Logger::getLogger('Cloudstack_Helper')->error("[STATIC_NAT] Unable to disable old static NAT: {$e->getMessage()}");
+                \Scalr::getContainer()->logger('Cloudstack_Helper')->error("[STATIC_NAT] Unable to disable old static NAT: {$e->getMessage()}");
             }
         }
 
@@ -92,14 +90,14 @@ class CloudstackHelper
         $info = $info[0];
         $oldVM = $info->virtualmachinedisplayname;
         if ($info->isstaticnat) {
-            \Logger::getLogger('Cloudstack_Helper')->warn("[STATIC_NAT] IP {$ipAddress} associated with another VM. Disabling Static NAT.");
+            \Scalr::getContainer()->logger('Cloudstack_Helper')->warn("[STATIC_NAT] IP {$ipAddress} associated with another VM. Disabling Static NAT.");
 
             try {
                 $result = $cs->firewall->disableStaticNat($allocationId);
                 for ($i = 0; $i <= 20; $i++) {
                     $res = $cs->queryAsyncJobResult($result->jobid);
                     if ($res->jobstatus != 0) {
-                        \Logger::getLogger('Cloudstack_Helper')->warn("[STATIC_NAT] After {$i}x2 seconds, IP {$ipAddress} is free and ready to use.");
+                        \Scalr::getContainer()->logger('Cloudstack_Helper')->warn("[STATIC_NAT] After {$i}x2 seconds, IP {$ipAddress} is free and ready to use.");
 
                         //UPDATING OLD SERVER
                         try {
@@ -115,7 +113,7 @@ class CloudstackHelper
                 }
 
             } catch (\Exception $e) {
-                \Logger::getLogger('Cloudstack_Helper')->error("[STATIC_NAT] Unable to disable static NAT: {$e->getMessage()}");
+                \Scalr::getContainer()->logger('Cloudstack_Helper')->error("[STATIC_NAT] Unable to disable static NAT: {$e->getMessage()}");
             }
         }
 
@@ -128,7 +126,7 @@ class CloudstackHelper
                 break;
             } catch (\Exception $e) {
                 if (!stristr($e->getMessage(), "already assigned to antoher vm") || $assignRetries == 3) {
-                    \Logger::getLogger('Cloudstack_Helper')->error("[STATIC_NAT] Unable to enable static NAT ({$assignRetries}): {$e->getMessage()}");
+                    \Scalr::getContainer()->logger('Cloudstack_Helper')->error("[STATIC_NAT] Unable to enable static NAT ({$assignRetries}): {$e->getMessage()}");
                     throw new \Exception($e->getMessage());
                 } else {
                     sleep(1);
@@ -148,9 +146,9 @@ class CloudstackHelper
      * @param   \Scalr\Service\CloudStack\CloudStack $cs       CloudStack instance
      * @return  boolean Returns true if IP address is available.
      */
-    private static function CheckElasticIP($ipaddress, CloudStack $cs)
+    private static function checkStaticNatIp($ipaddress, CloudStack $cs)
     {
-        \Logger::getLogger('Cloudstack_Helpers')->debug(sprintf(_("Checking IP: %s"), $ipaddress));
+        \Scalr::getContainer()->logger('Cloudstack_Helpers')->debug(sprintf(_("Checking IP: %s"), $ipaddress));
         try {
             $requestObject = new ListIpAddressesData();
             $requestObject->ipaddress = $ipaddress;
@@ -173,17 +171,19 @@ class CloudstackHelper
         try {
             $dbFarm = DBFarm::LoadByID($dbServer->farmId);
             $dbFarmRole = $dbServer->GetFarmRoleObject();
-            if (!$dbFarmRole->GetSetting(DBFarmRole::SETIING_CLOUDSTACK_USE_STATIC_NAT)) {
+            if (!$dbFarmRole->GetSetting(Entity\FarmRoleSetting::CLOUDSTACK_USE_STATIC_NAT)) {
                 return false;
             }
             $cs = $dbFarm->GetEnvironmentObject()->cloudstack($dbFarmRole->Platform);
 
         } catch (\Exception $e) {
-            \Logger::getLogger(\LOG_CATEGORY::FARM)->fatal(
+            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(
             new \FarmLogMessage($dbServer->farmId, sprintf(
                 _("Cannot allocate elastic ip address for instance %s on farm %s (0)"),
-                $dbServer->serverId, $dbFarm->Name
+                $dbServer->serverId, isset($dbFarm->Name) ? $dbFarm->Name : ''
             )));
+
+            return false;
         }
 
         $ip = $db->GetRow("
@@ -199,9 +199,9 @@ class CloudstackHelper
         ));
 
         if ($ip['ipaddress']) {
-            if (!self::checkElasticIp($ip['ipaddress'], $cs)) {
-                \Logger::getLogger(\LOG_CATEGORY::FARM)->warn(new \FarmLogMessage($dbServer->farmId, sprintf(
-                    _("Elastic IP '%s' does not belong to you. Allocating new one."), $ip['ipaddress']
+            if (!self::checkStaticNatIp($ip['ipaddress'], $cs)) {
+                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->warn(new \FarmLogMessage($dbServer->farmId, sprintf(
+                    _("Static NAT IP '%s' does not belong to you. Allocating new one."), $ip['ipaddress']
                 )));
 
                 $db->Execute("DELETE FROM elastic_ips WHERE ipaddress=?", array($ip['ipaddress']));
@@ -220,7 +220,7 @@ class CloudstackHelper
             ));
 
             // Check elastic IPs limit. We cannot allocate more than 'Max instances' option for role
-            if ($alocatedIps < $dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES)) {
+            if ($alocatedIps < $dbFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MAX_INSTANCES)) {
                 try {
                     $requestObject = new AssociateIpAddressData();
                     $requestObject->zoneid = $dbFarmRole->CloudLocation;
@@ -252,7 +252,7 @@ class CloudstackHelper
                     }
 
                 } catch (\Exception $e) {
-                    \Logger::getLogger(\LOG_CATEGORY::FARM)->error(new \FarmLogMessage($dbServer->farmId, sprintf(
+                    \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(new \FarmLogMessage($dbServer->farmId, sprintf(
                         _("Cannot allocate new elastic ip for instance '%s': %s"),
                         $dbServer->serverId,
                         $e->getMessage()
@@ -285,13 +285,13 @@ class CloudstackHelper
                     'allocation_id' => $ipId
                 );
 
-                \Logger::getLogger(\LOG_CATEGORY::FARM)->info(
+                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(
                     new \FarmLogMessage($dbServer->farmId, sprintf(_("Allocated new IP: %s"), $ip['ipaddress']))
                 );
                 // Waiting...
                 sleep(5);
             } else
-                \Logger::getLogger(__CLASS__)->fatal(_("Limit for elastic IPs reached. Check zomby records in database."));
+                \Scalr::getContainer()->logger(__CLASS__)->fatal(_("Limit for elastic IPs reached. Check zomby records in database."));
         }
 
         if ($ip['ipaddress']) {
@@ -306,7 +306,7 @@ class CloudstackHelper
                 $dbServer, $ip['ipaddress'], $dbServer->localIp
             ));
         } else {
-            \Logger::getLogger(\LOG_CATEGORY::FARM)->fatal(
+            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(
             new \FarmLogMessage($dbServer->farmId, sprintf(
                 _("Cannot allocate elastic ip address for instance %s on farm %s (2)"),
                 $dbServer->serverId, $dbFarm->Name
@@ -327,16 +327,16 @@ class CloudstackHelper
         $db = \Scalr::getDb();
         $dbFarm = $dbFarmRole->GetFarmObject();
 
-        if ($newSettings[DBFarmRole::SETTING_CLOUDSTACK_NETWORK_ID] == 'SCALR_MANUAL') {
+        if ($newSettings[Entity\FarmRoleSetting::CLOUDSTACK_NETWORK_ID] == 'SCALR_MANUAL') {
             return true;
         }
-        $dbFarmRole->SetSetting(DBFarmRole::SETIING_CLOUDSTACK_STATIC_NAT_MAP, null, DBFarmRole::TYPE_LCL);
+        $dbFarmRole->SetSetting(Entity\FarmRoleSetting::CLOUDSTACK_STATIC_NAT_MAP, null, Entity\FarmRoleSetting::TYPE_LCL);
 
         $cs = $dbFarm->GetEnvironmentObject()->cloudstack($dbFarmRole->Platform);
 
         // Disassociate IP addresses if checkbox was unchecked
-        if (!$newSettings[DBFarmRole::SETIING_CLOUDSTACK_USE_STATIC_NAT] &&
-            $oldSettings[DBFarmRole::SETIING_CLOUDSTACK_USE_STATIC_NAT]) {
+        if (!$newSettings[Entity\FarmRoleSetting::CLOUDSTACK_USE_STATIC_NAT] &&
+            $oldSettings[Entity\FarmRoleSetting::CLOUDSTACK_USE_STATIC_NAT]) {
 
             $eips = $db->Execute("
                 SELECT * FROM elastic_ips WHERE farm_roleid = ?
@@ -356,9 +356,9 @@ class CloudstackHelper
         }
 
         //TODO: Handle situation when tab was not opened, but max instances setting was changed.
-        if ($newSettings[DBFarmRole::SETIING_CLOUDSTACK_STATIC_NAT_MAP] &&
-            $newSettings[DBFarmRole::SETIING_CLOUDSTACK_USE_STATIC_NAT]) {
-            $map = explode(";", $newSettings[DBFarmRole::SETIING_CLOUDSTACK_STATIC_NAT_MAP]);
+        if ($newSettings[Entity\FarmRoleSetting::CLOUDSTACK_STATIC_NAT_MAP] &&
+            $newSettings[Entity\FarmRoleSetting::CLOUDSTACK_USE_STATIC_NAT]) {
+            $map = explode(";", $newSettings[Entity\FarmRoleSetting::CLOUDSTACK_STATIC_NAT_MAP]);
 
             foreach ($map as $ipconfig) {
                 list ($serverIndex, $ipAddress) = explode("=", $ipconfig);

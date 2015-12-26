@@ -1,15 +1,8 @@
 <?php
 
-use Scalr\Service\Aws\Ec2\DataType\CreateNetworkInterfaceRequestData;
 use Scalr\Service\Aws\Ec2\DataType\AssociateAddressRequestData;
-use Scalr\Service\Aws\Ec2\DataType\IpPermissionData;
-use Scalr\Service\Aws\Ec2\DataType\IpRangeList;
-use Scalr\Service\Aws\Ec2\DataType\IpRangeData;
-use Scalr\Service\Aws\Ec2\DataType\NetworkInterfaceAttributeType;
-use Scalr\Service\Aws\Ec2\DataType\SecurityGroupFilterNameType;
-use Scalr\Service\Aws\Ec2\DataType\SubnetFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\AddressFilterNameType;
-use Scalr\Modules\PlatformFactory;
+use Scalr\Model\Entity;
 
 class Scalr_Role_Behavior_Router extends Scalr_Role_Behavior implements Scalr_Role_iBehavior
 {
@@ -39,7 +32,7 @@ class Scalr_Role_Behavior_Router extends Scalr_Role_Behavior implements Scalr_Ro
 
     public function onFarmSave(DBFarm $dbFarm, DBFarmRole $dbFarmRole)
     {
-        $vpcId = $dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID);
+        $vpcId = $dbFarm->GetSetting(Entity\FarmSetting::EC2_VPC_ID);
         if (!$vpcId) {
             //REMOVE VPC RELATED SETTINGS
             return;
@@ -84,11 +77,11 @@ class Scalr_Role_Behavior_Router extends Scalr_Role_Behavior implements Scalr_Ro
                 $aws->ec2->address->associate($associateAddressRequestData);
             }
 
-            $dbFarmRole->SetSetting(self::ROLE_VPC_IP, $publicIp, DBFarmRole::TYPE_LCL);
-            $dbFarmRole->SetSetting(self::ROLE_VPC_AID, $address->allocationId, DBFarmRole::TYPE_LCL);
+            $dbFarmRole->SetSetting(self::ROLE_VPC_IP, $publicIp, Entity\FarmRoleSetting::TYPE_LCL);
+            $dbFarmRole->SetSetting(self::ROLE_VPC_AID, $address->allocationId, Entity\FarmRoleSetting::TYPE_LCL);
         }
 
-        $dbFarmRole->SetSetting(self::ROLE_VPC_ROUTER_CONFIGURED, 1, DBFarmRole::TYPE_LCL);
+        $dbFarmRole->SetSetting(self::ROLE_VPC_ROUTER_CONFIGURED, 1, Entity\FarmRoleSetting::TYPE_LCL);
     }
 
 
@@ -124,5 +117,60 @@ class Scalr_Role_Behavior_Router extends Scalr_Role_Behavior implements Scalr_Ro
         }
 
         return $message;
+    }
+
+    public static function setupBehavior(Entity\FarmRole $farmRole)
+    {
+        $farm = $farmRole->farm;
+        $vpcId = $farm->settings[Entity\FarmSetting::EC2_VPC_ID];
+        if (!$vpcId) {
+            //REMOVE VPC RELATED SETTINGS
+            return;
+        }
+
+        if ($farmRole->settings[self::ROLE_VPC_ROUTER_CONFIGURED] == 1) {
+            // ALL OBJECTS ALREADY CONFIGURED
+            return;
+        }
+
+        $aws = $farm->GetEnvironmentObject()->aws($farmRole->CloudLocation);
+
+        $niId = $farmRole->settings[self::ROLE_VPC_NID];
+
+
+        // If there is no public IP allocate it and associate with NI
+        $publicIp = $farmRole->settings[self::ROLE_VPC_IP];
+        if ($niId && !$publicIp) {
+
+            $filter = array(array(
+                'name'  => AddressFilterNameType::networkInterfaceId(),
+                'value' => $niId,
+            ));
+
+            $addresses = $aws->ec2->address->describe(null, null, $filter);
+            $address = $addresses->get(0);
+            $associate = false;
+            if (!$address) {
+                $address = $aws->ec2->address->allocate('vpc');
+                $associate = true;
+            }
+
+            $publicIp = $address->publicIp;
+
+            if ($associate) {
+                $associateAddressRequestData = new AssociateAddressRequestData();
+                $associateAddressRequestData->networkInterfaceId = $niId;
+                $associateAddressRequestData->allocationId = $address->allocationId;
+                $associateAddressRequestData->allowReassociation = true;
+
+                //Associate PublicIP with NetworkInterface
+                $aws->ec2->address->associate($associateAddressRequestData);
+            }
+
+            $farmRole->settings[static::ROLE_VPC_IP] = (new Entity\FarmRoleSetting())->setValue($publicIp)->setType(Entity\FarmRoleSetting::TYPE_LCL);
+            $farmRole->settings[static::ROLE_VPC_AID] = (new Entity\FarmRoleSetting())->setValue($address->allocationId)->setType(Entity\FarmRoleSetting::TYPE_LCL);
+        }
+
+        $farmRole->settings[static::ROLE_VPC_ROUTER_CONFIGURED] = (new Entity\FarmRoleSetting())->setValue(1)->setType(Entity\FarmRoleSetting::TYPE_LCL);
     }
 }

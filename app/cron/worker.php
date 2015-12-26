@@ -21,10 +21,14 @@ use Scalr\System\Zmq\Cron\ErrorPayload;
 use Scalr\System\Zmq\Cron\AbstractPayload;
 use Scalr\System\Zmq\Zmsg;
 use Scalr\System\Zmq\Mdp\Mdp;
+use Scalr\System\Zmq\Exception\MdpException;
 
 set_time_limit(0);
 
 $opt = getopt('', ['name:']);
+
+//10 KiB of emergency memory
+Scalr::$emergencyMemory = str_repeat(' ', 10240);
 
 if (empty($opt['name']) || !preg_match('/^[\w]+(\.|$)/', $opt['name'])) {
     printf("Usage: worker.php --name=service [options]\n");
@@ -64,18 +68,28 @@ $worker = (new Worker(Scalr::config('scalr.crontab.sockets.broker'), $service, t
 ;
 
 $interrupt = 0;
+// Whether the worker lost connection to the broker.
+$disconnected = false;
+
 //Signal handler callback function
-$sigHandler = function ($signo = null) use (&$interrupt, $task, $worker) {
+$sigHandler = function ($signo = null) use (&$interrupt, $task, $worker, $disconnected) {
     static $once = 0;
+
+    //Releases emergency memory trying to handle memory limit fatal error
+    Scalr::$emergencyMemory = null;
 
     $interrupt++;
 
     if ($once++) return;
 
-    $task->log("DEBUG", "Worker received termination SIGNAL:%d", intval($signo));
+    if ($disconnected) {
+        $task->log("DEBUG", "Worker was disconnected. Exiting");
+    } else {
+        $task->log("DEBUG", "Worker received termination SIGNAL:%d", intval($signo));
+    }
 
     //Prevents zombifying
-    if ($task->isServiceRegistered() !== false) {
+    if (!$disconnected && $task->isServiceRegistered() !== false) {
         //Disconnect worker
         //NOTE! If broker is offline at this moment, the process is hanging while worker is sending the message
         $worker->send(Mdp::WORKER_DISCONNECT);
@@ -106,6 +120,13 @@ while (!$interrupt) {
             break;
         }
         throw $e;
+    } catch (MdpException $e) {
+        if (strpos($e->getMessage(), 'Disconnected from broker') !== false) {
+            $disconnected = true;
+            $interrupt++;
+            usleep(1);
+            break;
+        } else throw $e;
     }
 
     $payload = unserialize($request->getLast());

@@ -3,7 +3,8 @@
 namespace Scalr\Modules\Platforms\Ec2;
 
 use FarmLogMessage;
-use \Logger;
+use Scalr\Model\Entity\CloudInstanceType;
+use Scalr\Service\Aws\Ec2\DataType\ReservationData;
 use Scalr\Service\Aws\Exception\InstanceNotFoundException;
 use Scalr\Service\Aws\S3\DataType\ObjectData;
 use Scalr\Service\Aws\Client\ClientException as AwsClientException;
@@ -23,18 +24,24 @@ use Scalr\Service\Aws\Ec2\DataType\SubnetFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\InternetGatewayFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\RouteTableFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\IamInstanceProfileRequestData;
+use Scalr\Service\Aws\Ec2\DataType\IamInstanceProfileResponseData;
 use Scalr\Service\Aws\Ec2\DataType\ReservationList;
+use Scalr\Service\Aws\Ec2\DataType\ResourceTagSetData;
 use Scalr\Service\Aws\Ec2\DataType\VolumeData;
 use Scalr\Service\Aws\Ec2\DataType\VolumeFilterNameType;
+use Scalr\Service\Aws\Ec2\DataType\InstanceData;
 use Scalr\Modules\Platforms\AbstractAwsPlatformModule;
 use Scalr\Modules\Platforms\Ec2\Adapters\StatusAdapter;
 use Scalr\Service\Aws\Ec2\DataType\RouteData;
+use Scalr\Model\Entity;
 use Scalr\Model\Entity\Image;
+use Scalr\Model\Entity\Server;
+use Scalr\Model\Entity\SshKey;
 use \EC2_SERVER_PROPERTIES;
 use \DBServer;
-use \DBFarm;
 use \Exception;
 use Scalr\Util\CryptoTool;
+use Scalr_Environment;
 use \SERVER_PLATFORMS;
 use \DBRole;
 use \SERVER_SNAPSHOT_CREATION_TYPE;
@@ -48,6 +55,8 @@ use Scalr\Service\Aws;
 use Scalr\Service\Aws\Ec2\DataType\EbsBlockDeviceData;
 use Scalr\Service\Aws\Ec2\DataType\BlockDeviceMappingList;
 use Scalr\Farm\Role\FarmRoleStorageConfig;
+use Scalr\Modules\Platforms\OrphanedServer;
+use Scalr\Service\Aws\Ec2\DataType\ImageData;
 
 class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modules\PlatformModuleInterface
 {
@@ -59,11 +68,14 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
     const CERTIFICATE	= 'ec2.certificate';
     const ACCOUNT_TYPE  = 'ec2.account_type';
 
-    const DETAILED_BILLING_BUCKET   = 'ec2.detailed_billing.bucket';
-    const DETAILED_BILLING_ENABLED  = 'ec2.detailed_billing.enabled';
+    const DETAILED_BILLING_BUCKET           = 'ec2.detailed_billing.bucket';
+    const DETAILED_BILLING_ENABLED          = 'ec2.detailed_billing.enabled';
+    const DETAILED_BILLING_PAYER_ACCOUNT    = 'ec2.detailed_billing.payer_account';
+    const DETAILED_BILLING_REGION           = 'ec2.detailed_billing.region';
 
     const DEFAULT_VPC_ID            = 'ec2.vpc.default';
 
+    const ACCOUNT_TYPE_REGULAR      = 'regular';
     const ACCOUNT_TYPE_GOV_CLOUD    = 'gov-cloud';
     const ACCOUNT_TYPE_CN_CLOUD     = 'cn-cloud';
 
@@ -71,8 +83,6 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
      * @var array
      */
     public $instancesListCache;
-
-    protected $resumeStrategy = \Scalr_Role_Behavior::RESUME_STRATEGY_INIT;
 
     public function __construct()
     {
@@ -91,7 +101,13 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         //http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSOptimized.html
         $restrictions = [
             't1' => ['ebs' => true, 'hvm' => false],
-            't2' => ['ebs' => true, 'hvm' => true, 'vpc' => true, 'x64' => true],
+            't2' => [
+                't2.nano'  => ['ebs' => true, 'hvm' => true, 'vpc' => true],
+                't2.micro'  => ['ebs' => true, 'hvm' => true, 'vpc' => true],
+                't2.small'  => ['ebs' => true, 'hvm' => true, 'vpc' => true],
+                't2.medium' => ['ebs' => true, 'hvm' => true, 'vpc' => true],
+                't2.large'  => ['ebs' => true, 'hvm' => true, 'vpc' => true, 'x64' => true],
+            ],
             'm1' => [
                 'm1.small' =>  ['hvm' => false],
                 'm1.medium' => ['hvm' => false],
@@ -128,13 +144,24 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'note' => 'SHARED CPU'
             ),
 
+            't2.nano' => array(
+                'name' => 't2.nano',
+                'ram' => '512',
+                'vcpus' => '1',
+                'disk' => '',
+                'type' => '',
+                'note' => 'SHARED CPU',
+                'ebsencryption' => true
+            ),
+            
             't2.micro' => array(
                 'name' => 't2.micro',
                 'ram' => '1024',
                 'vcpus' => '1',
                 'disk' => '',
                 'type' => '',
-                'note' => 'SHARED CPU'
+                'note' => 'SHARED CPU',
+                'ebsencryption' => true
             ),
 
             't2.small' => array(
@@ -143,7 +170,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '1',
                 'disk' => '',
                 'type' => '',
-                'note' => 'SHARED CPU'
+                'note' => 'SHARED CPU',
+                'ebsencryption' => true
             ),
 
             't2.medium' => array(
@@ -152,7 +180,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '2',
                 'disk' => '',
                 'type' => '',
-                'note' => 'SHARED CPU'
+                'note' => 'SHARED CPU',
+                'ebsencryption' => true
             ),
 
             't2.large' => array(
@@ -161,7 +190,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '2',
                 'disk' => '',
                 'type' => '',
-                'note' => 'SHARED CPU'
+                'note' => 'SHARED CPU',
+                'ebsencryption' => true
             ),
 
             'm1.small' => array(
@@ -169,14 +199,22 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ram' => '1740',
                 'vcpus' => '1',
                 'disk' => '160',
-                'type' => 'HDD'
+                'type' => 'HDD',
+                'instancestore' => [
+                    'number' => 1,
+                    'size'   => 160
+                ]
             ),
             'm1.medium' => array(
                 'name' => 'm1.medium',
                 'ram' => '3840',
                 'vcpus' => '1',
                 'disk' => '410',
-                'type' => 'HDD'
+                'type' => 'HDD',
+                'instancestore' => [
+                    'number' => 1,
+                    'size'   => 410
+                ]
             ),
             'm1.large' => array(
                 'name' => 'm1.large',
@@ -184,7 +222,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '2',
                 'disk' => '840',
                 'type' => 'HDD',
-                'ebsoptimized' => true
+                'ebsoptimized' => true,
+                'instancestore' => [
+                    'number' => 2,
+                    'size'   => 420
+                ]
             ),
             'm1.xlarge' => array(
                 'name' => 'm1.xlarge',
@@ -192,7 +234,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '4',
                 'disk' => '1680',
                 'type' => 'HDD',
-                'ebsoptimized' => true
+                'ebsoptimized' => true,
+                'instancestore' => [
+                    'number' => 4,
+                    'size'   => 420
+                ]
             ),
 
             'm2.xlarge' => array(
@@ -200,7 +246,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ram' => '17510',
                 'vcpus' => '2',
                 'disk' => '420',
-                'type' => 'HDD'
+                'type' => 'HDD',
+                'instancestore' => [
+                    'number' => 1,
+                    'size'   => 420
+                ]
             ),
             'm2.2xlarge' => array(
                 'name' => 'm2.2xlarge',
@@ -208,7 +258,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '4',
                 'disk' => '850',
                 'type' => 'HDD',
-                'ebsoptimized' => true
+                'ebsoptimized' => true,
+                'instancestore' => [
+                    'number' => 1,
+                    'size'   => 850
+                ]
             ),
             'm2.4xlarge' => array(
                 'name' => 'm2.4xlarge',
@@ -216,7 +270,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '8',
                 'disk' => '1680',
                 'type' => 'HDD',
-                'ebsoptimized' => true
+                'ebsoptimized' => true,
+                'instancestore' => [
+                    'number' => 2,
+                    'size'   => 840
+                ]
             ),
 
             'm3.medium' => array(
@@ -225,7 +283,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '1',
                 'disk' => '4',
                 'type' => 'SSD',
-                'ebsencryption' => true
+                'ebsencryption' => true,
+                'instancestore' => [
+                    'number' => 1,
+                    'size'   => 4
+                ]
             ),
             'm3.large' => array(
                 'name' => 'm3.large',
@@ -233,7 +295,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '2',
                 'disk' => '32',
                 'type' => 'SSD',
-                'ebsencryption' => true
+                'ebsencryption' => true,
+                'instancestore' => [
+                    'number' => 1,
+                    'size'   => 32
+                ]
             ),
             'm3.xlarge' => array(
                 'name' => 'm3.xlarge',
@@ -242,7 +308,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'disk' => '80',
                 'type' => 'SSD',
                 'ebsencryption' => true,
-                'ebsoptimized' => true
+                'ebsoptimized' => true,
+                'instancestore' => [
+                    'number' => 2,
+                    'size'   => 40
+                ]
             ),
             'm3.2xlarge' => array(
                 'name' => 'm3.2xlarge',
@@ -251,7 +321,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'disk' => '160',
                 'type' => 'SSD',
                 'ebsencryption' => true,
-                'ebsoptimized' => true
+                'ebsoptimized' => true,
+                'instancestore' => [
+                    'number' => 2,
+                    'size'   => 80
+                ]
             ),
 
             ///
@@ -261,7 +335,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '2',
                 'disk' => '',
                 'type' => '',
-                'ebsencryption' => true
+                'ebsencryption' => true,
+                'ebsoptimized' => 'default',
+                'placementgroups' => true
             ),
             'm4.xlarge' => array(
                 'name' => 'm4.xlarge',
@@ -270,7 +346,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'disk' => '',
                 'type' => '',
                 'ebsencryption' => true,
-                'ebsoptimized' => true
+                'ebsoptimized' => 'default',
+                'placementgroups' => true
             ),
             'm4.2xlarge' => array(
                 'name' => 'm4.2xlarge',
@@ -279,7 +356,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'disk' => '',
                 'type' => '',
                 'ebsencryption' => true,
-                'ebsoptimized' => true
+                'ebsoptimized' => 'default',
+                'placementgroups' => true
             ),
             'm4.4xlarge' => array(
                 'name' => 'm4.4xlarge',
@@ -288,7 +366,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'disk' => '',
                 'type' => '',
                 'ebsencryption' => true,
-                'ebsoptimized' => true
+                'ebsoptimized' => 'default',
+                'placementgroups' => true
             ),
             'm4.10xlarge' => array(
                 'name' => 'm4.10xlarge',
@@ -297,7 +376,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'disk' => '',
                 'type' => '',
                 'ebsencryption' => true,
-                'ebsoptimized' => true
+                'ebsoptimized' => 'default',
+                'placementgroups' => true
             ),
 
             'c1.medium' => array(
@@ -305,7 +385,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ram' => '1741',
                 'vcpus' => '2',
                 'disk' => '350',
-                'type' => 'HDD'
+                'type' => 'HDD',
+                'instancestore' => [
+                    'number' => 1,
+                    'size'   => 350
+                ]
             ),
             'c1.xlarge' => array(
                 'name' => 'c1.xlarge',
@@ -313,7 +397,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '8',
                 'disk' => '1680',
                 'type' => 'HDD',
-                'ebsoptimized' => true
+                'ebsoptimized' => true,
+                'instancestore' => [
+                    'number' => 4,
+                    'size'   => 420
+                ]
             ),
 
             'c4.large' => array(
@@ -374,7 +462,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'disk' => '32',
                 'type' => 'SSD',
                 'ebsencryption' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 2,
+                    'size'   => 16
+                ]
             ),
             'c3.xlarge' => array(
                 'name' => 'c3.xlarge',
@@ -384,7 +476,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 2,
+                    'size'   => 40
+                ]
             ),
             'c3.2xlarge' => array(
                 'name' => 'c3.2xlarge',
@@ -394,7 +490,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 2,
+                    'size'   => 80
+                ]
             ),
             'c3.4xlarge' => array(
                 'name' => 'c3.4xlarge',
@@ -404,7 +504,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 2,
+                    'size'   => 160
+                ]
             ),
             'c3.8xlarge' => array(
                 'name' => 'c3.8xlarge',
@@ -413,7 +517,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'disk' => '640',
                 'type' => 'SSD',
                 'ebsencryption' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 2,
+                    'size'   => 320
+                ]
             ),
 
             'r3.large' => array(
@@ -423,7 +531,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'disk' => '32',
                 'type' => 'SSD',
                 'ebsencryption' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 1,
+                    'size'   => 32
+                ]
             ),
             'r3.xlarge' => array(
                 'name' => 'r3.xlarge',
@@ -433,7 +545,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 1,
+                    'size'   => 80
+                ]
             ),
             'r3.2xlarge' => array(
                 'name' => 'r3.2xlarge',
@@ -443,7 +559,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 1,
+                    'size'   => 160
+                ]
             ),
             'r3.4xlarge' => array(
                 'name' => 'r3.4xlarge',
@@ -453,7 +573,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 1,
+                    'size'   => 320
+                ]
             ),
             'r3.8xlarge' => array(
                 'name' => 'r3.8xlarge',
@@ -462,7 +586,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'disk' => '640',
                 'type' => 'SSD',
                 'ebsencryption' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 2,
+                    'size'   => 320
+                ]
             ),
 
             'i2.xlarge' => array(
@@ -473,7 +601,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 1,
+                    'size'   => 800
+                ]
             ),
             'i2.2xlarge' => array(
                 'name' => 'i2.2xlarge',
@@ -483,7 +615,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 2,
+                    'size'   => 800
+                ]
             ),
             'i2.4xlarge' => array(
                 'name' => 'i2.4xlarge',
@@ -493,7 +629,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 4,
+                    'size'   => 800
+                ]
             ),
             'i2.8xlarge' => array(
                 'name' => 'i2.8xlarge',
@@ -502,7 +642,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'disk' => '6400',
                 'type' => 'SSD',
                 'ebsencryption' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 8,
+                    'size'   => 800
+                ]
             ),
 
             'd2.xlarge' => array(
@@ -513,7 +657,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'HDD',
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 3,
+                    'size'   => 2000
+                ]
             ),
             'd2.2xlarge' => array(
                 'name' => 'd2.2xlarge',
@@ -523,7 +671,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'HDD',
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 6,
+                    'size'   => 2000
+                ]
             ),
             'd2.4xlarge' => array(
                 'name' => 'd2.4xlarge',
@@ -533,7 +685,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'HDD',
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 12,
+                    'size'   => 2000
+                ]
             ),
             'd2.8xlarge' => array(
                 'name' => 'd2.8xlarge',
@@ -543,7 +699,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'HDD',
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 24,
+                    'size'   => 2000
+                ]
             ),
 
             'g2.2xlarge' => array(
@@ -555,7 +715,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'note' => 'GPU',
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 1,
+                    'size'   => 60
+                ]
             ),
 
             'g2.8xlarge' => array(
@@ -567,7 +731,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'note' => 'GPU',
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 2,
+                    'size'   => 120
+                ]
             ),
 
             'hs1.8xlarge' => array(
@@ -576,7 +744,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '16',
                 'disk' => '49152',
                 'type' => 'SSD',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 24,
+                    'size'   => 2000
+                ]
             ),
 
             'cc2.8xlarge' => array(
@@ -585,7 +757,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '32',
                 'disk' => '3360',
                 'type' => 'HDD',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 4,
+                    'size'   => 840
+                ]
             ),
             'cg1.4xlarge' => array(
                 'name' => 'cg1.4xlarge',
@@ -594,7 +770,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'disk' => '1680',
                 'type' => 'HDD',
                 'note' => 'GPU',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 2,
+                    'size'   => 840
+                ]
             ),
             'hi1.4xlarge' => array(
                 'name' => 'hi1.4xlarge',
@@ -602,7 +782,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'vcpus' => '16',
                 'disk' => '2048',
                 'type' => 'SSD',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 2,
+                    'size'   => 1024
+                ]
             ),
             'cr1.8xlarge' => array(
                 'name' => 'cr1.8xlarge',
@@ -611,7 +795,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'disk' => '240',
                 'type' => 'SSD',
                 'ebsencryption' => true,
-                'placementgroups' => true
+                'placementgroups' => true,
+                'instancestore' => [
+                    'number' => 2,
+                    'size'   => 120
+                ]
             )
         );
 
@@ -641,7 +829,13 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
     {
         if (!$this->container->analytics->enabled) return false;
 
-        if (in_array($env->getPlatformConfigValue(self::ACCOUNT_TYPE), array(self::ACCOUNT_TYPE_GOV_CLOUD, self::ACCOUNT_TYPE_CN_CLOUD))) {
+        if (in_array(
+                $env->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE],
+                [
+                    Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE_GOV_CLOUD,
+                    Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE_CN_CLOUD
+                ]
+            )) {
             $locations = $this->getLocations($env);
             $cloudLocation = key($locations);
         }
@@ -786,15 +980,6 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
     /**
      * {@inheritdoc}
-     * @see \Scalr\Modules\PlatformModuleInterface::GetServerFlavor()
-     */
-    public function GetServerFlavor(DBServer $DBServer)
-    {
-        return $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_TYPE);
-    }
-
-    /**
-     * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::IsServerExists()
      */
     public function IsServerExists(DBServer $DBServer, $debug = false)
@@ -814,79 +999,158 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
     public function GetServerIPAddresses(DBServer $DBServer)
     {
         $instanceId = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID);
-        $list = $DBServer->GetEnvironmentObject()->aws($DBServer)
-                         ->ec2->instance->describe($instanceId);
+        $cacheKey = sprintf('%s:%s', $DBServer->envId, $DBServer->cloudLocation);
 
-        if (!($list instanceof ReservationList)) {
-            throw new Exception(sprintf(
-                "ReservationList object is expected for describe instance response. InstanceId:%s, Environment:%d",
-                $instanceId, $DBServer->envId
-            ));
-        } else if (count($list) == 0) {
-            throw new Exception(sprintf(
-                "Instance %s has not been found in the cloud. Environment:%d",
-                $instanceId, $DBServer->envId
-            ));
+        if (!isset($this->instancesListCache[$cacheKey][$instanceId])) {
+            $list = $DBServer->GetEnvironmentObject()->aws($DBServer)
+                             ->ec2->instance->describe($instanceId);
+
+            if (!($list instanceof ReservationList)) {
+                throw new Exception(sprintf(
+                    "ReservationList object is expected for describe instance response. InstanceId:%s, Environment:%d",
+                    $instanceId, $DBServer->envId
+                ));
+            } else if (count($list) == 0) {
+                throw new Exception(sprintf(
+                    "Instance %s has not been found in the cloud. Environment:%d",
+                    $instanceId, $DBServer->envId
+                ));
+            }
+
+            $instance = $list->get(0)->instancesSet->get(0);
+
+            $this->instancesListCache[$cacheKey][$instance->instanceId] = [
+                'localIp' => $instance->privateIpAddress,
+                'remoteIp' => $instance->ipAddress,
+                'status' => $instance->instanceState->name,
+                'type' => $instance->instanceType
+            ];
         }
 
-        $instance = $list->get(0)->instancesSet->get(0);
-
         return array(
-            'localIp'  => $instance->privateIpAddress,
-            'remoteIp' => $instance->ipAddress
+            'localIp'  => $this->instancesListCache[$cacheKey][$instanceId]['localIp'],
+            'remoteIp' => $this->instancesListCache[$cacheKey][$instanceId]['remoteIp']
         );
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Modules\PlatformModuleInterface::getOrphanedServers()
+     */
+    public function getOrphanedServers(\Scalr_Environment $environment, $cloudLocation)
+    {
+        if (empty($cloudLocation)) {
+            return [];
+        }
+
+        $aws = $environment->aws($cloudLocation);
+
+        $orphans = [];
+        $nextToken = null;
+
+        do {
+            try {
+                /* @var $results ReservationList */
+                $results = $aws->ec2->instance->describe(null, null, $nextToken, 1000);
+            } catch (Exception $e) {
+                throw new Exception(sprintf("Cannot get list of servers for platform ec2: %s", $e->getMessage()));
+            }
+
+            if (count($results)) {
+                foreach ($results as $reservation) {
+                    /* @var $reservation ReservationData */
+                    foreach ($reservation->instancesSet as $instance) {
+                        /* @var $instance InstanceData */
+                        if (StatusAdapter::load($instance->instanceState->name)->isTerminated()) {
+                            continue;
+                        }
+
+                        // check whether scalr tag exists
+                        foreach ($instance->tagSet as $tag) {
+                            /* @var $tag ResourceTagSetData */
+                            if ($tag->key == "scalr-meta") {
+                                continue 2;
+                            }
+                        }
+
+                        $orphans[] = new OrphanedServer(
+                            $instance->instanceId,
+                            $instance->imageId,
+                            $instance->instanceState->name,
+                            $instance->launchTime->setTimezone(new \DateTimeZone("UTC")), // !important
+                            $instance->privateIpAddress,
+                            $instance->ipAddress,
+                            $instance->keyName,
+                            $instance->vpcId,
+                            $instance->subnetId,
+                            $instance->architecture,
+                            $instance->groupSet->toArray(),
+                            $instance->tagSet->toArray()
+                        );
+                    }
+                }
+            }
+
+            $nextToken = $results->getNextToken();
+
+            unset($results);
+        } while ($nextToken);
+
+        return $orphans;
     }
 
     /**
      * Gets the list of the EC2 instances
      * for the specified environment and AWS location
      *
-     * @param   \Scalr_Environment $environment Environment Object
-     * @param   string            $region      EC2 location name
-     * @param   bool              $skipCache   Whether it should skip the cache.
-     * @return  array Returns array looks like array(InstanceId => stateName)
+     * @param  \Scalr_Environment $environment          Environment Object
+     * @param  string             $region               EC2 location name
+     * @param  bool               $skipCache   optional Whether it should skip the cache.
+     * @return array Returns array looks like array(InstanceId => stateName)
      */
     public function GetServersList(\Scalr_Environment $environment, $region, $skipCache = false)
     {
         if (!$region)
-            return array();
+            return [];
 
         $aws = $environment->aws($region);
-
         $cacheKey = sprintf('%s:%s', $environment->id, $region);
 
         if (!isset($this->instancesListCache[$cacheKey]) || $skipCache) {
             $cacheValue = array();
-            $nextToken = null;
-            $results = null;
 
+            /* @var $results ReservationList */
+            $results = null;
             do {
                 try {
-                    if (isset($results)) {
-                        $nextToken = $results->getNextToken();
-                    }
-                    $results = $aws->ec2->instance->describe(null, null, $nextToken);
+                    $results = $aws->ec2->instance->describe(null, null, (isset($results) ? $results->getNextToken() : null), 1000);
                 } catch (Exception $e) {
                     throw new Exception(sprintf("Cannot get list of servers for platform ec2: %s", $e->getMessage()));
                 }
 
                 if (count($results)) {
                     foreach ($results as $reservation) {
-                        /* @var $reservation Scalr\Service\Aws\Ec2\DataType\ReservationData */
+                        /* @var $reservation ReservationData */
                         foreach ($reservation->instancesSet as $instance) {
-                            /* @var $instance Scalr\Service\Aws\Ec2\DataType\InstanceData */
-                            $cacheValue[sprintf('%s:%s', $environment->id, $region)][$instance->instanceId] = $instance->instanceState->name;
+                            /* @var $instance InstanceData */
+
+                            $cacheValue[$cacheKey][$instance->instanceId] = [
+                                'localIp'    => $instance->privateIpAddress,
+                                'remoteIp'   => $instance->ipAddress,
+                                'status'     => $instance->instanceState->name,
+                                'type'       => $instance->instanceType,
+                                '_timestamp' => time()
+                            ];
                         }
                     }
                 }
             } while ($results->getNextToken());
 
-            foreach ($cacheValue as $offset => $value) {
+            foreach ($cacheValue as $offset => $value)
                 $this->instancesListCache[$offset] = $value;
-            }
         }
 
-        return isset($this->instancesListCache[$cacheKey]) ? $this->instancesListCache[$cacheKey] : array();
+        return isset($this->instancesListCache[$cacheKey]) ? $this->instancesListCache[$cacheKey] : [];
     }
 
     /**
@@ -910,7 +1174,15 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
                 if ($reservations && count($reservations) > 0 && $reservations->get(0)->instancesSet &&
                     count($reservations->get(0)->instancesSet) > 0) {
-                    $status = $reservations->get(0)->instancesSet->get(0)->instanceState->name;
+                    $instance = $reservations->get(0)->instancesSet->get(0);
+                    $status = $instance->instanceState->name;
+
+                    $this->instancesListCache[$cacheKey][$instance->instanceId] = [
+                        'localIp' => $instance->privateIpAddress,
+                        'remoteIp' => $instance->ipAddress,
+                        'status' => $instance->instanceState->name,
+                        'type' => $instance->instanceType
+                    ];
                 } else {
                     $status = 'not-found';
                 }
@@ -919,7 +1191,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 $status = 'not-found';
             }
         } else {
-            $status = $this->instancesListCache[$cacheKey][$iid];
+            $status = $this->instancesListCache[$cacheKey][$iid]['status'];
         }
 
         return StatusAdapter::load($status);
@@ -982,8 +1254,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
     public function RemoveServerSnapshot(Image $image)
     {
         try {
-            if (! $image->getEnvironment())
+            if (! $image->getEnvironment()) {
                 return true;
+            }
 
             $aws = $image->getEnvironment()->aws($image->cloudLocation);
             try {
@@ -1035,9 +1308,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
                 if ($ami) {
                     if (!$bucket_not_exists) {
-                        /* @var $object ObjectData */
-                        foreach ($objects as $object) {
-                            $object->delete();
+                        if (!empty($objects)) {
+                            /* @var $object ObjectData */
+                            foreach ($objects as $object) {
+                                $object->delete();
+                            }
                         }
                         $bucket_not_exists = true;
                     }
@@ -1101,7 +1376,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                     }
                 }
             } catch (Exception $e) {
-                \Logger::getLogger(__CLASS__)->fatal("CheckServerSnapshotStatus ({$BundleTask->id}): {$e->getMessage()}");
+                \Scalr::getContainer()->logger(__CLASS__)->fatal("CheckServerSnapshotStatus ({$BundleTask->id}): {$e->getMessage()}");
             }
         }
     }
@@ -1115,17 +1390,13 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         $DBServer = DBServer::LoadByID($BundleTask->serverId);
         $aws = $DBServer->GetEnvironmentObject()->aws($DBServer);
 
-        if (!$BundleTask->prototypeRoleId) {
-            //FIXME $proto_image_id is never used
-            $proto_image_id = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::AMIID);
-        } else {
+        if ($BundleTask->prototypeRoleId) {
             $protoRole = DBRole::loadById($BundleTask->prototypeRoleId);
 
             $image = $protoRole->__getNewRoleObject()->getImage(
                 SERVER_PLATFORMS::EC2,
                 $DBServer->GetProperty(EC2_SERVER_PROPERTIES::REGION)
             );
-            $proto_image_id = $image->imageId;
 
             //Bundle EC2 in AWS way
             $BundleTask->designateType(\SERVER_PLATFORMS::EC2, $image->getImage()->getOs()->family, $image->getImage()->getOs()->generation);
@@ -1140,20 +1411,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 $BundleTask->SnapshotCreationFailed("Only EBS root filesystem supported for Windows servers.");
                 return;
             }
-            if ($BundleTask->status == SERVER_SNAPSHOT_CREATION_STATUS::PENDING) {
-                $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
-                $BundleTask->Log(sprintf(_("Selected platform snapshotting type: %s"), $BundleTask->bundleType));
-                $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::PREPARING;
 
-                $msg = $DBServer->SendMessage(new \Scalr_Messaging_Msg_Win_PrepareBundle($BundleTask->id));
-                $BundleTask->Log(sprintf(
-                    _("PrepareBundle message sent. MessageID: %s. Bundle task status changed to: %s"),
-                    $msg->messageId, $BundleTask->status
-                ));
-                $BundleTask->Save();
-            } elseif ($BundleTask->status == SERVER_SNAPSHOT_CREATION_STATUS::PREPARING) {
-                $callEc2CreateImage = true;
-            }
+            $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS_HVM;
+            $callEc2CreateImage = true;
         } else {
             if ($image) {
                 $BundleTask->Log(sprintf(
@@ -1339,7 +1599,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
                     $ebs = $aws->ec2->volume->describe(null, $filter);
                     foreach ($ebs as $volume) {
-                        /* @var $volume \Scalr\Service\Aws\Ec2\DataType\VolumeData */
+                        /* @var $volume VolumeData */
 
                         $blockStorage[] = $volume->attachmentSet->get(0)->device . " - {$volume->size} Gb"
                         . " (<a href='#/tools/aws/ec2/ebs/volumes/" . $volume->volumeId . "/view"
@@ -1402,7 +1662,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                     'Instance type'           => $instanceData->instanceType,
                     'Launch time'             => $instanceData->launchTime->format('Y-m-d\TH:i:s.000\Z'),
                     'Architecture'            => $instanceData->architecture,
-                    'IAM Role'                => $instanceData->iamInstanceProfile->arn,
+                    'IAM Role'                => isset($instanceData->iamInstanceProfile) && $instanceData->iamInstanceProfile instanceof IamInstanceProfileResponseData ? $instanceData->iamInstanceProfile->arn : null,
                     'Root device type'        => $instanceData->rootDeviceType,
                     'Instance state'          => $instanceData->instanceState->name . " ({$instanceData->instanceState->code})",
                     'Placement'               => isset($instanceData->placement) ? $instanceData->placement->availabilityZone : null,
@@ -1478,7 +1738,10 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
                 return $retval;
             }
+        } catch (InstanceNotFoundException $e) {
+            return false;
         } catch (Exception $e) {
+            throw $e;
         }
 
         return false;
@@ -1615,7 +1878,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             $DBRole = $dbFarmRole->GetRoleObject();
 
             $runInstanceRequest->setMonitoring(
-                $dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_ENABLE_CW_MONITORING)
+                $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_ENABLE_CW_MONITORING)
             );
 
             $image = $DBRole->__getNewRoleObject()->getImage(
@@ -1631,19 +1894,19 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
             $akiId = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::AKIID);
             if (!$akiId)
-                $akiId = $dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_AKI_ID);
+                $akiId = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_AKI_ID);
 
             if ($akiId)
                 $runInstanceRequest->kernelId = $akiId;
 
             $ariId = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::ARIID);
             if (!$ariId)
-                $ariId = $dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_ARI_ID);
+                $ariId = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_ARI_ID);
 
             if ($ariId)
                 $runInstanceRequest->ramdiskId = $ariId;
 
-            $iType = $dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_INSTANCE_TYPE);
+            $iType = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_INSTANCE_TYPE);
             $launchOptions->serverType = $iType;
 
             // Check governance of instance types
@@ -1656,13 +1919,13 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                     ));
             }
 
-            $iamProfileArn = $dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_IAM_INSTANCE_PROFILE_ARN);
+            $iamProfileArn = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_IAM_INSTANCE_PROFILE_ARN);
             if ($iamProfileArn) {
                 $iamInstanceProfile = new IamInstanceProfileRequestData($iamProfileArn);
                 $runInstanceRequest->setIamInstanceProfile($iamInstanceProfile);
             }
 
-            if ($dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_EBS_OPTIMIZED) == 1)
+            if ($dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_OPTIMIZED) == 1)
                 $runInstanceRequest->ebsOptimized = true;
             else
                 $runInstanceRequest->ebsOptimized = false;
@@ -1695,7 +1958,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
             $runInstanceRequest->userData = base64_encode($userData);
 
-            $vpcId = $dbFarmRole->GetFarmObject()->GetSetting(DBFarm::SETTING_EC2_VPC_ID);
+            $vpcId = $dbFarmRole->GetFarmObject()->GetSetting(Entity\FarmSetting::EC2_VPC_ID);
             if ($vpcId) {
                 if ($DBRole->hasBehavior(ROLE_BEHAVIORS::VPC_ROUTER)) {
                     $networkInterface = new InstanceNetworkInterfaceSetRequestData();
@@ -1707,7 +1970,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                     $noSecurityGroups = true;
                 } else {
 
-                    $vpcSubnetId = $dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_VPC_SUBNET_ID);
+                    $vpcSubnetId = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_VPC_SUBNET_ID);
 
                     // VPC Support v2
                     if ($vpcSubnetId && substr($vpcSubnetId, 0, 6) != 'subnet') {
@@ -1733,14 +1996,14 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                         }
 
                     } else {
-                        $vpcInternetAccess = $dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_VPC_INTERNET_ACCESS);
+                        $vpcInternetAccess = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_VPC_INTERNET_ACCESS);
                         if (!$vpcSubnetId) {
                             $aws = $environment->aws($launchOptions->cloudLocation);
 
                             $subnet = $this->AllocateNewSubnet(
                                 $aws->ec2,
                                 $vpcId,
-                                $dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_VPC_AVAIL_ZONE),
+                                $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_VPC_AVAIL_ZONE),
                                 24
                             );
 
@@ -1754,9 +2017,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
                             try {
 
-                                $routeTableId = $dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_VPC_ROUTING_TABLE_ID);
+                                $routeTableId = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_VPC_ROUTING_TABLE_ID);
 
-                                \Logger::getLogger('VPC')->warn(new \FarmLogMessage($DBServer->farmId, "Internet access: {$vpcInternetAccess}"));
+                                \Scalr::getContainer()->logger('VPC')->warn(new \FarmLogMessage($DBServer->farmId, "Internet access: {$vpcInternetAccess}"));
 
                                 if (!$routeTableId) {
                                     if ($vpcInternetAccess == \Scalr_Role_Behavior_Router::INTERNET_ACCESS_OUTBOUND) {
@@ -1768,11 +2031,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
                                         $networkInterfaceId = $routerRole->GetSetting(\Scalr_Role_Behavior_Router::ROLE_VPC_NID);
 
-                                        \Logger::getLogger('EC2')->warn(new \FarmLogMessage($DBServer->farmId, "Requesting outbound routing table. NID: {$networkInterfaceId}"));
+                                        \Scalr::getContainer()->logger('EC2')->warn(new \FarmLogMessage($DBServer->farmId, "Requesting outbound routing table. NID: {$networkInterfaceId}"));
 
                                         $routeTableId = $this->getRoutingTable($vpcInternetAccess, $aws, $networkInterfaceId, $vpcId);
 
-                                        \Logger::getLogger('EC2')->warn(new \FarmLogMessage($DBServer->farmId, "Routing table ID: {$routeTableId}"));
+                                        \Scalr::getContainer()->logger('EC2')->warn(new \FarmLogMessage($DBServer->farmId, "Routing table ID: {$routeTableId}"));
 
                                     } elseif ($vpcInternetAccess == \Scalr_Role_Behavior_Router::INTERNET_ACCESS_FULL) {
                                         $routeTableId = $this->getRoutingTable($vpcInternetAccess, $aws, null, $vpcId);
@@ -1783,14 +2046,14 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
                             } catch (Exception $e) {
 
-                                \Logger::getLogger('EC2')->warn(new \FarmLogMessage($DBServer->farmId, "Removing allocated subnet, due to routing table issues"));
+                                \Scalr::getContainer()->logger('EC2')->warn(new \FarmLogMessage($DBServer->farmId, "Removing allocated subnet, due to routing table issues"));
 
                                 $aws->ec2->subnet->delete($subnet->subnetId);
                                 throw $e;
                             }
 
                             $selectedSubnetId = $subnet->subnetId;
-                            $dbFarmRole->SetSetting(\DBFarmRole::SETTING_AWS_VPC_SUBNET_ID, $selectedSubnetId, \DBFarmRole::TYPE_LCL);
+                            $dbFarmRole->SetSetting(Entity\FarmRoleSetting::AWS_VPC_SUBNET_ID, $selectedSubnetId, Entity\FarmRoleSetting::TYPE_LCL);
                         } else
                             $selectedSubnetId = $vpcSubnetId;
                     }
@@ -1810,8 +2073,16 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
                         $networkInterface->subnetId = $selectedSubnetId;
 
+                        $staticPrivateIpsMap = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_PRIVATE_IPS_MAP);
+                        if (!empty($staticPrivateIpsMap)) {
+                            $map = @json_decode($staticPrivateIpsMap, true);
+                            if (array_key_exists((int)$DBServer->index, $map)) {
+                                $networkInterface->privateIpAddress = $map[$DBServer->index];
+                            }
+                        }
+
                         $aws = $environment->aws($launchOptions->cloudLocation);
-                        $sgroups = $this->GetServerSecurityGroupsList($DBServer, $aws->ec2, $vpcId, $governance);
+                        $sgroups = $this->GetServerSecurityGroupsList($DBServer, $aws->ec2, $vpcId, $governance, $launchOptions->osFamily);
                         $networkInterface->setSecurityGroupId($sgroups);
 
                         $runInstanceRequest->setNetworkInterface($networkInterface);
@@ -1827,7 +2098,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             if ($rootDevice && $rootDevice['settings'])
                 $rootDeviceSettings = $rootDevice['settings'];
 
-            $instanceInitiatedShutdownBehavior = $dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_SHUTDOWN_BEHAVIOR);
+            $instanceInitiatedShutdownBehavior = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_SHUTDOWN_BEHAVIOR);
         } else {
             $instanceInitiatedShutdownBehavior = null;
             $runInstanceRequest->userData = base64_encode(trim($launchOptions->userData));
@@ -1844,7 +2115,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         $runInstanceRequest->instanceInitiatedShutdownBehavior = $instanceInitiatedShutdownBehavior ?: 'terminate';
 
         if (!$noSecurityGroups) {
-            foreach ($this->GetServerSecurityGroupsList($DBServer, $aws->ec2, $vpcId, $governance) as $sgroup) {
+            foreach ($this->GetServerSecurityGroupsList($DBServer, $aws->ec2, $vpcId, $governance, $launchOptions->osFamily) as $sgroup) {
                 $runInstanceRequest->appendSecurityGroupId($sgroup);
             }
 
@@ -1876,53 +2147,30 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 true,
                 null
             );
-            $rootBlockDevice = new BlockDeviceMappingData('/dev/sda1', null, null, $ebs);
+
+            $deviceName = $rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_DEVICE_NAME] ? $rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_DEVICE_NAME] : '/dev/sda1';
+
+            $rootBlockDevice = new BlockDeviceMappingData($deviceName, null, null, $ebs);
             $runInstanceRequest->appendBlockDeviceMapping($rootBlockDevice);
         }
 
-        if (substr($launchOptions->serverType, 0, 2) == 'm3' ||
-            substr($launchOptions->serverType, 0, 2) == 'm4' ||
-            substr($launchOptions->serverType, 0, 2) == 'i2' ||
-            substr($launchOptions->serverType, 0, 2) == 'r3' ||
-            substr($launchOptions->serverType, 0, 2) == 'd2' ||
-            $launchOptions->serverType == 'hi1.4xlarge' ||
-            $launchOptions->serverType == 'cc2.8xlarge' ||
-            $launchOptions->serverType == 'hs1.8xlarge' ||
-            $launchOptions->osFamily == 'oel') {
-            foreach ($this->GetBlockDeviceMapping($launchOptions->serverType) as $bdm) {
-                $runInstanceRequest->appendBlockDeviceMapping($bdm);
-            }
+        foreach ($this->GetBlockDeviceMapping($launchOptions->serverType) as $bdm) {
+            $runInstanceRequest->appendBlockDeviceMapping($bdm);
         }
 
-        if (in_array($runInstanceRequest->instanceType, array(
-            'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge', 'cc2.8xlarge',
-            'cg1.4xlarge', 'g2.2xlarge', 'g2.8xlarge',
-            'cr1.8xlarge', 'r3.large', 'r3.xlarge', 'r3.2xlarge', 'r3.4xlarge', 'r3.8xlarge',
-            'hi1.4xlarge', 'hs1.8xlarge', 'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge', 'i2.8xlarge',
-            'd2.xlarge', 'd2.2xlarge', 'd2.4xlarge', 'd2.8xlarge'
-            ))) {
-
-            $placementGroup = $DBServer->GetFarmRoleObject()->GetSetting(\DBFarmRole::SETTING_AWS_CLUSTER_PG);
-            if ($placementGroup) {
-                if ($placementData === null) {
-                    $placementData = new PlacementResponseData(null, $placementGroup);
-                } else {
-                    $placementData->groupName = $placementGroup;
-                }
-            }
-        }
+        $placementData = $this->GetPlacementGroupData($launchOptions->serverType, $DBServer, $placementData);
 
         if ($placementData !== null) {
             $runInstanceRequest->setPlacement($placementData);
         }
 
-        $sshKey = \Scalr_SshKey::init();
+        $skipKeyValidation = false;
+        $sshKey = new SshKey();
+        $farmId = NULL;
         if ($DBServer->status == SERVER_STATUS::TEMPORARY) {
             $keyName = "SCALR-ROLESBUILDER-" . SCALR_ID;
-            if (!$sshKey->loadGlobalByName($keyName, $launchOptions->cloudLocation, $DBServer->envId, SERVER_PLATFORMS::EC2))
+            if (!$sshKey->loadGlobalByName($DBServer->envId, SERVER_PLATFORMS::EC2, $launchOptions->cloudLocation, $keyName))
                 $keyName = "SCALR-ROLESBUILDER-" . SCALR_ID . "-{$DBServer->envId}";
-
-            $farmId = NULL;
         } else {
             $keyName = $governance->getValue(SERVER_PLATFORMS::EC2, \Scalr_Governance::AWS_KEYPAIR);
             if ($keyName) {
@@ -1931,23 +2179,23 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 $keyName = "FARM-{$DBServer->farmId}-" . SCALR_ID;
                 $farmId = $DBServer->farmId;
                 $oldKeyName = "FARM-{$DBServer->farmId}";
-                if ($sshKey->loadGlobalByName($oldKeyName, $launchOptions->cloudLocation, $DBServer->envId, SERVER_PLATFORMS::EC2)) {
+                if ($sshKey->loadGlobalByName($DBServer->envId, SERVER_PLATFORMS::EC2, $launchOptions->cloudLocation, $oldKeyName)) {
                     $keyName = $oldKeyName;
                     $skipKeyValidation = true;
                 }
             }
         }
-        if (!$skipKeyValidation && !$sshKey->loadGlobalByName($keyName, $launchOptions->cloudLocation, $DBServer->envId, SERVER_PLATFORMS::EC2)) {
+        if (!$skipKeyValidation && !$sshKey->loadGlobalByName($DBServer->envId, SERVER_PLATFORMS::EC2, $launchOptions->cloudLocation, $keyName)) {
             $result = $aws->ec2->keyPair->create($keyName);
             if ($result->keyMaterial) {
                 $sshKey->farmId = $farmId;
                 $sshKey->envId = $DBServer->envId;
-                $sshKey->type = \Scalr_SshKey::TYPE_GLOBAL;
+                $sshKey->type = SshKey::TYPE_GLOBAL;
+                $sshKey->platform = SERVER_PLATFORMS::EC2;
                 $sshKey->cloudLocation = $launchOptions->cloudLocation;
                 $sshKey->cloudKeyName = $keyName;
-                $sshKey->platform = SERVER_PLATFORMS::EC2;
-                $sshKey->setPrivate($result->keyMaterial);
-                $sshKey->setPublic($sshKey->generatePublicKey());
+                $sshKey->privateKey = $result->keyMaterial;
+                $sshKey->generatePublicKey();
                 $sshKey->save();
             }
         }
@@ -1960,6 +2208,10 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             if (stristr($e->getMessage(), "The key pair") && stristr($e->getMessage(), "does not exist")) {
                 $sshKey->delete();
                 throw $e;
+            }
+
+            if (stristr($e->getMessage(), "The requested configuration is currently not supported for this AMI")) {
+                \Scalr::getContainer()->logger(__CLASS__)->fatal(sprintf("Unsupported configuration: %s", json_encode($runInstanceRequest)));
             }
 
             if (stristr($e->getMessage(), "The requested Availability Zone is no longer supported") ||
@@ -1985,20 +2237,27 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         }
 
         if ($result->instancesSet->get(0)->instanceId) {
+            $instanceTypeInfo = $this->getInstanceType(
+                $runInstanceRequest->instanceType,
+                $environment,
+                $launchOptions->cloudLocation
+            );
+            /* @var $instanceTypeInfo CloudInstanceType */
             $DBServer->SetProperties([
-                EC2_SERVER_PROPERTIES::REGION        => $launchOptions->cloudLocation,
-                EC2_SERVER_PROPERTIES::AVAIL_ZONE    => $result->instancesSet->get(0)->placement->availabilityZone,
-                EC2_SERVER_PROPERTIES::INSTANCE_ID   => $result->instancesSet->get(0)->instanceId,
-                EC2_SERVER_PROPERTIES::INSTANCE_TYPE => $runInstanceRequest->instanceType,
-                EC2_SERVER_PROPERTIES::AMIID         => $runInstanceRequest->imageId,
-                EC2_SERVER_PROPERTIES::VPC_ID        => $result->instancesSet->get(0)->vpcId,
-                EC2_SERVER_PROPERTIES::SUBNET_ID     => $result->instancesSet->get(0)->subnetId,
-                EC2_SERVER_PROPERTIES::ARCHITECTURE  => $result->instancesSet->get(0)->architecture,
+                \EC2_SERVER_PROPERTIES::REGION          => $launchOptions->cloudLocation,
+                \EC2_SERVER_PROPERTIES::AVAIL_ZONE      => $result->instancesSet->get(0)->placement->availabilityZone,
+                \EC2_SERVER_PROPERTIES::INSTANCE_ID     => $result->instancesSet->get(0)->instanceId,
+                \EC2_SERVER_PROPERTIES::AMIID           => $runInstanceRequest->imageId,
+                \EC2_SERVER_PROPERTIES::VPC_ID          => $result->instancesSet->get(0)->vpcId,
+                \EC2_SERVER_PROPERTIES::SUBNET_ID       => $result->instancesSet->get(0)->subnetId,
+                \EC2_SERVER_PROPERTIES::ARCHITECTURE    => $result->instancesSet->get(0)->architecture,
+                \SERVER_PROPERTIES::INFO_INSTANCE_VCPUS => $instanceTypeInfo ? $instanceTypeInfo->vcpus : null,
             ]);
 
             $DBServer->setOsType($result->instancesSet->get(0)->platform ? $result->instancesSet->get(0)->platform : 'linux');
             $DBServer->cloudLocation = $launchOptions->cloudLocation;
             $DBServer->cloudLocationZone = $result->instancesSet->get(0)->placement->availabilityZone;
+            $DBServer->update(['type' => $runInstanceRequest->instanceType, 'instanceTypeName' => $runInstanceRequest->instanceType]);
             $DBServer->imageId = $launchOptions->imageId;
             // we set server history here
             $DBServer->getServerHistory();
@@ -2061,113 +2320,54 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
     {
         $retval = array();
 
-        //b
-        if (in_array($instanceType, array(
-                'm1.small', 'c1.medium', 'm1.medium', 'm1.large', 'm1.xlarge',
-                'm2.xlarge', 'm2.2xlarge', 'm2.4xlarge',
-                'm3.large', 'm3.xlarge', 'm3.2xlarge',
-                'i2.xlarge', 'i2.2xlarge', 'i2.4xlarge', 'i2.8xlarge',
-                'd2.xlarge', 'd2.2xlarge', 'd2.4xlarge', 'd2.8xlarge',
-                'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
-                'r3.large', 'r3.xlarge', 'r3.2xlarge', 'r3.4xlarge', 'r3.8xlarge',
-                'c1.xlarge', 'cc1.4xlarge', 'cc2.8xlarge', 'cr1.8xlarge',
-                'hi1.4xlarge', 'cr1.8xlarge', 'hs1.8xlarge'
-            ))) {
-            $retval[] = new BlockDeviceMappingData("{$prefix}b", 'ephemeral0');
-        }
+        $instanceTypesInfo = $this->getInstanceTypes(null, null, true);
 
-        //c
-        if (in_array($instanceType, array(
-                'm1.large', 'm1.xlarge',
-                'm3.xlarge', 'm3.2xlarge',
-                'c3.large', 'c3.xlarge', 'c3.2xlarge', 'c3.4xlarge', 'c3.8xlarge',
-                'cc2.8xlarge', 'cc1.4xlarge',
-                'i2.2xlarge','i2.4xlarge','i2.8xlarge',
-                'd2.xlarge', 'd2.2xlarge', 'd2.4xlarge', 'd2.8xlarge',
-                'r3.8xlarge',
-                'c1.xlarge', 'cr1.8xlarge', 'hi1.4xlarge', 'm2.2xlarge', 'cr1.8xlarge', 'hs1.8xlarge'))) {
-            $retval[] = new BlockDeviceMappingData("{$prefix}c", 'ephemeral1');
-        }
+        if (isset($instanceTypesInfo[$instanceType]['instancestore'])) {
+            $devicesNames = [ 'b', 'c', 'e', 'f', 'g', 'h', 'i', 'j', 'k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7', 'k8', 'k9', 'l1', 'l2', 'l3', 'l4', 'l5', 'l6', 'l7' ];
+            $namesOverrides = [
+                'd2.4xlarge' => [ 8 => 'k', 9 => 'l', 10 => 'm', 11 => 'n' ],
+                'd2.8xlarge' => [ 8 => 'k', 9 => 'l', 10 => 'm', 11 => 'n', 12 => 'o', 13 => 'p', 14 => 'q', 15 => 'r', 16 => 's', 17 => 't', 18 => 'u', 19 => 'v', 20 => 'w', 21 => 'x', 22 => 'y', 23 => 'd' ]
+            ];
 
-        //e
-        if (in_array($instanceType, array('m1.xlarge', 'c1.xlarge', 'cc2.8xlarge', 'i2.4xlarge', 'i2.8xlarge', 'hs1.8xlarge', 'd2.xlarge', 'd2.2xlarge', 'd2.4xlarge', 'd2.8xlarge'))) {
-             $retval[] = new BlockDeviceMappingData("{$prefix}e", 'ephemeral2');
-        }
+            if (isset($namesOverrides[$instanceType])) {
+                $devicesNames = array_replace($devicesNames, $namesOverrides[$instanceType]);
+            }
 
-        //f
-        if (in_array($instanceType, array('m1.xlarge', 'c1.xlarge', 'cc2.8xlarge', 'i2.4xlarge', 'i2.8xlarge', 'hs1.8xlarge', 'd2.2xlarge', 'd2.4xlarge', 'd2.8xlarge'))) {
-            $retval[] = new BlockDeviceMappingData("{$prefix}f", 'ephemeral3');
-        }
-
-
-        //g
-        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge', 'd2.2xlarge', 'd2.4xlarge', 'd2.8xlarge'))) {
-            $retval[] = new BlockDeviceMappingData("{$prefix}g", 'ephemeral4');
-        }
-
-        //h
-        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge', 'd2.2xlarge', 'd2.4xlarge', 'd2.8xlarge'))) {
-            $retval[] = new BlockDeviceMappingData("{$prefix}h", 'ephemeral5');
-        }
-
-        //i
-        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge', 'd2.4xlarge', 'd2.8xlarge'))) {
-            $retval[] = new BlockDeviceMappingData("{$prefix}i", 'ephemeral6');
-        }
-
-        //j
-        if (in_array($instanceType, array('i2.8xlarge', 'hs1.8xlarge', 'd2.4xlarge', 'd2.8xlarge'))) {
-            $retval[] = new BlockDeviceMappingData("{$prefix}j", 'ephemeral7');
-        }
-
-        //k
-        if (in_array($instanceType, array('d2.4xlarge'))) {
-            $retval[] = new BlockDeviceMappingData("{$prefix}k1", 'ephemeral8');
-            $retval[] = new BlockDeviceMappingData("{$prefix}k2", 'ephemeral9');
-            $retval[] = new BlockDeviceMappingData("{$prefix}k3", 'ephemeral10');
-            $retval[] = new BlockDeviceMappingData("{$prefix}k4", 'ephemeral11');
-            $retval[] = new BlockDeviceMappingData("{$prefix}k5", 'ephemeral12');
-        }
-
-        if (in_array($instanceType, array('hs1.8xlarge'))) {
-            $retval[] = new BlockDeviceMappingData("{$prefix}k1", 'ephemeral8');
-            $retval[] = new BlockDeviceMappingData("{$prefix}k2", 'ephemeral9');
-            $retval[] = new BlockDeviceMappingData("{$prefix}k3", 'ephemeral10');
-            $retval[] = new BlockDeviceMappingData("{$prefix}k4", 'ephemeral11');
-            $retval[] = new BlockDeviceMappingData("{$prefix}k5", 'ephemeral12');
-            $retval[] = new BlockDeviceMappingData("{$prefix}k6", 'ephemeral13');
-            $retval[] = new BlockDeviceMappingData("{$prefix}k7", 'ephemeral14');
-            $retval[] = new BlockDeviceMappingData("{$prefix}k8", 'ephemeral15');
-            $retval[] = new BlockDeviceMappingData("{$prefix}k9", 'ephemeral16');
-            $retval[] = new BlockDeviceMappingData("{$prefix}l1", 'ephemeral17');
-            $retval[] = new BlockDeviceMappingData("{$prefix}l2", 'ephemeral18');
-            $retval[] = new BlockDeviceMappingData("{$prefix}l3", 'ephemeral19');
-            $retval[] = new BlockDeviceMappingData("{$prefix}l4", 'ephemeral20');
-            $retval[] = new BlockDeviceMappingData("{$prefix}l5", 'ephemeral21');
-            $retval[] = new BlockDeviceMappingData("{$prefix}l6", 'ephemeral22');
-            $retval[] = new BlockDeviceMappingData("{$prefix}l7", 'ephemeral23');
-        }
-
-        if (in_array($instanceType, array('d2.8xlarge'))) {
-            $retval[] = new BlockDeviceMappingData("{$prefix}k", 'ephemeral8');
-            $retval[] = new BlockDeviceMappingData("{$prefix}l", 'ephemeral9');
-            $retval[] = new BlockDeviceMappingData("{$prefix}m", 'ephemeral10');
-            $retval[] = new BlockDeviceMappingData("{$prefix}n", 'ephemeral11');
-            $retval[] = new BlockDeviceMappingData("{$prefix}o", 'ephemeral12');
-            $retval[] = new BlockDeviceMappingData("{$prefix}p", 'ephemeral13');
-            $retval[] = new BlockDeviceMappingData("{$prefix}q", 'ephemeral14');
-            $retval[] = new BlockDeviceMappingData("{$prefix}r", 'ephemeral15');
-            $retval[] = new BlockDeviceMappingData("{$prefix}s", 'ephemeral16');
-            $retval[] = new BlockDeviceMappingData("{$prefix}t", 'ephemeral17');
-            $retval[] = new BlockDeviceMappingData("{$prefix}u", 'ephemeral18');
-            $retval[] = new BlockDeviceMappingData("{$prefix}v", 'ephemeral19');
-            $retval[] = new BlockDeviceMappingData("{$prefix}w", 'ephemeral20');
-            $retval[] = new BlockDeviceMappingData("{$prefix}x", 'ephemeral21');
-            $retval[] = new BlockDeviceMappingData("{$prefix}y", 'ephemeral22');
-            $retval[] = new BlockDeviceMappingData("{$prefix}d", 'ephemeral23');
+            if (isset($instanceTypesInfo[$instanceType]['instancestore']['number'])) {
+                for ($i = 0; $i < $instanceTypesInfo[$instanceType]['instancestore']['number']; $i++) {
+                    $retval[] = new BlockDeviceMappingData("{$prefix}{$devicesNames[$i]}", "ephemeral{$i}");
+                }
+            }
         }
 
         return $retval;
+    }
+
+    /**
+     * Gets pre filled PlacementResponseData
+     *
+     * @param string                $instanceType   The type of the instance
+     * @param DBServer              $DBServer       DBServer instance
+     * @param PlacementResponseData $placementData  optional PlacementResponseData to fill
+     *
+     * @return PlacementResponseData
+     */
+    public function GetPlacementGroupData($instanceType, DBServer $DBServer, PlacementResponseData &$placementData = null)
+    {
+        $instanceTypesInfo = $this->getInstanceTypes(null, null, true);
+
+        if (!empty($instanceTypesInfo[$instanceType]['placementgroups'])) {
+            $placementGroup = $DBServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::AWS_CLUSTER_PG);
+            if ($placementGroup) {
+                if (isset($placementData)) {
+                    $placementData->groupName = $placementGroup;
+                } else {
+                    $placementData = new PlacementResponseData(null, $placementGroup);
+                }
+            }
+        }
+
+        return $placementData;
     }
 
     /**
@@ -2175,42 +2375,52 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
      *
      * If server does not have required security groups this method will create them.
      *
-     * @param   DBServer               $DBServer The DB Server instance
-     * @param   \Scalr\Service\Aws\Ec2 $ec2      Ec2 Client instance
-     * @param   string                 $vpcId    optional The ID of VPC
+     * @param   DBServer               $DBServer    The DB Server instance
+     * @param   \Scalr\Service\Aws\Ec2 $ec2         Ec2 Client instance
+     * @param   string                 $vpcId       optional The ID of VPC
+     * @param   \Scalr_Governance      $governance  Governance
+     * @param   string                 $osFamily    optional OS family of the instance
      * @return  array  Returns array looks like array(groupid-1, groupid-2, ..., groupid-N)
      */
-    private function GetServerSecurityGroupsList(DBServer $DBServer, \Scalr\Service\Aws\Ec2 $ec2, $vpcId = "", \Scalr_Governance $governance = null)
+    private function GetServerSecurityGroupsList(DBServer $DBServer, \Scalr\Service\Aws\Ec2 $ec2, $vpcId = "", \Scalr_Governance $governance = null, $osFamily = null)
     {
         $retval = array();
         $checkGroups = array();
-        $sgGovernance = true;
+        $wildCardSgs = [];
+        $sgGovernance = false;
         $allowAdditionalSgs = true;
-        $roleBuiledSgName = \Scalr::config('scalr.aws.security_group_name') . "-rb";
+        $roleBuilderSgName = \Scalr::config('scalr.aws.security_group_name') . "-rb";
 
         if ($governance && $DBServer->farmRoleId) {
             $sgs = $governance->getValue(SERVER_PLATFORMS::EC2, \Scalr_Governance::AWS_SECURITY_GROUPS);
+            if ($osFamily == 'windows' && $governance->getValue(SERVER_PLATFORMS::EC2, \Scalr_Governance::AWS_SECURITY_GROUPS, 'windows')) {
+                $sgs = $governance->getValue(SERVER_PLATFORMS::EC2, \Scalr_Governance::AWS_SECURITY_GROUPS, 'windows');
+            }
             if ($sgs !== null) {
                 $governanceSecurityGroups = @explode(",", $sgs);
                 if (!empty($governanceSecurityGroups)) {
                     foreach ($governanceSecurityGroups as $sg) {
-                        if ($sg != '')
+                        if ($sg != '') {
                             array_push($checkGroups, trim($sg));
+                            if (strpos($sg, '*') !== false) {
+                                array_push($wildCardSgs, trim($sg));
+                            }
+                        }
                     }
                 }
-
-                $sgGovernance = false;
+                if (!empty($checkGroups)) {
+                    $sgGovernance = true;
+                }
                 $allowAdditionalSgs = $governance->getValue(SERVER_PLATFORMS::EC2, \Scalr_Governance::AWS_SECURITY_GROUPS, 'allow_additional_sec_groups');
             }
-        } else
-            $sgGovernance = false;
+        }
 
         if (!$sgGovernance || $allowAdditionalSgs) {
             if ($DBServer->farmRoleId != 0) {
                 $dbFarmRole = $DBServer->GetFarmRoleObject();
-                if ($dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_SECURITY_GROUPS_LIST) !== null) {
+                if ($dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_SECURITY_GROUPS_LIST) !== null) {
                     // New SG management
-                    $sgs = @json_decode($dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_SECURITY_GROUPS_LIST));
+                    $sgs = @json_decode($dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_SECURITY_GROUPS_LIST));
                     if (!empty($sgs)) {
                         foreach ($sgs as $sg) {
                             if (stripos($sg, 'sg-') === 0)
@@ -2228,7 +2438,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                         array_push($checkGroups, "scalr-role.{$DBServer->farmRoleId}");
                     }
 
-                    $additionalSgs = trim($dbFarmRole->GetSetting(\DBFarmRole::SETTING_AWS_SG_LIST));
+                    $additionalSgs = trim($dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_SG_LIST));
                     if ($additionalSgs) {
                         $sgs = explode(",", $additionalSgs);
                         if (!empty($sgs)) {
@@ -2243,7 +2453,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                     }
                 }
             } else
-                array_push($checkGroups, $roleBuiledSgName);
+                array_push($checkGroups, $roleBuilderSgName);
         }
 
         // No name based security groups, return only SG ids.
@@ -2287,11 +2497,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 array_push($retval, $sgList[$groupName]);
 
             // Check Roles builder SG
-            } elseif ($groupName == $roleBuiledSgName) {
+            } elseif ($groupName == $roleBuilderSgName) {
                 if (!isset($sgList[$groupName])) {
                     try {
                         $securityGroupId = $ec2->securityGroup->create(
-                            $roleBuiledSgName, "Security group for Roles Builder", $vpcId
+                            $roleBuilderSgName, "Security group for Roles Builder", $vpcId
                         );
                         $ipRangeList = new IpRangeList();
                         foreach (\Scalr::config('scalr.aws.ip_pool') as $ip) {
@@ -2305,9 +2515,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                             new IpPermissionData('tcp', 8008, 8013, $ipRangeList)
                         ), $securityGroupId);
 
-                        $sgList[$roleBuiledSgName] = $securityGroupId;
+                        $sgList[$roleBuilderSgName] = $securityGroupId;
                     } catch (Exception $e) {
-                        throw new Exception(sprintf(_("Cannot create security group '%s': %s"), $roleBuiledSgName, $e->getMessage()));
+                        throw new Exception(sprintf(_("Cannot create security group '%s': %s"), $roleBuilderSgName, $e->getMessage()));
                     }
                 }
                 array_push($retval, $sgList[$groupName]);
@@ -2323,7 +2533,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                         sleep(2);
 
                         $userIdGroupPairList = new UserIdGroupPairList(new UserIdGroupPairData(
-                            $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::ACCOUNT_ID),
+                            $DBServer->GetEnvironmentObject()->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
                             null,
                             $groupName
                         ));
@@ -2374,7 +2584,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
                         // Default rules
                         $userIdGroupPairList = new UserIdGroupPairList(new UserIdGroupPairData(
-                            $DBServer->GetEnvironmentObject()->getPlatformConfigValue(self::ACCOUNT_ID),
+                            $DBServer->GetEnvironmentObject()->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
                             null,
                             $groupName
                         ));
@@ -2431,7 +2641,24 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 array_push($retval, $sgList[$groupName]);
             } else {
                 if (!isset($sgList[$groupName])) {
-                    throw new Exception(sprintf(_("Security group '%s' is not found"), $groupName));
+                    if (!in_array($groupName, $wildCardSgs)) {
+                        throw new Exception(sprintf(_("Security group '%s' is not found"), $groupName));
+                    } else {
+                        $wildCardMatchedSgs = [];
+                        $groupNamePattern = \Scalr_Governance::convertAsteriskPatternToRegexp($groupName);
+                        foreach ($sgList as $sgGroupName => $sgGroupId) {
+                            if (preg_match($groupNamePattern, $sgGroupName) === 1) {
+                                array_push($wildCardMatchedSgs, $sgGroupId);
+                            }
+                        }
+                        if (empty($wildCardMatchedSgs)) {
+                            throw new Exception(sprintf(_("Security group matched to pattern '%s' is not found."), $groupName));
+                        } else if (count($wildCardMatchedSgs) > 1) {
+                            throw new Exception(sprintf(_("There are more than one Security group matched to pattern '%s' found."), $groupName));
+                        } else {
+                            array_push($retval, $wildCardMatchedSgs[0]);
+                        }
+                    }
                 } else
                     array_push($retval, $sgList[$groupName]);
             }
@@ -2458,14 +2685,6 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
         $server_avail_zone = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::AVAIL_ZONE);
 
-        if ($DBServer->replaceServerID && !$server_avail_zone) {
-            try {
-                $rDbServer = DBServer::LoadByID($DBServer->replaceServerID);
-                $server_avail_zone = $rDbServer->GetProperty(EC2_SERVER_PROPERTIES::AVAIL_ZONE);
-            } catch (Exception $e) {
-            }
-        }
-
         $role_avail_zone = $this->db->GetOne("
             SELECT ec2_avail_zone FROM ec2_ebs
             WHERE server_index=? AND farm_roleid=?
@@ -2475,18 +2694,14 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         );
 
         if (!$role_avail_zone) {
-            $DBServer->SetProperty("tmp.ec2.avail_zone.algo1", "[S={$server_avail_zone}][R1:{$role_avail_zone}]");
-
             if ($server_avail_zone &&
                 $server_avail_zone != 'x-scalr-diff' &&
                 !stristr($server_avail_zone, "x-scalr-custom")) {
                 return $server_avail_zone;
             }
 
-            $role_avail_zone = $DBServer->GetFarmRoleObject()->GetSetting(\DBFarmRole::SETTING_AWS_AVAIL_ZONE);
+            $role_avail_zone = $DBServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::AWS_AVAIL_ZONE);
         }
-
-        $DBServer->SetProperty("tmp.ec2.avail_zone.algo2", "[S={$server_avail_zone}][R2:{$role_avail_zone}]");
 
         if (!$role_avail_zone) {
             return false;
@@ -2577,24 +2792,31 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 $dZones .= "({$zone}:{$num})";
             }
 
-            $DBServer->SetProperty("tmp.ec2.avail_zone.algo2", "[A:{$aZones}][D:{$dZones}][S:{$availZone}]");
-
             return $availZone;
         } else {
             return $role_avail_zone;
         }
     }
 
+    /**
+     * @param Scalr_Environment $environment
+     * @param DBServer $DBServer
+     *
+     * @return object
+     */
     public function GetPlatformAccessData($environment, DBServer $DBServer)
     {
         $config = \Scalr::getContainer()->config;
 
+        $cloudCredentials = $environment->cloudCredentials(SERVER_PLATFORMS::EC2);
+        $ccProps = $cloudCredentials->properties;
+
         $accessData = new \stdClass();
-        $accessData->accountId = $environment->getPlatformConfigValue(self::ACCOUNT_ID);
-        $accessData->keyId = $environment->getPlatformConfigValue(self::ACCESS_KEY);
-        $accessData->key = $environment->getPlatformConfigValue(self::SECRET_KEY);
-        $accessData->cert = $environment->getPlatformConfigValue(self::CERTIFICATE);
-        $accessData->pk = $environment->getPlatformConfigValue(self::PRIVATE_KEY);
+        $accessData->accountId = $ccProps[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID];
+        $accessData->keyId = $ccProps[Entity\CloudCredentialsProperty::AWS_ACCESS_KEY];
+        $accessData->key = $ccProps[Entity\CloudCredentialsProperty::AWS_SECRET_KEY];
+        $accessData->cert = $ccProps[Entity\CloudCredentialsProperty::AWS_CERTIFICATE];
+        $accessData->pk = $ccProps[Entity\CloudCredentialsProperty::AWS_PRIVATE_KEY];
 
         if ($config('scalr.aws.use_proxy') && in_array($config('scalr.connections.proxy.use_on'), array('both', 'instance'))) {
             $proxySettings = $config('scalr.connections.proxy');
@@ -2644,5 +2866,75 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
     public function ClearCache()
     {
         $this->instancesListCache = array();
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Modules\PlatformModuleInterface::getInstanceIdPropertyName()
+     */
+    public function getInstanceIdPropertyName()
+    {
+        return EC2_SERVER_PROPERTIES::INSTANCE_ID;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see PlatformModuleInterface::getgetClientByDbServer()
+     *
+     * @return Aws\Client\ClientInterface
+     */
+    public function getHttpClient(DBServer $dbServer)
+    {
+        return $dbServer->GetEnvironmentObject()
+                        ->aws($dbServer)
+                        ->ec2
+                        ->getApiHandler()
+                        ->getClient();
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see PlatformModuleInterface::getImageInfo()
+     */
+    public function getImageInfo(\Scalr_Environment $environment, $cloudLocation, $imageId)
+    {
+        $info = [];
+
+        $snap = $environment->aws($cloudLocation)->ec2->image->describe($imageId);
+
+        if ($snap->count() > 0) {
+            $sn = $snap->get(0);
+            if ($sn->imageState == ImageData::STATE_AVAILABLE) {
+                $info["name"]         = $sn->name;
+                $info["architecture"] = $sn->architecture;
+
+                if ($sn->description) {
+                    $info["description"] = $sn->description;
+                }
+
+                if ($sn->platform) {
+                    // platform could be windows or empty string
+                    $info["osFamily"] = $sn->platform;
+                }
+
+                if ($sn->rootDeviceType == "ebs" || $sn->rootDeviceType == "instance-store") {
+                    $info["type"] = $sn->rootDeviceType;
+
+                    if ($sn->virtualizationType == "hvm") {
+                        $info["type"] .= "-hvm";
+                    }
+                }
+
+                foreach ($sn->blockDeviceMapping as $b) {
+                    if (($b->deviceName == $sn->rootDeviceName) && $b->ebs) {
+                        $info["size"]          = $b->ebs->volumeSize;
+                        $info["ec2VolumeType"] = $b->ebs->volumeType;
+                        $info["ec2VolumeIops"] = $b->ebs->iops;
+                    }
+                }
+            }
+        }
+
+        return $info;
     }
 }

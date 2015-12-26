@@ -17,7 +17,7 @@ Ext.define('Scalr.ui.FarmBuilderFarmCostMetering', {
 
         comp = me.down('#projectId');
         comp.store.load({data: me['analyticsData']['projects']});
-        comp.findPlugin('comboaddnew').setDisabled(!Scalr.isAllowed('ADMINISTRATION_ANALYTICS', 'manage-projects') || me['analyticsData']['costCenterLocked'] == 1);
+        comp.findPlugin('comboaddnew').setDisabled(!Scalr.isAllowed('ANALYTICS_ACCOUNT', 'manage-projects') || me['analyticsData']['costCenterLocked'] == 1);
 
         comp = me.down('#chartWrap');
         comp.remove(comp.down('#chart'));
@@ -358,39 +358,49 @@ Ext.define('Scalr.ui.FarmBuilderFarmCostMetering', {
                 minInstCount,
                 maxInstCount,
                 platform,
+                baseConsiderSuspended,
+                suspendedInstCount,
                 alias;
             if (role.isModel) {
                 hourlyRate = role.get('hourly_rate');
                 settings = role.get('settings', true);
-                runInstCount = role.get('running_servers');
-                minInstCount = settings['scaling.min_instances'];
-                maxInstCount = settings['scaling.max_instances'];
+                baseConsiderSuspended = settings['base.consider_suspended'] || 'running';
+                suspendedInstCount = role.get('suspended_servers')*1;
+                runInstCount = role.get('running_servers')*1 - (baseConsiderSuspended === 'running' && suspendedInstCount ? suspendedInstCount : 0);
+                minInstCount = settings['scaling.enabled'] == 1 ? settings['scaling.min_instances']*1 : 0;
+                maxInstCount = settings['scaling.enabled'] == 1 ? settings['scaling.max_instances']*1 : runInstCount;
                 platform = role.data.platform;
                 alias = role.data.alias;
             } else {
                 hourlyRate = role['hourly_rate'];
-                runInstCount = role['running_servers'];
-                minInstCount = role['scaling.min_instances'];
-                maxInstCount = role['scaling.max_instances'];
-                platform = role['platfor'];
+                baseConsiderSuspended = role['base.consider_suspended'] || 'running';
+                suspendedInstCount = role['suspended_servers']*1;
+                runInstCount = role['running_servers']*1 - (baseConsiderSuspended === 'running' && suspendedInstCount ? suspendedInstCount : 0);
+                minInstCount = role['scaling.enabled'] == 1 ? role['scaling.min_instances']*1 : 0;
+                maxInstCount = role['scaling.enabled'] == 1 ? role['scaling.max_instances']*1 : runInstCount;
+                platform = role['platform'];
                 alias = role['alias'];
             }
-            minInst['count'] += minInstCount*1;
+            if (suspendedInstCount) {
+                minInstCount = Math.min(minInstCount, runInstCount);
+            }
+            maxInstCount = Math.max(maxInstCount, runInstCount);
+            
+            minInst['count'] += minInstCount;
             minInst['hourlyRate'] += Ext.isNumeric(hourlyRate) ? Ext.util.Format.round(hourlyRate*minInstCount, 2) : 0;
             minInst['dailyRate'] += Ext.isNumeric(hourlyRate) ? Ext.util.Format.round(hourlyRate*minInstCount*24, 2) : 0;
 
-            maxInst['count'] += maxInstCount*1;
+            maxInst['count'] += maxInstCount;
             maxInst['hourlyRate'] += Ext.isNumeric(hourlyRate) ? Ext.util.Format.round(hourlyRate*maxInstCount, 2) : 0;
             maxInst['dailyRate'] += Ext.isNumeric(hourlyRate) ? Ext.util.Format.round(hourlyRate*maxInstCount*24, 2) : 0;
 
-            runInst['count'] += runInstCount*1;
+            runInst['count'] += runInstCount;
             runInst['hourlyRate'] += Ext.isNumeric(hourlyRate) ? Ext.util.Format.round(hourlyRate*runInstCount, 2) : 0;
             runInst['dailyRate'] += Ext.isNumeric(hourlyRate) ? Ext.util.Format.round(hourlyRate*runInstCount*24, 2) : 0;
             if (Ext.Array.contains(me['analyticsData']['unsupportedClouds'], platform)) {
                 unsupportedRoles.push(alias);
             }
         });
-
 
         var chartWrapper = this.down('#currentRateWrapper');
         //chartWrapper.setVisible(farmRoles.length > 0);
@@ -500,6 +510,7 @@ Ext.define('Scalr.ui.FarmBuilderRoleCostMetering', {
                         name: 'min_instances',
                         fieldStyle: 'text-align:center',
                         hideOnDisabled: true,
+                        vtype: 'num',
                         listeners: {
                             change: function(comp, value) {
                                 comp.up('#maintab').onParamChange(comp.name, value);
@@ -535,6 +546,7 @@ Ext.define('Scalr.ui.FarmBuilderRoleCostMetering', {
                         name: 'max_instances',
                         fieldStyle: 'text-align:center',
                         hideOnDisabled: true,
+                        vtype: 'num',
                         listeners: {
                             change: function(comp, value) {
                                 comp.up('#maintab').onParamChange(comp.name, value);
@@ -561,8 +573,8 @@ Ext.define('Scalr.ui.FarmBuilderRoleCostMetering', {
                     html: 'Running&nbsp;instances'
                 },{
                     xtype: 'displayfield',
-                    _fieldLabel: 'Running&nbsp;instances',
-                    labelWidth: 130,
+                    _fieldLabel: 'Running',
+                    labelWidth: 60,
                     value: 0,
                     name: 'running_servers',
                     fieldStyle: 'text-align:center',
@@ -573,9 +585,9 @@ Ext.define('Scalr.ui.FarmBuilderRoleCostMetering', {
                             tip = 'Running servers: <span style="color:#00CC00; cursor:pointer;">' + (value.running_servers || 0) + '</span>' +
                                   (value.suspended_servers > 0 ? '<br/>' + (value['base.consider_suspended'] === 'running' ? 'Including' : 'Not including') + ' <span style="color:#4DA6FF;">' + value.suspended_servers + '</span> Suspended server(s)' : '');
                         }
-                        html = '<span data-anchor="right" data-qalign="r-l" data-qtip="' + (tip ? Ext.String.htmlEncode(tip) : '') + '" data-qwidth="270">' +
+                        html = '<span data-anchor="right" data-qalign="r-l" data-qtip="' + (tip ? Ext.String.htmlEncode(tip) : '') + '" data-qwidth="290">' +
                                '<span style="color:#00CC00; cursor:pointer;">' + (value.running_servers || 0) + '</span>' +
-                               (value.suspended_servers > 0 ? ' (<span style="color:#4DA6FF;">' + (value.suspended_servers || 0) + '</span>)' : '')+
+                               (value.suspended_servers > 0 ? '&nbsp;(<span style="color:#4DA6FF;">' + (value.suspended_servers || 0) + '</span>)' : '')+
                                 '</span>';
                         return value.running_servers > 0 ? '<a href="#">' + html + '</a>' : html;
                     },
@@ -656,16 +668,18 @@ Ext.define('Scalr.ui.FarmBuilderRoleCostMetering', {
         this.resumeLayouts(true);
     },
     updateRates: function() {
-        var hourlyRate = this.up('#maintab').currentRole.get('hourly_rate'),
-            minInstCount = this.down('[name="min_instances"]').getValue(),
-            maxInstCount = this.down('[name="max_instances"]').getValue(),
-            role = this.up('#maintab').currentRole,
-            runInstCount = role.get('running_servers');
+        var role = this.up('#maintab').currentRole,
+            hourlyRate = role.get('hourly_rate'),
+            settings = role.get('settings', true),
+            minInstCount = this.down('[name="min_instances"]').getValue()*1,
+            maxInstCount = this.down('[name="max_instances"]').getValue()*1,
+            runInstCount,
+            baseConsiderSuspended = settings['base.consider_suspended'] || 'running';
+        runInstCount = role.get('running_servers')*1 - (baseConsiderSuspended === 'running' && role.get('suspended_servers') ? role.get('suspended_servers')*1 : 0);
         if (Ext.Array.contains(this.up('#farmDesigner').moduleParams['analytics']['unsupportedClouds'], role.data.platform)) {
             hourlyRate = null;
         }
         this.suspendLayouts();
-        runInstCount = runInstCount > maxInstCount ? maxInstCount : runInstCount;
         this.down('#minRate').update({
             hourlyRate: minInstCount > 0 && Ext.isNumeric(hourlyRate) ? Ext.util.Format.round(hourlyRate*minInstCount, 2) : null,
             dailyRate: minInstCount > 0 && Ext.isNumeric(hourlyRate) ? Ext.util.Format.round(hourlyRate*minInstCount*24, 2) : null

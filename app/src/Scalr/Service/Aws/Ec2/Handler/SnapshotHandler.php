@@ -46,11 +46,13 @@ class SnapshotHandler extends AbstractEc2Handler
      * @param   SnapshotFilterList|SnapshotFilterData|array $filter           optional The list of filters.
      * @param   ListDataType|array|string                   $restorableByList optional One or more AWS accounts IDs that can create volumes
      *                                                                        from the snapshot.
+     * @param   string                   $nextToken           The next paginated set of results to return
+     * @param   int                      $maxResults          The maximum number of paginated snapshots items per response.
      * @return  SnapshotList Returns the list of snapshots on success
      * @throws  ClientException
      * @throws  Ec2Exception
      */
-    public function describe($snapshotIdList = null, $ownerList = null, $filter = null, $restorableByList = null)
+    public function describe($snapshotIdList = null, $ownerList = null, $filter = null, $restorableByList = null, $nextToken = null, $maxResults = null)
     {
         if ($snapshotIdList !== null && !($snapshotIdList instanceof ListDataType)) {
             $snapshotIdList = new ListDataType($snapshotIdList);
@@ -64,7 +66,7 @@ class SnapshotHandler extends AbstractEc2Handler
         if ($filter !== null && !($filter instanceof SnapshotFilterList)) {
             $filter = new SnapshotFilterList($filter);
         }
-        return $this->getEc2()->getApiHandler()->describeSnapshots($snapshotIdList, $ownerList, $filter, $restorableByList);
+        return $this->getEc2()->getApiHandler()->describeSnapshots($snapshotIdList, $ownerList, $filter, $restorableByList, $nextToken, $maxResults);
     }
 
     /**
@@ -119,12 +121,18 @@ class SnapshotHandler extends AbstractEc2Handler
      * @param   string     $presignedUrl  optional The pre-signed URL that facilitates copying an encrypted snapshot.
      *                                    The PresignedUrl should use the snapshot source endpoint, the CopySnapshot action, and include the SourceRegion,
                                           SourceSnapshotId, and DestinationRegion parameters.
+     * @param   bool       $encrypted     Specifies whether the destination snapshot should be encrypted.
+     *                                    There is no way to create an unencrypted snapshot copy from an encrypted snapshot;
+     *                                    however, you can encrypt a copy of an unencrypted snapshot with this flag.
+     * @param   string     $kmsKeyId      The full ARN of the AWS Key Management Service (AWS KMS) CMK to use when creating the snapshot copy.
+     *                                    This parameter is only required if you want to use a non-default CMK;
+     *                                    if this parameter is not specified, the default CMK for EBS is used.
      * @return  string     Returns ID of the created snapshot on success.
      * @throws  ClientException
      * @throws  Ec2Exception
      */
-    public function copy($srcRegion, $srcSnapshotId, $description = null, $destRegion = null, $presignedUrl = null)
+    public function copy($srcRegion, $srcSnapshotId, $description = null, $destRegion = null, $presignedUrl = null, $encrypted = null, $kmsKeyId = null)
     {
-        return $this->getEc2()->getApiHandler()->copySnapshot($srcRegion, $srcSnapshotId, $description, $destRegion, $presignedUrl);
+        return $this->getEc2()->getApiHandler()->copySnapshot($srcRegion, $srcSnapshotId, $description, $destRegion, $presignedUrl, $encrypted, $kmsKeyId);
     }
 }

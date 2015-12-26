@@ -47,12 +47,12 @@
 }
 
 .scalr-ui-dbbackups-this-month:hover {
-    background: #FBFBFB;
+    background: #FAFAFA;
 }
 
 .scalr-ui-dbbackups-not-this-month {
-    background: #F7F7F7;
-    border-right: 1px solid #EFEFEF;
+    background: #F5F5F5;
+    border-right: 1px solid #EEEEEE;
 }
 
 .scalr-ui-dbbackups-date {
@@ -69,7 +69,7 @@
 
 .scalr-ui-dbbackups-backups div {
     background: inherit;
-    border-radius: 3px;
+    border-radius: 0;
     height: 22px;
     text-align: left;
     padding: 3px;
@@ -142,7 +142,7 @@
     width: auto !important;
     overflow-y: auto;
     background: #3a6594;
-    border-radius: 2px;
+    border-radius: 0;
     overflow-x: hidden;
 }
 

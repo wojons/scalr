@@ -4,7 +4,11 @@ namespace Scalr\Model\Entity\Account;
 
 use Scalr\Model\AbstractEntity;
 use Scalr\Model\Entity\Account\User\UserSetting;
+use Scalr\Model\Entity\Client;
+use Scalr\Model\Entity\Farm;
+use Scalr\Acl\Acl;
 use Scalr_Account_Team;
+use Scalr_Permissions;
 
 /**
  * User entity
@@ -26,6 +30,9 @@ class User extends AbstractEntity
     const TYPE_ACCOUNT_ADMIN = 'AccountAdmin';
     const TYPE_ACCOUNT_SUPER_ADMIN = 'AccountSuperAdmin';
     const TYPE_TEAM_USER = 'TeamUser';
+
+    const PASSWORD_ADMIN_LENGTH = 15;
+    const PASSWORD_USER_LENGTH = 8;
 
     /**
      * The identifier of the User
@@ -111,7 +118,7 @@ class User extends AbstractEntity
     /**
      * The number of failed sign-in attempts
      *
-     * @Column(name="loginattempts",type="integer",nullable=true)
+     * @Column(name="loginattempts",type="integer")
      * @var int
      */
     public $loginAttempts;
@@ -136,6 +143,7 @@ class User extends AbstractEntity
     public function __construct()
     {
         $this->created = new \DateTime();
+        $this->loginAttempts = 0;
     }
 
     /**
@@ -167,7 +175,7 @@ class User extends AbstractEntity
     {
         return $this->email;
     }
-    
+
     /**
      * Gets LDAP username of the User
      *
@@ -178,7 +186,7 @@ class User extends AbstractEntity
         $ldapUsername = $this->getSetting(UserSetting::NAME_LDAP_USERNAME);
         if (!$ldapUsername)
             $ldapUsername = strtok($this->getEmail(), '@');
-    
+
         return $ldapUsername;
     }
 
@@ -454,7 +462,7 @@ class User extends AbstractEntity
      * Gets roles by specified identifier of the Environment
      *
      * @param   int   $envId       The identifier of the Environment
-     * @param   bool  $ingoreCache optional Whether it should ignore cache
+     * @param   bool  $ignoreCache optional Whether it should ignore cache
      * @return  \Scalr\Acl\Role\AccountRoleSuperposition Returns the list of the roles of account level by specified environment
      */
     public function getAclRolesByEnvironment($envId, $ignoreCache = false)
@@ -545,4 +553,58 @@ class User extends AbstractEntity
         ', array($this->id));
     }
 
+    /**
+     * Check if user is included in team
+     *
+     * @param   int     $teamId
+     * @return  bool
+     */
+    public function inTeam($teamId)
+    {
+        return (bool) $this->db()->getOne("
+            SELECT 1 FROM account_team_users WHERE user_id = ? AND team_id = ?
+        ", [$this->id, $teamId]);
+    }
+
+    /**
+     * Gets account entity
+     *
+     * @return Client
+     */
+    public function getAccount()
+    {
+        return Client::findPk($this->accountId);
+    }
+
+    /**
+     * Checks whether Farm can be accessed by user
+     *
+     * @param       int         $farmId   ID of Farm
+     * @param       int         $envId    ID of Environment
+     * @param       string      $perm     optional Name of permission
+     * @return      boolean     Returns true if access is granted
+     */
+    public function hasAccessFarm($farmId, $envId, $perm = null)
+    {
+        /* @var Farm $farm */
+        $farm = Farm::findPk($farmId);
+
+        if (! $farm)
+            return false;
+
+        if ($farm->envId != $envId)
+            return false;
+
+        $superposition = $this->getAclRolesByEnvironment($envId);
+        $result = $superposition->isAllowed(Acl::RESOURCE_FARMS, $perm);
+        if (!$result && $farm->teamId && $this->inTeam($farm->teamId)) {
+            $result = $superposition->isAllowed(Acl::RESOURCE_TEAM_FARMS, $perm);
+        }
+
+        if (!$result && $farm->createdById && $this->id == $farm->createdById) {
+            $result = $superposition->isAllowed(Acl::RESOURCE_OWN_FARMS, $perm);
+        }
+
+        return $result;
+    }
 }

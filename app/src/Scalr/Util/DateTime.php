@@ -39,7 +39,7 @@ class Scalr_Util_DateTime
 
         if ($dt && $dt->getTimestamp()) {
             if ($timezone)
-                self::convertTimeZone($dt, $timezone);
+                $dt = self::convertTimeZone($dt, $timezone);
 
             return $dt->format($format);
         } else
@@ -85,27 +85,36 @@ class Scalr_Util_DateTime
         return self::convertTz($dt, $format);
     }
 
-    public static function getTimezones()
+    /**
+     * @param   bool    $returnOffset optional If true return object [timezone] = GMT offset, otherwise return array of timezones
+     * @return  array
+     */
+    public static function getTimezones($returnOffset = false)
     {
-        $timezones = array();
-        foreach (DateTimeZone::listAbbreviations() as $timezoneAbbreviations) {
-            foreach ($timezoneAbbreviations as $value) {
-                if (preg_match( '/^(America|Arctic|Asia|Atlantic|Europe|Indian|Pacific|Australia|UTC)/', $value['timezone_id']))
-                    $timezones[$value['timezone_id']] = $value['offset'];
-            }
+        $timezones = [];
+        foreach (DateTimeZone::listIdentifiers() as $name) {
+            if (preg_match('/^(America|Arctic|Asia|Atlantic|Europe|Indian|Pacific|Australia|UTC)/', $name))
+                $timezones[] = $name;
         }
 
-        @ksort($timezones);
-        return array_keys($timezones);
+        sort($timezones);
+        if ($returnOffset) {
+            $result = [];
+            foreach ($timezones as $name) {
+                $result[$name] = (new DateTime(null, new DateTimeZone($name)))->getOffset();
+            }
+
+            return $result;
+        } else {
+            return $timezones;
+        }
     }
 
     public static function findTimezoneByOffset($offset)
     {
-        foreach (DateTimeZone::listAbbreviations() as $timezoneAbbreviations) {
-            foreach ($timezoneAbbreviations as $value) {
-                if (preg_match('/^(America|Antartica|Arctic|Asia|Atlantic|Europe|Indian|Pacific|Australia|UTC)/', $value['timezone_id']) && $value['offset'] == $offset)
-                    return $value['timezone_id'];
-            }
+        foreach (self::getTimezones(true) as $key => $name) {
+            if ($key == $offset)
+                return $name;
         }
     }
 
@@ -222,7 +231,7 @@ class Scalr_Util_DateTime
 
             $mins = ($time / 60) % 60;
 
-            if ($show_secs) $secs = $time % 60;
+            $secs = $show_secs ? $time % 60 : 0;
 
             $timestring = '';
             if ($neg) {
@@ -261,7 +270,7 @@ class Scalr_Util_DateTime
     }
 
     /**
-     * Calculates difference between two dates.
+     * Calculates difference in seconds between two dates.
      *
      * @param   DateTime|string      $value  DateTime object or string that represents time.
      * @param   bool                 $humanReadable Return number of seconds or human readable string
@@ -283,7 +292,6 @@ class Scalr_Util_DateTime
         }
 
         return $diff;
-
     }
 
     /**

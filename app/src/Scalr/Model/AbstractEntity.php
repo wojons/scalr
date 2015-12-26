@@ -27,11 +27,15 @@ use Scalr\Model\Mapping\GeneratedValue;
  *          Find record in database by primary key. Loads the record into self.
  *
  * @method  \Scalr\Model\Collections\EntityIterator find()
- *          find(array $criteria = null, array $order = null, int $limit = null, int $offset = null, bool $countRecords = null)
+ *          find(array $criteria = null, array $group = null, array $order = null, int $limit = null, int $offset = null, bool $countRecords = null)
  *          Searches by criteria
  *
+ * @method  \Scalr\Model\Collections\EntityIterator all()
+ *          all()
+ *          Gets all entities stored in DB
+ *
  * @method  \Scalr\Model\AbstractEntity findOne()
- *          findOne(array $criteria = null, array $order = null)
+ *          findOne(array $criteria = null, array $group = null, array $order = null)
  *          Searches one record by given criteria
  *
  * @method  \Scalr\Model\Collections\EntityIterator findBy{FieldName}()
@@ -41,6 +45,31 @@ use Scalr\Model\Mapping\GeneratedValue;
  * @method  \Scalr\Model\AbstractEntity  findOneBy{FieldName}()
  *          findOneBy{FieldName}(mixed $fieldValue)
  *          Searches by the specified field
+ *
+ * @method  int deleteBy()
+ *          deleteBy($keys, $_)
+ *          Removes records from database by criteria
+ *
+ * @method  int deletePk()
+ *          deletePk($keys, $_)
+ *          Removes record from database by primary key
+ *
+ * @method  int deleteByFieldName()
+ *          deleteByFieldName($keys, $_)
+ *          Removes record from database by specified field value
+ *
+ * @method  int deleteOneBy{FieldName}()
+ *          deleteBy{FieldName}($keys, $_)
+ *          Removes one record from database by specified field value
+ *
+ * @method  \Scalr\Model\EntityStatement prepareSaveStatement()
+ *          prepareSaveStatement()
+ *          Prepares statement to store data in database
+ *
+ * @method  bool hasUniqueIndex()
+ *          hasUniqueIndex()
+ *          Checks whether the table has at least one unique index
+ *          Returns true if table has unique index
  *
  * @method  string column()
  *          column(string $fieldName, string $tableAlias = null, string $alias = null)
@@ -83,6 +112,11 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
     const STMT_WHERE = '__WHERE__';
 
     /**
+     * Query magic property that adds DISCINCT to statement
+     */
+    const STMT_DISTINCT = '__DISTINCT__';
+
+    /**
      * @var int
      */
     private $resultType = self::DEFAULT_RESULT_TYPE;
@@ -118,6 +152,7 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
     /**
      * {@inheritdoc}
      * @see IteratorAggregate::getIterator()
+     * @return EntityPropertiesIterator Gets EntityPropertiesIterator
      */
     public function getIterator()
     {
@@ -245,12 +280,13 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
      * Finds one record by given criteria
      *
      * @param    array        $criteria     optional The search criteria.
+     * @param    array        $group        optional The group by parameter.
      * @param    array        $order        optional The results order
      * @return   AbstractEntity|null Gets found entity or null if nothing found
      */
-    private function _findOne(array $criteria = null, array $order = null)
+    private function _findOne(array $criteria = null, array $group = null, array $order = null)
     {
-        $list = $this->_find($criteria, $order, 1);
+        $list = $this->_find($criteria, $group, $order, 1);
 
         switch (true) {
             case $list instanceof EntityIterator:
@@ -281,7 +317,7 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
      * @param    string   $fieldName  The name of the field in the Entity
      * @param    string   $tableAlias optional The table alias
      * @param    string   $alias      optional The column alias
-     * @return   stirng   Returns the column as (`table` | `table_alias`).`column_name`[ AS `alias`]
+     * @return   string   Returns the column as (`table` | `table_alias`).`column_name`[ AS `alias`]
      */
     private function _column($fieldName, $tableAlias = null, $alias = null)
     {
@@ -292,6 +328,7 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
      * Finds collection of the values by any key
      *
      * @param    array        $criteria     optional The search criteria.
+     * @param    array        $group        optional The group by looks like [property1, ...]
      * @param    array        $order        optional The results order looks like [[property1 => true|false], ...]
      * @param    int          $limit        optional The records limit
      * @param    int          $offset       optional The offset
@@ -300,13 +337,10 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
      *           of the result depends on resultType property of the class which can be set as
      *           FooEntity::result(FooEntity::RESULT_ARRAY_COLLECTION)->find()
      */
-    private function _find(array $criteria = null, array $order = null, $limit = null, $offset = null, $countRecords = null)
+    private function _find(array $criteria = null, array $group = null, array $order = null, $limit = null, $offset = null, $countRecords = null)
     {
         $class = get_class($this);
         $iterator = $this->getIterator();
-
-        $stmtFields = '';
-        $arguments = array();
 
         if (is_array($criteria) && array_key_exists(static::STMT_FROM, $criteria)) {
             $stmtFrom = "FROM " . $criteria[static::STMT_FROM];
@@ -327,19 +361,42 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
             $built = $this->_buildQuery($criteria);
         }
 
+        if (!empty($group)) {
+            $sGroup = '';
+
+            foreach ($group as $col) {
+                $field = $iterator->getField($col);
+
+                if (!$field) {
+                    throw new InvalidArgumentException(sprintf(
+                        "Property %s does not exist in %s",
+                        $col, $class
+                    ));
+                }
+
+                $sGroup .= ', ' . $field->getColumnName();
+            }
+
+            $sGroup = $sGroup != '' ? 'GROUP BY ' . substr($sGroup, 2) : '';
+        }
+
         if (!empty($order)) {
             $sOrder = '';
+
             foreach ($order as $k => $v) {
                 $field = $iterator->getField($k);
+
                 if (!$field) {
                     throw new InvalidArgumentException(sprintf(
                         "Property %s does not exist in %s",
                         $k, $class
                     ));
                 }
+
                 $sOrder .= ', ' . $field->getColumnName() . ($v ? '' : ' DESC');
             }
-            $sOrder = ($sOrder != '' ? 'ORDER BY ' . substr($sOrder, 2) : '');
+
+            $sOrder = $sOrder != '' ? 'ORDER BY ' . substr($sOrder, 2) : '';
         }
 
         $bcnt = $countRecords && isset($limit);
@@ -347,7 +404,7 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
         $builtWhere = (!empty($built['where']) ? $built['where'] : '1=1');
 
         $stmt = "
-            SELECT " . ($bcnt ? 'SQL_CALC_FOUND_ROWS ' : '') . $this->fields() . " {$stmtFrom}
+            SELECT " . ($bcnt ? 'SQL_CALC_FOUND_ROWS ' : '') . (!empty($criteria[static::STMT_DISTINCT]) ? 'DISTINCT ' : '') . $this->fields() . " {$stmtFrom}
             {$stmtWhere} " . (!empty($rawWhere) ? "AND (" . $builtWhere . ")" : $builtWhere) . "
             " . (!empty($sOrder) ? $sOrder : "") . "
             " . (isset($limit) ? "LIMIT " . ($offset ? intval($offset) . ',' : '') . intval($limit) : "") . "
@@ -384,6 +441,100 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
     }
 
     /**
+     * Removes records from database by criteria
+     *
+     * @param   array   $criteria       optional The search criteria.
+     * @param   int     $limit          optional The records limit
+     *
+     * @return  int Returns number of affected rows
+     */
+    private function _delete(array $criteria = null, $limit = null)
+    {
+        if (is_array($criteria) && array_key_exists(static::STMT_FROM, $criteria)) {
+            $stmtFrom = "FROM " . $criteria[static::STMT_FROM];
+            unset($criteria[static::STMT_FROM]);
+        } else {
+            $stmtFrom = "FROM {$this->table()}";
+        }
+
+        if (is_array($criteria) && array_key_exists(static::STMT_WHERE, $criteria)) {
+            $stmtWhere = "WHERE " . $criteria[static::STMT_WHERE];
+            $rawWhere = !empty($criteria[static::STMT_WHERE]);
+            unset($criteria[static::STMT_WHERE]);
+        } else {
+            $stmtWhere = "WHERE";
+        }
+
+        if (!empty($criteria)) {
+            $built = $this->_buildQuery($criteria);
+        }
+
+        $builtWhere = (!empty($built['where']) ? $built['where'] : '');
+
+        $stmt = "
+            DELETE {$stmtFrom}
+            {$stmtWhere} " . (!empty($rawWhere) ? "AND (" . $builtWhere . ")" : $builtWhere) . "
+            " . (isset($limit) ? "LIMIT " . intval($limit) : "") . "
+        ";
+
+        $this->db()->Execute($stmt);
+
+        return $this->db()->_affectedrows();
+    }
+
+    /**
+     * Removes record from database by primary key
+     *
+     * @param   array   $args   The values which is a part of the primary key
+     *
+     * @return  int Returns number of affected rows
+     *
+     * @throws  ModelException
+     */
+    private function _deletePk(array $args = [])
+    {
+        $iterator = $this->getIterator();
+        $pk = $iterator->getPrimaryKey();
+
+        if (empty($pk)) {
+            throw new ModelException(sprintf(
+                "Primary key has not been defined with @Id tag for %s",
+                get_class($this)
+            ));
+        }
+
+        if (count($args) != count($pk)) {
+            throw new InvalidArgumentException(sprintf(
+                "The number of arguments passed does not match the primary key fields (%s)",
+                join(', ', $pk)
+            ));
+        }
+
+        $stmtWhere = [];
+        $arguments = [];
+        foreach ($pk as $pos => $fieldName) {
+            $field = $iterator->getField($fieldName);
+            $value = $args[$pos];
+
+            if (!isset($value) && $field->column->nullable) {
+                $stmtWhere[] = "{$field->getColumnName()} IS NULL";
+            } else {
+                $stmtWhere[] = "{$field->getColumnName()} = {$field->type->wh()}";
+                $arguments[] = $field->type->toDb($value);
+            }
+        }
+
+        $stmtWhere = implode(' AND ', $stmtWhere);
+
+        $this->db()->Execute("
+            DELETE FROM {$this->table()}
+            WHERE {$stmtWhere} LIMIT 1
+        ", $arguments);
+
+        return $this->db()->_affectedrows();
+    }
+
+    /**
      * Builds query statement
      *
      * @param  array  $criteria     Criteria array
@@ -397,7 +548,7 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
         $iterator = $this->getIterator();
         $class = get_class($this);
 
-        foreach ([static::STMT_FROM, static::STMT_WHERE] as $uk) {
+        foreach ([static::STMT_FROM, static::STMT_WHERE, static::STMT_DISTINCT] as $uk) {
             if (array_key_exists($uk, $criteria)) unset($criteria[$uk]);
         }
 
@@ -489,6 +640,82 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
         }
 
         return $built;
+    }
+
+    /**
+     * Prepares statement to store data in database
+     *
+     * @return EntityStatement
+     *
+     * @throws ModelException
+     */
+    private function _prepareSaveStatement()
+    {
+        $stmt = new EntityStatement($this->db(), get_class($this));
+
+        /* @var $iterator EntityPropertiesIterator */
+        $iterator = $this->getIterator();
+
+        $pk = $iterator->getPrimaryKey();
+
+        if (empty($pk)) {
+            throw new ModelException("Primary key has not been defined with @Id tag for " . get_class($this));
+        }
+
+        $stmtPk      = [];
+        $stmtFields  = [];
+        $stmtUpdate  = [];
+
+        $args  = [];
+        $pkArgs = [];
+        $onDuplicateArgs  = [];
+
+        /* @var $field Field */
+        foreach ($iterator->fields() as $field) {
+            $stmtFields[] = "{$field->getColumnName()} = {$field->type->wh()}";
+            $args[] = $field;
+
+            if (isset($field->id)) {
+                //Field takes a part in primary key
+                $stmtPk[] = "{$field->getColumnName()} = {$field->type->wh()}";
+                $pkArgs[] = $field;
+            } else {
+                $stmtUpdate[] = "{$field->getColumnName()} = {$field->type->wh()}";
+                $onDuplicateArgs[] = $field;
+            }
+        }
+
+        $stmtFields = implode(", ", $stmtFields);
+
+        $table = static::table();
+
+        if ($this->_hasUniqueIndex()) {
+            $stmt->setInsertStatement(
+                static::db()->Prepare("INSERT INTO {$table} SET {$stmtFields} "),
+                $args
+            );
+        } else {
+            $stmt->setInsertStatement(
+                static::db()->Prepare("INSERT INTO {$table} SET {$stmtFields}" . (empty($stmtUpdate) ? '' : (" ON DUPLICATE KEY UPDATE " . implode(", ", $stmtUpdate)))),
+                array_merge($args, $onDuplicateArgs)
+            );
+        }
+
+        if (!empty($stmtPk)) {
+            $stmtPk = implode(" AND ", $stmtPk);
+
+            $stmt->setUpdateStatement(
+                static::db()->Prepare("UPDATE {$table} SET {$stmtFields} WHERE {$stmtPk} LIMIT 1"),
+                array_merge($args, $pkArgs)
+            );
+
+            $stmt->setDeleteStatement(
+                static::db()->Prepare("DELETE FROM {$table} WHERE {$stmtPk} LIMIT 1"),
+                $pkArgs
+            );
+        }
+
+        return $stmt;
     }
 
     /**
@@ -770,6 +997,7 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
 
             $this->db = \Scalr::getContainer()->$service;
         }
+
         return $this->db;
     }
 
@@ -820,10 +1048,13 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
     {
         $entity = new static;
 
-        if ($name == 'findPk' || $name == 'find' || $name == 'findOne' || $name == 'all') {
+        if (in_array($name, ['findPk', 'find', 'findOne', 'all', 'deletePk', 'prepareSaveStatement', 'hasUniqueIndex'])) {
             return $entity->__call($name, $arguments);
-        } else if (strpos($name, 'findBy') === 0 || strpos($name, 'findOneBy') === 0) {
-            return call_user_func_array(array($entity, '__call'), array($name, $arguments));
+        } else if (in_array($name, ['delete', 'deleteBy'])) {
+            return call_user_func_array([$entity, '_delete'], $arguments);
+        } else if (strpos($name, 'findBy') === 0 || strpos($name, 'findOneBy') === 0 ||
+                   strpos($name, 'deleteBy') === 0 || strpos($name, 'deleteOneBy') === 0) {
+            return call_user_func_array([$entity, '__call'], [$name, $arguments]);
         }
 
         throw new BadMethodCallException(sprintf(
@@ -843,6 +1074,22 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
             return call_user_func_array(array($this, '_findOne'), $args);
         } else if ($method == 'all') {
             return $this->_find();
+        } else if ($method == 'deleteBy') {
+            return call_user_func_array(array($this, '_delete'), $args);
+        } else if ($method == 'deletePk') {
+            return $this->_deletePk($args);
+        } else if (strpos($method, 'deleteBy') === 0) {
+            $field = lcfirst(substr($method, 8));
+            return empty($field) ? call_user_func_array([$this, '_delete'], $args) :
+                $this->_delete([["{$field}" => (isset($args[0]) ? $args[0] : null)]]);
+        } else if (strpos($method, 'deleteOneBy') === 0) {
+            $field = lcfirst(substr($method, 8));
+            return empty($field) ? call_user_func_array([$this, '_delete'], array_merge($args, [1])) :
+                $this->_delete([["{$field}" => (isset($args[0]) ? $args[0] : null)]], 1);
+        } else if ($method == 'prepareSaveStatement') {
+            return $this->_prepareSaveStatement();
+        } else if ($method == 'hasUniqueIndex') {
+            return $this->_hasUniqueIndex();
         } else if ($prefix == 'get') {
             $prop = lcfirst(substr($method, 3));
             if (property_exists($this, $prop)) {
@@ -861,7 +1108,7 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
         } else if (strpos($method, 'findOneBy') === 0) {
             $field = lcfirst(substr($method, 9));
             return empty($field) ? call_user_func_array(array($this, '_findOne'), $args) :
-                   $this->_findOne([["$field" => (isset($args[0]) ? $args[0] : null)]]);
+                $this->_findOne([["$field" => (isset($args[0]) ? $args[0] : null)]]);
         } else if (strpos($method, 'column') === 0) {
             $field = lcfirst(substr($method, 6));
             if (!empty($field)) array_unshift($args, $field);

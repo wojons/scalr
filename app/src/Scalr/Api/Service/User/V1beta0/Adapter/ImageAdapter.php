@@ -10,6 +10,7 @@ use Scalr\DataType\ScopeInterface;
 use Scalr\Model\Entity;
 use Scalr\Model\Entity\Image;
 use DateTime;
+use UnexpectedValueException;
 
 /**
  * ImageAdapter V1
@@ -19,6 +20,11 @@ use DateTime;
  */
 class ImageAdapter extends ApiEntityAdapter
 {
+
+    /**
+     * Default image architecture
+     */
+    const DEFAULT_TYPE_ARCHITECTURE = 'x86_64';
 
     /**
      * Converter rules
@@ -31,7 +37,7 @@ class ImageAdapter extends ApiEntityAdapter
         self::RULE_TYPE_TO_DATA     => [
             'hash' => 'id', 'name', 'id' => 'cloudImageId', 'cloudLocation',
             'platform' => 'cloudPlatform', '_added' => 'added', 'dtLastUsed' => 'lastUsed',
-            'architecture', 'size', 'isDeprecated' => 'deprecated', 'source',
+            '_architecture' => 'architecture', 'size', 'isDeprecated' => 'deprecated', 'source',
             'status', 'type', 'statusError',
             '_scope' => 'scope',
             '_os'    => 'os',
@@ -65,24 +71,48 @@ class ImageAdapter extends ApiEntityAdapter
                 throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid scope value");
             }
 
-            if ($from->scope === ScopeInterface::SCOPE_SCALR) {
-                $to->envId = null;
-            } else if ($from->scope === ScopeInterface::SCOPE_ENVIRONMENT) {
-                $to->envId = $this->controller->getEnvironment()->id;
-            } else {
-                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Unexpected scope value");
+            switch ($from->scope) {
+                case ScopeInterface::SCOPE_SCALR:
+                    $to->accountId = null;
+                    $to->envId = null;
+                    break;
+
+                case ScopeInterface::SCOPE_ACCOUNT:
+                    $to->accountId = $this->controller->getUser()->getAccountId();
+                    $to->envId = null;
+                    break;
+
+                case ScopeInterface::SCOPE_ENVIRONMENT:
+                    $to->accountId = $this->controller->getUser()->getAccountId();
+                    $to->envId = $this->controller->getEnvironment()->id;
+                    break;
+
+                default:
+                    throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Unexpected scope value");
             }
         } else if ($action == self::ACT_GET_FILTER_CRITERIA) {
             if (empty($from->scope)) {
                 throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid scope value");
             }
 
-            if ($from->scope === ScopeInterface::SCOPE_SCALR) {
-                return [['$or' => [['envId' => null], ['envId' => 0]]]];
-            } else if ($from->scope === ScopeInterface::SCOPE_ENVIRONMENT) {
-                return [['envId' => $this->controller->getEnvironment()->id]];
-            } else {
-                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Unexpected scope value");
+            switch ($from->scope) {
+                case ScopeInterface::SCOPE_SCALR:
+                    return [
+                        ['$or' => [['envId' => null], ['envId' => 0]]],
+                        ['accountId' => null]
+                    ];
+
+                case ScopeInterface::SCOPE_ACCOUNT:
+                    return [
+                        ['accountId' => $this->controller->getUser()->getAccountId()],
+                        ['envId' => null]
+                    ];
+
+                case ScopeInterface::SCOPE_ENVIRONMENT:
+                    return [['envId' => $this->controller->getEnvironment()->id]];
+
+                default:
+                    throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Unexpected scope value");
             }
         }
     }
@@ -93,20 +123,19 @@ class ImageAdapter extends ApiEntityAdapter
             $to->os = !empty($from->osId) ? ['id' => $from->osId] : null;
         } else if ($action == self::ACT_CONVERT_TO_ENTITY) {
             $osId = ApiController::getBareId($from, 'os');
-            if (!empty($osId)) {
-                if (!is_string($osId) || !preg_match('/^' . Entity\Os::ID_REGEXP . '$/', $osId)) {
-                    throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid identifier of the OS");
-                }
-                $to->osId = $osId;
-            } else {
-                $to->osId = null;
-            }
-        } else if ($action == self::ACT_GET_FILTER_CRITERIA) {
-            if (empty($from->os) || !preg_match('/^' . Entity\Os::ID_REGEXP . '$/', $from->os)) {
+            if (empty($osId)) {
+                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property 'os.id'");
+            } else if (!(is_string($osId) && preg_match('/^' . Entity\Os::ID_REGEXP . '$/', $osId))) {
                 throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid identifier of the OS");
             }
+            $to->osId = $osId;
 
-            return [['osId' => $from->os]];
+        } else if ($action == self::ACT_GET_FILTER_CRITERIA) {
+            $osId = ApiController::getBareId($from, 'os');
+            if (!(is_string($osId) && preg_match('/^' . Entity\Os::ID_REGEXP . '$/', $osId))) {
+                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid identifier of the OS");
+            }
+            return [['osId' => $osId]];
         }
     }
 
@@ -131,8 +160,30 @@ class ImageAdapter extends ApiEntityAdapter
                         ]]
                     ]]];
                 } else {
-                    return [['dtAdded' => self::convertInputValue('datetime', $from->added)]];
+                    return [['dtAdded' => static::convertInputValue('datetime', $from->added, 'added')]];
                 }
+        }
+    }
+
+    protected function _architecture($from, $to, $action)
+    {
+        switch ($action) {
+            case self::ACT_CONVERT_TO_OBJECT:
+                $to->architecture = $from->architecture ? $from->architecture : self::DEFAULT_TYPE_ARCHITECTURE;
+                break;
+
+            case self::ACT_CONVERT_TO_ENTITY:
+                if (!in_array($from->architecture, ['i386', 'x86_64'])) {
+                    throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid architecture value");
+                }
+                $to->architecture = $from->architecture;
+                break;
+
+            case self::ACT_GET_FILTER_CRITERIA:
+                if (!in_array($from->architecture, ['i386', 'x86_64'])) {
+                    throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid architecture value");
+                }
+                return [['architecture' => $from->architecture]];
         }
     }
 
@@ -157,9 +208,9 @@ class ImageAdapter extends ApiEntityAdapter
             }
         } else {
             $image = Entity\Image::findOne([
-                ['id' => $entity->id],
-                ['$or' => [['envId' => $entity->envId], ['envId' => null]]],
-                ['platform' => $entity->platform],
+                ['id'            => $entity->id],
+                ['$or'           => [['envId' => $entity->envId], ['envId' => null]]],
+                ['platform'      => $entity->platform],
                 ['cloudLocation' => $entity->cloudLocation]
             ]);
 
@@ -174,13 +225,12 @@ class ImageAdapter extends ApiEntityAdapter
             $entity->createdById = $this->controller->getUser()->id;
         }
 
-        if (!Entity\Role::validateName($entity->name)) {
+        if (!Entity\Role::isValidName($entity->name)) {
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid name of the Image");
         }
 
-        $entity->architecture = $entity->architecture ?: 'x86_64';
-        if (! in_array($entity->architecture, ['i386','x86_64'])) {
-            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid architecture of the Image.");
+        if(empty($entity->architecture)) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property 'architecture'");
         }
 
         if (!$this->controller->hasPermissions($entity, true)) {
@@ -189,21 +239,20 @@ class ImageAdapter extends ApiEntityAdapter
         }
 
         //We only allow to either create or modify Environment Scope Roles
-        if ($entity->getScope() !== ScopeInterface::SCOPE_ENVIRONMENT) {
+        if ($entity->getScope() !== $this->controller->getScope()) {
             throw new ApiErrorException(403, ErrorMessage::ERR_SCOPE_VIOLATION, sprintf(
-                "Only %s scope is allowed.", ScopeInterface::SCOPE_ENVIRONMENT
+                "Invalid scope"
             ));
         }
 
-        //Validates OS
-        if (!empty($entity->osId)) {
-            //Tries to find out the specified OS
-            $os = Entity\Os::findPk($entity->osId);
-            if (!($os instanceof Entity\Os)) {
-                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Specified OS does not exist");
-            }
-        } else {
-            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "OS must be provided with the request.");
+
+        if (empty($entity->osId)) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property 'os.id'");
+        }
+
+        //Tries to find out the specified OS
+        if (empty(Entity\Os::findPk($entity->osId))) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "OS with id '{$entity->osId}' not found.");
         }
     }
 }

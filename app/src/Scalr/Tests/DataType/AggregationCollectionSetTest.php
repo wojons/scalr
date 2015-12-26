@@ -24,9 +24,9 @@ class AggregationCollectionSetTest extends TestCase
 
         $rawData = [
             ['ccId' => 1, 'projectId' => 2, 'platform' => 'ec2', 'cost' => 0.12],
-            ['ccId' => 1, 'projectId' => 3, 'platform' => 'esc', 'cost' => 0.23],
+            ['ccId' => 1, 'projectId' => 3, 'platform' => 'gce', 'cost' => 0.23],
             ['ccId' => 2, 'projectId' => 3, 'platform' => 'ec2', 'cost' => 1.10],
-            ['ccId' => 4, 'projectId' => 2, 'platform' => 'esc', 'cost' => 0.13],
+            ['ccId' => 4, 'projectId' => 2, 'platform' => 'gce', 'cost' => 0.13],
         ];
 
         $data[] = [$rawData, [
@@ -45,7 +45,7 @@ class AggregationCollectionSetTest extends TestCase
             ],
             'byPlatform' => [
                 'ec2' => ['id' => 'ec2', 'cost' => 1.22],
-                'esc' => ['id' => 'esc', 'cost' => 0.36],
+                'gce' => ['id' => 'gce', 'cost' => 0.36],
             ],
         ]];
 

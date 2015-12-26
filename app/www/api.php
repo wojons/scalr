@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\Util\CryptoTool;
+use Scalr\Model\Entity\SettingEntity;
 
 /**
  * @deprecated This API is deprecated. You should not build your apps on it.
@@ -23,8 +24,9 @@ try {
     $user = Scalr_Account_User::init();
     $user->loadByApiAccessKey($keyId);
 
-    if (!$user->getSetting(Scalr_Account_User::SETTING_API_ENABLED))
+    if (!$user->getSetting(Scalr_Account_User::SETTING_API_ENABLED)) {
         throw new Exception("API disabled for this account");
+    }
 
     //Check IP whitelist
 
@@ -42,8 +44,10 @@ try {
         $postDataConvert[str_replace('.', '_', $key)] = $value;
     }
 
-    $request = Scalr_UI_Request::initializeInstance(Scalr_UI_Request::REQUEST_TYPE_API, getallheaders(), $_SERVER, $postDataConvert, $_FILES, $user->id, $envId);
+    $request = Scalr_UI_Request::initializeInstance(Scalr_UI_Request::REQUEST_TYPE_API, Scalr::getAllHeaders(), $_SERVER, $postDataConvert, $_FILES, $user->id, $envId);
     $request->requestApiVersion = intval(trim($version, 'v'));
+
+    SettingEntity::increase('internalapi.' . join('.', $pathChunks));
 
     Scalr_Api_Controller::handleRequest($pathChunks);
     Scalr_UI_Response::getInstance()->sendResponse();

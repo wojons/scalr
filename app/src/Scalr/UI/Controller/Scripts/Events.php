@@ -111,6 +111,8 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
      */
     public function xSaveAction($id = 0, $name, $description, $replaceEvent = false)
     {
+        $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_EVENTS, Acl::PERM_GENERAL_CUSTOM_EVENTS_MANAGE);
+
         $validator = new \Scalr\UI\Request\Validator();
         $validator->addErrorIf(!preg_match("/^[A-Za-z0-9]+$/si", $name), 'name', "Name should contain only alphanumeric characters");
         $validator->addErrorIf(strlen($name) > 25, 'name', "Name should be less than 25 characters");
@@ -134,21 +136,21 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
                     $criteria[] = ['$or' => [['envId' => NULL], ['envId' => $this->getEnvironmentId(true)]]];
                 }
             }
-            //FIXME don't count the number of records in such way
+
             $validator->addErrorIf(EventDefinition::find($criteria)->count(), 'name', 'This name is already in use. Note that Event names are case-insensitive.');
 
             // check replacements
             $replacements = NULL;
             if ($this->user->isScalrAdmin()) {
                 $replacements = EventDefinition::find([
-                    ['name' => $name],
+                    ['name'      => $name],
                     ['accountId' => ['$ne' => NULL]]
                 ]);
             } else if ($scope == 'account') {
                 $replacements = EventDefinition::find([
-                    ['name' => $name],
+                    ['name'      => $name],
                     ['accountId' => $this->user->getAccountId()],
-                    ['envId' => ['$ne' => NULL]]
+                    ['envId'     => ['$ne' => NULL]]
                 ]);
             }
         }
@@ -291,7 +293,7 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
             EventDefinition::find([
                 ['$or' => [['accountId' => NULL], ['accountId' => $this->user->getAccountId()]]],
                 ['$or' => [['envId' => NULL], ['envId' => $this->getEnvironmentId()]]]
-            ], ['name' => 'asc'])->getArrayCopy()
+            ], null, ['name' => 'asc'])->getArrayCopy()
         );
 
         $this->response->page('ui/scripts/events/fire.js', $data);
@@ -312,8 +314,8 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
 
         if (! EventDefinition::findOne([
             ['name' => $eventName],
-            ['$or' => [['accountId' => NULL], ['accountId' => $this->user->getAccountId()]]],
-            ['$or' => [['envId' => NULL], ['envId' => $this->getEnvironmentId()]]]
+            ['$or' => [['accountId' => null], ['accountId' => $this->user->getAccountId()]]],
+            ['$or' => [['envId' => null], ['envId' => $this->getEnvironmentId()]]]
         ])) {
             throw new Exception("Event definition not found");
         }

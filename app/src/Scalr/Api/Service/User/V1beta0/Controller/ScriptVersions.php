@@ -33,9 +33,9 @@ class ScriptVersions  extends ApiController
      */
     public function describeAction($scriptId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_SCRIPTS);
+        $this->checkPermissions(Acl::RESOURCE_SCRIPTS_ENVIRONMENT);
 
-        if (!$this->hasPermissions(Script::findPk($scriptId), true)) {
+        if (!$this->hasPermissions(Script::findPk($scriptId))) {
             //Checks entity level write access permissions
             throw new ApiErrorException(403, ErrorMessage::ERR_PERMISSION_VIOLATION, "Insufficient permissions");
         }
@@ -83,7 +83,7 @@ class ScriptVersions  extends ApiController
      */
     public function fetchAction($scriptId, $versionNumber)
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_SCRIPTS);
+        $this->checkPermissions(Acl::RESOURCE_SCRIPTS_ENVIRONMENT);
 
         return $this->result($this->adapter('scriptVersion')->toData($this->getVersion($scriptId, $versionNumber)));
     }
@@ -98,7 +98,7 @@ class ScriptVersions  extends ApiController
      */
     public function createAction($scriptId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_SCRIPTS, Acl::PERM_ADMINISTRATION_SCRIPTS_MANAGE);
+        $this->checkPermissions(Acl::RESOURCE_SCRIPTS_ENVIRONMENT, Acl::PERM_SCRIPTS_ENVIRONMENT_MANAGE);
 
         $object = $this->request->getJsonBody();
 
@@ -156,7 +156,7 @@ class ScriptVersions  extends ApiController
      */
     public function modifyAction($scriptId, $versionNumber)
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_SCRIPTS, Acl::PERM_ADMINISTRATION_SCRIPTS_MANAGE);
+        $this->checkPermissions(Acl::RESOURCE_SCRIPTS_ENVIRONMENT, Acl::PERM_SCRIPTS_ENVIRONMENT_MANAGE);
 
         $object = $this->request->getJsonBody();
 
@@ -196,7 +196,7 @@ class ScriptVersions  extends ApiController
      */
     public function deleteAction($scriptId, $versionNumber)
     {
-        $this->checkPermissions(Acl::RESOURCE_ADMINISTRATION_SCRIPTS, Acl::PERM_ADMINISTRATION_SCRIPTS_MANAGE);
+        $this->checkPermissions(Acl::RESOURCE_SCRIPTS_ENVIRONMENT, Acl::PERM_SCRIPTS_ENVIRONMENT_MANAGE);
 
         $version = $this->getVersion($scriptId, $versionNumber, true);
 

@@ -18,7 +18,7 @@ class JobLauncher
 
     function __construct($process_classes_folder)
     {
-        $this->Logger = \Logger::getLogger('JobLauncher');
+        $this->Logger = \Scalr::getContainer()->logger('JobLauncher');
 
         $processes = @glob("{$process_classes_folder}/class.*Process.php");
 

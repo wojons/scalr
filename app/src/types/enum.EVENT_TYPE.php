@@ -4,7 +4,6 @@ final class EVENT_TYPE
 {
     const HOST_UP 	= "HostUp";
     const HOST_DOWN	= "HostDown";
-    const HOST_CRASH	= "HostCrash";
     const HOST_INIT 	= "HostInit";
 
     const REBUNDLE_COMPLETE	= "RebundleComplete";
@@ -12,6 +11,8 @@ final class EVENT_TYPE
 
     const REBOOT_BEGIN	= "RebootBegin";
     const REBOOT_COMPLETE	= "RebootComplete";
+    
+    const RESUME_COMPLETE	= "ResumeComplete";
 
     const FARM_TERMINATED = "FarmTerminated";
     const FARM_LAUNCHED = "FarmLaunched";
@@ -47,11 +48,11 @@ final class EVENT_TYPE
             self::HOST_UP 			=> _("Instance started and configured."),
             self::BEFORE_HOST_UP 	=> _("Time for user-defined actions before instance will be added to DNS, LoadBalancer, etc."),
             self::HOST_DOWN 		=> _("Instance terminated."),
-            self::HOST_CRASH 		=> _("Instance crashed inexpectedly."),
             self::REBUNDLE_COMPLETE => _("\"Synchronize to all\" or custom role creation competed successfully."),
             self::REBUNDLE_FAILED 	=> _("\"Synchronize to all\" or custom role creation failed."),
             self::REBOOT_BEGIN 		=> _("Instance being rebooted."),
             self::REBOOT_COMPLETE 	=> _("Instance came up after reboot."),
+            self::RESUME_COMPLETE 	=> _("Instance successfully resumed after suspension."),
             self::FARM_LAUNCHED 	=> _("Farm has been launched."),
             self::FARM_TERMINATED 	=> _("Farm has been terminated."),
             self::HOST_INIT			=> _("Instance booted up, Scalr environment not configured and services not initialized yet."),
@@ -90,6 +91,7 @@ final class EVENT_TYPE
             EVENT_TYPE::HOST_DOWN => EVENT_TYPE::GetEventDescription(EVENT_TYPE::HOST_DOWN),
             //EVENT_TYPE::DNS_ZONE_UPDATED => EVENT_TYPE::GetEventDescription(EVENT_TYPE::DNS_ZONE_UPDATED),
             EVENT_TYPE::REBOOT_COMPLETE => EVENT_TYPE::GetEventDescription(EVENT_TYPE::REBOOT_COMPLETE),
+            EVENT_TYPE::RESUME_COMPLETE => EVENT_TYPE::GetEventDescription(EVENT_TYPE::RESUME_COMPLETE),
             EVENT_TYPE::CHECK_FAILED => EVENT_TYPE::GetEventDescription(EVENT_TYPE::CHECK_FAILED),
             EVENT_TYPE::CHECK_RECOVERED => EVENT_TYPE::GetEventDescription(EVENT_TYPE::CHECK_RECOVERED)
         );
@@ -106,6 +108,20 @@ final class EVENT_TYPE
             ];
         }
         return $events;
+    }
+
+    /**
+     * List Events that restricted for the Chef orchestration actions
+     *
+     * @return array
+     */
+    public static function getChefRestrictedEvents()
+    {
+        return [
+            static::BEFORE_INSTANCE_LAUNCH,
+            static::HOST_INIT,
+            static::HOST_DOWN
+        ];
     }
 
 }

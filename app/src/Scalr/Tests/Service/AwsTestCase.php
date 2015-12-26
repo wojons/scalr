@@ -145,7 +145,7 @@ class AwsTestCase extends TestCase
 
 
     /**
-     * Gets an ser vice interface mock object
+     * Gets an service interface mock object
      *
      * @param   string                   $serviceName  Service name (Elb, CloudWatch etc..)
      * @param   \Closure|callback|string $callback     optional callback for QueryClientResponse mock
@@ -257,7 +257,7 @@ class AwsTestCase extends TestCase
                 'getResponseCode',
             ),
             array(
-                $this->getMock('HttpMessage')
+                $this->getMock('\http\Client\Response')
             )
         );
 

@@ -3,7 +3,7 @@ namespace Scalr\System\Zmq\Cron;
 
 use DateTime;
 use Exception;
-use Scalr\LoggerTrait;
+use Scalr\LoggerAwareTrait;
 use Scalr\System\Zmq\Mdp\Client;
 use Scalr\System\Zmq\Zmsg;
 
@@ -15,7 +15,7 @@ use Scalr\System\Zmq\Zmsg;
  */
 class Launcher
 {
-    use LoggerTrait;
+    use LoggerAwareTrait;
 
     /**
      * Start time

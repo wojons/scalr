@@ -15,7 +15,7 @@ class Scalr_UI_Controller_Account2_Teams extends Scalr_UI_Controller
             array(),
             array('ui/account2/dataconfig.js'),
             array('ui/account2/teams/view.css'),
-            array('account.environments', 'account.users', 'account.teams', 'account.roles')
+            array('account.environments', 'account.users', 'account.teams', 'account.acl')
         );
     }
 

@@ -1,32 +1,32 @@
 Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
-	var platforms = moduleParams.platforms || {},
+    var platforms = moduleParams.platforms || {},
         vpcLimits = Scalr.getGovernance('ec2', 'aws.vpc'),
-		rootDeviceTypeFilterEnabled = true,
-		chefFieldsetEnabled = true,//Scalr.flags['betaMode'],
-		advancedFieldsetEnabled = Scalr.flags['betaMode'],
-		result = {},
-		behaviors,
-		buttons = {
-			platforms: [],
-			behaviors: [],
-			addons: []
-		};
+        rootDeviceTypeFilterEnabled = true,
+        chefFieldsetEnabled = true,//Scalr.flags['betaMode'],
+        advancedFieldsetEnabled = Scalr.flags['betaMode'],
+        result = {},
+        behaviors,
+        buttons = {
+            platforms: [],
+            behaviors: [],
+            addons: []
+        };
 
-	behaviors = [
-		{name: 'mysql2', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona','mariadb'], os:[{family: 'centos', version: /^7/i}]}},
-		{name: 'mariadb', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona','mysql2']}},
-		{name: 'postgresql', disable: {platform: ['gce'], behavior: ['redis', 'mongodb', 'percona', 'mysql2']}},
-		{name: 'percona', disable: Ext.apply({behavior: ['postgresql', 'redis', 'mongodb', 'mysql2']})},
-		{name: 'app', disable: {behavior:['www', 'tomcat']}},
+    behaviors = [
+        {name: 'mysql2', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona', 'mariadb'], os:[{family: 'centos', version: /^7/i}]}},
+        {name: 'mariadb', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona','mysql2']}},
+        {name: 'postgresql', disable: {platform: ['gce'], behavior: ['redis', 'mongodb', 'percona', 'mysql2', 'mariadb']}},
+        {name: 'percona', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'mysql2', 'mariadb']}},
+        {name: 'app', disable: {behavior:['www', 'tomcat']}},
         {name: 'tomcat', disable: {behavior:['app'], os:['oel', {family: 'ubuntu', version: ['10.04']}]}},
         {name: 'haproxy', disable: {behavior:['www']}},
-		{name: 'www', disable: {behavior:['app', 'haproxy']}},
-		{name: 'memcached'},
-		{name: 'redis', disable: {behavior: ['postgresql', 'mongodb', 'percona', 'mysql2']}},
-		{name: 'rabbitmq', disable: {os: ['rhel', 'oel', 'redhat']}},
-		{name: 'mongodb', disable: {
+        {name: 'www', disable: {behavior:['app', 'haproxy']}},
+        {name: 'memcached'},
+        {name: 'redis', disable: {behavior: ['postgresql', 'mongodb', 'percona', 'mysql2', 'mariadb']}},
+        {name: 'rabbitmq', disable: {os: ['rhel', 'oel', 'redhat']}},
+        {name: 'mongodb', disable: {
             platform: ['gce', 'rackspacengus', 'rackspacenguk'],
-            behavior: ['postgresql', 'redis', 'percona', 'mysql2'],
+            behavior: ['postgresql', 'redis', 'percona', 'mysql2', 'mariadb'],
             os: [
                 {family: 'debian', version: /^8/i},
                 {family: 'ubuntu', version: ['15.04']},
@@ -36,149 +36,149 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                 {family: 'amazon', version: /^2015/i}
             ]
         }},
-		//{name: 'mysqlproxy', addon: true, disable: {os: ['centos', 'oel', 'rhel']}},//{family: 'ubuntu', version: ['10.04']}
-		{name: 'chef', addon: true, button: {pressed: true, toggle: Ext.emptyFn}}
-	];
+        //{name: 'mysqlproxy', addon: true, disable: {os: ['centos', 'oel', 'rhel']}},//{family: 'ubuntu', version: ['10.04']}
+        {name: 'chef', addon: true, button: {pressed: true, toggle: Ext.emptyFn}}
+    ];
 
-	//behaviors buttons
-	for (var i=0, len=behaviors.length; i<len; i++) {
-		var button = {
+    //behaviors buttons
+    for (var i=0, len=behaviors.length; i<len; i++) {
+        var button = {
             iconCls: 'x-icon-behavior-large x-icon-behavior-large-' + behaviors[i].name,
             text: Scalr.utils.beautifyBehavior(behaviors[i].name),
-			behavior: behaviors[i].name
-		};
-		if (behaviors[i].button) {
-			Ext.apply(button, behaviors[i].button);
-		}
-		buttons[behaviors[i].addon ? 'addons' : 'behaviors'].push(button);
-	}
+            behavior: behaviors[i].name
+        };
+        if (behaviors[i].button) {
+            Ext.apply(button, behaviors[i].button);
+        }
+        buttons[behaviors[i].addon ? 'addons' : 'behaviors'].push(button);
+    }
 
-	//platform buttons
-	for (var i in platforms) {
-		buttons['platforms'].push({
+    //platform buttons
+    for (var i in platforms) {
+        buttons['platforms'].push({
             text: Scalr.utils.getPlatformName(i, true),
             iconCls: 'x-icon-platform-large x-icon-platform-large-' + i,
-			value: i
-		});
-	}
+            value: i
+        });
+    }
 
-	var toggleBehaviors = function(enable) {
-		panel.down('#settings-behaviors').items.each(function(){
-			this[enable?'enable':'disable']();
-			this.setTooltip(enable?'':'Please select operating system.');
-		});
-		panel.down('#settings-addons').items.each(function(){
+    var toggleBehaviors = function(enable) {
+        panel.down('#settings-behaviors').items.each(function(){
+            this[enable?'enable':'disable']();
+            this.setTooltip(enable?'':'Please select operating system.');
+        });
+        panel.down('#settings-addons').items.each(function(){
             if (this.xtype === 'button') {
                 this[enable?'enable':'disable']();
                 this.setTooltip(enable?'':'Please select operating system.');
             }
-		});
-	};
+        });
+    };
 
-	var onSelectBehavior = function() {
-		if (this.pressed) {
-			result.behaviors.push(this.behavior);
-		} else {
-			Ext.Array.remove(result.behaviors, this.behavior);
-		}
-		panel.refreshBehaviors();
+    var onSelectBehavior = function() {
+        if (this.pressed) {
+            result.behaviors.push(this.behavior);
+        } else {
+            Ext.Array.remove(result.behaviors, this.behavior);
+        }
+        panel.refreshBehaviors();
         refreshSoftwareWarning();
-	};
+    };
 
-	var onSelectAddon = function() {
-		if (this.pressed) {
-			result.addons.push(this.behavior);
-		} else {
-			Ext.Array.remove(result.addons, this.behavior);
-		}
-		if (this.behavior == 'chef') {
-			panel.down('#chefsettings')[this.pressed?'show':'hide']();
-		}
+    var onSelectAddon = function() {
+        if (this.pressed) {
+            result.addons.push(this.behavior);
+        } else {
+            Ext.Array.remove(result.addons, this.behavior);
+        }
+        if (this.behavior == 'chef') {
+            panel.down('#chefsettings')[this.pressed?'show':'hide']();
+        }
         refreshSoftwareWarning();
-	};
+    };
 
     var refreshSoftwareWarning = function() {
         panel.down('#softwarewarning').setVisible(result.behaviors.length > 0 || result.addons.length > 1);
     };
 
-	var panel = Ext.create('Ext.panel.Panel', {
-		scalrOptions: {
-			maximize: 'all',
+    var panel = Ext.create('Ext.panel.Panel', {
+        scalrOptions: {
+            maximize: 'all',
             menuTitle: 'Roles',
             menuHref: '#/roles',
             menuParentStateId: 'grid-roles-manager'
-		},
-		layout: {
-			type: 'hbox',
-			align: 'stretch'
-		},
+        },
+        layout: {
+            type: 'hbox',
+            align: 'stretch'
+        },
         plugins: {
             ptype: 'localcachedrequest',
             crscope: 'rolebuilder'
         },
 
-		items:[{
-			xtype: 'container',
+        items:[{
+            xtype: 'container',
             cls: 'x-panel-column-left',
             autoScroll: true,
-			width: 534,
-			layout: {
-				type: 'vbox',
-				align: 'stretch'
-			},
-			items: [{
-				xtype: 'fieldset',
-				itemId: 'leftcol',
+            width: 534,
+            layout: {
+                type: 'vbox',
+                align: 'stretch'
+            },
+            items: [{
+                xtype: 'fieldset',
+                itemId: 'leftcol',
                 cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
                 title: 'Location and operating system',
-				layout: {
-					type: 'vbox',
-					align: 'stretch'
-				},
-				items: [{
-					xtype: 'label',
-					text: 'Cloud Location',
+                layout: {
+                    type: 'vbox',
+                    align: 'stretch'
+                },
+                items: [{
+                    xtype: 'label',
+                    text: 'Cloud Location',
                     cls: 'x-form-item-label-default'
-				},{
-					xtype: 'container',
-					layout: {
-						type: 'hbox',
-						pack: 'center'
-					},
-					margin: '0 0 10 0',
-					items: {
-						xtype: 'cloudlocationmap',
-						itemId: 'locationmap',
-						platforms: Scalr.platforms,
-						size: 'large',
-						listeners: {
+                },{
+                    xtype: 'container',
+                    layout: {
+                        type: 'hbox',
+                        pack: 'center'
+                    },
+                    margin: '0 0 10 0',
+                    items: {
+                        xtype: 'cloudlocationmap',
+                        itemId: 'locationmap',
+                        platforms: Scalr.platforms,
+                        size: 'large',
+                        listeners: {
                             beforeselectlocation: function() {
                                 return !panel.serverId;
                             },
-							selectlocation: function(location){
-								panel.down('#cloudLocation').setValue(location);
-							}
-						}
-					}
-				},{
-					xtype: 'combo',
-					margin: '0 0 6 0',
-					itemId: 'cloudLocation',
-					editable: false,
-					valueField: 'id',
-					displayField: 'name',
-					queryMode: 'local',
-					store: {
-						fields: ['id', 'name']
-					},
+                            selectlocation: function(location){
+                                panel.down('#cloudLocation').setValue(location);
+                            }
+                        }
+                    }
+                },{
+                    xtype: 'combo',
+                    margin: '0 0 6 0',
+                    itemId: 'cloudLocation',
+                    editable: false,
+                    valueField: 'id',
+                    displayField: 'name',
+                    queryMode: 'local',
+                    store: {
+                        fields: ['id', 'name']
+                    },
                     plugins: [{
                         ptype: 'fieldinnericoncloud'
                     }, {
                         ptype: 'fieldicons',
                         icons: ['governance']
                     }],
-					listeners: {
-						change: function(comp, value) {
+                    listeners: {
+                        change: function(comp, value) {
                             if (value) {
                                 panel.fireEvent('selectlocation', value);
                                 var locations = [];
@@ -207,8 +207,8 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                                     vpcIdField.getPlugin('comboaddnew').setDisabled(disableAddNew);
                                 }
                             }
-						}
-					}
+                        }
+                    }
                 },{
                     xtype: 'combo',
                     flex: 1,
@@ -273,94 +273,94 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                     allowBlank: false,
                     hidden: true,
                     maxCount: 1
-				},{
-					xtype: 'buttongroupfield',
-					itemId: 'architecture',
-					fieldLabel: 'Architecture',
-					cls: 'hideoncustomimage',
-					margin: '10 0 0 0',
-					labelWidth: 120,
-					listeners: {
-						change: function(comp, value) {
-							panel.fireEvent('selectarchitecture', value);
-						}
-					},
-					defaults: {
-						width: 140
-					},
-					items: [{
-						text: '64 bit',
-						value: 'x86_64'
-					},{
-						text: '32 bit',
-						value: 'i386'
-					}]
-				},{
-					xtype: 'container',
-					itemId: 'rootdevicetypewrap',
-					cls: 'hideoncustomimage',
-					hidden: true,
-					layout: 'hbox',
-					margin: '10 0 4 0',
-					items: [{
-						xtype: 'buttongroupfield',
-						itemId: 'root_device_type',
-						fieldLabel: 'Root device type',
-						labelWidth: 120,
+                },{
+                    xtype: 'buttongroupfield',
+                    itemId: 'architecture',
+                    fieldLabel: 'Architecture',
+                    cls: 'hideoncustomimage',
+                    margin: '10 0 0 0',
+                    labelWidth: 120,
+                    listeners: {
+                        change: function(comp, value) {
+                            panel.fireEvent('selectarchitecture', value);
+                        }
+                    },
+                    defaults: {
+                        width: 140
+                    },
+                    items: [{
+                        text: '64 bit',
+                        value: 'x86_64'
+                    },{
+                        text: '32 bit',
+                        value: 'i386'
+                    }]
+                },{
+                    xtype: 'container',
+                    itemId: 'rootdevicetypewrap',
+                    cls: 'hideoncustomimage',
+                    hidden: true,
+                    layout: 'hbox',
+                    margin: '10 0 4 0',
+                    items: [{
+                        xtype: 'buttongroupfield',
+                        itemId: 'root_device_type',
+                        fieldLabel: 'Root device type',
+                        labelWidth: 120,
                         width: 412,
-						listeners: {
-							change: function(comp, value) {
-								panel.fireEvent('selectrootdevicetype', value);
-							}
-						},
-						defaults: {
-							width: 140
-						},
-						items: [{
-							text: 'EBS',
-							value: 'ebs'
-						},{
-							text: 'Instance store',
-							value: 'instance-store'
-						}]
-					},{
-						xtype: 'button',
-						itemId: 'hvm',
-						enableToggle: true,
-						text: 'HVM',
-						toggleHandler: function(){
-							panel.fireEvent('selecthvm', this.pressed);
-						}
-					}]
-				},{
-					xtype: 'label',
-					text: 'Image ID:',
-					margin: '12 0 16 0',
-					cls: 'showoncustomimage'
-				},{
-					xtype: 'textfield',
-					itemId: 'imageId',
-					cls: 'showoncustomimage',
-					allowBlank: false
-				},{
-					xtype: 'label',
-					text: 'Operating system',
-					margin: '10 0 0 0',
-					cls: 'x-form-item-label-default hideoncustomimage'
-				}]
-			},{
-				xtype: 'container',
-				itemId: 'images',
-				cls: 'hideoncustomimage',
+                        listeners: {
+                            change: function(comp, value) {
+                                panel.fireEvent('selectrootdevicetype', value);
+                            }
+                        },
+                        defaults: {
+                            width: 140
+                        },
+                        items: [{
+                            text: 'EBS',
+                            value: 'ebs'
+                        },{
+                            text: 'Instance store',
+                            value: 'instance-store'
+                        }]
+                    },{
+                        xtype: 'button',
+                        itemId: 'hvm',
+                        enableToggle: true,
+                        text: 'HVM',
+                        toggleHandler: function(){
+                            panel.fireEvent('selecthvm', this.pressed);
+                        }
+                    }]
+                },{
+                    xtype: 'label',
+                    text: 'Image ID:',
+                    margin: '12 0 16 0',
+                    cls: 'showoncustomimage'
+                },{
+                    xtype: 'textfield',
+                    itemId: 'imageId',
+                    cls: 'showoncustomimage',
+                    allowBlank: false
+                },{
+                    xtype: 'label',
+                    text: 'Operating system',
+                    margin: '10 0 0 0',
+                    cls: 'x-form-item-label-default hideoncustomimage'
+                }]
+            },{
+                xtype: 'container',
+                itemId: 'images',
+                cls: 'hideoncustomimage',
                 margin: '0 0 0 18'
-			}]
-		}, {
-			xtype: 'form',
-			itemId: 'rightcol',
-			layout: 'anchor',
-			autoScroll: true,
-			flex: 1,
-			items: [{
+            }]
+        }, {
+            xtype: 'form',
+            itemId: 'rightcol',
+            layout: 'anchor',
+            autoScroll: true,
+            flex: 1,
+            items: [{
                 xtype: 'fieldset',
                 title: 'General info and software',
                 defaults: {
@@ -377,6 +377,8 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                 },{
                     xtype: 'checkbox',
                     boxLabel: 'Only create an Image, do not create a Role using that Image',
+                    readOnly: !Scalr.isAllowed('ROLES_ENVIRONMENT', 'manage'),
+                    checked: !Scalr.isAllowed('ROLES_ENVIRONMENT', 'manage'),
                     itemId: 'roleimage'
                 },{
                     xtype: 'label',
@@ -539,90 +541,90 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                         return !Ext.isEmpty(value) && Ext.typeOf(Ext.decode(value, true)) != 'object' ? 'Invalid json' : true;
                     }
                 }]
-			},{
-				xtype: 'fieldset',
-				title: 'Advanced options',
-				collapsible: true,
-				collapsed: true,
+            },{
+                xtype: 'fieldset',
+                title: 'Advanced options',
+                collapsible: true,
+                collapsed: true,
                 toggleOnTitleClick: true,
-				hidden: !advancedFieldsetEnabled,
-				layout: 'anchor',
-				defaults: {
-					maxWidth: 516,
-					anchor: '100%',
-					labelWidth: 140
-				},
-				listeners: {
-					expand: function(){
-						panel.down('#rightcol').body.scrollTo('top', 3000);
-					}
-				},
-				items: [{
-					xtype: 'displayfield',
-					cls: 'x-form-field-warning',
-					value: 'Please use advanced options on your own risk!',
-					margin: '8 0 12 0'
-				},{
-					xtype: 'textfield',
-					name: 'advanced.availzone',
-					itemId: 'availzone',
-					fieldLabel: 'Availability zone'
-				},{
-					xtype: 'textfield',
-					name: 'advanced.servertype',
-					itemId: 'servertype',
-					fieldLabel: 'Server type'
-				},{
-					xtype: 'textfield',
-					name: 'advanced.scalrbranch',
-					itemId: 'scalrbranch',
-					fieldLabel: 'Scalarizr branch'
-				},{
-					xtype: 'textfield',
-					name: 'advanced.region',
-					itemId: 'region',
-					fieldLabel: 'Region'
-				},{
-					xtype: 'textfield',
-					name: 'advanced.overrideImageId',
-					itemId: 'overrideImageId',
-					hidden: true,
-					fieldLabel: 'Image ID'
-				},{
-					xtype: 'checkbox',
-					name: 'advanced.dontterminatefailed',
-					itemId: 'dontterminatefailed',
-					boxLabel: 'Do not terminate if build failed'
-				}]
-			}],
-			dockedItems:[{
-				xtype: 'container',
-				dock: 'bottom',
-				cls: 'x-docked-buttons',
+                hidden: !advancedFieldsetEnabled,
+                layout: 'anchor',
+                defaults: {
+                    maxWidth: 516,
+                    anchor: '100%',
+                    labelWidth: 140
+                },
+                listeners: {
+                    expand: function(){
+                        panel.down('#rightcol').body.scrollTo('top', 3000);
+                    }
+                },
+                items: [{
+                    xtype: 'displayfield',
+                    cls: 'x-form-field-warning',
+                    value: 'Please use advanced options on your own risk!',
+                    margin: '8 0 12 0'
+                },{
+                    xtype: 'textfield',
+                    name: 'advanced.availzone',
+                    itemId: 'availzone',
+                    fieldLabel: 'Availability zone'
+                },{
+                    xtype: 'textfield',
+                    name: 'advanced.servertype',
+                    itemId: 'servertype',
+                    fieldLabel: 'Server type'
+                },{
+                    xtype: 'textfield',
+                    name: 'advanced.scalrbranch',
+                    itemId: 'scalrbranch',
+                    fieldLabel: 'Scalarizr branch'
+                },{
+                    xtype: 'textfield',
+                    name: 'advanced.region',
+                    itemId: 'region',
+                    fieldLabel: 'Region'
+                },{
+                    xtype: 'textfield',
+                    name: 'advanced.overrideImageId',
+                    itemId: 'overrideImageId',
+                    hidden: true,
+                    fieldLabel: 'Image ID'
+                },{
+                    xtype: 'checkbox',
+                    name: 'advanced.dontterminatefailed',
+                    itemId: 'dontterminatefailed',
+                    boxLabel: 'Do not terminate if build failed'
+                }]
+            }],
+            dockedItems:[{
+                xtype: 'container',
+                dock: 'bottom',
+                cls: 'x-docked-buttons',
                 style: 'z-index:101;background:transparent',//show toolbar above the mask to make "Cancel" button available
-				layout: {
-					type: 'hbox',
-					pack: 'center'
-				},
-				items: [{
-					xtype: 'button',
-					itemId: 'save',
-					text: 'Create',
-					disabled: true,
-					handler: function() {
+                layout: {
+                    type: 'hbox',
+                    pack: 'center'
+                },
+                items: [{
+                    xtype: 'button',
+                    itemId: 'save',
+                    text: 'Create',
+                    disabled: true,
+                    handler: function() {
                         var platformImages = panel.getPlatformImages(result.platform);
-						if (chefFieldsetEnabled) {
-							if (!panel.down('#chefattributes').isValid()) {
-								panel.down('#chefsettings').expand();
-								return;
-							}
-						}
-						if (!platformImages.length) {
-							if (!panel.down('#imageId').isValid()) {
-								panel.down('#imageId').focus();
-								return;
-							}
-						}
+                        if (chefFieldsetEnabled) {
+                            if (!panel.down('#chefattributes').isValid()) {
+                                panel.down('#chefsettings').expand();
+                                return;
+                            }
+                        }
+                        if (!platformImages.length) {
+                            if (!panel.down('#imageId').isValid()) {
+                                panel.down('#imageId').focus();
+                                return;
+                            }
+                        }
 
                         if (loadParams['vpc'] == 1 && result.platform === 'ec2') {
                             if (!panel.down('#vpcId').isValid()) {
@@ -633,98 +635,98 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                             }
                         }
 
-						if (panel.down('#rolename').isValid()) {
-							var r = Scalr.utils.CloneObject(result);
-							r.advanced = {};
-							r.chef = {};
+                        if (panel.down('#rolename').isValid()) {
+                            var r = Scalr.utils.CloneObject(result);
+                            r.advanced = {};
+                            r.chef = {};
 
-							//role name
-							r['name'] = panel.down('#rolename').getValue();
+                            //role name
+                            r['name'] = panel.down('#rolename').getValue();
                             r['createImage'] = panel.down('#roleimage').getValue();
 
-							//collect behaviors
-							if (! r.behaviors.length) {
-								Ext.Array.include(r.behaviors, 'base');
-							}
-							r['behaviors'] = Ext.encode(Ext.Array.merge(r.behaviors, r.addons));
-							delete r.addons;
+                            //collect behaviors
+                            if (! r.behaviors.length) {
+                                Ext.Array.include(r.behaviors, 'base');
+                            }
+                            r['behaviors'] = Ext.encode(Ext.Array.merge(r.behaviors, r.addons));
+                            delete r.addons;
 
-							//imageId
-							if (platformImages.length) {
-								r['imageId'] = panel.getImageId();
-							} else {
-								r['imageId'] = panel.down('#imageId').getValue();
-								delete r['architecture'];
-							}
+                            //imageId
+                            if (platformImages.length) {
+                                r['imageId'] = panel.getImageId();
+                            } else {
+                                r['imageId'] = panel.down('#imageId').getValue();
+                                delete r['architecture'];
+                            }
 
-							//collect fieldsets options
-							var extraOptions = panel.down('#rightcol').getValues();
-							if (advancedFieldsetEnabled) {//collect advanced options
-								Ext.Object.each(extraOptions, function(key, value){
-									if (key.match(/^advanced\./ig)) {
-										r.advanced[key.replace('advanced.', '')] = value;
-									}
-								});
-								//override imageId
-								if (platformImages.length && !Ext.isEmpty(r.advanced['overrideImageId'])) {
-									r['imageId'] = r.advanced['overrideImageId'];
-								}
-								delete r.advanced['overrideImageId'];
-							}
-							if (chefFieldsetEnabled) {//collect chef options
-								Ext.Object.each(extraOptions, function(key, value){
-									if (key.match(/^chef./ig)) {
-										r.chef[key] = value;
-									}
-								});
-							}
+                            //collect fieldsets options
+                            var extraOptions = panel.down('#rightcol').getValues();
+                            if (advancedFieldsetEnabled) {//collect advanced options
+                                Ext.Object.each(extraOptions, function(key, value){
+                                    if (key.match(/^advanced\./ig)) {
+                                        r.advanced[key.replace('advanced.', '')] = value;
+                                    }
+                                });
+                                //override imageId
+                                if (platformImages.length && !Ext.isEmpty(r.advanced['overrideImageId'])) {
+                                    r['imageId'] = r.advanced['overrideImageId'];
+                                }
+                                delete r.advanced['overrideImageId'];
+                            }
+                            if (chefFieldsetEnabled) {//collect chef options
+                                Ext.Object.each(extraOptions, function(key, value){
+                                    if (key.match(/^chef./ig)) {
+                                        r.chef[key] = value;
+                                    }
+                                });
+                            }
 
-							if (loadParams['devScalarizrBranch']) {
-								r['devScalarizrBranch'] = loadParams['devScalarizrBranch'];
-							}
+                            if (loadParams['devScalarizrBranch']) {
+                                r['devScalarizrBranch'] = loadParams['devScalarizrBranch'];
+                            }
 
-							//backward compatibility
-							r['mysqlServerType'] = 'mysql';
-							r['location'] = r['cloudLocation'];
+                            //backward compatibility
+                            r['mysqlServerType'] = 'mysql';
+                            r['location'] = r['cloudLocation'];
 
-							r.advanced = Ext.encode(r.advanced);
-							r.chef = Ext.encode(r.chef);
+                            r.advanced = Ext.encode(r.advanced);
+                            r.chef = Ext.encode(r.chef);
 
                             if (loadParams['vpc'] == 1 && r.platform === 'ec2' && panel.down('#vpcId').getValue()) {
                                 r.vpcId = panel.down('#vpcId').getValue();
                                 r.vpcSubnetId = panel.down('#vpcSubnetId').getValue();
                             }
-							Scalr.Request({
-								processBox: {
-									type: 'action'
-								},
-								url: '/roles/xBuild',
-								params: r,
-								success: function (data) {
-									Scalr.event.fireEvent('redirect', '#/roles/builder?serverId=' + data.serverId + (loadParams['devel'] ? '&devel=1' : ''));
-								}
-							});
-						} else {
-							panel.down('#rightcol').body.scrollTo('top', 0);
-							panel.down('#rolename').focus();
-						}
-					}
-				}, {
-					xtype: 'button',
-					itemId: 'cancel',
-					text: 'Cancel',
-					handler: function() {
-						Scalr.event.fireEvent('close');
-					}
-				}]
-			}]
-		},{
+                            Scalr.Request({
+                                processBox: {
+                                    type: 'action'
+                                },
+                                url: '/roles/xBuild',
+                                params: r,
+                                success: function (data) {
+                                    Scalr.event.fireEvent('redirect', '#/roles/builder?serverId=' + data.serverId + (loadParams['devel'] ? '&devel=1' : ''));
+                                }
+                            });
+                        } else {
+                            panel.down('#rightcol').body.scrollTo('top', 0);
+                            panel.down('#rolename').focus();
+                        }
+                    }
+                }, {
+                    xtype: 'button',
+                    itemId: 'cancel',
+                    text: 'Cancel',
+                    handler: function() {
+                        Scalr.event.fireEvent('close');
+                    }
+                }]
+            }]
+        },{
             xtype: 'container',
-			itemId: 'progresscol',
-			layout: 'anchor',
-			autoScroll: true,
+            itemId: 'progresscol',
+            layout: 'anchor',
+            autoScroll: true,
             hidden: true,
-			flex: 1,
+            flex: 1,
             listeners: {
                 show: {
                     fn: function() {
@@ -734,9 +736,9 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                     single: true
                 }
             },
-			items: [{
+            items: [{
                 xtype: 'fieldset',
-                title: moduleParams['server'] ? (moduleParams['server']['object'] == 'role' ? 'Role' : 'Image' + ' creation progress') : '',
+                title: moduleParams['server'] ? ((moduleParams['server']['object'] == 'role' ? 'Role' : 'Image') + ' creation progress') : '',
                 cls: 'x-fieldset-separator-none',
                 itemId: 'progress',
                 layout: {
@@ -800,7 +802,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                 }]
             },{
                 xtype: 'fieldset',
-                title: moduleParams['server'] ? (moduleParams['server']['object'] == 'role' ? 'Role' : 'Image' + ' creation log') : '',
+                title: moduleParams['server'] ? ((moduleParams['server']['object'] == 'role' ? 'Role' : 'Image') + ' creation log') : '',
                 cls: 'x-fieldset-separator-top-bottom',
                 itemId: 'log',
                 collapsible: true,
@@ -808,8 +810,16 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                     var rightcol = this.up('#progresscol');
                     this.bundleTaskId = bundleTaskId;
                     rightcol.down('#progress').updateProgress('in-progress');
-                    this.down('#fullLog').update('<a target="_blank" href="#/bundletasks/'+bundleTaskId+'/logs">View full log in new tab</a>');
+                    this.down('#fullLog').update('<a href="#">View full log</a>', [], function() {
+                        this.el.down('a').on('click', function(e) {
+                            var logPanel = Scalr.getPage('Scalr.ui.bundletasks.view.logs');
+                            logPanel.bundleTaskId = bundleTaskId;
+                            Scalr.utils.Window(logPanel);
+                            e.preventDefault();
+                        });
+                    });
                     this.loadBundleTaskData();
+
                 },
                 loadBundleTaskData: function() {
                     var me = this;
@@ -897,7 +907,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                 xtype: 'component',
                 itemId: 'success',
                 hidden: true,
-                cls: 'x-fieldset-subheader',
+                cls: 'x-fieldset-subheader x-fieldset-subheader-no-text-transform',
                 style: 'text-align:center',
                 margin: '48 0 16'
             },{
@@ -937,7 +947,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                                     xtype: 'component',
                                     style: 'text-align: center',
                                     margin: '36 0 0',
-                                    html: '<span class="x-fieldset-subheader">Are you sure want to cancel role creation?</span>'
+                                    html: '<span class="x-fieldset-subheader x-fieldset-subheader-no-text-transform">Are you sure want to cancel role creation?</span>'
                                 },
                                 success: function() {
                                     Scalr.Request({
@@ -1003,13 +1013,13 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                 }]
             }]
         }],
-		dockedItems: [{
-			xtype: 'container',
+        dockedItems: [{
+            xtype: 'container',
             itemId: 'platforms',
-			dock: 'left',
-			cls: 'x-docked-tabs',
+            dock: 'left',
+            cls: 'x-docked-tabs',
             width: 110 + Ext.getScrollbarSize().width,
-			defaults: {
+            defaults: {
                 xtype: 'button',
                 ui: 'tab',
                 allowDepress: false,
@@ -1022,13 +1032,13 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                         panel.fireEvent('selectplatform', this.value);
                     }
                 }
-			},
-			items: buttons['platforms']
-		}],
+            },
+            items: buttons['platforms']
+        }],
 
-		suspendState: 0,
-		platformsState: {},
-		filters: {},
+        suspendState: 0,
+        platformsState: {},
+        filters: {},
         imagesCache: {},
 
         getPlatformImages: function(platformId) {
@@ -1046,46 +1056,46 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
             return me.imagesCache[platformId];
         },
 
-		onSelectPlatform: function(platformId) {
-			var platformLocations = Scalr.platforms[platformId] ? Scalr.platforms[platformId].locations : null,
-				images = this.getPlatformImages(platformId),
-				compImages = panel.down('#images'),
-				added = {},
-				locations = {},
-				compLocationData = [],
-				archs = {};
+        onSelectPlatform: function(platformId) {
+            var platformLocations = Scalr.platforms[platformId] ? Scalr.platforms[platformId].locations : null,
+                images = this.getPlatformImages(platformId),
+                compImages = panel.down('#images'),
+                added = {},
+                locations = {},
+                compLocationData = [],
+                archs = {};
 
 
             panel.toggleRightColumn(images.length == 0);
-			if (result) {
-				this.platformsState[result.platform] = Ext.apply({}, result);
-			}
+            if (result) {
+                this.platformsState[result.platform] = Ext.apply({}, result);
+            }
 
-			if (this.platformsState[platformId]) {
-				this.platformsState[platformId].behaviors = result.behaviors;
-				this.platformsState[platformId].addons = result.addons;
-				this.platformsState[platformId].hvm = 0;
-				result = Ext.apply({}, this.platformsState[platformId]);
-			} else {
-				result = {
-					platform: platformId,
-					architecture: 'x86_64',
-					behaviors: result.behaviors || [],
-					addons: result.addons || ['chef']
-				};
-			}
+            if (this.platformsState[platformId]) {
+                this.platformsState[platformId].behaviors = result.behaviors;
+                this.platformsState[platformId].addons = result.addons;
+                this.platformsState[platformId].hvm = 0;
+                result = Ext.apply({}, this.platformsState[platformId]);
+            } else {
+                result = {
+                    platform: platformId,
+                    architecture: 'x86_64',
+                    behaviors: result.behaviors || [],
+                    addons: result.addons || ['chef']
+                };
+            }
 
-			this.filters = ['architecture'];
-			if (result.platform == 'ec2' && rootDeviceTypeFilterEnabled) {
-				this.filters.push('root_device_type');
-			}
+            this.filters = ['architecture'];
+            if (result.platform == 'ec2' && rootDeviceTypeFilterEnabled) {
+                this.filters.push('root_device_type');
+            }
 
 
-			panel.suspendLayouts();
-			compImages.removeAll();
-			if (images.length) {
-				for (var i=0, len=images.length; i<len; i++) {
-					var image = images[i],
+            panel.suspendLayouts();
+            compImages.removeAll();
+            if (images.length) {
+                for (var i=0, len=images.length; i<len; i++) {
+                    var image = images[i],
                         osId = image.os_id,
                         os = Scalr.utils.getOsById(osId);
                     if (os) {
@@ -1117,44 +1127,40 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                         }
                         archs[image.architecture] = true;
                     }
-				}
-			} else {
-				locations = platformLocations ? Ext.clone(platformLocations) : {};
-			}
+                }
+            } else {
+                locations = platformLocations ? Ext.clone(platformLocations) : {};
+            }
 
-			var c = panel.down('#leftcol').query('component[cls~=hideoncustomimage]');
-			for (var i=0, len=c.length; i<len; i++) {
-				c[i].setVisible(!!images.length);
-			}
+            var c = panel.down('#leftcol').query('component[cls~=hideoncustomimage]');
+            for (var i=0, len=c.length; i<len; i++) {
+                c[i].setVisible(!!images.length);
+            }
 
-			var c = panel.down('#leftcol').query('component[cls~=showoncustomimage]');
-			for (var i=0, len=c.length; i<len; i++) {
-				c[i].setVisible(!images.length);
-			}
+            var c = panel.down('#leftcol').query('component[cls~=showoncustomimage]');
+            for (var i=0, len=c.length; i<len; i++) {
+                c[i].setVisible(!images.length);
+            }
 
-			//location combobox setup
-			var compLocation = panel.down('#cloudLocation');
+            //location combobox setup
+            var compLocation = panel.down('#cloudLocation');
             compLocation.store.clearFilter();
             compLocation.reset();
 
             compLocation.toggleIcon('governance', false);
             compLocation.getPlugin('fieldinnericoncloud').setPlatform(platformId);
 
-			if (result.platform == 'gce') {
-				compLocation.store.loadData([{id: 'all', name: 'GCE roles are automatically available in all regions.'}]);
-				compLocation.setValue('all');
-				compLocation.setDisabled(true);
-			} else if (result.platform == 'ecs') {
-				compLocation.store.loadData([{id: 'all', name: 'ECS roles are automatically available in all regions.'}]);
-				compLocation.setValue('all');
-				compLocation.setDisabled(true);
-			} else {
-				Ext.Object.each(locations, function(k, v){
-					compLocationData.push({id: k, name: v});
-				});
-				compLocation.store.loadData(compLocationData);
-				compLocation.setDisabled(false);
-				compLocation.store.sort('name', 'desc');
+            if (result.platform == 'gce') {
+                compLocation.store.loadData([{id: 'all', name: 'GCE roles are automatically available in all regions.'}]);
+                compLocation.setValue('all');
+                compLocation.setDisabled(true);
+            } else {
+                Ext.Object.each(locations, function(k, v){
+                    compLocationData.push({id: k, name: v});
+                });
+                compLocation.store.loadData(compLocationData);
+                compLocation.setDisabled(false);
+                compLocation.store.sort('name', 'desc');
                 if (loadParams['vpc'] == 1 && platformId == 'ec2' && vpcLimits && vpcLimits['regions']) {
                     var defaultRegion;
                     compLocation.store.filter({filterFn: function(region){
@@ -1171,7 +1177,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                 } else {
                     compLocation.setValue(result.cloudLocation ? result.cloudLocation : (result.platform == 'ec2' && locations['us-east-1'] ? 'us-east-1' : compLocationData[0].id));
                 }
-			}
+            }
 
             if (loadParams['vpc'] == 1) {
                 this.down('#vpcId').setVisible(platformId == 'ec2');
@@ -1179,64 +1185,64 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
             }
 
 
-			panel.down('#rootdevicetypewrap')[result.platform == 'ec2' && rootDeviceTypeFilterEnabled ? 'show' : 'hide']();
-			//panel.down('#architecture')[Ext.Object.getSize(archs) > 1 ? 'show' : 'hide']();
-			panel.resumeLayouts(true);
+            panel.down('#rootdevicetypewrap')[result.platform == 'ec2' && rootDeviceTypeFilterEnabled ? 'show' : 'hide']();
+            //panel.down('#architecture')[Ext.Object.getSize(archs) > 1 ? 'show' : 'hide']();
+            panel.resumeLayouts(true);
 
 
-		},
+        },
 
-		initFilters: function() {
-			var me = this;
-			for (var i=0, len=this.filters.length; i<len; i++) {
-				var comp = panel.down('#'+this.filters[i]),
-					isItemFound = false;
-				comp.items.each(function(item, index){
-					item.enable();
-					if (result[me.filters[i]] && result[me.filters[i]] == item.value) {
-						comp.setValue(item.value);
-						isItemFound = true;
-						return false;
-					}
-				});
-				if (!isItemFound) {
-					comp.items.each(function(item, index){
-						if (!item.disabled) {
-							comp.setValue(item.value);
-							return false;
-						}
-					});
-				}
-			}
-		},
+        initFilters: function() {
+            var me = this;
+            for (var i=0, len=this.filters.length; i<len; i++) {
+                var comp = panel.down('#'+this.filters[i]),
+                    isItemFound = false;
+                comp.items.each(function(item, index){
+                    item.enable();
+                    if (result[me.filters[i]] && result[me.filters[i]] == item.value) {
+                        comp.setValue(item.value);
+                        isItemFound = true;
+                        return false;
+                    }
+                });
+                if (!isItemFound) {
+                    comp.items.each(function(item, index){
+                        if (!item.disabled) {
+                            comp.setValue(item.value);
+                            return false;
+                        }
+                    });
+                }
+            }
+        },
 
-		getImageId: function() {
-			var me = this,
-				imageId,
-				images = this.getPlatformImages(result.platform),
-				hvm = panel.down('#hvm').pressed ? 1 : 0;
+        getImageId: function() {
+            var me = this,
+                imageId,
+                images = this.getPlatformImages(result.platform),
+                hvm = panel.down('#hvm').pressed ? 1 : 0;
 
-			for (var j=0, len=images.length; j<len; j++) {
-				var image = images[j],
-					match = result.cloudLocation == 'all' || image.cloud_location == result.cloudLocation;
-				if (match) {
-					for (var i=0, len1=me.filters.length; i<len1; i++) {
-						match = result[me.filters[i]] ? image[me.filters[i]] == result[me.filters[i]] : true;
-						if (match && result.platform == 'ec2' && me.filters[i] == 'root_device_type' && result[me.filters[i]] == 'ebs') {//hvm
-							match = hvm == (image.hvm || 0);
-						}
-						if (!match) break;
-					}
-				}
-				if (match && result.osId == image.os_id) {
-					imageId = image.image_id;
-					break;
-				}
-			}
+            for (var j=0, len=images.length; j<len; j++) {
+                var image = images[j],
+                    match = result.cloudLocation == 'all' || image.cloud_location == result.cloudLocation;
+                if (match) {
+                    for (var i=0, len1=me.filters.length; i<len1; i++) {
+                        match = result[me.filters[i]] ? image[me.filters[i]] == result[me.filters[i]] : true;
+                        if (match && result.platform == 'ec2' && me.filters[i] == 'root_device_type' && result[me.filters[i]] == 'ebs') {//hvm
+                            match = hvm == (image.hvm || 0);
+                        }
+                        if (!match) break;
+                    }
+                }
+                if (match && result.osId == image.os_id) {
+                    imageId = image.image_id;
+                    break;
+                }
+            }
 
-			return imageId;
+            return imageId;
 
-		},
+        },
 
         findImageById: function(platform, imageId) {
             var images = this.getPlatformImages(platform),
@@ -1251,169 +1257,169 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
             return image;
         },
 
-		getFiltersValues: function() {
-			var me = this,
-				images = this.getPlatformImages(result.platform),
-				state = {images: {}, filters: {}},
-				hvm = panel.down('#hvm').pressed ? 1 : 0;
+        getFiltersValues: function() {
+            var me = this,
+                images = this.getPlatformImages(result.platform),
+                state = {images: {}, filters: {}},
+                hvm = panel.down('#hvm').pressed ? 1 : 0;
 
-			for (var j=0, len=images.length; j<len; j++) {
-				var image = images[j],
-					matchHvm = true,
-					match = result.cloudLocation == 'all' || image.cloud_location == result.cloudLocation;
-				if (match) {
-					for (var i=0, len1=me.filters.length; i<len1; i++) {
-						match = result[me.filters[i]] ? image[me.filters[i]] == result[me.filters[i]] : true;
+            for (var j=0, len=images.length; j<len; j++) {
+                var image = images[j],
+                    matchHvm = true,
+                    match = result.cloudLocation == 'all' || image.cloud_location == result.cloudLocation;
+                if (match) {
+                    for (var i=0, len1=me.filters.length; i<len1; i++) {
+                        match = result[me.filters[i]] ? image[me.filters[i]] == result[me.filters[i]] : true;
 
-						if (match && result.platform == 'ec2' && me.filters[i] == 'root_device_type' && result[me.filters[i]] == 'ebs') {//hvm
-							matchHvm = hvm == (image.hvm || 0);
-						}
+                        if (match && result.platform == 'ec2' && me.filters[i] == 'root_device_type' && result[me.filters[i]] == 'ebs') {//hvm
+                            matchHvm = hvm == (image.hvm || 0);
+                        }
 
-						if (!match || !matchHvm) break;
-					}
-				}
-				if (match ) {
-					if (matchHvm) {
-						state.images[image.os_id] = true;
-					}
-					if (result.platform == 'ec2' && result.root_device_type == 'ebs' && image.hvm) {
-						state.hvm = 1;
-					}
-				}
-			}
-			for (var i=0, len=me.filters.length; i<len; i++) {
-				for (var k=0, len1=images.length; k<len1; k++) {
-					var image = images[k],
-						match = result.cloudLocation == 'all' || image.cloud_location == result.cloudLocation;
-					if (match) {
-						for (var j=0, len2=me.filters.length; j<len2; j++) {
-							match = result[me.filters[j]] == result[me.filters[i]] || (result[me.filters[j]] ? image[me.filters[j]] == result[me.filters[j]] : true);
-							if (!match) break;
-						}
-					}
-					if (match) {
-						state.filters[me.filters[i]] = state.filters[me.filters[i]] || {};
-						state.filters[me.filters[i]][image[me.filters[i]]] = true;
-					}
-				}
-			}
-			return state;
-		},
+                        if (!match || !matchHvm) break;
+                    }
+                }
+                if (match ) {
+                    if (matchHvm) {
+                        state.images[image.os_id] = true;
+                    }
+                    if (result.platform == 'ec2' && result.root_device_type == 'ebs' && image.hvm) {
+                        state.hvm = 1;
+                    }
+                }
+            }
+            for (var i=0, len=me.filters.length; i<len; i++) {
+                for (var k=0, len1=images.length; k<len1; k++) {
+                    var image = images[k],
+                        match = result.cloudLocation == 'all' || image.cloud_location == result.cloudLocation;
+                    if (match) {
+                        for (var j=0, len2=me.filters.length; j<len2; j++) {
+                            match = result[me.filters[j]] == result[me.filters[i]] || (result[me.filters[j]] ? image[me.filters[j]] == result[me.filters[j]] : true);
+                            if (!match) break;
+                        }
+                    }
+                    if (match) {
+                        state.filters[me.filters[i]] = state.filters[me.filters[i]] || {};
+                        state.filters[me.filters[i]][image[me.filters[i]]] = true;
+                    }
+                }
+            }
+            return state;
+        },
 
-		updateFiltersState: function() {
-			var me = this,
-				state = this.getFiltersValues(),
-				compImages = panel.down('#images');
+        updateFiltersState: function() {
+            var me = this,
+                state = this.getFiltersValues(),
+                compImages = panel.down('#images');
 
-			if (state.hvm) {
-				panel.down('#hvm').enable();
-			} else {
-				panel.down('#hvm').toggle(false);
-				panel.down('#hvm').disable();
-			}
+            if (state.hvm) {
+                panel.down('#hvm').enable();
+            } else {
+                panel.down('#hvm').toggle(false);
+                panel.down('#hvm').disable();
+            }
 
-			compImages.items.each(function() {
-				if (state.images[this.osId]) {
-					this.enable();
-				} else {
-					if (this.pressed) {
-						this.toggle(false);
-					}
-					this.disable();
-				}
-			});
+            compImages.items.each(function() {
+                if (state.images[this.osId]) {
+                    this.enable();
+                } else {
+                    if (this.pressed) {
+                        this.toggle(false);
+                    }
+                    this.disable();
+                }
+            });
 
-			for (var i=0, len=me.filters.length; i<len; i++) {
-				if (state.filters[me.filters[i]]) {
-					var comp = panel.down('#'+me.filters[i]);
-					comp.setReadOnly(false);
-					comp.items.each(function(){
-						if (!state.filters[me.filters[i]][this.value]) {
-							if (this.pressed) {
-								this.toggle(false);
-								var that = this;
-								comp.items.each(function(){
-									if (this !== that && !this.disabled) {
-										this.toggle(true);
-									}
-								});
-							}
-							comp.setReadOnly(true);
-						}
-					});
-				}
-			}
-		},
+            for (var i=0, len=me.filters.length; i<len; i++) {
+                if (state.filters[me.filters[i]]) {
+                    var comp = panel.down('#'+me.filters[i]);
+                    comp.setReadOnly(false);
+                    comp.items.each(function(){
+                        if (!state.filters[me.filters[i]][this.value]) {
+                            if (this.pressed) {
+                                this.toggle(false);
+                                var that = this;
+                                comp.items.each(function(){
+                                    if (this !== that && !this.disabled) {
+                                        this.toggle(true);
+                                    }
+                                });
+                            }
+                            comp.setReadOnly(true);
+                        }
+                    });
+                }
+            }
+        },
 
-		refreshBehaviors: function() {
-			var params = {platform: result.platform, behavior: result.behaviors},
-				image = panel.down('#images').down('[pressed=true]'),
+        refreshBehaviors: function() {
+            var params = {platform: result.platform, behavior: result.behaviors},
+                image = panel.down('#images').down('[pressed=true]'),
                 os = Scalr.utils.getOsById(image.osId);
-			if (os) {
-				params.os = {
-					family: os.family,
-					version: os.version
-				}
-			}
-			for (var i=0, len=behaviors.length; i<len; i++) {
-				var item = behaviors[i],
-					enabled = true,
-					disableInfo;
-				if (item.disable) {
-					Ext.Object.each(params, function(key, value){
-						if (item.disable[key]) {
-							if (key == 'os') {
-								for (var j=0, len1=item.disable[key].length; j<len1; j++) {
-									if (Ext.isString(item.disable[key][j])) {
-										if (value.family == item.disable[key][j]) {
-											enabled = false;
-											break;
-										}
-									} else {
-										if (value.family == item.disable[key][j].family) {
+            if (os) {
+                params.os = {
+                    family: os.family,
+                    version: os.version
+                }
+            }
+            for (var i=0, len=behaviors.length; i<len; i++) {
+                var item = behaviors[i],
+                    enabled = true,
+                    disableInfo;
+                if (item.disable) {
+                    Ext.Object.each(params, function(key, value){
+                        if (item.disable[key]) {
+                            if (key == 'os') {
+                                for (var j=0, len1=item.disable[key].length; j<len1; j++) {
+                                    if (Ext.isString(item.disable[key][j])) {
+                                        if (value.family == item.disable[key][j]) {
+                                            enabled = false;
+                                            break;
+                                        }
+                                    } else {
+                                        if (value.family == item.disable[key][j].family) {
                                             if (Ext.isArray(item.disable[key][j].version)) {
                                                 if (Ext.Array.contains(item.disable[key][j].version, value.version)) {
                                                     enabled = false;
                                                     break;
                                                 }
                                             } else if (Ext.isString(value.version) && value.version.match(item.disable[key][j].version)){
-    											enabled = false;
-        										break;
+                                                enabled = false;
+                                                break;
                                             }
-										}
-									}
-								}
-							} else {
-								enabled = Ext.isArray(value) ? !Ext.Array.intersect(item.disable[key], value).length : !Ext.Array.contains(item.disable[key], value);
-							}
-						}
-						disableInfo = {
-							reason: key,
-							value: item.disable[key] || null
-						};
-						return enabled;
-					});
-				}
+                                        }
+                                    }
+                                }
+                            } else {
+                                enabled = Ext.isArray(value) ? !Ext.Array.intersect(item.disable[key], value).length : !Ext.Array.contains(item.disable[key], value);
+                            }
+                        }
+                        disableInfo = {
+                            reason: key,
+                            value: item.disable[key] || null
+                        };
+                        return enabled;
+                    });
+                }
                 var btn = panel.down('[behavior="'+item.name+'"]');
-				if (enabled) {
-					btn.enable();
+                if (enabled) {
+                    btn.enable();
                     btn.setTooltip('');
-				}  else {
-					btn.toggle(false).disable();
-					var message = '';
-					if (disableInfo.reason == 'os') {
-						message = '<b>' + Scalr.utils.beautifyBehavior(item.name) + '</b> cannot be used together with <b style="white-space:nowrap">' + Scalr.utils.beautifyOsFamily(Scalr.utils.getOsById(result.osId, 'family')) + ' ' + Scalr.utils.getOsById(result.osId, 'version') + '</b>.';
-					} else if (disableInfo.reason == 'platform') {
-						message = '<b>' + Scalr.utils.beautifyBehavior(item.name) + '</b> is not available on <b style="white-space:nowrap">' + platforms[result.platform].name + '</b>.';
-					} else if (disableInfo.reason == 'behavior') {
-						message = '<b>' + Scalr.utils.beautifyBehavior(item.name) + '</b> cannot be used together with <b style="white-space:nowrap">' + (Ext.Array.map(Ext.Array.intersect(result.behaviors, disableInfo.value), Scalr.utils.beautifyBehavior)).join(', ') + '</b>.';
-						//disableInfo.reason + (disableInfo.reason == 'behavior' ? ': ' + disableInfo.value.join(', ') : '')
-					}
-					btn.setTooltip(message);
-				}
-			}
-		},
-		toggleRightColumn: function(enable) {
+                }  else {
+                    btn.toggle(false).disable();
+                    var message = '';
+                    if (disableInfo.reason == 'os') {
+                        message = '<b>' + Scalr.utils.beautifyBehavior(item.name) + '</b> cannot be used together with <b style="white-space:nowrap">' + Scalr.utils.beautifyOsFamily(Scalr.utils.getOsById(result.osId, 'family')) + ' ' + Scalr.utils.getOsById(result.osId, 'version') + '</b>.';
+                    } else if (disableInfo.reason == 'platform') {
+                        message = '<b>' + Scalr.utils.beautifyBehavior(item.name) + '</b> is not available on <b style="white-space:nowrap">' + platforms[result.platform].name + '</b>.';
+                    } else if (disableInfo.reason == 'behavior') {
+                        message = '<b>' + Scalr.utils.beautifyBehavior(item.name) + '</b> cannot be used together with <b style="white-space:nowrap">' + (Ext.Array.map(Ext.Array.intersect(result.behaviors, disableInfo.value), Scalr.utils.beautifyBehavior)).join(', ') + '</b>.';
+                        //disableInfo.reason + (disableInfo.reason == 'behavior' ? ': ' + disableInfo.value.join(', ') : '')
+                    }
+                    btn.setTooltip(message);
+                }
+            }
+        },
+        toggleRightColumn: function(enable) {
             toggleBehaviors(true);
             panel.down('#save').setDisabled(!enable);
             var rightcol = panel.down('#rightcol'), mask;
@@ -1432,7 +1438,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
         loadServer: function(server, image) {
             image = image || {};
             panel.suspendLayouts();
-            if (server['platform'] !== 'gce' && server['platform'] !== 'ecs') {
+            if (server['platform'] !== 'gce') {
                 panel.down('#cloudLocation').setValue(image['cloud_location']).disable();
             }
             panel.down('#architecture').setValue(image['architecture']).disable();
@@ -1479,8 +1485,8 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
             failed.show();
         },
 
-		listeners: {
-			afterrender: function () {
+        listeners: {
+            afterrender: function () {
                 var items = panel.down('#platforms').items,
                     defaultPlatform = loadParams['platform'] || 'ec2',
                     defaultItem, server = moduleParams['server'], image;
@@ -1508,8 +1514,8 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
 
                 defaultItem = defaultItem || items.first();
                 defaultItem.toggle(true);
-			},
-			selectplatform: function(platform) {
+            },
+            selectplatform: function(platform) {
                 var me = this;
                 callback = function() {
                     me.suspendState++;
@@ -1518,55 +1524,55 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                     me.suspendState--;
                     me.updateFiltersState();
                     me.down('#availzone')[platform=='ec2'?'show':'hide']();
-                    me.down('#region')[platform=='gce' || platform=='ecs'?'show':'hide']();
+                    me.down('#region')[platform=='gce'?'show':'hide']();
                     me.down('#overrideImageId')[me.getPlatformImages(platform).length && Scalr.flags['betaMode']?'show':'hide']();
                     me.fireEvent('afterselectplatform');
                 };
-                if (platform=='gce' || platform=='ecs') {
+                if (platform=='gce') {
                     callback();
                 } else {
                     Scalr.loadCloudLocations(platform, callback);
                 }
-			},
-			selectlocation: function(value) {
-				result.cloudLocation = value;
-				if (!this.suspendState) {
-					panel.updateFiltersState();
-				}
-			},
-			selectarchitecture: function(value) {
-				result.architecture = value;
-				if (!this.suspendState) {
-					panel.updateFiltersState();
-				}
-			},
-			selectrootdevicetype: function(value) {
-				result.root_device_type = value;
-				if (value=='ebs') {
-					panel.down('#hvm').enable();
-				} else {
-					panel.down('#hvm').toggle(false);
-					panel.down('#hvm').disable();
-				}
-				if (!this.suspendState) {
-					panel.updateFiltersState();
-				}
-			},
-			selecthvm: function(value) {
-				result.hvm = value ? 1 : 0;
-				if (!this.suspendState) {
-					panel.updateFiltersState();
-				}
-			},
-			selectname: function(osId, select) {
-				result.osId = select ? osId : null;
+            },
+            selectlocation: function(value) {
+                result.cloudLocation = value;
+                if (!this.suspendState) {
+                    panel.updateFiltersState();
+                }
+            },
+            selectarchitecture: function(value) {
+                result.architecture = value;
+                if (!this.suspendState) {
+                    panel.updateFiltersState();
+                }
+            },
+            selectrootdevicetype: function(value) {
+                result.root_device_type = value;
+                if (value=='ebs') {
+                    panel.down('#hvm').enable();
+                } else {
+                    panel.down('#hvm').toggle(false);
+                    panel.down('#hvm').disable();
+                }
+                if (!this.suspendState) {
+                    panel.updateFiltersState();
+                }
+            },
+            selecthvm: function(value) {
+                result.hvm = value ? 1 : 0;
+                if (!this.suspendState) {
+                    panel.updateFiltersState();
+                }
+            },
+            selectname: function(osId, select) {
+                result.osId = select ? osId : null;
                 panel.toggleRightColumn(select);
-				if (select) {
-					panel.refreshBehaviors();
-				}
-			}
+                if (select) {
+                    panel.refreshBehaviors();
+                }
+            }
 
-		}
-	});
-	return panel;
+        }
+    });
+    return panel;
 });

@@ -13,21 +13,22 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
 
     public function hasAccess()
     {
-        return ($this->request->getScope() == WebhookEndpoint::SCOPE_ENVIRONMENT && $this->request->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_WEBHOOKS) && !$this->user->isScalrAdmin() ||
-               $this->request->getScope() == WebhookEndpoint::SCOPE_ACCOUNT && $this->request->isAllowed(Acl::RESOURCE_ADMINISTRATION_WEBHOOKS) && !$this->user->isScalrAdmin() ||
+        return ($this->request->getScope() == WebhookEndpoint::SCOPE_ENVIRONMENT && $this->request->isAllowed(Acl::RESOURCE_WEBHOOKS_ENVIRONMENT) && !$this->user->isScalrAdmin() ||
+               $this->request->getScope() == WebhookEndpoint::SCOPE_ACCOUNT && $this->request->isAllowed(Acl::RESOURCE_WEBHOOKS_ACCOUNT) && !$this->user->isScalrAdmin() ||
                $this->request->getScope() == WebhookEndpoint::SCOPE_SCALR && $this->user->isScalrAdmin());
     }
 
     /**
      * @param WebhookEndpoint $endpoint
+     * @return bool
      * @throws Exception
      */
-    private function canEditEndpoint($endpoint)
+    private function canManageEndpoint($endpoint)
     {
         return $this->request->getScope() == $endpoint->getScope() &&
                ($endpoint->getScope() == WebhookEndpoint::SCOPE_SCALR ||
-                $endpoint->getScope() == WebhookEndpoint::SCOPE_ACCOUNT && $endpoint->accountId == $this->user->getAccountId() ||
-                $endpoint->getScope() == WebhookEndpoint::SCOPE_ENVIRONMENT && $endpoint->envId == $this->getEnvironmentId() && $endpoint->accountId == $this->user->getAccountId());
+                $endpoint->getScope() == WebhookEndpoint::SCOPE_ACCOUNT && $endpoint->accountId == $this->user->getAccountId() && $this->request->isAllowed(Acl::RESOURCE_WEBHOOKS_ACCOUNT, Acl::PERM_WEBHOOKS_ACCOUNT_MANAGE) ||
+                $endpoint->getScope() == WebhookEndpoint::SCOPE_ENVIRONMENT && $endpoint->envId == $this->getEnvironmentId() && $endpoint->accountId == $this->user->getAccountId() && $this->request->isAllowed(Acl::RESOURCE_WEBHOOKS_ENVIRONMENT, Acl::PERM_WEBHOOKS_ENVIRONMENT_MANAGE));
     }
 
 
@@ -49,7 +50,8 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
     public function xRemoveAction($endpointId)
     {
         $endpoint = WebhookEndpoint::findPk($endpointId);
-        if (!$this->canEditEndpoint($endpoint)) {
+
+        if (!$this->canManageEndpoint($endpoint)) {
             throw new Scalr_Exception_Core('Insufficient permissions to remove endpoint');
         }
 
@@ -73,7 +75,8 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
             $endpoint->securityKey = Scalr::GenerateRandomKey(64);
         } else {
             $endpoint = WebhookEndpoint::findPk($endpointId);
-            if (!$this->canEditEndpoint($endpoint)) {
+
+            if (!$this->canManageEndpoint($endpoint)) {
                 throw new Scalr_Exception_Core('Insufficient permissions to edit endpoint at this scope');
             }
         }
@@ -147,7 +150,7 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
         if (!empty($endpointIds)) {
             $endpoints = WebhookEndpoint::find([['endpointId'  => ['$in' => $endpointIds]]]);
             foreach ($endpoints as $endpoint) {
-                if (!$this->canEditEndpoint($endpoint)) {
+                if (!$this->canManageEndpoint($endpoint)) {
                     $errors[] = 'Insufficient permissions to remove endpoint';
                 } elseif (count(WebhookConfigEndpoint::findByEndpointId($endpoint->endpointId)) == 0) {
                     $processed[] = $endpoint->endpointId;
@@ -160,10 +163,10 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
 
         $num = count($endpointIds);
         if (count($processed) == $num) {
-            $this->response->success('Endpoints successfully processed');
+            $this->response->success('Selected endpoint(s) successfully removed');
         } else {
             array_walk($errors, function(&$item) { $item = '- ' . $item; });
-            $this->response->warning(sprintf("Successfully processed only %d from %d endpoints. \nFollowing errors occurred:\n%s", count($processed), $num, join($errors, '')));
+            $this->response->warning(sprintf("Successfully removed only %d from %d endpoints. \nFollowing errors occurred:\n%s", count($processed), $num, join($errors, '')));
         }
 
         $this->response->data(array('processed' => $processed));
@@ -177,7 +180,8 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
     public function xValidateAction($endpointId, $url)
     {
         $endpoint = WebhookEndpoint::findPk($endpointId);
-        if (!$this->canEditEndpoint($endpoint)) {
+
+        if (!$this->canManageEndpoint($endpoint)) {
             throw new Scalr_Exception_Core('Insufficient permissions to edit endpoint in this scope');
         }
 
@@ -256,7 +260,13 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
         foreach (WebhookEndpoint::find($criteria) as $entity) {
             $webhooks = array();
             foreach (WebhookConfigEndpoint::findByEndpointId($entity->endpointId) as $WebhookConfigEndpoint) {
-                $webhooks[$WebhookConfigEndpoint->webhookId] = WebhookConfig::findPk($WebhookConfigEndpoint->webhookId)->name;
+                $webhookConfigEntity = WebhookConfig::findPk($WebhookConfigEndpoint->webhookId);
+                $webhooks[] = [
+                    'webhookId' => $webhookConfigEntity->webhookId,
+                    'name'      => $webhookConfigEntity->name,
+                    'scope'     => $webhookConfigEntity->getScope(),
+                    'envId'     => $webhookConfigEntity->envId
+                ];
             }
 
             $endpoint = array(

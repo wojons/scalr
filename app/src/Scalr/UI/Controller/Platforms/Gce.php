@@ -2,13 +2,14 @@
 
 use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Platforms_Gce extends Scalr_UI_Controller
 {
     public function xGetFarmRoleStaticIpsAction($region, $cloudLocation, $farmRoleId) {
         $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::GCE);
         $gceClient = $p->getClient($this->environment);
-        $projectId = $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID);
+        $projectId = $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID];
 
         $map = array();
 
@@ -16,14 +17,14 @@ class Scalr_UI_Controller_Platforms_Gce extends Scalr_UI_Controller
             $dbFarmRole = DBFarmRole::LoadByID($farmRoleId);
             $this->user->getPermissions()->validate($dbFarmRole);
 
-            $maxInstances = $dbFarmRole->GetSetting(DBFarmRole::SETTING_SCALING_MAX_INSTANCES);
+            $maxInstances = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MAX_INSTANCES);
             for ($i = 1; $i <= $maxInstances; $i++) {
                 $map[] = array('serverIndex' => $i);
             }
 
             $servers = $dbFarmRole->GetServersByFilter();
             for ($i = 0; $i < count($servers); $i++) {
-                if ($servers[$i]->status != SERVER_STATUS::TERMINATED && $servers[$i]->status != SERVER_STATUS::TROUBLESHOOTING && $servers[$i]->index) {
+                if ($servers[$i]->status != SERVER_STATUS::TERMINATED && $servers[$i]->index) {
                     $map[$servers[$i]->index - 1]['serverIndex'] = $servers[$i]->index;
                     $map[$servers[$i]->index - 1]['serverId'] = $servers[$i]->serverId;
                     $map[$servers[$i]->index - 1]['remoteIp'] = $servers[$i]->remoteIp;
@@ -83,7 +84,7 @@ class Scalr_UI_Controller_Platforms_Gce extends Scalr_UI_Controller
     {
         $p = PlatformFactory::NewPlatform(SERVER_PLATFORMS::GCE);
         $gceClient = $p->getClient($this->environment);
-        $projectId = $this->environment->getPlatformConfigValue(GoogleCEPlatformModule::PROJECT_ID);
+        $projectId = $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID];
 
         $data['zones'] = array();
         $zones = $gceClient->zones->listZones($projectId);

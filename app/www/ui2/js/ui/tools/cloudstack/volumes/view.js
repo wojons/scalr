@@ -34,7 +34,7 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.volumes.view', function (loadParams, mo
 		},
 
 		columns: [
-			{ header: "Used by", flex: 1, dataIndex: 'id', sortable: false, xtype: 'templatecolumn', tpl:
+			{ header: "Used by", flex: 1, dataIndex: 'farmId', sortable: false, xtype: 'templatecolumn', tpl:
 				'<tpl if="farmId">' +
 					'<a href="#/farms?farmId={farmId}" title="Farm {farmName}">{farmName}</a>' +
 					'<tpl if="roleName">' +
@@ -70,7 +70,7 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.volumes.view', function (loadParams, mo
 			}
 		],
 
-        selModel: 'selectedmodel',
+        selModel: Scalr.isAllowed('CLOUDSTACK_VOLUMES', 'manage') ? 'selectedmodel' : null,
         listeners: {
             selectionchange: function(selModel, selections) {
                 this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
@@ -87,6 +87,7 @@ Scalr.regPage('Scalr.ui.tools.cloudstack.volumes.view', function (loadParams, mo
                 cls: 'x-btn-red',
                 tooltip: 'Select one or more volume(s) to delete them',
                 disabled: true,
+                hidden: !Scalr.isAllowed('CLOUDSTACK_VOLUMES', 'manage'),
                 handler: function() {
                     var request = {
                         confirmBox: {

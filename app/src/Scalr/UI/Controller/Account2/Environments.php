@@ -3,6 +3,7 @@ use Scalr\Acl\Acl;
 use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
+use Scalr\DataType\ScopeInterface;
 
 class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
 {
@@ -64,12 +65,12 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
 
     public function xCloneAction()
     {
-        if (!$this->user->isAccountSuperAdmin() && !$this->request->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_ENV_CLOUDS)) {
+        if (!$this->user->isAccountSuperAdmin() && !$this->request->isAllowed(Acl::RESOURCE_ENV_CLOUDS_ENVIRONMENT)) {
             throw new Scalr_Exception_InsufficientPermissions();
         }
         $params = array(
             'envId' => array('type' => 'int'),
-            'name' => array('type' => 'string', 'validator' => array(
+            'name'  => array('type' => 'string', 'validator' => array(
                 Scalr_Validator::REQUIRED => true,
                 Scalr_Validator::NOHTML => true
             ))
@@ -81,8 +82,9 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
         $this->user->getPermissions()->validate($oldEnv);
 
         if ($this->request->isValid()) {
-            if (!$this->user->isAccountOwner() && !$this->user->isAccountSuperAdmin())
+            if (!$this->user->isAccountOwner() && !$this->user->isAccountSuperAdmin()) {
                 throw new Scalr_Exception_InsufficientPermissions();
+            }
 
             $this->user->getAccount()->validateLimit(Scalr_Limits::ACCOUNT_ENVIRONMENTS, 1);
             $env = $this->user->getAccount()->createEnvironment($this->getParam('name'));
@@ -90,20 +92,22 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
 
             //Copy cloud credentials
             $cloudConfig = $oldEnv->getFullConfiguration();
-            foreach ($cloudConfig as $group => $props)
+            foreach ($cloudConfig as $group => $props) {
                 $env->setPlatformConfig($props, null, $group);
+            }
 
             //Copy teams & ACLs
             $teams = $oldEnv->getTeams();
-            foreach ($teams as $teamId)
+            foreach ($teams as $teamId) {
                 $env->addTeam($teamId);
+            }
 
             //Copy Env level global variables
-            $oldGv = new Scalr_Scripting_GlobalVariables($oldEnv->clientId, $oldEnv->id, Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT);
+            $oldGv = new Scalr_Scripting_GlobalVariables($oldEnv->clientId, $oldEnv->id, ScopeInterface::SCOPE_ENVIRONMENT);
             $variables = $oldGv->getValues();
 
-            $newGv = new Scalr_Scripting_GlobalVariables($env->clientId, $env->id, Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT);
-            $newGv->setValues($variables);
+            $newGv = new Scalr_Scripting_GlobalVariables($env->clientId, $env->id, ScopeInterface::SCOPE_ENVIRONMENT);
+            $newGv->setValues($variables, 0, 0, 0, '', false, true);
 
             //Copy governance rules
             $oldGov = new Scalr_Governance($oldEnv->id);
@@ -111,22 +115,24 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
 
             $newGov = new Scalr_Governance($env->id);
 
-            foreach ($govRules as $category => $rules)
-                foreach ($rules as $name => $data)
-                    $newGov->setValue($category, $name, $data);
+            foreach ($govRules as $category => $rules) {
+                foreach ($rules as $name => $data) {
+                    $newGov->setValue($category, $name, $data['enabled'], $data['limits']);
+                }
+            }
 
             $this->response->success("Environment successfully cloned");
 
-                $this->response->data(array(
-                    'env' => array(
-                        'id' => $env->id,
-                        'name' => $env->name,
-                        'status' => $env->status,
-                        'platforms' => $env->getEnabledPlatforms(),
-                        'teams' => $teams,
-                        'ccId' => $env->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID)
-                    )
-                ));
+            $this->response->data(array(
+                'env' => array(
+                    'id' => $env->id,
+                    'name' => $env->name,
+                    'status' => $env->status,
+                    'platforms' => $env->getEnabledPlatforms(),
+                    'teams' => $teams,
+                    'ccId' => $env->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID)
+                )
+            ));
 
         } else {
             $this->response->failure($this->request->getValidationErrorsMessage(), true);
@@ -135,7 +141,7 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
 
     public function xSaveAction()
     {
-        if (!$this->user->isAccountSuperAdmin() && !$this->request->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_ENV_CLOUDS)) {
+        if (!$this->user->isAccountSuperAdmin() && !$this->request->isAllowed(Acl::RESOURCE_ENV_CLOUDS_ENVIRONMENT)) {
             throw new Scalr_Exception_InsufficientPermissions();
         }
 
@@ -152,7 +158,7 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
         $this->request->defineParams($params);
         $this->request->validate();
 
-        if ($this->getContainer()->analytics->enabled && $this->request->isInterfaceBetaOrNotHostedScalr()) {
+        if ($this->getContainer()->analytics->enabled) {
             if ($this->getParam('ccId')) {
                 if (!$this->getContainer()->analytics->ccs->get($this->getParam('ccId'))) {
                     $this->request->addValidationErrors('ccId', 'Invalid cost center ID');
@@ -178,7 +184,7 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
 
             $this->user->getPermissions()->validate($env);
 
-            if (!$this->user->isAccountSuperAdmin() && !$this->user->getAclRolesByEnvironment($env->id)->isAllowed(Acl::RESOURCE_ENVADMINISTRATION_ENV_CLOUDS))
+            if (!$this->user->isAccountSuperAdmin() && !$this->user->getAclRolesByEnvironment($env->id)->isAllowed(Acl::RESOURCE_ENV_CLOUDS_ENVIRONMENT))
                 throw new Scalr_Exception_InsufficientPermissions();
 
             //set name and status
@@ -218,9 +224,23 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
                 }
 
                 //set teams
-                $env->clearTeams();
                 if ($this->getContainer()->config->get('scalr.auth_mode') == 'ldap') {
-                    foreach ($this->getParam('teams') as $name) {
+                    $teams = array_map('trim', $this->getParam('teams'));
+
+                    $ldapGroups = null;
+                    if ($this->getContainer()->config->get('scalr.connections.ldap.user')) {
+                        $ldap = $this->getContainer()->ldap(null, null);
+                        $ldapGroups = $ldap->getGroupsDetails($teams);
+                        foreach ($teams as $team) {
+                            if (!isset($ldapGroups[$team])) {
+                                throw new \Exception(sprintf("Team '%s' is not found on the directory server", $team));
+                            }
+                        }
+                    }
+
+                    $env->clearTeams();
+
+                    foreach ($teams as $name) {
                         $name = trim($name);
                         if ($name) {
                             $id = $this->db->GetOne('SELECT id FROM account_teams WHERE name = ? AND account_id = ? LIMIT 1', array($name, $this->user->getAccountId()));
@@ -228,13 +248,25 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
                                 $team = new Scalr_Account_Team();
                                 $team->name = $name;
                                 $team->accountId = $this->user->getAccountId();
+                                if ($ldapGroups !== null && $ldapGroups[$name] != $name) {
+                                    $team->description = $ldapGroups[$name];
+                                }
                                 $team->save();
                                 $id = $team->id;
+                            } elseif ($ldapGroups !== null) {
+                                // Update team description
+                                $team = new Scalr_Account_Team();
+                                $team->loadById($id);
+                                if ($team->description != $ldapGroups[$name] && $ldapGroups[$name] != $name) {
+                                    $team->description = $ldapGroups[$name];
+                                    $team->save();
+                                }
                             }
 
                             $env->addTeam($id);
                         }
                     }
+
                     if ($this->getContainer()->config->get('scalr.connections.ldap.user')) {
                         $user = strtok($this->user->getEmail(), '@');
                         $ldap = $this->getContainer()->ldap($user, null);
@@ -243,6 +275,8 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
                         }
                     }
                 } else {
+                    $env->clearTeams();
+
                     foreach ($this->getParam('teams') as $id)
                         $env->addTeam($id);
                 }

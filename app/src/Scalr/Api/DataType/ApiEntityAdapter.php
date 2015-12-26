@@ -2,13 +2,16 @@
 
 namespace Scalr\Api\DataType;
 
+use DomainException;
 use Exception;
 use Scalr\Model\Collections\EntityIterator;
+use Scalr\Model\Collections\SettingsCollection;
 use Scalr\Model\Objects\BaseAdapter;
 use Scalr\Api\Rest\Controller\ApiController;
 use Scalr\Model\Loader\Field;
 use Scalr\Api\Rest\Exception\ApiErrorException;
 use Scalr\Model\AbstractEntity;
+use UnexpectedValueException;
 
 /**
  * ApiEntityAdapter
@@ -51,6 +54,16 @@ class ApiEntityAdapter extends BaseAdapter
      * Default rule set
      */
     const RULE_TYPE_PROP_DEFAULT = 'default';
+
+    /**
+     * Rules of conversion entity settings into data fields
+     */
+    const RULE_TYPE_SETTINGS = 'settings';
+
+    /**
+     * Entity property provides settings
+     */
+    const RULE_TYPE_SETTINGS_PROPERTY = 'settings.property';
 
     /**
      * Controller instance
@@ -129,9 +142,31 @@ class ApiEntityAdapter extends BaseAdapter
                 }
             }
 
+            //As the name of the property that goes into response may be different from the
+            //real setting name in the Entity object it should be mapped at first
+            if (empty($property) && !empty($rules[static::RULE_TYPE_SETTINGS])) {
+                if (!isset($settingsRules)) {
+                    $settingsRules = $this->getSettingsRules();
+                }
+
+                if (($property = array_search($key, $settingsRules)) !== false) {
+                    if (!isset($collection)) {
+                        $collection = $this->getSettingsCollection($entity);
+                    }
+
+                    if (!is_string($property)) {
+                        $property = $key;
+                    }
+
+                    $collection[$property] = $object->$key;
+                    continue;
+                }
+            }
+
             $property = isset($property) ? $property : $key;
 
-            $entity->$property = $object->$key === null ? null : self::convertInputValue($it->getField($property)->column->type, $object->$key);
+            $entity->$property = $object->$key === null ? null : static::convertInputValue($it->getField($property)->column->type, $object->$key, $key);
+
         }
     }
 
@@ -192,6 +227,16 @@ class ApiEntityAdapter extends BaseAdapter
                     }
                 }
 
+                if (empty($property) && !empty($rules[static::RULE_TYPE_SETTINGS]) && method_exists($entity, 'getSettingCriteria')) {
+                    if (!isset($settingsRules)) {
+                        $settingsRules = $this->getSettingsRules();
+                    }
+
+                    if (($property = array_search($key, $settingsRules)) !== false) {
+                        $criteria = $entity->getSettingCriteria($property, $filterValue, $criteria);
+                    }
+                }
+
                 //Fetches the definition of the field from the Entity model
                 $field = $it->getField($property);
 
@@ -204,7 +249,7 @@ class ApiEntityAdapter extends BaseAdapter
                 }
 
                 //Different column type values should be converted
-                $criteria[] = [$field->name => self::convertInputValue($field->column->type, $filterValue)];
+                $criteria[] = [$field->name => static::convertInputValue($field->column->type, $filterValue, $property)];
             }
         }
 
@@ -224,48 +269,18 @@ class ApiEntityAdapter extends BaseAdapter
     }
 
     /**
-     * Converts input value which comes from the request
+     * {@inheritdoc}
+     * @see BaseAdapter::convertInputValue()
      *
-     * @param    string    $fieldType  Field type
-     * @param    string    $value      A value taken from input
      * @throws   ApiErrorException
-     * @return   mixed     Returns value which can be stored in the Entity
      */
-    public static function convertInputValue($fieldType, $value)
+    public static function convertInputValue($fieldType, $value, $fieldName = '')
     {
-        switch ($fieldType) {
-            case 'boolean':
-                $result = is_string($value) ? (strtolower($value) === 'false' ? false : (bool) $value) : (bool) $value;
-                break;
-
-            case 'UTCDatetime':
-            case 'UTCDate':
-                try {
-                    $result = new \DateTime($value, new \DateTimeZone('UTC'));
-                } catch (\Exception $e) {
-                    throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid timestamp");
-                }
-                break;
-
-            case 'date':
-            case 'datetime':
-                try {
-                    $result = new \DateTime($value, new \DateTimeZone('UTC'));
-                } catch (\Exception $e) {
-                    throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid timestamp");
-                }
-                //According to API documentation we should accept timestamps in UTC
-                //even though it is stored in database in the server timezone
-                if (date_default_timezone_get() !== 'UTC') {
-                    $result->setTimezone(new \DateTimeZone(date_default_timezone_get()));
-                }
-                break;
-
-            default:
-                $result = $value;
+        try {
+            return parent::convertInputValue($fieldType, $value, $fieldName);
+        } catch (UnexpectedValueException $e) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, $e->getMessage());
         }
-
-        return $result;
     }
 
     /**
@@ -354,7 +369,7 @@ class ApiEntityAdapter extends BaseAdapter
 
         $criteria = $this->getCriteria($criteria);
 
-        $this->setInnerIterator($findCallback(empty($criteria) ? null : $criteria, $this->getSorting(), $this->controller->getMaxResults(), $this->controller->getPageOffset(), true));
+        $this->setInnerIterator($findCallback(empty($criteria) ? null : $criteria, null, $this->getSorting(), $this->controller->getMaxResults(), $this->controller->getPageOffset(), true));
 
         return $this;
     }
@@ -362,13 +377,14 @@ class ApiEntityAdapter extends BaseAdapter
     /**
      * Gets describe result
      *
-     * @param   array    $criteria  Default search criteria
-     * @param   callable $findCallback optional Find method. Default value: find
-     * @return  array  Returns describe result
+     * @param   array    $criteria      Default search criteria
+     * @param   callable $findCallback  optional Find method. Default value: find
+     * @return  ListResultEnvelope      Returns describe result
      */
     public function getDescribeResult($criteria = null, $findCallback = null)
     {
         $data = [];
+
         foreach ($this->find($criteria, $findCallback) as $item) {
             $data[] = $item;
         }
@@ -437,6 +453,10 @@ class ApiEntityAdapter extends BaseAdapter
 
         $doesNotExist = array_diff(array_keys(get_object_vars($object)), $validFields);
 
+        if (!empty($rules[static::RULE_TYPE_SETTINGS])) {
+            $doesNotExist = array_diff($doesNotExist, array_values($this->getSettingsRules()));
+        }
+
         if (!empty($doesNotExist)) {
             if (count($doesNotExist) > 1) {
                 $message = "You are trying to set properties %s that do not exist.";
@@ -446,5 +466,91 @@ class ApiEntityAdapter extends BaseAdapter
 
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, sprintf($message, implode(', ', $doesNotExist)));
         }
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see BaseAdapter::toEntity()
+     */
+    public function toEntity($data)
+    {
+        $entity = parent::toEntity($data);
+
+        $converterRules = $this->getRules();
+
+        if (!is_object($data)) {
+            $data = (object) $data;
+        }
+
+        if (!empty($converterRules[static::RULE_TYPE_SETTINGS])) {
+            $collection = $this->getSettingsCollection($entity);
+
+            foreach ($this->getSettingsRules() as $key => $property) {
+                $key = is_int($key) ? $property : $key;
+
+                $collection[$key] = $data->$property;
+            }
+        }
+
+        return $entity;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see BaseAdapter::toData()
+     */
+    public function toData($entity)
+    {
+        $result = parent::toData($entity);
+
+        $converterRules = $this->getRules();
+
+        if (!empty($converterRules[static::RULE_TYPE_SETTINGS])) {
+            $collection = $this->getSettingsCollection($entity);
+
+            foreach ($converterRules[static::RULE_TYPE_SETTINGS] as $key => $property) {
+                //Some properties only for writing we can't include them in the response
+                if ($property[0] == '!') {
+                    continue;
+                }
+
+                //This is necessary when result data key does not match the property name of the entity
+                $key = is_int($key) ? $property : $key;
+
+                $result->$property = $collection[$key];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Gets settings collection from entity.
+     *
+     * @param   AbstractEntity  $entity Entity containing collection of settings
+     *
+     * @return  SettingsCollection
+     *
+     * @throws DomainException if RULE_TYPE_SETTINGS_PROPERTY not defined in rules
+     */
+    public function getSettingsCollection(AbstractEntity $entity)
+    {
+        if (empty($this->rules[static::RULE_TYPE_SETTINGS_PROPERTY])) {
+            throw new DomainException('Rule RULE_TYPE_SETTINGS_PROPERTY must be defined!');
+        }
+
+        $collectionProperty = $this->rules[static::RULE_TYPE_SETTINGS_PROPERTY];
+
+        return $entity->$collectionProperty;
+    }
+
+    /**
+     * Gets settings to data rules
+     *
+     * @return array
+     */
+    public function getSettingsRules()
+    {
+        return array_map(function ($field) { return $field[0] == '!' ? substr($field, 1) : $field; }, $this->rules[static::RULE_TYPE_SETTINGS]);
     }
 }

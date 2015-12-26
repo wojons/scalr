@@ -183,9 +183,13 @@ class OpenStack
     /**
      * List tenants action
      *
+     * API v2.0 tenants are visible as projects in API v3
+     *
+     * IMPORTANT! This method does not work with the API v3
+     *
      * @param   Marker $marker  Marker Data.
      * @return  array  Return tenants list
-     */
+     * /
     public function listTenants(Marker $marker = null)
     {
         $result = null;
@@ -201,6 +205,7 @@ class OpenStack
         }
         return $result;
     }
+    */
 
     /**
      * Gets the list of available zones for the current endpoint

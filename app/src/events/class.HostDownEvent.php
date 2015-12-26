@@ -1,6 +1,6 @@
 <?php
 
-class HostDownEvent extends Event
+class HostDownEvent extends AbstractServerEvent
 {
 
     /**
@@ -13,22 +13,11 @@ class HostDownEvent extends Event
     
     public $isSuspended = false;
 
-    /**
-     *
-     * @var DBServer
-     */
-    public $replacementDBServer;
-
+    
     public function __construct(DBServer $DBServer)
     {
         parent::__construct();
         $this->DBServer = $DBServer;
-        $r_server = \Scalr::getDb()->GetRow("SELECT server_id FROM servers WHERE replace_server_id=? LIMIT 1", array(
-            $DBServer->serverId
-        ));
-        if ($r_server) {
-            $this->replacementDBServer = DBServer::LoadByID($r_server['server_id']);
-        }
 
         try {
             $history = $this->DBServer->getServerHistory();

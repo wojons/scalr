@@ -24,6 +24,7 @@ class Scalr_Account extends Scalr_Model
 
     const SETTING_TRIAL_MAIL_SENT = 'mail.trial_sent';
     const SETTING_IS_TRIAL          = 'billing.is_trial';
+    const SETTING_UI_VARS = 'ui.vars';
 
     //MOVE TO Scalr_Billing
     const SETTING_BILLING_PAY_AS_YOU_GO_DATE = 'billing.pay-as-you-go-date';
@@ -130,7 +131,6 @@ class Scalr_Account extends Scalr_Model
             foreach ($this->db->Execute("SELECT id FROM farms WHERE clientid=?", [$this->id]) as $farm) {
                 $this->db->Execute("DELETE FROM farms WHERE id=?", array($farm["id"]));
                 $this->db->Execute("DELETE FROM farm_roles WHERE farmid=?", array($farm["id"]));
-                $this->db->Execute("DELETE FROM farm_role_options WHERE farmid=?", array($farm["id"]));
                 $this->db->Execute("DELETE FROM farm_event_observers WHERE farmid=?", array($farm["id"]));
                 $this->db->Execute("DELETE FROM elastic_ips WHERE farmid=?", array($farm["id"]));
             }
@@ -141,7 +141,6 @@ class Scalr_Account extends Scalr_Model
 
                 $this->db->Execute("DELETE FROM role_behaviors WHERE role_id = ?", array($role['id']));
                 $this->db->Execute("DELETE FROM role_images WHERE role_id = ?", array($role['id']));
-                $this->db->Execute("DELETE FROM role_parameters WHERE role_id = ?", array($role['id']));
                 $this->db->Execute("DELETE FROM role_properties WHERE role_id = ?", array($role['id']));
                 $this->db->Execute("DELETE FROM role_security_rules WHERE role_id = ?", array($role['id']));
             }
@@ -228,6 +227,8 @@ class Scalr_Account extends Scalr_Model
      */
     public function createEnvironment($name)
     {
+        $config = [];
+
         if (!$this->id) {
             throw new Exception("Account has not been created yet.");
         }
@@ -237,8 +238,8 @@ class Scalr_Account extends Scalr_Model
         $env = Scalr_Environment::init()->create($name, $this->id);
 
         $config[Scalr_Environment::SETTING_TIMEZONE] = "America/Adak";
-//         $config[Scalr_Environment::SETTING_API_LIMIT_ENABLED] = 1;
-//         $config[Scalr_Environment::SETTING_API_LIMIT_REQPERHOUR] = 18000;
+        //$config[Scalr_Environment::SETTING_API_LIMIT_ENABLED] = 1;
+        //$config[Scalr_Environment::SETTING_API_LIMIT_REQPERHOUR] = 18000;
 
         $env->setPlatformConfig($config, false);
 

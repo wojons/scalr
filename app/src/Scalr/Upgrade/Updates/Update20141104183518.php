@@ -15,9 +15,11 @@ class Update20141104183518 extends AbstractUpdate implements SequenceInterface
 
     protected $description = 'Migrate software from roles to images';
 
-    protected $ignoreChanges = false;
+    protected $ignoreChanges = true;
 
     protected $dbservice = 'adodb';
+
+    const PERM_IMAGES_ENVIRONMENT_CREATE = 'create';
 
     /**
      * {@inheritdoc}
@@ -101,9 +103,9 @@ class Update20141104183518 extends AbstractUpdate implements SequenceInterface
             }
 
             $obj = Image::findOne([
-                ['id' => $image['image_id']],
-                ['envId' => $image['env_id'] == 0 ? NULL : $image['env_id']],
-                ['platform' => $image['platform']],
+                ['id'            => $image['image_id']],
+                ['envId'         => $image['env_id'] == 0 ? null : $image['env_id']],
+                ['platform'      => $image['platform']],
                 ['cloudLocation' => $image['cloud_location']]]
             );
 
@@ -111,12 +113,12 @@ class Update20141104183518 extends AbstractUpdate implements SequenceInterface
             if ($obj) {
                 $obj->setSoftware($props);
             } else {
-                if (! Image::findOne([
-                        ['id' => $image['image_id']],
-                        ['envId' => NULL],
-                        ['platform' => $image['platform']],
-                        ['cloudLocation' => $image['cloud_location']]]
-                ))
+                if (!Image::findOne([
+                    ['id'            => $image['image_id']],
+                    ['envId'         => null],
+                    ['platform'      => $image['platform']],
+                    ['cloudLocation' => $image['cloud_location']]
+                ]))
                     $this->console->warning('Image not found: %s', $image['image_id']);
             }
         }
@@ -126,20 +128,20 @@ class Update20141104183518 extends AbstractUpdate implements SequenceInterface
 
     protected function isApplied2($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_FARMS_IMAGES') && $this->db->GetOne("
+        return defined('Scalr\\Acl\\Acl::RESOURCE_IMAGES_ENVIRONMENT') && $this->db->GetOne("
             SELECT `granted` FROM `acl_role_resources`
             WHERE `resource_id` = ? AND `role_id` = ?
             LIMIT 1
         ", array(
-            Acl::RESOURCE_FARMS_IMAGES,
+            Acl::RESOURCE_IMAGES_ENVIRONMENT,
             Acl::ROLE_ID_FULL_ACCESS,
         )) == 1;
     }
 
     protected function validateBefore2($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_FARMS_IMAGES') &&
-        Definition::has(Acl::RESOURCE_FARMS_IMAGES);
+        return defined('Scalr\\Acl\\Acl::RESOURCE_IMAGES_ENVIRONMENT') &&
+        Definition::has(Acl::RESOURCE_IMAGES_ENVIRONMENT);
     }
 
     protected function run2($stage)
@@ -150,14 +152,14 @@ class Update20141104183518 extends AbstractUpdate implements SequenceInterface
             VALUES (?, ?, 1)
         ", array(
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::RESOURCE_FARMS_IMAGES
+            Acl::RESOURCE_IMAGES_ENVIRONMENT
         ));
     }
 
     protected function isApplied3($stage)
     {
-        return  defined('Scalr\\Acl\\Acl::RESOURCE_FARMS_IMAGES') &&
-        defined('Scalr\\Acl\\Acl::PERM_FARMS_IMAGES_MANAGE') &&
+        return  defined('Scalr\\Acl\\Acl::RESOURCE_IMAGES_ENVIRONMENT') &&
+        defined('Scalr\\Acl\\Acl::PERM_IMAGES_ENVIRONMENT_MANAGE') &&
         $this->db->GetOne("
                     SELECT `granted` FROM `acl_role_resource_permissions`
                     WHERE `resource_id` = ?
@@ -165,17 +167,17 @@ class Update20141104183518 extends AbstractUpdate implements SequenceInterface
                     AND `perm_id` = ?
                     LIMIT 1
                 ", array(
-            Acl::RESOURCE_FARMS_IMAGES,
+            Acl::RESOURCE_IMAGES_ENVIRONMENT,
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::PERM_FARMS_IMAGES_MANAGE,
+            Acl::PERM_IMAGES_ENVIRONMENT_MANAGE,
         )) == 1;
     }
 
     protected function validateBefore3($stage)
     {
-        return  defined('Scalr\\Acl\\Acl::RESOURCE_FARMS_IMAGES') &&
-        defined('Scalr\\Acl\\Acl::PERM_FARMS_IMAGES_MANAGE') &&
-        Definition::has(Acl::RESOURCE_FARMS_IMAGES);
+        return  defined('Scalr\\Acl\\Acl::RESOURCE_IMAGES_ENVIRONMENT') &&
+        defined('Scalr\\Acl\\Acl::PERM_IMAGES_ENVIRONMENT_MANAGE') &&
+        Definition::has(Acl::RESOURCE_IMAGES_ENVIRONMENT);
     }
 
     protected function run3($stage)
@@ -186,15 +188,14 @@ class Update20141104183518 extends AbstractUpdate implements SequenceInterface
             VALUES (?, ?, ?, 1)
         ", array(
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::RESOURCE_FARMS_IMAGES,
-            Acl::PERM_FARMS_IMAGES_MANAGE
+            Acl::RESOURCE_IMAGES_ENVIRONMENT,
+            Acl::PERM_IMAGES_ENVIRONMENT_MANAGE
         ));
     }
 
     protected function isApplied4($stage)
     {
-        return  defined('Scalr\\Acl\\Acl::RESOURCE_FARMS_IMAGES') &&
-        defined('Scalr\\Acl\\Acl::PERM_FARMS_IMAGES_CREATE') &&
+        return  defined('Scalr\\Acl\\Acl::RESOURCE_IMAGES_ENVIRONMENT') &&
         $this->db->GetOne("
                     SELECT `granted` FROM `acl_role_resource_permissions`
                     WHERE `resource_id` = ?
@@ -202,17 +203,16 @@ class Update20141104183518 extends AbstractUpdate implements SequenceInterface
                     AND `perm_id` = ?
                     LIMIT 1
                 ", array(
-            Acl::RESOURCE_FARMS_IMAGES,
+            Acl::RESOURCE_IMAGES_ENVIRONMENT,
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::PERM_FARMS_IMAGES_CREATE
+            self::PERM_IMAGES_ENVIRONMENT_CREATE
         )) == 1;
     }
 
     protected function validateBefore4($stage)
     {
-        return  defined('Scalr\\Acl\\Acl::RESOURCE_FARMS_IMAGES') &&
-        defined('Scalr\\Acl\\Acl::PERM_FARMS_IMAGES_CREATE') &&
-        Definition::has(Acl::RESOURCE_FARMS_IMAGES);
+        return  defined('Scalr\\Acl\\Acl::RESOURCE_IMAGES_ENVIRONMENT') &&
+        Definition::has(Acl::RESOURCE_IMAGES_ENVIRONMENT);
     }
 
     protected function run4($stage)
@@ -223,8 +223,8 @@ class Update20141104183518 extends AbstractUpdate implements SequenceInterface
             VALUES (?, ?, ?, 1)
         ", array(
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::RESOURCE_FARMS_IMAGES,
-            Acl::PERM_FARMS_IMAGES_CREATE
+            Acl::RESOURCE_IMAGES_ENVIRONMENT,
+            self::PERM_IMAGES_ENVIRONMENT_CREATE
         ));
     }
 

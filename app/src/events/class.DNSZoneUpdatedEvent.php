@@ -1,6 +1,6 @@
 <?php
 
-class DNSZoneUpdatedEvent extends Event
+class DNSZoneUpdatedEvent extends AbstractServerEvent
 {
     public $ZoneName;
 

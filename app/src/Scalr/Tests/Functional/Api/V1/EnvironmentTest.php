@@ -3,6 +3,8 @@
 namespace Scalr\Tests\Functional\Api\V1;
 
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
+use SERVER_PLATFORMS;
+use Scalr\Model\Entity;
 
 class EnvironmentTest extends ApiTestCase
 {
@@ -95,13 +97,14 @@ class EnvironmentTest extends ApiTestCase
             $this->markTestSkipped('Skip EC2 platform test');
         }
 
-        $env = $this->getEnvironment();
+        $ccProps = $this->getEnvironment()->cloudCredentials(SERVER_PLATFORMS::EC2)->properties;
+
         // enable EC2
         $content = $this->request('/environments/' . $envId . '/platform/xSaveEc2', array(
             'ec2.is_enabled' => '1',
-            'ec2.account_id' => $env->getPlatformConfigValue(Ec2PlatformModule::ACCOUNT_ID),
-            'ec2.access_key' => $env->getPlatformConfigValue(Ec2PlatformModule::ACCESS_KEY),
-            'ec2.secret_key' => $env->getPlatformConfigValue(Ec2PlatformModule::SECRET_KEY)
+            'ec2.account_id' => $ccProps[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
+            'ec2.access_key' => $ccProps[Entity\CloudCredentialsProperty::AWS_ACCESS_KEY],
+            'ec2.secret_key' => $ccProps[Entity\CloudCredentialsProperty::AWS_SECRET_KEY]
         ), 'POST', array(), array());
 
         $this->assertFalse($content['success']);

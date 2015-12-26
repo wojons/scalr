@@ -17,7 +17,7 @@ class Scalr_Messaging_Service {
         $this->cryptoTool = \Scalr::getContainer()->srzcrypto;
         $this->serializer = new Scalr_Messaging_XmlSerializer();
         $this->jsonSerializer = new Scalr_Messaging_JsonSerializer();
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
     }
 
     function addQueueHandler(Scalr_Messaging_Service_QueueHandler $handler) {

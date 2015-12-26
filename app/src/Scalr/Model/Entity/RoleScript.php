@@ -18,7 +18,7 @@ use Scalr\Util\CryptoTool;
  * @Entity
  * @Table(name="role_scripts")
  */
-class RoleScript extends OrchestrationRule implements ScopeInterface, AccessPermissionsInterface
+class RoleScript extends OrchestrationRule
 {
 
     /**
@@ -44,16 +44,6 @@ class RoleScript extends OrchestrationRule implements ScopeInterface, AccessPerm
     {
         $this->hash = CryptoTool::sault(12);
 
-        $this->scriptType = empty($this->scriptId) ? 'local' : 'scalr';
-
-        if (!isset($this->orderIndex)) {
-            $this->orderIndex = 10;
-        }
-
-        if (!isset($this->issync)) {
-            $this->issync = 0;
-        }
-
         parent::save();
     }
 
@@ -62,12 +52,12 @@ class RoleScript extends OrchestrationRule implements ScopeInterface, AccessPerm
      *
      * It should check only Entity level access permissions, NOT ACL
      *
-     * @param     AbstractEntity    $entity               Object that defines permissions
-     * @param     User              $user                 The User Entity
-     * @param     Environment       $environment optional The Environment Entity if request is from Environment scope
-     * @param     bool              $modify      optional Whether it should check MODIFY permission. By default it checks READ permission.
+     * @param   AbstractEntity  $entity                  Object that defines permissions
+     * @param   User            $user                    The User Entity
+     * @param   Environment     $environment    optional The Environment Entity if request is from Environment scope
+     * @param   bool            $modify         optional Whether it should check MODIFY permission. By default it checks READ permission.
      *
-     * @return bool Returns TRUE if the user has access to the specified object
+     * @return  bool    Returns TRUE if the user has access to the specified object
      *
      * @see AccessPermissionsInterface::hasAccessPermissions()
      */

@@ -13,7 +13,7 @@ class Scalr_Messaging_Service_ControlQueueHandler implements Scalr_Messaging_Ser
     function __construct()
     {
         $this->db = \Scalr::getDb();
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
     }
 
     function accept($queue) {

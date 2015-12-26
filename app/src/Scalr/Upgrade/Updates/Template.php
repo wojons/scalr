@@ -14,8 +14,6 @@ class Update<?= $upd_released ?> extends AbstractUpdate implements SequenceInter
 
     protected $description = /* It should be set! */;
 
-    protected $ignoreChanges = true;
-
     protected $dbservice = 'adodb';
 
     /**

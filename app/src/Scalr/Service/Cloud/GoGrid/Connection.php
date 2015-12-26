@@ -1,6 +1,9 @@
 <?php
-  class Scalr_Service_Cloud_GoGrid_Connection
-  {
+
+use Scalr\System\Http\Client\Request;
+
+class Scalr_Service_Cloud_GoGrid_Connection
+{
         protected	$apiKey;
         protected	$secretKey;
         protected	$signature;
@@ -17,7 +20,7 @@
             $this->apiKey		= $key;
             $this->secretKey	= $secret;
             $this->signature	= $this->getSignature($key, $secret);
-            $this->httpRequest	= new HttpRequest();
+            $this->httpRequest	= new Request();
         }
 
 
@@ -57,20 +60,18 @@
         {
             try
             {
-                $this->httpRequest->send();
+                $response = \Scalr::getContainer()->http->sendRequest($this->httpRequest);
 
-                $info = $this->httpRequest->getResponseInfo();
+                $data = $response->getBody()->toString();
+                $this->LastResponseHeaders = $response->getHeaders();
 
-                $data = $this->httpRequest->getResponseData();
-                $this->LastResponseHeaders = $data['headers'];
-
-                if($info['response_code'] >= 400)
+                if($response->getResponseCode() >= 400)
                 {
 
-                    $errMsg = json_decode($data['body']);
+                    $errMsg = json_decode($data);
                     $errMsg = $errMsg->list[0]->message;
 
-                    throw new Exception(sprintf('Request to GoGrid failed (Error code: %s): %s', $info['response_code'], $errMsg ));
+                    throw new Exception("Request to GoGrid failed (Error code: {$response->getResponseCode()}): {$errMsg}");
                 }
             }
             catch (Exception $e)
@@ -117,21 +118,19 @@
         /**
          * Set request headers and options
          *
-         * @name  buildHttpRequestObject
-         * @param mixed $method
+         * @param mixed $url
          * @param mixed $args
-         * @return HttpRequest
          */
         private function setRequestOptions($url, $args = null)
         {
 
-            $this->httpRequest->setUrl($url);
+            $this->httpRequest->setRequestUrl($url);
 
-            $this->httpRequest->setOptions(array("redirect" => 10,
-                "useragent" => "Scalr GoGrid Client (http://scalr.com)")
-            );
+            $this->httpRequest->setOptions([
+                "redirect" => 10,
+            ]);
 
-            $this->httpRequest->setMethod(constant("HTTP_METH_GET"));
+            $this->httpRequest->setRequestMethod("GET");
 
             $args['api_key'] 	= $this->apiKey;
             $args['v']			= self::API_VERSION;
@@ -139,12 +138,9 @@
 
             // set GET body's args
             ksort($args);
-            foreach ($args as $k => $v)
-                $CanonicalizedQueryString .= "&{$k}=".urlencode($v);
 
-            $CanonicalizedQueryString = trim($CanonicalizedQueryString, "&");
-            $this->httpRequest->setQueryData($CanonicalizedQueryString);
+            $c11dQueryString = http_build_query($args, null, '&', PHP_QUERY_RFC3986);
+            $this->httpRequest->setQuery($c11dQueryString);
 
         }
-  }
-?>
+}

@@ -1,11 +1,17 @@
 <?php
 
+use http\Client\Request;
 use Scalr\Service\Cloud\Rackspace\Exception\ClientException;
 use Scalr\Service\Cloud\Rackspace\Exception\RackspaceResponseErrorFactory;
+use Scalr\Util\CallbackInterface;
+use Scalr\Util\CallbackTrait;
 
-class Scalr_Service_Cloud_Rackspace_Connection
-  {
-          protected	$xAuthUser;
+class Scalr_Service_Cloud_Rackspace_Connection implements CallbackInterface
+{
+
+    use CallbackTrait;
+
+        protected	$xAuthUser;
         protected	$xAuthKey;
         public		$LastResponseHeaders 	= array();
         public      $lastRequestBody         = "";
@@ -25,7 +31,7 @@ class Scalr_Service_Cloud_Rackspace_Connection
         {
             $this->xAuthUser = $xAuthUser;
             $this->xAuthKey  = $xAuthKey;
-            $this->httpRequest = new HttpRequest();
+            $this->httpRequest = new Request();
 
             switch($cloudLocation)
             {
@@ -53,10 +59,10 @@ class Scalr_Service_Cloud_Rackspace_Connection
         {
             try
             {
-                $this->setRequestOptions("https://{$this->apiAuthURL}/".self::API_VERSION, "GET");
-                $response = $this->sendRequest();
-                $this->xAuthToken	= $response['headers']['X-Auth-Token'];
-                $this->xSessionUrl	= $response['headers']['X-Server-Management-Url'];
+                $this->setRequestOptions("https://{$this->apiAuthURL}/" . self::API_VERSION, "GET");
+                $this->sendRequest();
+                $this->xAuthToken	= $this->LastResponseHeaders['X-Auth-Token'];
+                $this->xSessionUrl	= $this->LastResponseHeaders['X-Server-Management-Url'];
             }
             catch(Exception $e)
             {
@@ -68,11 +74,11 @@ class Scalr_Service_Cloud_Rackspace_Connection
       {
           try
           {
-              $this->setRequestOptions("https://{$this->apiAuthURL}/".self::API_VERSION, "GET");
-              $response = $this->sendRequest();
-              $this->xAuthToken	= $response['headers']['X-Auth-Token'];
-              $this->xSessionUrl = $response['headers']['X-Server-Management-Url'];
-              return $response['headers'];
+              $this->setRequestOptions("https://{$this->apiAuthURL}/" . self::API_VERSION, "GET");
+              $this->sendRequest();
+              $this->xAuthToken	= $this->LastResponseHeaders['X-Auth-Token'];
+              $this->xSessionUrl = $this->LastResponseHeaders['X-Server-Management-Url'];
+              return $this->LastResponseHeaders;
           }
           catch(Exception $e)
           {
@@ -92,16 +98,15 @@ class Scalr_Service_Cloud_Rackspace_Connection
         {
            try
            {
-                $this->httpRequest->send();
-                $info = $this->httpRequest->getResponseInfo();
+                $response = \Scalr::getContainer()->http->sendRequest($this->httpRequest);
 
-                $data = $this->httpRequest->getResponseData();
-                $this->LastResponseHeaders = $data['headers'];
-                $this->LastResponseBody = $data['body'];
+                $data = $response->getBody()->toString();
+                $this->LastResponseHeaders = $response->getHeaders();
+                $this->LastResponseBody = $data;
 
-                if($info['response_code'] >= 400)
+                if($response->getResponseCode() >= 400)
                 {
-                    $errMsg = json_decode($data['body']);
+                    $errMsg = json_decode($data);
 
                     if (is_object($errMsg)) {
                         $errMsg = @array_values(@get_object_vars($errMsg));
@@ -109,7 +114,7 @@ class Scalr_Service_Cloud_Rackspace_Connection
                     }
 
                     $code = ($errMsg->code) ? $errMsg->code : 0;
-                    $msg = ($errMsg->details) ? $errMsg->details : trim($data['body']);
+                    $msg = ($errMsg->details) ? $errMsg->details : trim($data);
 
 
                     throw new Exception(sprintf('Request to Rackspace failed (Code: %s): %s',
@@ -160,6 +165,9 @@ class Scalr_Service_Cloud_Rackspace_Connection
                 $this->setRequestOptions($url, $method, $args);
                 $response = $this->sendRequest();
 
+                if (is_callable($this->callback)) {
+                    call_user_func($this->callback, $this->httpRequest, $response);
+                }
             }
             catch (Exception $e)
             {
@@ -169,13 +177,13 @@ class Scalr_Service_Cloud_Rackspace_Connection
                 //if ($k < 3 && stristr($e->getMessage(), 'Timeout was reached; Operation timed out after'))
                 //    return $this->request($method, $uri, $args, $url, $k++);
 
-                $info = "Method: " . $this->httpRequest->getMethod();
-                $info .= " (". $this->httpRequest->getRawRequestMessage() .")";
+                $info = "Method: " . $this->httpRequest->getRequestMethod();
+                $info .= " ({$this->httpRequest})";
 
                 throw RackspaceResponseErrorFactory::make("[Attempt {$k}] ".$e->getMessage() . " [{$info}]");
             }
 
-            return json_decode($response['body']);
+            return json_decode($response);
 
         }
 
@@ -183,24 +191,23 @@ class Scalr_Service_Cloud_Rackspace_Connection
         /**
          * Set request headers and options
          *
-         * @name  buildHttpRequestObject
+         * @param mixed $url
          * @param mixed $method
          * @param mixed $args
-         * @return HttpRequest
+         * @return Request
          */
         private function setRequestOptions($url, $method, $args = null)
         {
 
-            $this->httpRequest->setUrl($url);
+            $this->httpRequest->setRequestUrl($url);
 
             $this->httpRequest->setOptions(array(
                 "redirect" 		=> 2,
-                "useragent" 	=> "Scalr",
                 'timeout'		=> 20,
                 'connecttimeout'=> 5
             ));
 
-            $this->httpRequest->setMethod(constant("HTTP_METH_{$method}"));
+            $this->httpRequest->setRequestMethod($method);
             $this->httpRequest->setHeaders(array("X-Auth-User" => $this->xAuthUser,
                 "X-Auth-Key"	=> $this->xAuthKey,
                 "Accept"		=> self::ACCEPT_JSON,
@@ -210,7 +217,7 @@ class Scalr_Service_Cloud_Rackspace_Connection
 
             $this->lastRequestBody = json_encode($args);
 
-            $CanonicalizedQueryString = "";
+            $c11dQueryString = "";
 
              $time = time();
              switch($method)
@@ -219,29 +226,17 @@ class Scalr_Service_Cloud_Rackspace_Connection
                         $args['t'] = $time;
 
                         ksort($args);
-                        foreach ($args as $k => $v)
-                            $CanonicalizedQueryString .= "&{$k}=".urlencode($v);
-
-                        $CanonicalizedQueryString = trim($CanonicalizedQueryString, "&");
-                        $this->httpRequest->setQueryData($CanonicalizedQueryString);
-                        break;
-
-                 case "PUT":
-
-                        $this->httpRequest->setQueryData("");
-
-                        if($args)
-                            $this->httpRequest->setPutData(json_encode($args));
+                        $c11dQueryString = http_build_query($args);
+                        $this->httpRequest->setQuery($c11dQueryString);
                         break;
 
                  case "POST":
+                 case "PUT":
 
-                        $this->httpRequest->setQueryData("");
+                        $this->httpRequest->setQuery("");
 
                         if($args)
-                            $this->httpRequest->setBody(json_encode($args));
-
-
+                            $this->httpRequest->append(json_encode($args));
                         break;
              }
 
@@ -251,4 +246,3 @@ class Scalr_Service_Cloud_Rackspace_Connection
 
         }
   }
-?>

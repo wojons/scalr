@@ -76,7 +76,7 @@ class Prices
                 ['cloudLocation' => $price->cloudLocation],
                 ['accountId'     => $price->accountId],
                 ['applied'       => ['$lte' => $price->applied->format('Y-m-d')]],
-            ], ['applied' => false]);
+            ], null, ['applied' => false]);
         } else {
             throw new \InvalidArgumentException(sprintf(
                 "Either priceId or both platform and cloudLocation properties must be set for PriceHistoryEntity."
@@ -235,7 +235,7 @@ class Prices
             ['cloudLocation' => $cloudLocation],
             ['url'           => $url],
             ['accountId'     => $accountId],
-        ], ['applied' => true]);
+        ], null, ['applied' => true]);
     }
 
     /**

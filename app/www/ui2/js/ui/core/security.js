@@ -1,112 +1,105 @@
 Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
     var defaultPassword = '******';
-	var form = Ext.create('Ext.form.Panel', {
-		width: 700,
-		title: 'Security',
-		fieldDefaults: {
-			anchor: '100%',
-			labelWidth: 130
-		},
+    var form = Ext.create('Ext.form.Panel', {
+        width: 700,
+        title: 'Security',
+        fieldDefaults: {
+            anchor: '100%',
+            labelWidth: 130
+        },
         layout: 'auto',
-		items: [{
-			xtype: 'fieldset',
+        items: [{
+            xtype: 'fieldset',
             title: 'Change password',
             hidden: Scalr.flags['authMode'] == 'ldap',
-			items: [{
-				xtype: 'textfield',
-				inputType:'password',
-				name: 'password',
+            items: [{
+                xtype: 'scalrpasswordfield',
+                name: 'password',
                 itemId: 'password',
-				allowBlank: false,
+                fieldLabel: 'Password',
                 vtype: 'password',
                 otherPassField: 'cpassword',
-				fieldLabel: 'New password',
-				value: defaultPassword,
-                selectOnFocus: true,
-                validateOnChange: false,
-                listeners: {
-                    change: function(){this.clearInvalid();}
-                }
-			},{
-				xtype: 'textfield',
-				inputType:'password',
-				name: 'cpassword',
+                value: defaultPassword,
+                minPasswordLengthAdmin: moduleParams['isAdmin'],
+                allowBlank: false,
+                selectOnFocus: true
+            }, {
+                xtype: 'scalrpasswordfield',
+                name: 'cpassword',
                 itemId: 'cpassword',
-				allowBlank: false,
-                vtype: 'password',
-                otherPassField: 'password',
-				fieldLabel: 'Confirm password',
-				value: defaultPassword,
+                fieldLabel: 'Password confirm',
+                allowBlank: false,
                 selectOnFocus: true,
-                validateOnChange: false,
+                value: defaultPassword,
+                minPasswordLengthAdmin: moduleParams['isAdmin'],
+                submitValue: false,
+                vtype: 'password',
+                otherPassField: 'password'
+            }]
+        }, {
+            xtype: 'fieldset',
+            hidden: !moduleParams['security2fa'],
+            title: 'Two-factor authentication based on <a href="http://code.google.com/p/google-authenticator/" target="_blank">google authenticator</a> (TOTP)',
+            items: [{
+                xtype: 'buttongroupfield',
+                name: 'security2faGgl',
                 listeners: {
-                    change: function(){this.clearInvalid();}
-                }
-			}]
-		}, {
-			xtype: 'fieldset',
-			hidden: !moduleParams['security2fa'],
-			title: 'Two-factor authentication based on <a href="http://code.google.com/p/google-authenticator/" target="_blank">google authenticator</a> (TOTP)',
-			items: [{
-				xtype: 'buttongroupfield',
-				name: 'security2faGgl',
-				listeners: {
-					beforetoggle: function(field, value) {
-						if (value == '1') {
-							Scalr.utils.Window({
-								xtype: 'form',
-								title: 'Enable two-factor authentication',
-								width: 400,
+                    beforetoggle: function(field, value) {
+                        if (value == '1') {
+                            Scalr.utils.Window({
+                                xtype: 'form',
+                                title: 'Enable two-factor authentication',
+                                width: 400,
                                 layout: 'auto',
-								items: [{
-									xtype: 'fieldset',
+                                items: [{
+                                    xtype: 'fieldset',
                                     cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
-									defaults: {
-										labelWidth: 50
-									},
-									items: [{
-										xtype: 'textfield',
-										readOnly: true,
-										name: 'qr',
-										value: moduleParams['security2faCode'],
-										fieldLabel: 'Key',
+                                    defaults: {
+                                        labelWidth: 50
+                                    },
+                                    items: [{
+                                        xtype: 'textfield',
+                                        readOnly: true,
+                                        name: 'qr',
+                                        value: moduleParams['security2faCode'],
+                                        fieldLabel: 'Key',
                                         anchor: '100%'
-									}, {
+                                    }, {
                                         xtype: 'qrpanel',
                                         textToEncode: 'otpauth://totp/' + encodeURIComponent(document.location.host) + ':' + encodeURIComponent(Scalr.user['userName'])  + '?secret=' + moduleParams['security2faCode'],
                                         margin: '0 0 6 55'
-									}, {
-										xtype: 'textfield',
-										name: 'code',
-										fieldLabel: 'Code',
-										allowBlank: false,
+                                    }, {
+                                        xtype: 'textfield',
+                                        name: 'code',
+                                        fieldLabel: 'Code',
+                                        allowBlank: false,
                                         anchor: '100%'
                                     }]
-								}],
-								dockedItems: [{
-									xtype: 'container',
-									dock: 'bottom',
+                                }],
+                                dockedItems: [{
+                                    xtype: 'container',
+                                    dock: 'bottom',
                                     cls: 'x-docked-buttons',
-									layout: {
-										type: 'hbox',
-										pack: 'center'
-									},
-									items: [{
-										xtype: 'button',
-										text: 'Enable',
-										handler: function() {
-											var fm = this.up('#box').getForm();
+                                    layout: {
+                                        type: 'hbox',
+                                        pack: 'center'
+                                    },
+                                    items: [{
+                                        xtype: 'button',
+                                        text: 'Enable',
+                                        handler: function() {
+                                            var fm = this.up('#box').getForm();
 
-											if (fm.isValid())
-												Scalr.Request({
-													processBox: {
-														type: 'action'
-													},
-													form: fm,
-													url: '/core/xSettingsEnable2FaGgl/',
-													success: function (data) {
-														form.down('[name="security2faGgl"]').setValue('1');
-														this.up('#box').close();
+                                            if (fm.isValid())
+                                                Scalr.Request({
+                                                    processBox: {
+                                                        type: 'action'
+                                                    },
+                                                    form: fm,
+                                                    url: '/core/xSettingsEnable2FaGgl/',
+                                                    success: function (data) {
+                                                        form.down('[name="security2faGgl"]').setValue('1');
+                                                        this.up('#box').close();
 
                                                         Scalr.utils.Window({
                                                             xtype: 'form',
@@ -146,19 +139,19 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
                                                             }
                                                         });
                                                     },
-													scope: this
-												});
-										}
-									}, {
-										xtype: 'button',
-										text: 'Cancel',
-										handler: function() {
-											this.up('#box').close();
-										}
-									}]
-								}]
-							});
-						} else {
+                                                    scope: this
+                                                });
+                                        }
+                                    }, {
+                                        xtype: 'button',
+                                        text: 'Cancel',
+                                        handler: function() {
+                                            this.up('#box').close();
+                                        }
+                                    }]
+                                }]
+                            });
+                        } else {
                             Scalr.utils.Window({
                                 xtype: 'form',
                                 title: 'Disable two-factor authentication',
@@ -213,56 +206,56 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
                                     }]
                                 }]
                             });
-						}
+                        }
 
-						return false;
-					}
-				},
+                        return false;
+                    }
+                },
                 defaults: {
                     width: 95
                 },
-				items: [{
-					text: 'Disabled',
-					value: ''
-				}, {
-					text: 'Enabled',
-					value: '1'
-				}]
-			}]
-		}, {
-			xtype: 'fieldset',
-			title: 'IP access whitelist',
+                items: [{
+                    text: 'Disabled',
+                    value: ''
+                }, {
+                    text: 'Enabled',
+                    value: '1'
+                }]
+            }]
+        }, {
+            xtype: 'fieldset',
+            title: 'IP access whitelist',
             cls: 'x-fieldset-separator-none',
-			items: [{
-				xtype: 'displayfield',
-				value: 'Example: 67.45.3.7, 67.46.*, 91.*'
-			}, {
-				xtype:'textarea',
-				hideLabel: true,
-				name: 'securityIpWhitelist',
-				grow: true,
-				growMax: 200,
-				emptyText: 'Leave blank to disable',
-				anchor: '100%'
+            items: [{
+                xtype: 'displayfield',
+                value: 'Example: 67.45.3.7, 67.46.*, 91.*'
+            }, {
+                xtype:'textarea',
+                hideLabel: true,
+                name: 'securityIpWhitelist',
+                grow: true,
+                growMax: 200,
+                emptyText: 'Leave blank to disable',
+                anchor: '100%'
             }, {
                 xtype: 'displayfield',
                 fieldLabel: 'Current IP',
                 name: 'currentIp'
-			}]
-		}],
+            }]
+        }],
 
-		dockedItems: [{
-			xtype: 'container',
-			cls: 'x-docked-buttons',
-			dock: 'bottom',
-			layout: {
-				type: 'hbox',
-				pack: 'center'
-			},
-			items: [{
-				xtype: 'button',
-				text: 'Save',
-				handler: function() {
+        dockedItems: [{
+            xtype: 'container',
+            cls: 'x-docked-buttons',
+            dock: 'bottom',
+            layout: {
+                type: 'hbox',
+                pack: 'center'
+            },
+            items: [{
+                xtype: 'button',
+                text: 'Save',
+                handler: function() {
                     var frm = this.up('form').getForm(),
                         confirmBox;
                     sendRequest = function(currentPassword) {
@@ -296,17 +289,17 @@ Scalr.regPage('Scalr.ui.core.security', function (loadParams, moduleParams) {
                             sendRequest();
                         }
                     }
-				}
-			}, {
-				xtype: 'button',
-				text: 'Cancel',
-				handler: function() {
-					Scalr.event.fireEvent('close');
-				}
-			}]
-		}]
-	});
+                }
+            }, {
+                xtype: 'button',
+                text: 'Cancel',
+                handler: function() {
+                    Scalr.event.fireEvent('close');
+                }
+            }]
+        }]
+    });
 
-	form.getForm().setValues(moduleParams);
-	return form;
+    form.getForm().setValues(moduleParams);
+    return form;
 });

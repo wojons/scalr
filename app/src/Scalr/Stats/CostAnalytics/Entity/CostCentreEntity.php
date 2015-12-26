@@ -430,14 +430,13 @@ class CostCentreEntity extends \Scalr\Model\AbstractEntity implements AccessPerm
         if ($user->isFinAdmin() || $user->isScalrAdmin()) {
             return true;
         } else if ($modify) {
-            //FIXME CostCentreEntity::hasAccessPermissions() should be corrected according to logic
             return false;
         }
 
         if ($environment) {
             return $this->ccId == Scalr_Environment::init()->loadById($environment->id)->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID);
+        } else {
+            return (bool) AccountCostCenterEntity::findPk($user->accountId, $this->ccId);
         }
-
-        return false;
     }
 }

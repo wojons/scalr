@@ -10,7 +10,7 @@ class UsageStatsPollerProcess implements \Scalr\System\Pcntl\ProcessInterface
     public function __construct()
     {
         // Get Logger instance
-        $this->Logger = Logger::getLogger(__CLASS__);
+        $this->Logger = \Scalr::getContainer()->logger(__CLASS__);
     }
 
     public function OnStartForking()
@@ -39,7 +39,7 @@ class UsageStatsPollerProcess implements \Scalr\System\Pcntl\ProcessInterface
 
         foreach ($DBFarm->GetFarmRoles() as $DBFarmRole)
         {
-            foreach ($DBFarmRole->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, SERVER_STATUS::PENDING, SERVER_STATUS::TROUBLESHOOTING)), array()) as $DBServer)
+            foreach ($DBFarmRole->GetServersByFilter(array('status' => array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, SERVER_STATUS::PENDING)), array()) as $DBServer)
             {
                 $launchTime = strtotime($DBServer->dateAdded);
                 $lastCheckTime = (int)$DBServer->GetProperty(SERVER_PROPERTIES::STATISTICS_LAST_CHECK_TS);
@@ -52,11 +52,6 @@ class UsageStatsPollerProcess implements \Scalr\System\Pcntl\ProcessInterface
                 if ($period > $maxMinutes)
                     $period = $maxMinutes;
 
-                $serverType = $DBServer->GetFlavor();
-
-                if (!$serverType)
-                    continue;
-
                 $db->Execute("INSERT INTO servers_stats SET
                     `usage` = ?,
                     `instance_type` = ?,
@@ -68,7 +63,7 @@ class UsageStatsPollerProcess implements \Scalr\System\Pcntl\ProcessInterface
                 ON DUPLICATE KEY UPDATE `usage` = `usage` + ?
                 ", array(
                     $period,
-                    $serverType,
+                    $DBServer->getType(),
                     $DBServer->envId,
                     date("m"),
                     date("Y"),

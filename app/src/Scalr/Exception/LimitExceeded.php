@@ -1,5 +1,8 @@
 <?php
 
+/**
+ * @deprecated Use Scalr\Exception\LimitExceededException
+ */
 class Scalr_Exception_LimitExceeded extends Exception
 {
     function __construct($limitName)

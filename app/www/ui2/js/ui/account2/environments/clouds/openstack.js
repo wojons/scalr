@@ -1,32 +1,8 @@
 Scalr.regPage('Scalr.ui.account2.environments.clouds.openstack', function (loadParams, moduleParams) {
-    var keyStoneUrlField,
-        keyStoneUrls,
-        params = moduleParams['params'],
+    var params = moduleParams['params'],
         isEnabledProp = loadParams['platform'] + '.is_enabled',
         cloudFeatures = params['features'] || {},
         cloudFeaturesTabs = [];
-
-    switch (loadParams['platform']) {
-        case 'ecs':
-            keyStoneUrls = ['https://api-legacy.entercloudsuite.com:5000/v2.0', 'https://api.entercloudsuite.com:5000/v2.0', 'https://catalog.entercloudsuite.com:443/v2.0', 'https://staging-api.entercloudsuite.com:5000/v2.0'];
-            keyStoneUrlField = {
-                xtype: 'combo',
-                fieldLabel: 'Keystone URL',
-                name: 'keystone_url',
-                store: keyStoneUrls,
-                editable: false,
-                value: params['keystone_url'] || keyStoneUrls[2]
-            };
-        break;
-        default:
-            keyStoneUrlField = {
-                xtype: 'textfield',
-                fieldLabel: 'Keystone URL',
-                name: 'keystone_url',
-                value: params['keystone_url']
-            };
-        break;
-    }
 
     if (Ext.Object.getSize(cloudFeatures) !== 0) {
         Ext.Object.each(cloudFeatures, function(key, value) {
@@ -67,7 +43,34 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.openstack', function (loadP
 			xtype: 'hidden',
 			name: isEnabledProp,
 			value: 'on'
-		}, keyStoneUrlField, {
+		},{
+            xtype: 'textfield',
+            fieldLabel: 'Keystone URL',
+            name: 'keystone_url',
+            value: params['keystone_url'],
+            validator: function(value) {
+                return /^https?:\/\//.test(value) || 'Keystone URL must begin with http:// or https://';
+            },
+            onKeystoneUrlChange: function() {
+                var isV3 = (this.getValue() || '').indexOf('v3') !== -1;
+                this.next('[name="domain_name"]').setVisible(isV3).setDisabled(!isV3);
+            },
+            enableKeyEvents: true,
+            listeners: {
+                afterrender: {
+                    fn: 'onKeystoneUrlChange',
+                    single: true
+                },
+                change: 'onKeystoneUrlChange'
+            }
+        },{
+			xtype: 'textfield',
+			fieldLabel: 'Domain name',
+			name: 'domain_name',
+			value: params['domain_name'],
+			hidden: true,
+            disabled: true
+        },{
 			xtype: 'textfield',
 			fieldLabel: 'Username',
 			name: 'username',
@@ -98,7 +101,7 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.openstack', function (loadP
             name: 'ssl_verifypeer',
             width: 260,
             checked: params['ssl_verifypeer'],
-            hidden: (loadParams['platform'] == 'rackspacengus' || loadParams['platform'] == 'rackspacenguk' || loadParams['platform'] == 'ecs'),
+            hidden: (loadParams['platform'] == 'rackspacengus' || loadParams['platform'] == 'rackspacenguk'),
             boxLabel: 'Enable SSL certificate verification for Keystone endpoints'
         }, {
             xtype: 'tabpanel',
@@ -114,27 +117,23 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.openstack', function (loadP
 		var apiUrl = form.down('[name="keystone_url"]')
 		apiUrl.setValue('https://identity.api.rackspacecloud.com/v2.0');
 		apiUrl.setReadOnly(true);
-		
+
 		form.down('[name="api_key"]').show();
-		
+
 		form.down('[name="password"]').hide();
 		form.down('[name="tenant_name"]').hide();
 	} else if (loadParams['platform'] === 'rackspacenguk') {
 		var apiUrl = form.down('[name="keystone_url"]')
 		apiUrl.setValue('https://lon.identity.api.rackspacecloud.com/v2.0');
 		apiUrl.setReadOnly(true);
-		
+
 		form.down('[name="api_key"]').show();
-		
+
 		form.down('[name="password"]').hide();
 		form.down('[name="tenant_name"]').hide();
 	} else {
-        if (loadParams['platform'] === 'ecs') {
-            form.down('[name="keystone_url"]').setVisible(!!Scalr.flags['betaMode']);
-        }
-
         form.down('[name="api_key"]').hide();
-		
+
 		form.down('[name="password"]').show();
 		form.down('[name="tenant_name"]').show();
 	}

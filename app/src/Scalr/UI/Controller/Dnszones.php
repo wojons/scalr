@@ -98,6 +98,8 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 
     public function xSaveSettingsAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_DNS_ZONES, Acl::PERM_DNS_ZONES_MANAGE);
+
         $this->request->defineParams(array(
             'dnsZoneId' => array('type' => 'int'),
             'axfrAllowedHosts' => array('type' => 'string'),
@@ -147,6 +149,8 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 
     public function createAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_DNS_ZONES, Acl::PERM_DNS_ZONES_MANAGE);
+
         $farms = self::loadController('Farms')->getFarmWidgetFarms(array('addEmpty'));
 
         $records = array();
@@ -177,11 +181,15 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 
     public function create2Action()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_DNS_ZONES, Acl::PERM_DNS_ZONES_MANAGE);
+
         $this->createAction();
     }
 
     public function editAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_DNS_ZONES, Acl::PERM_DNS_ZONES_MANAGE);
+
         $this->request->defineParams(array(
             'dnsZoneId' => array('type' => 'int')
         ));
@@ -218,11 +226,15 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 
     public function edit2Action()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_DNS_ZONES, Acl::PERM_DNS_ZONES_MANAGE);
+
         $this->editAction();
     }
 
     public function xSaveAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_DNS_ZONES, Acl::PERM_DNS_ZONES_MANAGE);
+
         $this->request->defineParams(array(
             'domainId' => array('type' => 'int'),
 
@@ -371,6 +383,8 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
 
     public function xRemoveZonesAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_DNS_ZONES, Acl::PERM_DNS_ZONES_MANAGE);
+
         $this->request->defineParams(array(
             'zones' => array('type' => 'json')
         ));
@@ -384,7 +398,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
             $zone->save();
         }
 
-        $this->response->success();
+        $this->response->success('DNS Zone(s) are scheduled to remove');
     }
 
     public function xListZonesAction()

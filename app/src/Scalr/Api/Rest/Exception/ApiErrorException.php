@@ -1,6 +1,7 @@
 <?php
 
 namespace Scalr\Api\Rest\Exception;
+use Exception;
 
 
 /**
@@ -30,16 +31,18 @@ class ApiErrorException extends \Exception
     /**
      * Constructor
      *
-     * @param    int    $status  HTTP response status code
-     * @param    string $error   Machine-readable API error code
-     * @param    string $message Human-readable error message
+     * @param   int         $status              HTTP response status code
+     * @param   string      $error               Machine-readable API error code
+     * @param   string      $message             Human-readable error message
+     * @param   int         $code       optional The Exception code
+     * @param   Exception   $previous   optional The previous exception used for the exception chaining
      */
-    public function __construct($status, $error, $message)
+    public function __construct($status, $error, $message, $code = 0, Exception $previous = null)
     {
         $this->status = $status;
         $this->error = $error;
 
-        parent::__construct($message);
+        parent::__construct($message, $code, $previous);
     }
 
     /**

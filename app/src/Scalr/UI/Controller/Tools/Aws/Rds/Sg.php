@@ -1,29 +1,37 @@
 <?php
 
 use Scalr\Service\Aws\Rds\DataType\DBSecurityGroupIngressRequestData;
+use Scalr\UI\Request\JsonData;
 use Scalr\Acl\Acl;
 
 class Scalr_UI_Controller_Tools_Aws_Rds_Sg extends Scalr_UI_Controller
 {
-
+    /**
+     * {@inheritdoc}
+     * @see Scalr_UI_Controller::hasAccess()
+     */
     public function hasAccess()
     {
         return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_RDS);
     }
 
     /**
-     * Gets AWS Client for the current environment
-     *
-     * @return \Scalr\Service\Aws Returns Aws client for current environment
+     * Forwards the controller to the default action
      */
-    protected function getAwsClient()
-    {
-        return $this->getEnvironment()->aws($this->getParam('cloudLocation'));
-    }
-
     public function defaultAction()
     {
         $this->viewAction();
+    }
+
+    /**
+     * Gets AWS Client for the current environment
+     *
+     * @param  string $cloudLocation Cloud location
+     * @return \Scalr\Service\Aws Returns Aws client for current environment
+     */
+    protected function getAwsClient($cloudLocation)
+    {
+        return $this->environment->aws($cloudLocation);
     }
 
     public function viewAction()
@@ -34,38 +42,60 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Sg extends Scalr_UI_Controller
     }
 
     /**
-     * @param string $name optional  Filter by name
+     * List security groups
+     *
+     * @param string $cloudLocation          Cloud location
+     * @param string $name          optional Filter by name
      */
-    public function xListAction($name = null)
+    public function xListAction($cloudLocation, $name = null)
     {
-        $sGroups = $this->getAwsClient()->rds->dbSecurityGroup->describe($name)->toArray(true);
+        $sGroups = $this->getAwsClient($cloudLocation)->rds->dbSecurityGroup->describe($name)->toArray(true);
         $response = $this->buildResponseFromData($sGroups, ['DBSecurityGroupName']);
         $this->response->data($response);
     }
 
-    public function xCreateAction()
+    /**
+     * Creates security group
+     *
+     * @param string $cloudLocation              Cloud location
+     * @param string $dbSecurityGroupName        Security group name
+     * @param string $dbSecurityGroupDescription Security group description
+     */
+    public function xCreateAction($cloudLocation, $dbSecurityGroupName, $dbSecurityGroupDescription)
     {
-        $this->getAwsClient()->rds->dbSecurityGroup->create(
-            $this->getParam('dbSecurityGroupName'), $this->getParam('dbSecurityGroupDescription')
-        );
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_RDS, Acl::PERM_AWS_RDS_MANAGE);
+
+        $this->getAwsClient($cloudLocation)->rds->dbSecurityGroup->create($dbSecurityGroupName, $dbSecurityGroupDescription);
         $this->response->success("DB security group successfully created");
     }
 
-    public function xDeleteAction()
+    /**
+     * Deletes security group
+     *
+     * @param string $cloudLocation Cloud location
+     * @param string $dbSgName      Security group name
+     */
+    public function xDeleteAction($cloudLocation, $dbSgName)
     {
-        $this->getAwsClient()->rds->dbSecurityGroup->delete($this->getParam('dbSgName'));
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_RDS, Acl::PERM_AWS_RDS_MANAGE);
+
+        $this->getAwsClient($cloudLocation)->rds->dbSecurityGroup->delete($dbSgName);
         $this->response->success("DB security group successfully removed");
     }
 
-    public function editAction()
+    /**
+     * Gets security group rules for editing
+     *
+     * @param string $cloudLocation Cloud location
+     * @param string $dbSgName      Security group name
+     */
+    public function editAction($cloudLocation, $dbSgName)
     {
-        $aws = $this->getAwsClient();
-
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_RDS, Acl::PERM_AWS_RDS_MANAGE);
         /* @var $group \Scalr\Service\Aws\Rds\DataType\DBSecurityGroupData */
-        $group = $aws->rds->dbSecurityGroup->describe($this->getParam('dbSgName'))->get(0);
+        $group = $this->getAwsClient($cloudLocation)->rds->dbSecurityGroup->describe($dbSgName)->get(0);
 
-        $ipRules = array();
-        $groupRules = array();
+        $ipRules = $groupRules = [];
         if (!empty($group->iPRanges) && count($group->iPRanges)) {
             $ipRules = $group->iPRanges->toArray(true);
         }
@@ -73,46 +103,51 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Sg extends Scalr_UI_Controller
             $groupRules = $group->eC2SecurityGroups->toArray(true);
         }
 
-        $rules = array('ipRules' => $ipRules, 'groupRules' => $groupRules);
+        $rules = ['ipRules' => $ipRules, 'groupRules' => $groupRules];
 
         $this->response->page('ui/tools/aws/rds/sg/edit.js', ['rules' => $rules, 'description' => $group->dBSecurityGroupDescription]);
     }
 
-    public function xSaveAction()
+    /**
+     * Saves the rules
+     *
+     * @param string   $cloudLocation Cloud location
+     * @param string   $dbSgName      Security group name
+     * @param JsonData $rules         Rules
+     */
+    public function xSaveAction($cloudLocation, $dbSgName, JsonData $rules)
     {
-        $this->request->defineParams(array(
-            'rules' => array('type' => 'json')
-        ));
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_RDS, Acl::PERM_AWS_RDS_MANAGE);
 
-        $aws = $this->getAwsClient();
-
+        $aws = $this->getAwsClient($cloudLocation);
         /* @var $group \Scalr\Service\Aws\Rds\DataType\DBSecurityGroupData */
-        $group = $aws->rds->dbSecurityGroup->describe($this->getParam('dbSgName'))->get(0);
+        $group = $aws->rds->dbSecurityGroup->describe($dbSgName)->get(0);
 
-        $rules = array();
+        $sgRules = [];
 
         if (!empty($group->iPRanges)) {
             foreach ($group->iPRanges as $r) {
                 $r = $r->toArray(true);
                 $r['id'] = md5($r['CIDRIP']);
-                $rules[$r['id']] = $r;
+                $sgRules[$r['id']] = $r;
             }
         }
         if (!empty($group->eC2SecurityGroups)) {
             foreach ($group->eC2SecurityGroups as $r) {
                 $r = $r->toArray(true);
                 $r['id'] = md5($r['EC2SecurityGroupName'] . $r['EC2SecurityGroupOwnerId']);
-                $rules[$r['id']] = $r;
+                $sgRules[$r['id']] = $r;
             }
         }
 
-        foreach ($rules as $id => $r) {
+        foreach ($sgRules as $id => $r) {
             $found = false;
-            foreach ($this->getParam('rules') as $rule) {
-                if ($rule['Type'] == 'CIDR IP')
+            foreach ($rules as $rule) {
+                if ($rule['Type'] == 'CIDR IP') {
                     $rid = md5($rule['CIDRIP']);
-                else
+                } else {
                     $rid = md5($rule['EC2SecurityGroupName'] . $rule['EC2SecurityGroupOwnerId']);
+                }
 
                 if ($id == $rid) {
                     $found = true;
@@ -120,7 +155,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Sg extends Scalr_UI_Controller
             }
 
             if (!$found) {
-                $request = new DBSecurityGroupIngressRequestData($this->getParam('dbSgName'));
+                $request = new DBSecurityGroupIngressRequestData($dbSgName);
                 if ($r['CIDRIP']) {
                     $request->cIDRIP = $r['CIDRIP'];
                 } else {
@@ -132,9 +167,9 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Sg extends Scalr_UI_Controller
             }
         }
 
-        foreach ($this->getParam('rules') as $rule){
+        foreach ($rules as $rule){
             if ($rule['Status'] == 'new') {
-                $request = new DBSecurityGroupIngressRequestData($this->getParam('dbSgName'));
+                $request = new DBSecurityGroupIngressRequestData($dbSgName);
                 if ($rule['Type'] == 'CIDR IP') {
                     $request->cIDRIP = $rule['CIDRIP'];
                 } else {
@@ -145,6 +180,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Sg extends Scalr_UI_Controller
                 unset($request);
             }
         }
+
         $this->response->success("DB security group successfully updated");
     }
 }

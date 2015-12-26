@@ -1,61 +1,255 @@
 Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, moduleParams) {
 
-    var store = Ext.create('Scalr.ui.ContinuousStore', {
+    var dbInstancesStore = Ext.create('Scalr.ui.ContinuousStore', {
 
-        fields: [
-            'engine',
-            'status',
-            'hostname',
-            'port',
-            'name',
-            'username',
-            'type',
-            'storage',
-            'dtadded',
-             'avail_zone',
-             'isReplica',
-             'engineVersion',
-             'multiAz'
-        ],
+        fields: [{
+            name: 'Address',
+            type: 'string'
+        }, {
+            name: 'AllocatedStorage',
+            type: 'auto'
+        }, {
+            name: 'AutoMinorVersionUpgrade',
+            type: 'boolean'
+        }, {
+            name: 'AvailabilityZone',
+            type: 'string'
+        }, {
+            name: 'BackupRetentionPeriod',
+            type: 'number'
+        }, {
+            name: 'CharacterSetName',
+            type: 'string'
+        }, {
+            name: 'DBClusterIdentifier',
+            type: 'string'
+        }, {
+            name: 'DBInstanceClass',
+            type: 'string'
+        }, {
+            name: 'DBInstanceIdentifier',
+            type: 'string'
+        }, {
+            name: 'DBInstanceStatus',
+            type: 'string'
+        }, {
+            name: 'DBName',
+            type: 'string'
+        }, {
+            name: 'DBParameterGroup',
+            type: 'string'
+        }, {
+            name: 'DBSecurityGroups',
+            type: 'auto'
+        }, {
+            name: 'DBSubnetGroupName',
+            type: 'string'
+        }, {
+            name: 'Engine',
+            type: 'string'
+        }, {
+            name: 'EngineVersion',
+            type: 'string'
+        }, {
+            name: 'InstanceCreateTime',
+            type: 'string'
+        }, {
+            name: 'Iops',
+            type: 'number'
+        }, {
+            name: 'KmsKeyId',
+            type: 'string'
+        }, {
+            name: 'LicenseModel',
+            type: 'string'
+        }, {
+            name: 'MasterUsername',
+            type: 'string'
+        }, {
+            name: 'MultiAZ',
+            type: 'string'
+        }, {
+            name: 'OptionGroupName',
+            type: 'string'
+        }, {
+            name: 'Port',
+            type: 'number'
+        }, {
+            name: 'PreferredBackupWindow',
+            type: 'string'
+        }, {
+            name: 'PreferredMaintenanceWindow',
+            type: 'string'
+        }, {
+            name: 'PubliclyAccessible',
+            type: 'boolean'
+        }, {
+            name: 'ReadReplicaSourceDBInstanceIdentifier',
+            type: 'string'
+        }, {
+            name: 'StorageType',
+            type: 'string'
+        }, {
+            name: 'VpcId',
+            type: 'string'
+        }, {
+            name: 'VpcSecurityGroups',
+            type: 'auto'
+        }, {
+            name: 'isReplica',
+            type: 'boolean'
+        }, {
+            name: 'farmId',
+            type: 'string'
+        }, {
+            name: 'farmName',
+            type: 'string'
+        }],
 
         proxy: {
             type: 'ajax',
-            url: '/tools/aws/rds/instances/xListInstances/',
+            url: '/tools/aws/rds/instances/xListInstances',
             reader: {
                 type: 'json',
                 rootProperty: 'data',
                 totalProperty: 'total',
                 successProperty: 'success'
             }
+        },
+
+        setDbInstanceStatus: function (dbInstanceIdentifier, dbInstanceStatus) {
+            var me = this;
+
+            var record = me.findRecord('DBInstanceIdentifier', dbInstanceIdentifier);
+
+            if (!Ext.isEmpty(record)) {
+                record.set('DBInstanceStatus', dbInstanceStatus);
+            }
+
+            return record;
+        },
+
+        getLaunchedDbInstancesStatuses: function () {
+            var me = this;
+
+            var dbInstances = {};
+
+            me.each(function (record) {
+                var dbInstanceStatus = record.get('DBInstanceStatus');
+                if (dbInstanceStatus !== 'deleted') {
+                    dbInstances[record.get('DBInstanceIdentifier')] = dbInstanceStatus;
+                }
+            });
+
+            return dbInstances;
+        },
+
+        updateDbInstances: function () {
+            var me = this;
+
+            Scalr.Request({
+                url: '/tools/aws/rds/instances/xGetDbInstancesStatus',
+                hideErrorMessage: true,
+                params: {
+                    cloudLocation: dbInstancesGrid.getCloudLocation(),
+                    dbInstances: Ext.encode(
+                        me.getLaunchedDbInstancesStatuses()
+                    )
+                },
+                success: function (response) {
+                    var dbInstances = response.dbInstances;
+
+                    if (!Ext.isEmpty(dbInstances)) {
+                        Ext.Object.each(dbInstances, function (dbInstanceIdentifier, dbInstanceData) {
+                            var record = me.findRecord('DBInstanceIdentifier', dbInstanceIdentifier);
+                            var isRecordExist = !Ext.isEmpty(record);
+
+                            if (isRecordExist && dbInstanceData !== 'deleted') {
+                                record.set(dbInstanceData);
+                            } else if (isRecordExist) {
+                                record.set('DBInstanceStatus', 'deleted');
+                            }
+                        });
+
+                        me.fireEvent('updaterecords', Ext.Object.getKeys(dbInstances));
+                    }
+
+                    return true;
+                }
+            });
+
+            return me;
         }
     });
 
-    var grid = Ext.create('Ext.grid.Panel', {
+    var dbInstancesGrid = Ext.create('Ext.grid.Panel', {
         flex: 1,
         cls: 'x-panel-column-left',
         scrollable: true,
 
-        store: store,
+        store: dbInstancesStore,
 
-        plugins: [ 'applyparams', 'focusedrowpointer', {
+        plugins: [ 'continuousrenderer', 'focusedrowpointer', {
             ptype: 'selectedrecord',
             disableSelection: false,
             clearOnRefresh: true,
             selectSingleRecord: true
         }, {
-            ptype: 'continuousrenderer'
+            ptype: 'applyparams',
+            loadStoreOnReturn: false
         }],
 
         viewConfig: {
-            emptyText: 'No DB Instances defined'
+            emptyText: 'No DB Instances defined.'
         },
 
-        selModel: 'selectedmodel',
+        selModel:
+            Scalr.isAllowed('AWS_RDS', 'manage') ? {
+                selType: 'selectedmodel',
+                getVisibility: function (record) {
+                    var dbInstanceStatus = record.get('DBInstanceStatus');
+                    return dbInstanceStatus !== 'deleting' && dbInstanceStatus !== 'deleted';
+                }
+            } : null,
+
+        getCloudLocation: function () {
+            return this.down('#cloudLocation').getValue();
+        },
 
         areDbInstancesAvailable: function (dbInstances) {
             return Ext.Array.every(dbInstances, function (dbInstance) {
-                return dbInstance.get('status') === 'available';
+                return dbInstance.get('DBInstanceStatus') === 'available';
             });
+        },
+
+        updatePage: function (type, action, dbInstanceData, cloudLocation) {
+            var me = this;
+
+            if (type === '/tools/aws/rds/instances' && cloudLocation === me.getCloudLocation()) {
+                /** temp fix; todo: improve Scalr.ui.RepeatableTask */
+                panel.restartTask = false;
+                /** end */
+
+                var store = me.getStore();
+                var record;
+
+                if (action === 'launch') {
+                    record = store.add(dbInstanceData)[0];
+                } else if (action === 'modify') {
+                    me.clearSelectedRecord();
+
+                    record = store.findRecord(
+                        'DBInstanceIdentifier',
+                        dbInstanceData['DBInstanceIdentifier']
+                    );
+                }
+
+                me.setSelectedRecord(record);
+
+                me.updateDbInstancesTask.start(true);
+            }
+
+            return me;
         },
 
         listeners: {
@@ -69,52 +263,146 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                 toolbar.down('#reboot').setDisabled(!hasSelected
                     || !me.areDbInstancesAvailable(selections)
                 );
+            },
+
+            afterrender: function (grid) {
+                grid.updateDbInstancesTask = Ext.create('Scalr.ui.RepeatableTask', {
+                    scope: dbInstancesStore,
+                    handleRequest: true,
+                    interval: 60000,
+                    run: dbInstancesStore.updateDbInstances,
+                    subscribers: {
+                        start: 'load',
+                        restart: 'refresh',
+                        stop: ['beforeload', {
+                            event: 'deactivate',
+                            scope: panel
+                        }],
+                        destroy: {
+                            event: 'beforedestroy',
+                            scope: panel
+                        }
+                    },
+                    stopIf: function (store, records) {
+                        return Ext.isEmpty(records);
+                    }
+                });
+
+                dbInstancesStore.on('updaterecords', grid.maybeReloadSelectedRecord, grid);
+
+                Scalr.event.on('update', grid.updatePage, grid);
+            },
+
+            destroy: function (grid) {
+                Scalr.event.un('update', grid.updatePage, grid);
             }
         },
 
-        collectSelectedDbInstancesIds: function () {
+        maybeReloadSelectedRecord: function (dbInstanceIdentifiers) {
+            dbInstanceIdentifiers = Ext.isArray(dbInstanceIdentifiers)
+                ? dbInstanceIdentifiers
+                : [dbInstanceIdentifiers];
+
+            var me = this;
+
+            var selectedRecord = me.getSelectedRecord();
+
+            var isSelectedInstanceBeingDeleted = !Ext.isEmpty(selectedRecord)
+                && Ext.Array.contains(
+                    dbInstanceIdentifiers,
+                    selectedRecord.get('DBInstanceIdentifier')
+                );
+
+            if (isSelectedInstanceBeingDeleted) {
+                me.clearSelectedRecord();
+                me.setSelectedRecord(selectedRecord);
+            }
+
+            return isSelectedInstanceBeingDeleted;
+        },
+
+        collectSelectedDbInstancesIds: function (collectClustersIds) {
             var me = this;
 
             return Ext.Array.map(
                 me.getSelectionModel().getSelection(),
 
                 function (record) {
-                    return record.get('name');
+                    return !collectClustersIds
+                        ? record.get('DBInstanceIdentifier')
+                        : {
+                            dbInstanceIdentifier: record.get('DBInstanceIdentifier'),
+                            dbClusterIdentifier: record.get('Engine') === 'aurora'
+                                ? record.get('DBClusterIdentifier')
+                                : null
+                        };
                 }
             );
         },
 
-        terminateDbInstance: function (dbInstanceId) {
+        updateProcessedRecords: function (dbInstancesIdentifiers, dbInstancesStatus) {
             var me = this;
 
-            var isOperationMultiple = Ext.isArray(dbInstanceId);
+            if (Ext.isEmpty(dbInstancesIdentifiers)) {
+                return me;
+            }
+
+            var store = me.getStore();
+            var selectionModel = me.getSelectionModel();
+
+            Ext.Array.each(dbInstancesIdentifiers, function(dbInstanceIdentifier) {
+                selectionModel.deselect(
+                    store.setDbInstanceStatus(
+                        dbInstanceIdentifier,
+                        dbInstancesStatus
+                    )
+                );
+            });
+
+            me.maybeReloadSelectedRecord(dbInstancesIdentifiers);
+
+            return me;
+        },
+
+        terminateDbInstance: function (dbInstancesData) {
+            var me = this;
+
+            var isOperationMultiple = Ext.isArray(dbInstancesData);
+
+            var dbInstanceIdentifier = !isOperationMultiple
+                ? dbInstancesData.dbInstanceIdentifier
+                : Ext.Array.map(dbInstancesData, function (instanceData) {
+                    return instanceData.dbInstanceIdentifier;
+                });
 
             Scalr.Request({
                 confirmBox: {
                     type: 'terminate',
                     msg: !isOperationMultiple
-                        ? 'Terminate server <b>' + dbInstanceId + '</b> ?<p>' +
+                        ? 'Terminate server <b>' + dbInstanceIdentifier + '</b> ?<p>' +
                             '<i> This action will completely remove this server from AWS.<br>' +
                             'All data that has not been snapshotted will be lost.</i>'
                         : 'Terminate selected server(s): %s ?<p>' +
                             '<i> This action will completely remove this servers from AWS.<br>' +
                             'All data that has not been snapshotted will be lost.</i>',
-                    objects: isOperationMultiple ? dbInstanceId : null
+                    objects: isOperationMultiple ? dbInstanceIdentifier : null
                 },
                 processBox: {
                     type: 'terminate',
                     msg: 'Sending terminate command...'
                 },
-                url: '/tools/aws/rds/instances/xTerminate/',
+                url: '/tools/aws/rds/instances/xTerminate',
                 params: {
-                    cloudLocation: me.down('#cloudLocation').getValue(),
+                    cloudLocation: me.getCloudLocation(),
                     dbInstancesIds: Ext.encode(
-                        !isOperationMultiple ? [dbInstanceId] : dbInstanceId
+                        !isOperationMultiple ? [dbInstancesData] : dbInstancesData
                     )
                 },
                 success: function (response) {
-                    store.load();
-                    grid.setSelection();
+                    me.updateProcessedRecords(response.processed, 'deleting');
+                },
+                failure: function (response) {
+                    me.updateProcessedRecords(response.processed, 'deleting');
                 }
             });
 
@@ -124,9 +412,14 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
         terminateSelectedDbInstance: function () {
             var me = this;
 
-            me.terminateDbInstance(
-                me.getSelectedRecord().get('name')
-            );
+            var record = me.getSelectedRecord();
+
+            me.terminateDbInstance({
+                dbInstanceIdentifier: record.get('DBInstanceIdentifier'),
+                dbClusterIdentifier: record.get('Engine') === 'aurora'
+                    ? record.get('DBClusterIdentifier')
+                    : null
+            });
 
             return me;
         },
@@ -135,39 +428,41 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             var me = this;
 
             me.terminateDbInstance(
-                me.collectSelectedDbInstancesIds()
+                me.collectSelectedDbInstancesIds(true)
             );
 
             return me;
         },
 
-        rebootDbInstance: function (dbInstanceId) {
+        rebootDbInstance: function (dbInstanceIdentifier) {
             var me = this;
 
-            var isOperationMultiple = Ext.isArray(dbInstanceId);
+            var isOperationMultiple = Ext.isArray(dbInstanceIdentifier);
 
             Scalr.Request({
                 confirmBox: {
                     type: 'reboot',
                     msg: !isOperationMultiple
-                        ? 'Reboot server <b>' + dbInstanceId + '</b> ?'
+                        ? 'Reboot server <b>' + dbInstanceIdentifier + '</b> ?'
                         : 'Reboot selected server(s): %s ?',
-                    objects: isOperationMultiple ? dbInstanceId : null
+                    objects: isOperationMultiple ? dbInstanceIdentifier : null
                 },
                 processBox: {
                     type: 'reboot',
                     msg: 'Sending reboot command...'
                 },
-                url: '/tools/aws/rds/instances/xReboot/',
+                url: '/tools/aws/rds/instances/xReboot',
                 params: {
-                    cloudLocation: me.down('#cloudLocation').getValue(),
+                    cloudLocation: me.getCloudLocation(),
                     dbInstancesIds: Ext.encode(
-                        !isOperationMultiple ? [dbInstanceId] : dbInstanceId
+                        !isOperationMultiple ? [dbInstanceIdentifier] : dbInstanceIdentifier
                     )
                 },
                 success: function (response) {
-                    store.load();
-                    grid.setSelection();
+                    me.updateProcessedRecords(response.processed, 'rebooting');
+                },
+                failure: function (response) {
+                    me.updateProcessedRecords(response.processed, 'rebooting');
                 }
             });
 
@@ -178,7 +473,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             var me = this;
 
             me.rebootDbInstance(
-                me.getSelectedRecord().get('name')
+                me.getSelectedRecord().get('DBInstanceIdentifier')
             );
 
             return me;
@@ -194,21 +489,43 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             return me;
         },
 
+        modifyDbInstance: function (dbInstanceIdentifier, vpcId) {
+            var me = this;
+
+            var requestParams = {
+                cloudLocation: me.getCloudLocation()
+            };
+
+            if (!Ext.isEmpty(vpcId)) {
+                requestParams.vpcId = vpcId;
+            }
+
+            Scalr.event.fireEvent('redirect',
+                '#/tools/aws/rds/instances/' + dbInstanceIdentifier
+                + '/edit?'
+                + Ext.Object.toQueryString(requestParams)
+            );
+
+            return me;
+        },
+
         modifySelectedDbInstance: function () {
             var me = this;
 
-            Scalr.event.fireEvent('redirect',
-                '#/tools/aws/rds/instances/' + me.getSelectedRecord().get('name') +
-                '/edit?cloudLocation=' + me.down('#cloudLocation').getValue()
+            var selectedRecord = me.getSelectedRecord();
+
+            me.modifyDbInstance(
+                selectedRecord.get('DBInstanceIdentifier'),
+                selectedRecord.get('VpcId')
             );
 
             return me;
         },
 
         columns: [{
-            text: "DB Instance",
+            text: 'DB Instance',
             flex: 1,
-            dataIndex: 'name',
+            dataIndex: 'DBInstanceIdentifier',
             sortable: true
         }, {
             text: 'Used on',
@@ -225,22 +542,29 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                 return '&mdash;';
             }
         }, {
-            text: "Engine",
+            text: 'Engine',
             xtype: 'templatecolumn',
             flex: 0.7,
             minWidth: 160,
-            tpl: '{[this.beautifyEngine(values.engine, values.engineVersion)]}',
+            tpl: '{[this.beautifyEngine(values.Engine, values.EngineVersion)]}',
             sortable: false
         }, {
-            text: "Placement",
+            text: 'Placement',
+            xtype: 'templatecolumn',
             width: 120,
-            dataIndex: 'avail_zone',
-            sortable: false
+            sortable: false,
+            tpl: [
+                '<tpl if="!Ext.isEmpty(AvailabilityZone)">',
+                    '{AvailabilityZone}',
+                '<tpl else>',
+                    '&mdash;',
+                '</tpl>'
+            ]
         }, {
-            header: "Status",
+            header: 'Status',
             minWidth: 160,
             width: 130,
-            dataIndex: 'status',
+            dataIndex: 'DBInstanceStatus',
             sortable: true,
             xtype: 'statuscolumn',
             statustype: 'rdsdbinstance'
@@ -249,108 +573,161 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             menu: [{
                 iconCls: 'x-menu-icon-edit',
                 text: 'Modify',
-                showAsQuickAction: true,
-                getVisibility: function(data) {
-                    return data['status'] === 'available';
+                showAsQuickAction: 1,
+                getVisibility: function (data) {
+                    return data['DBInstanceStatus'] === 'available' && Scalr.isAllowed('AWS_RDS', 'manage');
                 },
-                menuHandler: function(data) {
-                    Scalr.event.fireEvent('redirect', '#/tools/aws/rds/instances/' + data['name'] + '/edit?cloudLocation=' + store.proxy.extraParams.cloudLocation);
+                menuHandler: function (data) {
+                    dbInstancesGrid.modifyDbInstance(
+                        data['DBInstanceIdentifier'],
+                        data['VpcId']
+                    );
                 }
             }, {
                 xtype: 'menuseparator'
             }, {
                 text: 'Create snapshot',
                 iconCls: 'x-menu-icon-createserversnapshot',
-                getVisibility: function(data) {
-                    return data['status'] === 'available';
+                getVisibility: function (data) {
+                    return Scalr.isAllowed('AWS_RDS', 'manage')
+                        && data['Engine'] !== 'aurora'
+                        && data['DBInstanceStatus'] === 'available';
                 },
                 request: {
                     processBox: {
                         type: 'action'
                     },
-                    url: '/tools/aws/rds/snapshots/xCreateSnapshot/',
-                    dataHandler: function(data) {
+                    url: '/tools/aws/rds/snapshots/xCreateSnapshot',
+                    dataHandler: function (data) {
                         return {
-                            dbinstance: data['name'],
-                            cloudLocation: store.proxy.extraParams.cloudLocation
-                        }
+                            cloudLocation: dbInstancesGrid.getCloudLocation(),
+                            dbInstanceId: data['DBInstanceIdentifier']
+                        };
                     },
-                    success: function() {
-                        Scalr.event.fireEvent('redirect', '#/tools/aws/rds/snapshots?dbinstance=' + this.params.dbinstance + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
+                    success: function () {
+                        Scalr.event.fireEvent('redirect',
+                            '#/tools/aws/rds/snapshots?' + Ext.Object.toQueryString(this.params)
+                        );
                     }
                 }
             }, {
                 text: 'Manage snapshots',
                 iconCls: 'x-menu-icon-configure',
-                menuHandler: function(data) {
-                    Scalr.event.fireEvent('redirect', '#/tools/aws/rds/snapshots?dbinstance=' + data['name'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
+                showAsQuickAction: 4,
+                getVisibility: function (data) {
+                    return Scalr.isAllowed('AWS_RDS', 'manage') && data['Engine'] !== 'aurora';
+                },
+                menuHandler: function (data) {
+                    Scalr.event.fireEvent('redirect',
+                        '#/tools/aws/rds/snapshots?' + Ext.Object.toQueryString({
+                            dbInstanceId: data['DBInstanceIdentifier'],
+                            cloudLocation: dbInstancesGrid.getCloudLocation()
+                        })
+                    );
                 }
             }, {
                 xtype: 'menuseparator'
             }, {
                 text: 'Create read replica',
                 iconCls: 'x-menu-icon-create',
-                getVisibility: function(data) {
-                    var engine = data['engine'];
+                getVisibility: function (data) {
+                    var engine = data['Engine'];
 
-                    return !data['isReplica'] && (engine === 'mysql' || engine === 'postgres') && data['status'] === 'available';
+                    return !data['isReplica']
+                        && Ext.Array.contains(['aurora', 'mysql', 'postgres', 'mariadb'], engine)
+                        && data['DBInstanceStatus'] === 'available' && Scalr.isAllowed('AWS_RDS', 'manage');
                 },
-                menuHandler: function(data) {
-                    Scalr.event.fireEvent('redirect', '#/tools/aws/rds/instances/' + data['name'] + '/createReadReplica?cloudLocation=' + store.proxy.extraParams.cloudLocation);
+                menuHandler: function (data) {
+                    Scalr.event.fireEvent('redirect',
+                        '#/tools/aws/rds/instances/' + data['DBInstanceIdentifier']
+                        + '/createReadReplica?cloudLocation=' + dbInstancesGrid.getCloudLocation()
+                    );
                 }
             }, {
                 text: 'Promote read replica',
                 iconCls: 'x-menu-icon-promotereplica',
-                getVisibility: function(data) {
-                    return data['isReplica'] && data['status'] === 'available';
+                getVisibility: function (data) {
+                    return data['isReplica'] && data['DBInstanceStatus'] === 'available' && Scalr.isAllowed('AWS_RDS', 'manage');
                 },
-                menuHandler: function(data) {
-                    Scalr.event.fireEvent('redirect', '#/tools/aws/rds/instances/' + data['name'] + '/promoteReadReplica?cloudLocation=' + store.proxy.extraParams.cloudLocation);
+                menuHandler: function (data) {
+                    Scalr.event.fireEvent('redirect',
+                        '#/tools/aws/rds/instances/' + data['DBInstanceIdentifier']
+                        + '/promoteReadReplica?cloudLocation=' + dbInstancesGrid.getCloudLocation()
+                    );
                 }
             }, {
                 xtype: 'menuseparator'
             }, {
                 text: 'CloudWatch statistics',
                 iconCls: 'x-menu-icon-statsload',
-                menuHandler: function(data) {
-                    Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/cloudwatch?objectId=' + data['name'] + '&object=DBInstanceIdentifier&namespace=AWS/RDS&region=' + store.proxy.extraParams.cloudLocation);
+                showAsQuickAction: 5,
+                getVisibility: function(data) {
+                    return Scalr.isAllowed('AWS_CLOUDWATCH');
+                },
+                menuHandler: function (data) {
+                    Scalr.event.fireEvent('redirect',
+                        '#/tools/aws/ec2/cloudwatch?' + Ext.Object.toQueryString({
+                            objectId: data['DBInstanceIdentifier'],
+                            object: 'DBInstanceIdentifier',
+                            namespace: 'AWS/RDS',
+                            region: dbInstancesGrid.getCloudLocation()
+                        })
+                    );
                 }
             }, {
                 xtype: 'menuseparator'
             }, {
                 text: 'Events log',
                 iconCls: 'x-menu-icon-logs',
-                menuHandler: function(data) {
-                    Scalr.event.fireEvent('redirect', '#/tools/aws/rds/logs?name=' + data['name'] + '&type=db-instance&cloudLocation=' + store.proxy.extraParams.cloudLocation);
+                showAsQuickAction: 6,
+                getVisibility: function(data) {
+                    return Scalr.isAllowed('LOGS_EVENT_LOGS');
+                },
+                menuHandler: function (data) {
+                    Scalr.event.fireEvent('redirect',
+                        '#/tools/aws/rds/logs?' + Ext.Object.toQueryString({
+                            name: data['DBInstanceIdentifier'],
+                            type: 'db-instance',
+                            cloudLocation: dbInstancesGrid.getCloudLocation()
+                        })
+                    );
                 }
             }, {
                 xtype: 'menuseparator'
             }, {
                 text: 'Reboot',
                 iconCls: 'x-menu-icon-reboot',
-                showAsQuickAction: true,
-                getVisibility: function(data) {
-                    return data.status === 'available';
+                showAsQuickAction: 2,
+                getVisibility: function (data) {
+                    return data['DBInstanceStatus'] === 'available' && Scalr.isAllowed('AWS_RDS', 'manage');
                 },
-                menuHandler: function(data) {
-                    grid.rebootDbInstance(data.name);
+                menuHandler: function (data) {
+                    dbInstancesGrid.rebootDbInstance(
+                        data['DBInstanceIdentifier']
+                    );
                 }
             }, {
                 text: 'Terminate',
                 iconCls: 'x-menu-icon-terminate',
-                showAsQuickAction: true,
-                getVisibility: function(data) {
-                    return data.status !== 'deleting';
+                showAsQuickAction: 3,
+                getVisibility: function (data) {
+                    var dbInstanceStatus = data['DBInstanceStatus'];
+                    return dbInstanceStatus !== 'deleting' && dbInstanceStatus !== 'deleted' && Scalr.isAllowed('AWS_RDS', 'manage');
                 },
-                menuHandler: function(data) {
-                    grid.terminateDbInstance(data.name);
+                menuHandler: function (data) {
+                    dbInstancesGrid.terminateDbInstance({
+                        dbInstanceIdentifier: data['DBInstanceIdentifier'],
+                        dbClusterIdentifier: data['Engine'] === 'aurora'
+                            ? data['DBClusterIdentifier']
+                            : null
+                    });
                 }
             }]
         }],
 
         dockedItems: [{
             xtype: 'toolbar',
-            store: store,
+            store: dbInstancesStore,
             dock: 'top',
             ui: 'simple',
 
@@ -360,7 +737,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
 
             items: [{
                 xtype: 'filterfield',
-                store: store,
+                store: dbInstancesStore,
                 margin: 0,
                 flex: 1,
                 minWidth: 100,
@@ -368,13 +745,14 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             }, {
                 xtype: 'cloudlocationfield',
                 platforms: [ 'ec2' ],
-                gridStore: store
+                gridStore: dbInstancesStore
             }, {
                 xtype: 'tbfill'
             }, {
                 text: 'New DB Instance',
                 cls: 'x-btn-green',
-                handler: function() {
+                hidden: !Scalr.isAllowed('AWS_RDS', 'manage'),
+                handler: function () {
                     Scalr.event.fireEvent('redirect', '#/tools/aws/rds/instances/create');
                 }
             }, {
@@ -382,15 +760,16 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                 iconCls: 'x-btn-icon-refresh',
                 tooltip: 'Refresh',
                 handler: function () {
-                    store.clearAndLoad();
+                    dbInstancesStore.clearAndLoad();
                 }
             }, {
                 itemId: 'reboot',
                 iconCls: 'x-btn-icon-reboot',
                 tooltip: 'Select one or more DB Instances to reboot them',
                 disabled: true,
+                hidden: !Scalr.isAllowed('AWS_RDS', 'manage'),
                 handler: function () {
-                    grid.rebootSelectedDbInstances();
+                    dbInstancesGrid.rebootSelectedDbInstances();
                 }
             }, {
                 itemId: 'terminate',
@@ -398,14 +777,15 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                 cls: 'x-btn-red',
                 tooltip: 'Select one or more DB Instances to terminate them',
                 disabled: true,
+                hidden: !Scalr.isAllowed('AWS_RDS', 'manage'),
                 handler: function () {
-                    grid.terminateSelectedDbInstances();
+                    dbInstancesGrid.terminateSelectedDbInstances();
                 }
             }]
         }]
     });
 
-    var form = Ext.create('Ext.form.Panel', {
+    var dbInstanceForm = Ext.create('Ext.form.Panel', {
         hidden: true,
         autoScroll: true,
 
@@ -417,35 +797,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             return engine.substring(0, 6) === 'oracle';
         },
 
-        getDbInstanceData: function (dbInstanceName, cloudLocation, callback, scope) {
-            var me = this;
-
-            me.hide();
-
-            Scalr.Request({
-                processBox: {
-                    type: 'load'
-                },
-                url: '/tools/aws/rds/instances/xGetDbInstanceData',
-                params: {
-                    dbInstanceName: dbInstanceName,
-                    cloudLocation: cloudLocation
-                },
-                success: function (response) {
-                    var dbInstanceData = response.instance;
-
-                    if (!Ext.isEmpty(dbInstanceData)) {
-                        callback.call(scope, dbInstanceData);
-                    }
-
-                    me.show();
-                },
-                failure: function () {
-                    me.show();
-                }
-            });
-
-            return me;
+        isAurora: function (engine) {
+            return engine === 'aurora';
         },
 
         hideIopsField: function (hidden) {
@@ -480,31 +833,31 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
 
             var securityGroupsField = me.down('[name=securityGroups]');
             securityGroupsField.isVpcDefined = isVpcDefined;
-            securityGroupsField.cloudLocation = grid.down('#cloudLocation').getValue();
+            securityGroupsField.cloudLocation = dbInstancesGrid.getCloudLocation();
 
             return me;
         },
 
-        applyDbInstanceData: function (data) {
+        hideStorageFieldSet: function (hidden) {
             var me = this;
 
-            var vpcSecurityGroups = data['VpcSecurityGroups'];
-            var isVpcDefined = !Ext.isEmpty(vpcSecurityGroups);
+            me.down('#storage').setVisible(!hidden);
 
-            data.securityGroups = isVpcDefined
-                ? vpcSecurityGroups
-                : data['DBSecurityGroups'];
+            return me;
+        },
 
-            me
-                .hideIopsField(Ext.isEmpty(data['Iops']))
-                .hideSourceInstanceField(!data.isReplica)
-                .hideCharacterSetNameField(
-                    !me.isOracle(data['Engine'])
-                )
-                .setSecurityGroupsSettings(isVpcDefined)
-                .getForm().setValues(data);
+        hideKmsKeyField: function (hidden) {
+            var me = this;
 
-            me.getRecord().set(data);
+            me.down('[name=KmsKeyId]').setVisible(!hidden);
+
+            return me;
+        },
+
+        hideClusterIdField: function (hidden) {
+            var me = this;
+
+            me.down('[name=DBClusterIdentifier]').setVisible(!hidden);
 
             return me;
         },
@@ -513,6 +866,18 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             var me = this;
 
             me.down('#main').setTitle(value);
+
+            return me;
+        },
+
+        disableTerminateButton: function (dbInstanceStatus) {
+            var me = this;
+
+            me.down('#terminate')
+                .setDisabled(
+                    dbInstanceStatus === 'deleting'
+                    || dbInstanceStatus === 'deleted'
+                );
 
             return me;
         },
@@ -526,11 +891,15 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             return me;
         },
 
-        disableTerminateButton: function (dbInstanceStatus) {
+        setFarmName: function (farmId, farmName) {
             var me = this;
 
-            me.down('#terminate')
-                .setDisabled(dbInstanceStatus === 'deleting');
+            if (!Ext.isEmpty(farmId)) {
+                me.down('#usedOn')
+                    .setValue(
+                        '<a href="#/farms?farmId=' + farmId + '">' + farmName + '</a>'
+                    );
+            }
 
             return me;
         },
@@ -539,38 +908,55 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             beforeloadrecord: function (record) {
                 var me = this;
 
-                if (!Ext.isEmpty(record.get('Address'))) {
-                    me
-                        .hideIopsField(Ext.isEmpty(record.get('Iops')))
-                        .hideSourceInstanceField(!record.get('isReplica'))
-                        .hideCharacterSetNameField(
-                            !me.isOracle(record.get('Engine'))
-                        )
-                        .setSecurityGroupsSettings(
-                            !Ext.isEmpty(record.get('VpcSecurityGroups'))
-                        );
-                }
+                var engine = record.get('Engine');
+                var isAurora = me.isAurora(engine);
+
+                me
+                    .hideIopsField(
+                        record.get('Iops') === 0
+                    )
+                    .hideSourceInstanceField(
+                        !record.get('isReplica')
+                    )
+                    .hideCharacterSetNameField(
+                        !me.isOracle(engine)
+                    )
+                    .hideStorageFieldSet(isAurora)
+                    .hideClusterIdField(!isAurora)
+                    .hideKmsKeyField(
+                        Ext.isEmpty(record.get('KmsKeyId'))
+                    )
+                    .setSecurityGroupsSettings(
+                        !Ext.isEmpty(record.get('VpcId'))
+                    );
+
+                return true;
             },
             afterloadrecord: function (record) {
                 var me = this;
 
-                var dbInstanceName = record.get('name');
-
-                if (Ext.isEmpty(record.get('Address'))) {
-                    me.getDbInstanceData(
-                        dbInstanceName,
-                        grid.down('#cloudLocation').getValue(),
-                        me.applyDbInstanceData,
-                        me
-                    );
-                }
-
-                var dbInstanceStatus = record.get('status');
+                var dbInstanceIdentifier = record.get('DBInstanceIdentifier');
+                var dbInstanceStatus = record.get('DBInstanceStatus');
+                var isAurora = me.isAurora(record.get('Engine'));
 
                 me
-                    .setHeader(dbInstanceName)
+                    .setHeader(dbInstanceIdentifier)
+                    .setFarmName(
+                        record.get('farmId'),
+                        record.get('farmName')
+                    )
                     .disableModifyButton(dbInstanceStatus)
                     .disableTerminateButton(dbInstanceStatus);
+
+                var securityGroupsField = me.down('[name=securityGroups]');
+
+                securityGroupsField.setValue(
+                    !securityGroupsField.isVpcDefined
+                        ? record.get('DBSecurityGroups')
+                        : record.get('VpcSecurityGroups')
+                );
+
+                return true;
             }
         },
 
@@ -587,24 +973,27 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             itemId: 'main',
             headerCls: 'x-fieldset-separator-bottom',
             items: [{
-                name: 'farmId',
+                itemId: 'usedOn',
                 fieldLabel: 'Used on',
-                renderer: function (farmId) {
-                    var record = form.getRecord();
-
-                    if (!Ext.isEmpty(record)) {
-                        var farmName = record.get('farmName');
-
-                        if (!Ext.isEmpty(farmName)) {
-                            return '<a href="#/farms?farmId=' + farmId + '">' + farmName + '</a>';
-                        }
-                    }
-
-                    return '&mdash;';
+                value: '&mdash;'
+            }, {
+                name: 'DBClusterIdentifier',
+                fieldLabel: 'DB Cluster Identifier',
+                renderer: function (value) {
+                    return Ext.isEmpty(value)
+                        ? '&mdash;'
+                        : '<a href="#/tools/aws/rds/clusters/view?' + Ext.Object.toQueryString({
+                            platform: 'ec2',
+                            cloudLocation: dbInstancesGrid.getCloudLocation(),
+                            dBClusterIdentifier: value
+                        }) + '">' + value + '</a>';
                 }
             }, {
                 name: 'Address',
-                fieldLabel: 'DNS Name'
+                fieldLabel: 'DNS Name',
+                renderer: function (value) {
+                    return !Ext.isEmpty(value) ? value : '&mdash;';
+                }
             }, {
                 name: 'InstanceCreateTime',
                 fieldLabel: 'Created at'
@@ -612,20 +1001,34 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                 name: 'isReplica',
                 fieldLabel: 'Read Replica',
                 renderer: function (value) {
-                    return !Ext.isEmpty(value) ? 'No' : 'Yes';
+                    return !value
+                        ? '&mdash;'
+                        : '<div class="x-grid-icon x-grid-icon-ok" style="cursor: default;"></div>';
                 }
             }, {
                 name: 'ReadReplicaSourceDBInstanceIdentifier',
-                fieldLabel: 'Source Instance'
+                fieldLabel: 'Source Instance',
+                renderer: function (value) {
+                    return !Ext.isEmpty(value) ? value : '&mdash;';
+                }
             }, {
                 name: 'DBInstanceClass',
                 fieldLabel: 'Type'
             }, {
                 name: 'MultiAZ',
-                fieldLabel: 'Multi-AZ Deployment'
+                fieldLabel: 'Multi-AZ Deployment',
+                renderer: function (value) {
+                    // fixme: string to boolean
+                    return value !== 'Enabled'
+                        ? '<span data-qtip="Disabled">&mdash;</span>'
+                        : '<div class="x-grid-icon x-grid-icon-ok" data-qtip="Enabled" style="cursor: default;"></div>';
+                }
             }, {
                 name: 'AvailabilityZone',
-                fieldLabel: 'Availability Zone'
+                fieldLabel: 'Availability Zone',
+                renderer: function (value) {
+                    return !Ext.isEmpty(value) ? value : '&mdash;';
+                }
             }, {
                 name: 'securityGroups',
                 fieldLabel: 'Security Groups',
@@ -679,6 +1082,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             }]
         }, {
             title: 'Storage',
+            itemId: 'storage',
             items: [{
                 name: 'StorageType',
                 fieldLabel: 'Storage type',
@@ -695,7 +1099,20 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                 fieldLabel: 'IOPS'
             }, {
                 name: 'AllocatedStorage',
-                fieldLabel: 'Allocated Storage'
+                fieldLabel: 'Allocated Storage',
+                renderer: function (value) {
+                    if (!Ext.isEmpty(value)) {
+                        // temp fix: wait for pending values refactoring
+                        return value.indexOf('New value') !== -1
+                            ? value
+                            : value + ' GB';
+                    }
+
+                    return '&mdash;';
+                }
+            }, {
+                name: 'KmsKeyId',
+                fieldLabel: 'KMS key'
             }]
         }, {
             title: 'Database Engine',
@@ -730,7 +1147,10 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                 fieldLabel: 'Character Set Name'
             }, {
                 name: 'Port',
-                fieldLabel: 'Port'
+                fieldLabel: 'Port',
+                renderer: function (value) {
+                    return value !== 0 ? value : '&mdash;';
+                }
             }]
         }, {
             title: 'Database',
@@ -739,7 +1159,10 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                 fieldLabel: 'Master Username'
             }, {
                 name: 'DBName',
-                fieldLabel: 'Database Name'
+                fieldLabel: 'Database Name',
+                renderer: function (value) {
+                    return !Ext.isEmpty(value) ? value : '&mdash;';
+                }
             }]
         }, {
             title: 'Maintenance Windows and Backups',
@@ -747,7 +1170,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                 name: 'AutoMinorVersionUpgrade',
                 fieldLabel: 'Auto Minor Version Upgrade',
                 renderer: function (value) {
-                    return value ? 'Enabled' : 'Disabled';
+                    return !value
+                        ? '<span data-qtip="Disabled">&mdash;</span>'
+                        : '<div class="x-grid-icon x-grid-icon-ok" data-qtip="Enabled" style="cursor: default;"></div>';
                 }
             }, {
                 name: 'PreferredMaintenanceWindow',
@@ -757,7 +1182,13 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                 fieldLabel: 'Preferred Backup Window'
             }, {
                 name: 'BackupRetentionPeriod',
-                fieldLabel: 'Backup Retention Period'
+                fieldLabel: 'Backup Retention Period',
+                renderer: function (value) {
+                    if (Ext.isEmpty(value)) {
+                        return '&mdash;';
+                    }
+                    return value + (value === 1 ? 'day' : 'days');
+                }
             }]
         }],
 
@@ -765,6 +1196,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             xtype: 'container',
             dock: 'bottom',
             cls: 'x-docked-buttons',
+            hidden: !Scalr.isAllowed('AWS_RDS', 'manage'),
             layout: {
                 type: 'hbox',
                 pack: 'center'
@@ -772,14 +1204,14 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             maxWidth: 700,
             defaults: {
                 flex: 1,
-                maxWidth: 140
+                maxWidth: 160
             },
             items: [{
                 xtype: 'button',
                 itemId: 'modify',
                 text: 'Modify',
                 handler: function () {
-                    grid.modifySelectedDbInstance();
+                    dbInstancesGrid.modifySelectedDbInstance();
                 }
             }, {
                 xtype: 'button',
@@ -787,15 +1219,15 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                 cls: 'x-btn-red',
                 text: 'Terminate',
                 handler: function () {
-                    grid.terminateSelectedDbInstance();
+                    dbInstancesGrid.terminateSelectedDbInstance();
                 }
             }]
         }]
     });
 
-    return Ext.create('Ext.panel.Panel', {
+    var panel = Ext.create('Ext.panel.Panel', {
         stateful: true,
-        stateId: 'grid-scaling-metrics-view',
+        stateId: 'grid-tools-aws-rds-instances-view',
 
         layout: {
             type: 'hbox',
@@ -810,14 +1242,37 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             menuFavorite: true
         },
 
-        items: [ grid, {
+        items: [ dbInstancesGrid, {
             xtype: 'container',
             itemId: 'rightcol',
-            flex: .6,
+            flex: 0.6,
             maxWidth: 700,
             minWidth: 500,
             layout: 'fit',
-            items: [ form ]
-        }]
+            items: [ dbInstanceForm ]
+        }],
+
+        /** temp fix; todo: improve Scalr.ui.RepeatableTask */
+        restartTask: false,
+
+        listeners: {
+            activate: function () {
+                var me = this;
+
+                var updateDbInstancesTask = dbInstancesGrid.updateDbInstancesTask;
+
+                if (me.restartTask) {
+                    if (updateDbInstancesTask.isStopped() && dbInstancesStore.getCount() > 0) {
+                        updateDbInstancesTask.start(true);
+                    }
+                    return true;
+                }
+
+                me.restartTask = true;
+            }
+        }
+        /** end */
     });
+
+    return panel;
 });

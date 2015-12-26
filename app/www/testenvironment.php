@@ -34,10 +34,6 @@ if (!$windows) {
         $err[] = "System V semaphore must be enabled. Look at $PHPSITE/sem.installation.php";
     }
 
-    // Check SNMP
-    // if (!function_exists('snmpget')) {
-    //     $err[] = "Cannot find SNMP functions. Make sure that SNMP Functions enabled. Look at $PHPSITE/snmp.installation.php";
-    // }
 
 //     //Check RRDTool
 //     if (class_exists('RRDUpdater')) {
@@ -46,10 +42,8 @@ if (!$windows) {
 }
 
 // Check PECL_HTTP
-if (!class_exists('HTTPRequest')) {
-    $err[] = "Cannot find PECL_HTTP functions. Make sure that PECL_HTTP Functions enabled. Look at $PHPSITE/http.install.php";
-} else if (version_compare(phpversion('http'), '1.7.4', '<') || version_compare(phpversion('http'), '2.0.0', '>=')) {
-    $err[] = 'Version of the Pecl_Http extension must be >= 1.7.4 and < 2.0.0.';
+if (version_compare(phpversion('http'), '2.5.3', '<')) {
+    $err[] = "Version of the pecl_http extension must be at least 2.5.3. Look at $PHPSITE/http.install.php";
 }
 
 //SSH2
@@ -114,12 +108,6 @@ if (!function_exists('openssl_verify')) {
 // Check SOAP
 if (!class_exists('SoapClient')) {
     $err[] = "Cannot find SoapClient class. Make sure that SoapClient Extension enabled. Look at $PHPSITE/soap.installation.php";
-}
-
-// Checks php settings
-if (ini_get('http.persistent.handles.limit') !== "0") {
-    //HttpRequest should not share connection between different API requests
-    $err[] = sprintf("http.persistent.handles.limit must be set to 0. Current value is %s", ini_get('http.persistent.handles.limit'));
 }
 
 // Dev requirements

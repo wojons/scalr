@@ -19,7 +19,7 @@ class EventsTest extends ApiTestCase
 
     public function eventToDelete($eventId)
     {
-        static::$testData['Scalr\Model\Entity\EventDefinition'][] = $eventId;
+        static::toDelete('Scalr\Model\Entity\EventDefinition', $eventId);
     }
 
     public function getCriteria($environment = false)
@@ -38,11 +38,11 @@ class EventsTest extends ApiTestCase
         return [[ '$or' => $criteria ]];
     }
 
-    public function postEvent(array $eventData, $environment = false)
+    public function postEvent(array $eventData, $environment = false, $params = [])
     {
-        $uri = self::getUserApiUrl('/events', $environment);
+        $uri = $environment === false ? self::getAccountApiUrl('/events') : self::getUserApiUrl('/events', $environment);
 
-        $response = $this->request($uri, Request::METHOD_POST, [], $eventData);
+        $response = $this->request($uri, Request::METHOD_POST, $params, $eventData);
 
         $body = $response->getBody();
 
@@ -66,7 +66,7 @@ class EventsTest extends ApiTestCase
         $testName = str_replace('-', '', static::getTestName());
 
         $events = null;
-        $uri = self::getUserApiUrl('/events', false);
+        $uri = self::getAccountApiUrl('/events');
 
         static::createEntity(new EventDefinition(), [
             'name' => 'testAccount',
@@ -122,6 +122,16 @@ class EventsTest extends ApiTestCase
             'scope' => ScopeInterface::SCOPE_ACCOUNT
         ]);
 
+        $body = $create->getBody();
+        $this->assertEquals(201, $create->response->getStatus());
+        $this->assertFetchResponseNotEmpty($create);
+        $this->assertEventObjectNotEmpty($body->data);
+
+        $this->assertNotEmpty($body->data->id);
+        $this->assertEquals($testName, $body->data->id);
+        $this->assertEquals($testName, $body->data->description);
+        $this->assertEquals(ScopeInterface::SCOPE_ACCOUNT, $body->data->scope);
+
         $createSame = $this->postEvent([
             'id' => $testName,
             'description' => $testName,
@@ -140,21 +150,29 @@ class EventsTest extends ApiTestCase
 
         $scopeConflict = $this->postEvent([
             'id' => 'testEnvAccount',
-            'description' => 'testEnvAccount',
+            'description' => 'testEnvAccount-scope-conflict',
             'scope' => ScopeInterface::SCOPE_ACCOUNT
         ]);
 
         $this->assertErrorMessageContains($scopeConflict, 409, ErrorMessage::ERR_UNICITY_VIOLATION);
 
-        $body = $create->getBody();
-        $this->assertEquals(201, $create->response->getStatus());
-        $this->assertFetchResponseNotEmpty($create);
-        $this->assertEventObjectNotEmpty($body->data);
+        //test lower-scope replacement
+        $replace = $this->postEvent([
+            'id' => 'testEnvAccount',
+            'description' => 'testEnvAccount-scope-replace',
+            'scope' => ScopeInterface::SCOPE_ACCOUNT
+        ], false, [ 'replace' => true ]);
 
-        $this->assertNotEmpty($body->data->id);
-        $this->assertEquals($testName, $body->data->id);
-        $this->assertEquals($testName, $body->data->description);
-        $this->assertEquals(ScopeInterface::SCOPE_ACCOUNT, $body->data->scope);
+        $this->assertEquals(201, $replace->response->getStatus());
+
+        $dbEvents = EventDefinition::find([[ 'name' => 'testEnvAccount' ], [ 'accountId' => $this->getUser()->getAccountId() ]]);
+
+        $this->assertEquals(1, count($dbEvents));
+
+        /* @var $dbEvent EventDefinition */
+        foreach ($dbEvents as $dbEvent) {
+            $this->assertEquals(null, $dbEvent->envId);
+        }
 
         // test filtering
         $describe = $this->request($uri, Request::METHOD_GET, ['description' => $testName]);

@@ -25,7 +25,7 @@ abstract class ScalrRESTService
     public function __construct()
     {
         $this->DB = \Scalr::getDb();
-        $this->Logger = Logger::getLogger(__CLASS__);
+        $this->Logger = \Scalr::getContainer()->logger(__CLASS__);
     }
 
     /**
@@ -41,7 +41,8 @@ abstract class ScalrRESTService
 
     protected function GetArg($name)
     {
-        return $this->Args[strtolower($name)];
+        $name = strtolower($name);
+        return isset($this->Args[$name]) ? $this->Args[$name] : null;
     }
 
     /**

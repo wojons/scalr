@@ -23,15 +23,10 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
 
     }( Scalr.getGovernance('ec2', 'aws.vpc') );
 
-    var isCurrentRegionAllowed = true;
-
-    if (vpcPolicy.enabled) {
-
-        var allowedRegions = vpcPolicy.regions;
-
-        isCurrentRegionAllowed = Ext.isEmpty(allowedRegions)
-            || Ext.Array.contains(allowedRegions, cloudLocation);
-    }
+    var isCurrentRegionAllowed = !(vpcPolicy.enabled
+        && vpcPolicy.launchWithVpcOnly
+        && !Ext.Array.contains(vpcPolicy.regions, cloudLocation)
+    );
 
     var form = Ext.create('Ext.form.Panel', {
         title: 'Tools &raquo; Amazon Web Services &raquo; RDS &raquo; DB Instances &raquo; Restore',
@@ -106,7 +101,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                     filters: [{
                         id: 'governancePolicyFilter',
                         filterFn: function (record) {
-                            return vpcPolicy.enabled
+                            return vpcPolicy.enabled && vpcPolicy.launchWithVpcOnly
                                 ? Ext.Array.contains(vpcPolicy.regions, record.get('id'))
                                 : true;
                         }
@@ -121,39 +116,46 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                 listeners: {
                     change: function (field, value) {
 
-                        if (!isCurrentRegionAllowed || (vpcPolicy.enabled && !vpcPolicy.launchWithVpcOnly)) {
+                        if (!isCurrentRegionAllowed/* || (vpcPolicy.enabled && !vpcPolicy.launchWithVpcOnly)*/) {
                             return;
                         }
 
-                        Scalr.Request({
-                            processBox: {
-                                type: 'load'
-                            },
-                            url: '/platforms/ec2/xGetVpcList',
-                            params: {
-                                cloudLocation: value
-                            },
-                            success: function (data) {
-                                var vpc = data.vpc;
-                                var defaultVpc = data.default;
+                        var vpcField = field.next();
 
-                                if (!defaultVpc) {
-                                    vpc.unshift({
-                                        id: 0,
-                                        name: ''
-                                    });
+                        if (!vpcPolicy.enabled || !Ext.isEmpty(vpcPolicy.vpcs[value])) {
+                            Scalr.Request({
+                                processBox: {
+                                    type: 'load'
+                                },
+                                url: '/platforms/ec2/xGetVpcList',
+                                params: {
+                                    cloudLocation: value,
+                                    serviceName: 'rds'
+                                },
+                                success: function (data) {
+                                    var vpc = data.vpc;
+                                    var defaultVpc = data.default;
+
+                                    if (!defaultVpc) {
+                                        vpc.unshift({
+                                            id: 0,
+                                            name: ''
+                                        });
+                                    }
+
+                                    var vpcStore = vpcField.getStore();
+
+                                    vpcStore.loadData(vpc);
+
+                                    vpcField.setValue(
+                                        snapshot['VpcId']
+                                    );
                                 }
+                            });
+                            return;
+                        }
 
-                                var vpcField = field.next();
-                                var vpcStore = vpcField.getStore();
-
-                                vpcStore.loadData(vpc);
-
-                                vpcField.setValue(
-                                    snapshot['VpcId']
-                                );
-                            }
-                        });
+                        vpcField.disable();
                     }
                 }
             }, {
@@ -179,9 +181,11 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                                 form.down('[name=cloudLocation]').getValue()
                                 ].ids;
 
+                            var vpcId = record.get('id');
+
                             return !Ext.isEmpty(allowedVpcs)
-                                ? Ext.Array.contains(allowedVpcs, record.get('id'))
-                                : true;
+                                ? (!vpcPolicy.launchWithVpcOnly ? vpcId === 0 : false) || Ext.Array.contains(allowedVpcs, vpcId)
+                                : (vpcPolicy.launchWithVpcOnly ? vpcId !== 0 : true);
                         }
                     }]
                 },
@@ -542,7 +546,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                         { id: 'sqlserver-se', name: 'Microsoft SQL Server SE' },
                         { id: 'sqlserver-ex', name: 'Microsoft SQL Server EX' },
                         { id: 'sqlserver-web', name: 'Microsoft SQL Server WEB' },
-                        { id: 'postgres', name: 'PostgreSQL' }
+                        { id: 'postgres', name: 'PostgreSQL' },
+                        { id: 'mariadb', name: 'MariaDB' }
                     ],
                     filters: [{
                         filterId: 'bySnapshotEngine',
@@ -569,7 +574,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                     ],
                     'sqlserver-ex': [{ licenseModel: 'license-included' }],
                     'sqlserver-web': [{ licenseModel: 'license-included' }],
-                    'postgres': [{ licenseModel: 'postgresql-license' }]
+                    'postgres': [{ licenseModel: 'postgresql-license' }],
+                    'mariadb': [{ licenseModel: 'general-public-license' }]
                 },
                 portValues: {
                     'mysql': 3306,
@@ -580,7 +586,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
                     'sqlserver-se': 1433,
                     'sqlserver-ex': 1433,
                     'sqlserver-web': 1433,
-                    'postgres': 5432
+                    'postgres': 5432,
+                    'mariadb': 3306
                 },
                 queryMode: 'local',
                 editable: false,
@@ -674,8 +681,12 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
         }, {
             xtype: 'fieldset',
             title: 'Database',
-            name: 'databaseSettings',
+            itemId: 'databaseSettings',
             hidden: snapshot['Engine'] === 'mysql',
+            defaults: {
+                labelWidth: 200,
+                width: 500
+            },
             items: [{
                 xtype: 'textfield',
                 fieldLabel: 'Initial Database Name',
@@ -718,6 +729,29 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.restore', function (loadParams, 
             return record.get('type') !== 'io1' || parseInt(snapshot['AllocatedStorage']) >= 100;
         }
     });
+
+    if (snapshot['Engine'] === 'mariadb') {
+        var dBInstanceClassField = form.down('[name=DBInstanceClass]');
+        var dBInstanceClassStore = dBInstanceClassField.getStore();
+
+        dBInstanceClassStore.filterBy(function (record) {
+            var instanceType = record.get('field1');
+
+            return Ext.Array.some([ 't2', 'm3', 'r3' ], function (type) {
+                return instanceType.indexOf('.' + type) !== -1;
+            });
+        });
+
+        dBInstanceClassField.setValue(
+            dBInstanceClassStore.first()
+        );
+
+        form.down('[name=VpcId]').allowBlank = false;
+
+        form.down('#databaseSettings')
+            .disable()
+            .hide();
+    }
 
     /*
     var instanceTypesField = form.down('[name=DBInstanceClass]');

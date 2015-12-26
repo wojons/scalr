@@ -55,7 +55,7 @@ class Scalr_UI_Controller_Account2_Environments_Accessmap extends Scalr_UI_Contr
                     'id' => $this->env->id,
                     'name' => $this->env->name
             )
-        ));
+        ), [], ['ui/account2/acl/view.css']);
     }
 
     public function xGetAction() {

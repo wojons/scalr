@@ -52,12 +52,14 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.eips.view', function (loadParams, modulePa
 			}
 		],
 
-        selModel: {
-            selType: 'selectedmodel',
-            getVisibility: function(record) {
-                return !record.get('server_id');
-            }
-        },
+        selModel:
+            Scalr.isAllowed('AWS_ELASTIC_IPS', 'manage') ?
+            {
+                selType: 'selectedmodel',
+                getVisibility: function(record) {
+                    return !record.get('server_id');
+                }
+            } : null,
 
         listeners: {
             selectionchange: function(selModel, selections) {
@@ -80,6 +82,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.eips.view', function (loadParams, modulePa
                 cls: 'x-btn-red',
                 tooltip: 'Select one or more elastic IP(s) to delete them',
                 disabled: true,
+                hidden: !Scalr.isAllowed('AWS_ELASTIC_IPS', 'manage'),
                 handler: function() {
                     var request = {
                         confirmBox: {

@@ -49,12 +49,7 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
 
             if ($vhost_info)
             {
-                $template = $this->DB->GetOne("SELECT value FROM farm_role_options WHERE hash IN ('nginx_https_vhost_template') AND farm_roleid=? LIMIT 1",
-                    array($DBFarmRole->ID)
-                );
-                if (!$template)
-                    $template = file_get_contents(APPPATH."/templates/services/nginx/ssl.vhost.tpl");
-
+                $template = file_get_contents(APPPATH."/templates/services/nginx/ssl.vhost.tpl");
                 if ($template) {
                     $vars = unserialize($vhost_info['httpd_conf_vars']);
                     $vars['host'] = $vhost_info['name'];
@@ -142,52 +137,8 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
     protected function ListRoleParams()
     {
         $ResponseDOMDocument = $this->CreateResponse();
-        $ParamsDOMNode = $ResponseDOMDocument->createElement("params");
 
-        if (SCALR_ID == 'ab6d8171') {
-            $this->DB->Execute("INSERT INTO debug_scripting SET
-                server_id = ?,
-                request = ?,
-                params = ?,
-                account_id = ?,
-                farm_id = ?
-            ", array(
-                $this->DBServer->serverId,
-                json_encode($_REQUEST),
-                json_encode(array(
-                    $this->DBServer->GetProperty(SERVER_PROPERTIES::SZR_VESION),
-                    $_SERVER['REQUEST_URI']
-                )),
-                $this->DBServer->clientId,
-                $this->DBServer->farmId
-            ));
-        }
-
-
-        $DBFarmRole = $this->DBServer->GetFarmRoleObject();
-        $dbRole = $DBFarmRole->GetRoleObject();
-        $params = $dbRole->getParameters();
-        foreach ($params as $param) {
-            if ($this->GetArg("name") && $this->GetArg("name") != $param['hash'])
-                continue;
-
-            $farmRoleOption = $this->DB->GetRow("SELECT id, value FROM farm_role_options WHERE farm_roleid=? AND `hash`=? LIMIT 1", array($DBFarmRole->ID, $param['hash']));
-            if ($farmRoleOption['id'])
-                $value = $farmRoleOption['value'];
-            else
-                $value = $param['defval'];
-
-            $ParamDOMNode = $ResponseDOMDocument->createElement("param");
-            $ParamDOMNode->setAttribute("name", $param['hash']);
-
-            $ValueDomNode = $ResponseDOMDocument->createElement("value");
-            $ValueDomNode->appendChild($ResponseDOMDocument->createCDATASection($value));
-
-            $ParamDOMNode->appendChild($ValueDomNode);
-            $ParamsDOMNode->appendChild($ParamDOMNode);
-        }
-
-        $ResponseDOMDocument->documentElement->appendChild($ParamsDOMNode);
+        // No longer supported. Method here for backward compatibility
 
         return $ResponseDOMDocument;
     }
@@ -198,9 +149,11 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
      */
     protected function GetHttpsCertificate()
     {
+        $sslInfo = null;
+
         $ResponseDOMDocument = $this->CreateResponse();
 
-        if (in_array($this->DBServer->status, array(SERVER_STATUS::PENDING_TERMINATE, SERVER_STATUS::TERMINATED, SERVER_STATUS::TROUBLESHOOTING, SERVER_STATUS::SUSPENDED)))
+        if (in_array($this->DBServer->status, array(SERVER_STATUS::PENDING_TERMINATE, SERVER_STATUS::TERMINATED, SERVER_STATUS::SUSPENDED)))
             return $ResponseDOMDocument;
 
         $hostName = $this->GetArg("hostname") ? " AND name=".$this->qstr($this->GetArg("hostname")) : "";
@@ -297,15 +250,13 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
         {
             $DBFarmRole = DBFarmRole::LoadByID($farm_role['id']);
 
-            $roleId = $DBFarmRole->NewRoleID ? $DBFarmRole->NewRoleID : $DBFarmRole->RoleID;
-
             // Create role node
             $RoleDOMNode = $ResponseDOMDocument->createElement('role');
             $RoleDOMNode->setAttribute('behaviour', implode(",", $DBFarmRole->GetRoleObject()->getBehaviors()));
-            $RoleDOMNode->setAttribute('name', DBRole::loadById($roleId)->name);
+            $RoleDOMNode->setAttribute('name', DBRole::loadById($DBFarmRole->RoleID)->name);
             $RoleDOMNode->setAttribute('alias', $DBFarmRole->Alias);
             $RoleDOMNode->setAttribute('id', $DBFarmRole->ID);
-            $RoleDOMNode->setAttribute('role-id', $roleId);
+            $RoleDOMNode->setAttribute('role-id', $DBFarmRole->RoleID);
 
             $HostsDomNode = $ResponseDOMDocument->createElement('hosts');
             $RoleDOMNode->appendChild($HostsDomNode);

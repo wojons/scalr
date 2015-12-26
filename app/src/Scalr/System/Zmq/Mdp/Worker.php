@@ -4,7 +4,7 @@ namespace Scalr\System\Zmq\Mdp;
 use ZMQ, ZMQContext, ZMQSocket, ZMQPoll;
 use Scalr\System\Zmq\Zmsg;
 use Scalr\System\Zmq\Exception\MdpException;
-use Scalr\LoggerTrait;
+use Scalr\LoggerAwareTrait;
 
 /**
  * Majordomo Protocol Worker API
@@ -15,7 +15,7 @@ use Scalr\LoggerTrait;
  */
 class Worker
 {
-    use LoggerTrait;
+    use LoggerAwareTrait;
 
     /**
      * Reliability parameter.
@@ -303,12 +303,13 @@ class Worker
             } elseif (--$this->liveness == 0) {
                 // poll ended on timeout, $event being false
                 if ($this->verbose) {
-                    $this->log("WARN", "disconnected from broker - retrying...\n");
+                    $this->log("WARN", "Disconnected from broker - exiting...\n");
                 }
 
-                usleep($this->reconnect * 1000);
-
-                $this->connect();
+                //Exiting is deviation from the MDP protocol
+                throw new MdpException("Disconnected from broker - exiting");
+                //usleep($this->reconnect * 1000);
+                //$this->connect();
             }
 
             // Send HEARTBEAT if it's time

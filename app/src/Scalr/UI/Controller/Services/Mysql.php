@@ -1,5 +1,7 @@
 <?php
+
 use Scalr\Acl\Acl;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Services_Mysql extends Scalr_UI_Controller
 {
@@ -98,13 +100,13 @@ class Scalr_UI_Controller_Services_Mysql extends Scalr_UI_Controller
         if ($DBServer) {
             $DBFarmRole = $DBServer->GetFarmRoleObject();
 
-            if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_USER)) {
+            if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_PMA_USER)) {
                 $r = array();
                 $r['s'] = md5(mt_rand());
                 $key = substr($r['s'], 5) . \Scalr::config('scalr.ui.pma.key');
                 $r['r'] = $this->pmaEncrypt(serialize(array(
-                    'user' => $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_USER),
-                    'password' => $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_PMA_PASS),
+                    'user' => $DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_PMA_USER),
+                    'password' => $DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_PMA_PASS),
                     'host' => $DBServer->remoteIp
                 )), $key);
                 $r['h'] = md5($r['r'].$r['s'] . \Scalr::config('scalr.ui.pma.key'));

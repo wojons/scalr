@@ -34,7 +34,13 @@ class Scalr_Messaging_JsonSerializer {
         $this->walkSerialize($msg, $retval->body, 'underScope');
         $this->walkSerialize($meta, $retval->meta, 'underScope');
 
-        return @json_encode($retval);
+        $retval = @json_encode($retval);
+        if (!$retval) {
+            $error = json_last_error_msg();
+            throw new Exception("Unable to serialize message: {$error}");
+        }
+            
+        return $retval;
     }
 
     public function walkSerialize ($object, &$retval, $normalizationMethod) {

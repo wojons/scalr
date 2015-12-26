@@ -1,9 +1,9 @@
 .scalr-ui-dashboard-panel .x-grid-empty {
 	font-size: 18px;
-	background-color: #f0f1f4;
-
+	background-color: #F1F5FA;
 	text-align: center;
 	padding: 30px;
+    color: #224164;
 }
 
 .scalr-ui-dashboard-panel .x-error {
@@ -40,7 +40,7 @@
 
 .scalr-ui-dashboard-widgets-cloudyn .x-grid-row td.border div {
 	background: #84B845;
-	border-radius: 3px;
+	border-radius: 0;
 	margin-right: 12px;
     margin-left: 12px;
 	color: white;
@@ -72,7 +72,7 @@
     color: white;
     font-size: 12px;
     font-family: OpenSansBold;
-    border-radius: 2px;
+    border-radius: 0;
     text-align: center;
     text-transform: uppercase;
 }
@@ -105,7 +105,7 @@
 	width: 100%;
 	visibility: visible;
 	cursor: pointer;
-	border-radius: 2px;
+	border-radius: 0;
 }
 
 .scalr-ui-dashboard-container-over-empty div.editpanel div.remove, .scalr-ui-dashboard-container-over-empty div.editpanel div.add {
@@ -115,19 +115,18 @@
 }
 
 .scalr-ui-dashboard-container-over-empty div.editpanel div.add {
-	border-radius: 2px;
+	border-radius: 0;
 }
 
 .scalr-ui-dashboard-container-over-empty div.editpanel div.remove {
 	width: 49%;
 	margin-left: 2px;
-	border-radius: 2px;
+	border-radius: 0;
 }
 
 .scalr-ui-dashboard-panel .x-panel-dd-spacer {
     display: none;
-	border: 2px dashed #A9BCD8;
-	border-radius: 4px;
+	border: 1px dashed #B7D8F9;
 	margin-bottom: 5px;
 }
 
@@ -144,9 +143,9 @@
     border-bottom: 1px solid #f7f7f7;
 }
 
-/*.scalr-ui-dashboard-widgets-div:nth-of-type(even) {
-    background-color: #F4F4F4;
-}*/
+.scalr-ui-dashboard-widgets-div:last-child {
+    border-bottom-width: 0;
+}
 
 .scalr-ui-dashboard-widgets-message {
 	font-size: 13px;
@@ -209,7 +208,7 @@ ul.scalr-ui-dashboard-farms li a.icon {
 	height: 45px;
 	width: 45px;
     background-color: white;
-	border-radius: 3px;
+	border-radius: 0;
 	position: relative;
     display: block;
 	top: 8px;
@@ -271,6 +270,17 @@ ul.scalr-ui-dashboard-farms li a.count {
 
 .scalr-ui-dashboard-tutor-desc a {
 	color: #666;
+}
+.x-form-dashboard-checklist .x-fieldset .x-fieldset-body {
+    padding: 0 22px 8px;
+}
+
+.x-form-dashboard-checklist .x-fieldset:last-child {
+    border-bottom-width: 0;
+}
+
+.x-form-dashboard-checklist .x-field {
+    height: 40px;
 }
 
 .scalr-ui-dashboard-checklist-icon {

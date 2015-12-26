@@ -25,6 +25,7 @@ namespace Scalr\Net\Ldap;
  * @property  string $groupMemberAttribute Group member attribute
  * @property  string $groupnameAttribute Group name attribute
  * @property  string $groupMemberAttributeType Group member attribute type (regular | unix_netgroup)
+ * @property  string $groupDisplayNameAttribute Group display name attribute
  */
 class LdapConfig
 {
@@ -151,6 +152,13 @@ class LdapConfig
      * @var string
      */
     private $groupnameAttribute;
+    
+    /**
+     * Group display name attribute
+     *
+     * @var string
+     */
+    private $groupDisplayNameAttribute;
 
     /**
      * Contstructor
@@ -172,10 +180,11 @@ class LdapConfig
      * @param   string     $groupMemberAttribute optional Group member attribute
      * @param   string     $groupMemberAttributeType optional Group member attribute type
      * @param   string     $groupnameAttribute   optional Group name attribute
+     * @param   string     $groupDisplayNameAttribute optional Group display name attribute
      * @param   bool       $debug               optional Turns on debug mode
      */
     public function __construct($host, $port, $user, $password, $baseDn, $userFilter, $groupFilter, $domain = null,
-                                $baseDnGroups = null, $groupNesting = null, $bindType = null, $mailAttribute = null, $fullNameAttribute = null, $usernameAttribute = null, $groupMemberAttribute = null, $groupMemberAttributeType = 'regular', $groupnameAttribute = null, $debug = null)
+                                $baseDnGroups = null, $groupNesting = null, $bindType = null, $mailAttribute = null, $fullNameAttribute = null, $usernameAttribute = null, $groupMemberAttribute = null, $groupMemberAttributeType = 'regular', $groupnameAttribute = null, $groupDisplayNameAttribute = null, $debug = null)
     {
         $this->host = $host;
         $this->port = $port;
@@ -194,6 +203,7 @@ class LdapConfig
         $this->groupMemberAttribute = (empty($groupMemberAttribute) ? 'member' : (string)$groupMemberAttribute);
         $this->groupMemberAttributeType = (empty($groupMemberAttributeType) ? 'regular' : (string)$groupMemberAttributeType);
         $this->groupnameAttribute = (empty($groupnameAttribute) ? 'sAMAccountName' : (string)$groupnameAttribute);
+        $this->groupDisplayNameAttribute = (empty($groupDisplayNameAttribute) ? 'sAMAccountName' : (string)$groupDisplayNameAttribute);
         $this->debug = $debug === null ? false : (bool) $debug;
     }
 

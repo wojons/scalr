@@ -3,6 +3,9 @@ namespace Scalr\System\Zmq\Cron\Task;
 
 use ArrayObject, Exception, DateTime, DateTimeZone, stdClass;
 use BundleTask;
+use Scalr\Model\Entity\Account\EnvironmentProperty;
+use Scalr\Model\Entity\Account\User;
+use Scalr\Model\Entity\Account\User\UserSetting;
 use Scalr\System\Zmq\Cron\AbstractTask;
 use Scalr\Service\Aws\Plugin\Handlers\StatisticsPlugin;
 
@@ -79,12 +82,22 @@ class Rotate extends AbstractTask
 
         $keep = $this->config()->keep;
 
+        if ($db->GetOne("SHOW TABLES LIKE 'api_counters'")) {
+            $this->getLogger()->info("Rotating api rate limit counters");
+            $db->Execute("TRUNCATE TABLE `api_counters`");
+        }
+
         $this->getLogger()->info("Rotating logentries table. Keep:'%s'", $keep['scalr']['logentries']);
         $this->rotateTable("DELETE FROM `logentries` WHERE `time` < ?", [strtotime($keep['scalr']['logentries'])]);
 
         $this->getLogger()->info("Rotating scripting_log table. Keep:'%s'", $keep['scalr']['scripting_log']);
         $this->rotateTable("DELETE FROM `scripting_log` WHERE `dtadded` < ?", [
             date('Y-m-d H:i:s', strtotime($keep['scalr']['scripting_log']))
+        ]);
+
+        $this->getLogger()->info("Rotating api_log table. Keep:'%s'", $keep['scalr']['api_log']);
+        $this->rotateTable("DELETE FROM `api_log` WHERE `dtadded` < ?", [
+            strtotime($keep['scalr']['api_log'])
         ]);
 
         $this->getLogger()->info("Rotating events table. Keep:'%s'", $keep['scalr']['events']);
@@ -106,6 +119,11 @@ class Rotate extends AbstractTask
         $this->getLogger()->info("Rotating webhook_history table. Keep:'%s'", $keep['scalr']['webhook_history']);
         $this->rotateTable("DELETE FROM webhook_history WHERE `created` < ?", [
             date('Y-m-d H:i:s', strtotime($keep['scalr']['webhook_history']))
+        ]);
+
+        $this->getLogger()->info("Rotating ui_errors table");
+        $this->rotateTable("DELETE FROM ui_errors WHERE `tm` < ?", [
+            date('Y-m-d H:i:s', strtotime('-1 day'))
         ]);
 
         $this->getLogger()->info("Rotating farm_role_scripts table");
@@ -159,11 +177,35 @@ class Rotate extends AbstractTask
             $this->rotateTable("DELETE FROM `usage_h` WHERE `dtime` < ?", [$before], 'cadb');
             $this->getLogger()->info("Rotating analytics.nm_usage_h table");
             $this->rotateTable("DELETE FROM `nm_usage_h` WHERE `dtime` < ?", [$before], 'cadb');
+
+            $this->getLogger()->info("Rotating analytics.aws_billing_records table. Keep:'%s'", $keep['analytics']['aws_billing_records']);
+            $before = (new DateTime($keep['analytics']['aws_billing_records'], new DateTimeZone('UTC')))->format('Y-m-d');
+            $this->rotateTable("DELETE FROM `aws_billing_records` WHERE `date` < ?", [$before], 'cadb');
         }
 
         $this->getLogger()->info("Update bundle_tasks table. Fail for 3 days expired tasks.");
         $affected = BundleTask::failObsoleteTasks();
         $this->getLogger()->info("%d task%s %s failed by timeout", $affected, ($affected != 1 ? 's' : ''), ($affected > 1 ? 'were' : 'was'));
+
+        if (\Scalr::config('scalr.auth_mode') == 'scalr') {
+            // suspend user based on config settings
+            $days = (int) \Scalr::config('scalr.security.user.suspension.inactivity_days');
+            if ($days > 0) {
+                $dt = date('Y-m-d H:i:s', strtotime("-{$days} day"));
+
+                $db->Execute("
+                    UPDATE `account_users`
+                    SET `status` = ?
+                    WHERE `email` != 'admin' AND (
+                        `dtlastlogin` IS NOT NULL AND `dtlastlogin` < ? OR `dtlastlogin` IS NULL AND `dtcreated` < ?
+                    )
+                ", [User::STATUS_INACTIVE, $dt, $dt]);
+                $affected = $db->Affected_Rows();
+                if ($affected > 0) {
+                    $this->getLogger()->info("%d %s suspended due to inactivity", $affected, $affected > 1 ? 'users were' : 'user was');
+                }
+            }
+        }
 
         $this->getLogger()->info('Done');
 

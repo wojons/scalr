@@ -1,10 +1,10 @@
 <?php
 
-use Scalr\LoggerTrait;
+use Scalr\LoggerAwareTrait;
 
 class Scalr_SchedulerTask extends Scalr_Model
 {
-    use LoggerTrait;
+    use LoggerAwareTrait;
 
     protected $dbTableName = 'scheduler';
     protected $dbPrimaryKey = 'id';
@@ -104,35 +104,44 @@ class Scalr_SchedulerTask extends Scalr_Model
     }
 
     /**
-     * @return bool
+     * Executes the task
+     *
+     * @return bool $manual  optional Whether task is executed by manual
      * @throws Exception
      */
     public function execute($manual = false)
     {
         $farmRoleNotFound = false;
-        $logger = $this->getLogger() ?: Logger::getLogger(__CLASS__);
+        $logger = $this->getLogger() ?: \Scalr::getContainer()->logger(__CLASS__);
 
-        switch($this->type) {
+        switch ($this->type) {
             case self::LAUNCH_FARM:
                 try {
                     $farmId = $this->targetId;
+
                     $DBFarm = DBFarm::LoadByID($farmId);
 
                     if ($DBFarm->Status == FARM_STATUS::TERMINATED) {
                         // launch farm
-                        Scalr::FireEvent($farmId, new FarmLaunchedEvent(true));
+                        Scalr::FireEvent($farmId, new FarmLaunchedEvent(
+                            true, // Mark instances as Active
+                            null, // User
+                            ['service.scheduler.task_id' => $this->id]
+                        ));
+
                         $logger->info(sprintf("Farm #{$farmId} successfully launched"));
-                    } elseif($DBFarm->Status == FARM_STATUS::RUNNING) {
+                    } elseif ($DBFarm->Status == FARM_STATUS::RUNNING) {
                         // farm is running
                         $logger->info(sprintf("Farm #{$farmId} is already running"));
                     } else {
                         // farm can't be launched
                         $logger->info(sprintf("Farm #{$farmId} can't be launched because of it's status: {$DBFarm->Status}"));
                     }
-                } catch(Exception $e) {
+                } catch (Exception $e) {
                     $farmRoleNotFound  = true;
                     $logger->info(sprintf("Farm #{$farmId} was not found and can't be launched"));
                 }
+
                 break;
 
             case self::TERMINATE_FARM:
@@ -146,23 +155,30 @@ class Scalr_SchedulerTask extends Scalr_Model
 
                     $DBFarm = DBFarm::LoadByID($farmId);
 
-                    if($DBFarm->Status == FARM_STATUS::RUNNING) {
-                        // terminate farm
-                        $event = new FarmTerminatedEvent($deleteDNSZones, $keepCloudObjects, false, $keepCloudObjects);
-                        Scalr::FireEvent($farmId, $event);
+                    if ($DBFarm->Status == FARM_STATUS::RUNNING) {
+                        // Terminate farm
+                        Scalr::FireEvent($farmId, new FarmTerminatedEvent(
+                            $deleteDNSZones,
+                            $keepCloudObjects,
+                            false,
+                            $keepCloudObjects,
+                            true, // Force termination
+                            null, // User
+                            ['service.scheduler.task_id' => $this->id]
+                        ));
 
                         $logger->info(sprintf("Farm successfully terminated"));
                     } else {
                         $logger->info(sprintf("Farm #{$farmId} can't be terminated because of it's status"));
                     }
-                } catch(Exception $e) {
+                } catch (Exception $e) {
                     $farmRoleNotFound  = true;
                     $logger->info(sprintf("Farm #{$farmId} was not found and can't be terminated"));
                 }
                 break;
 
             case self::FIRE_EVENT:
-                
+
                 switch($this->targetType) {
                     case self::TARGET_FARM:
                         $DBFarm = DBFarm::LoadByID($this->targetId);
@@ -187,19 +203,18 @@ class Scalr_SchedulerTask extends Scalr_Model
                         );
                         break;
                 }
-                
+
                 if (count($servers) == 0)
                     throw new Exception("No running Servers found. Event was not fired.");
-                
+
                 foreach ($servers as $server) {
-                    $dbServer = DBServer::LoadByID($server['server_id']);
                     /* @var $dbServer DBServer */
-                    $event = new CustomEvent($dbServer, $this->config['eventName'], (array)$this->config['eventParams']);
-                    Scalr::FireEvent($dbServer->farmId, $event);
+                    $dbServer = DBServer::LoadByID($server['server_id']);
+                    Scalr::FireEvent($dbServer->farmId, new CustomEvent($dbServer, $this->config['eventName'], (array)$this->config['eventParams']));
                 }
-                
+
                 break;
-                
+
             case self::SCRIPT_EXEC:
                 // generate event name
                 $eventName = "Scheduler (TaskID: {$this->id})";

@@ -19,7 +19,7 @@ use \DBFarmRole;
 use \SERVER_PLATFORMS;
 use \FARM_STATUS;
 use Scalr\Exception\NotApplicableException;
-
+use Scalr\Model\Entity;
 
 /**
  * DbMsrMaintenance task
@@ -84,7 +84,7 @@ class DbMsrMaintenance extends AbstractTask
                 $tz = date_default_timezone_get();
             }
 
-            $farmTz = $dbFarm->GetSetting(DBFarm::SETTING_TIMEZONE);
+            $farmTz = $dbFarm->GetSetting(Entity\FarmSetting::TIMEZONE);
 
             if ($farmTz) {
                 $tz = $farmTz;
@@ -135,7 +135,7 @@ class DbMsrMaintenance extends AbstractTask
                 }
 
                 if ($timeouted) {
-                    $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_IS_RUNNING"), 0, DBFarmRole::TYPE_LCL);
+                    $dbFarmRole->SetSetting(Scalr_Db_Msr::getConstant("DATA_{$action}_IS_RUNNING"), 0, Entity\FarmRoleSetting::TYPE_LCL);
                 }
             } else {
                 //Check bundle window

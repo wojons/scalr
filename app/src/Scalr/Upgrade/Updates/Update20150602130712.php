@@ -45,14 +45,14 @@ class Update20150602130712 extends AbstractUpdate implements SequenceInterface
         $cntUpdated = 0;
 
         foreach (Image::find([
-            ['type' => NULL],
+            ['type'     => null],
             ['platform' => SERVER_PLATFORMS::EC2],
-            ['envId' => ['$ne' => NULL]]
+            ['envId'    => ['$ne' => null]]
         ]) as $image) {
-            /** @var Image $image */
+            /* @var $image Image */
             $type = $image->type;
             $cntAll++;
-            if ($image->checkImage(true)) {
+            if ($image->checkImage()) {
                 $image->save();
                 if ($type != $image->type) {
                     $cntUpdated++;

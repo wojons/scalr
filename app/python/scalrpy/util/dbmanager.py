@@ -1,4 +1,5 @@
 import time
+import random
 import socket
 import threading
 import pymysql
@@ -8,6 +9,7 @@ import pymysql.cursors
 from scalrpy.util import helper
 
 from scalrpy import LOG
+from scalrpy import exceptions
 
 
 def make_connection(config, autocommit=True):
@@ -39,17 +41,17 @@ class DB(object):
 
     def __init__(self, config, pool_size=None):
         self._local = threading.local()
+        self.pool_size = pool_size or config.get('pool_size', 50)
 
         def _make_connection():
-            return make_connection(config, autocommit=True)
+            connection = make_connection(config, autocommit=True)
+            connection.timestamp = time.time()
+            return connection
 
         def _validate_connection(connection):
             return validate_connection(connection)
 
-        self._connection_pool = helper.Pool(
-            _make_connection,
-            _validate_connection,
-            pool_size if pool_size else config.get('pool_size', 4))
+        self._connection_pool = helper.Pool(_make_connection, _validate_connection, self.pool_size)
 
     def autocommit(self, state):
         if state and self._connection:
@@ -75,31 +77,56 @@ class DB(object):
             self._local.autocommit = True
             return self._local.autocommit
 
+    def _get_connection_from_pool(self, timeout=None):
+        connection = self._connection_pool.get(timeout=timeout)
+        if time.time() - connection.timestamp > 3600:
+            self._connection_pool.remove(connection)
+            connection.close()
+            connection = self._connection_pool.get(timeout=timeout)
+        return connection
+
     def execute(self, query, retries=0, retry_timeout=10):
         while True:
             try:
                 if self._autocommit or not self._connection:
-                    self._local.connection = self._connection_pool.get(timeout=10)
+                    self._local.connection = self._get_connection_from_pool(timeout=30)
                 self._local.connection.autocommit(self._autocommit)
                 self._local.cursor = self._connection.cursor()
+                start_time = time.time()
                 try:
-                    start_time = time.time()
                     self._local.cursor.execute(query)
-                    end_time = time.time()
-                    if end_time - start_time > 1:
-                        LOG.debug('Query too slow: %s\n%s...' %
-                                  (end_time - start_time, query[:150]))
                     results = self._local.cursor.fetchall()
-                    if results is not None:
-                        results = tuple(results)
-                    return results
                 finally:
-                    if self._autocommit:
-                        self._local.cursor.close()
-                        self._connection_pool.put(self._local.connection)
+                    end_time = time.time()
+                    try:
+                        if self._autocommit:
+                            self._connection_pool.put(self._local.connection)
+                            self._local.cursor.close()
+                            self._local.connection = None
+                            self._local.cursor = None
+                    except:
+                        msg = 'MySQL finalize connection error'
+                        helper.handle_error(message=msg, level='error')
+                if end_time - start_time > 5:
+                    LOG.debug('Query too slow: %s\n%s...' % (end_time - start_time, query[:150]))
+                if results is not None:
+                    results = tuple(results)
+                else:
+                    results = tuple()
+                return results
+            except exceptions.TimeoutError as e:
+                LOG.warning(e)
+            except (pymysql.err.InternalError, pymysql.err.OperationalError, socket.timeout) as e:
+                if isinstance(e, pymysql.err.InternalError) and e.args[0] == 1213:
+                    LOG.warning('MySQL 1213 error, retry')
+                    time.sleep(random.randint(0, 20) / 100.0)
+                    continue
+                if isinstance(e, pymysql.err.OperationalError) and e.args[0] == 2013:
+                    LOG.warning('MySQL 2013 error during query: %s' % query[0:150])
+                    if self._local.connection:
+                        self._connection_pool.remove(self._local.connection)
+                        self._local.connection.close()
                         self._local.connection = None
-                        self._local.cursor = None
-            except (pymysql.err.OperationalError, pymysql.err.InternalError, socket.timeout):
                 if not retries:
                     raise
                 retries -= 1
@@ -109,7 +136,6 @@ class DB(object):
         """
         :returns: generator
         """
-
         if max_limit:
             i, chunk_size = 0, min(limit, max_limit)
         else:
@@ -143,175 +169,119 @@ class DB(object):
 class ScalrDB(DB):
 
     def load_server_properties(self, servers, names):
-        names = list(names)
-        servers_id = list(set(server['server_id'] for server in servers if server['server_id']))
-        if not servers_id:
+        names = map(str, list(names))
+        servers_ids = list(set(str(server['server_id']) for server in servers if server['server_id']))
+        if not servers_ids:
             return
         query = (
             "SELECT server_id, name, value "
             "FROM server_properties "
-            "WHERE name IN ({0}) "
-            "AND server_id IN ({1})"
-        ).format(str(names)[1:-1], str(servers_id)[1:-1])
+            "WHERE name IN ({}) "
+            "AND server_id IN ({})"
+        ).format(str(names)[1:-1], str(servers_ids)[1:-1])
         results = self.execute(query)
-        tmp = dict()
-        for result in results:
-            tmp.setdefault(result['server_id'], {}).update({result['name']: result['value']})
         for server in servers:
-            if server['server_id'] not in tmp:
-                continue
-            for k, v in tmp[server['server_id']].iteritems():
-                if k in server and server[k]:
-                    continue
-                server[k] = v
-        return
+            server.update({result['name']: result['value'] for result in results
+                          if result['server_id'] == server['server_id'] and not server.get(result['name'])})
 
     def load_client_environment_properties(self, envs, names):
-        names = list(names)
-        envs_ids = list(set(env['id'] for env in envs if env['id'] or env['id'] == 0))
+        names = map(str, list(names))
+        envs_ids = list(set(int(env['id']) for env in envs))
         if not envs_ids:
-            return tuple()
+            return
         query = (
             "SELECT env_id, name, value "
             "FROM client_environment_properties "
-            "WHERE name IN ({0}) "
-            "AND env_id IN ({1})"
-        ).format(str(names)[1:-1], str(envs_ids).replace('L', '')[1:-1])
+            "WHERE name IN ({}) "
+            "AND env_id IN ({})"
+        ).format(str(names)[1:-1], str(envs_ids)[1:-1])
         results = self.execute(query)
-        tmp = dict()
-        for result in results:
-            tmp.setdefault(result['env_id'], {}).update({result['name']: result['value']})
         for env in envs:
-            if env['id'] not in tmp:
-                continue
-            for k, v in tmp[env['id']].iteritems():
-                if k in env and env[k]:
-                    continue
-                env[k] = v
-        return
+            env.update({result['name']: result['value'] for result in results
+                       if result['env_id'] == env['id'] and not env.get(result['name'])})
 
     def load_farm_settings(self, farms, names):
-        names = list(names)
-        farms_ids = list(set(farm['id'] for farm in farms if farm['id'] or farm['id'] == 0))
+        names = map(str, list(names))
+        farms_ids = list(set(int(farm['id']) for farm in farms if farm['id'] or farm['id'] == 0))
         if not farms_ids:
-            return dict()
+            return
         query = (
             "SELECT farmid farm_id, name, value "
             "FROM farm_settings "
-            "WHERE name IN({0}) "
-            "AND farmid IN ({1})"
-        ).format(str(names)[1:-1], str(farms_ids).replace('L', '')[1:-1])
+            "WHERE name IN({}) "
+            "AND farmid IN ({})"
+        ).format(str(names)[1:-1], str(farms_ids)[1:-1])
         results = self.execute(query)
-        tmp = dict()
-        for result in results:
-            tmp.setdefault(result['farm_id'], {}).update({result['name']: result['value']})
         for farm in farms:
-            if farm['id'] not in tmp:
-                continue
-            for k, v in tmp[farm['id']].iteritems():
-                if k in farm and farm[k]:
-                    continue
-                farm[k] = v
-        return
+            farm.update({result['name']: result['value'] for result in results
+                        if result['farm_id'] == farm['id'] and not farm.get(result['name'])})
 
-    def load_farm_role_settings(self, farms_roles, names):
-        names = list(names)
-        farms_roles_ids = list(set(_['id'] for _ in farms_roles if _['id'] or _['id'] == 0))
-        if not farms_roles_ids:
-            return dict()
+    def load_farm_role_settings(self, farm_roles, names):
+        names = map(str, list(names))
+        farm_roles_ids = list(set(int(farm_role['id']) for farm_role in farm_roles
+                              if farm_role['id'] or farm_role['id'] == 0))
+        if not farm_roles_ids:
+            return
         query = (
-            "SELECT farm_roleid, name, value "
+            "SELECT farm_roleid farm_role_id, name, value "
             "FROM farm_role_settings "
-            "WHERE name IN ({0}) "
-            "AND farm_roleid IN ({1})"
-        ).format(str(names)[1:-1], str(farms_roles_ids).replace('L', '')[1:-1])
+            "WHERE name IN ({}) "
+            "AND farm_roleid IN ({})"
+        ).format(str(names)[1:-1], str(farm_roles_ids)[1:-1])
         results = self.execute(query)
-        tmp = dict()
-        for result in results:
-            tmp.setdefault(result['farm_roleid'], {}).update({result['name']: result['value']})
-        for farm_role in farms_roles:
-            if farm_role['id'] not in tmp:
-                continue
-            for k, v in tmp[farm_role['id']].iteritems():
-                if k in farm_role and farm_role[k]:
-                    continue
-                farm_role[k] = v
-        return
+        for farm_role in farm_roles:
+            farm_role.update({result['name']: result['value'] for result in results
+                             if result['farm_role_id'] == farm_role['id'] and not farm_role.get(result['name'])})
 
     def load_vpc_settings(self, servers):
-        # ec2.vpc.id
-        farms_id = list(set([_['farm_id'] for _ in servers if _['farm_id'] or _['farm_id'] == 0]))
-        if not farms_id:
+        if not servers:
             return
-        query = (
-            "SELECT farmid, value "
-            "FROM farm_settings "
-            "WHERE name = 'ec2.vpc.id' "
-            "AND farmid IN ({0})"
-        ).format(str(farms_id).replace('L', '')[1:-1])
-        results = self.execute(query)
-        tmp = dict()
-        for result in results:
-            tmp[result['farmid']] = result['value']
-        for server in servers:
-            if server['farm_id'] not in tmp:
-                continue
-            server['ec2.vpc.id'] = tmp[server['farm_id']]
 
-        # router_role_id
-        farms_role_id = list(set([_['farm_roleid'] for _ in servers if 'ec2.vpc.id' in _]))
-        if not farms_role_id:
-            return
-        # get router role id from farm_role_settings
-        query = (
-            "SELECT farm_roleid, value "
-            "FROM farm_role_settings "
-            "WHERE name = 'router.scalr.farm_role_id' "
-            "AND farm_roleid IN ({0}) "
-        ).format(str(farms_role_id).replace('L', '')[1:-1])
-        results = self.execute(query)
-        tmp = dict()
-        for result in results:
-            tmp[result['farm_roleid']] = int(result['value'])
-        for server in servers:
-            if server['farm_roleid'] not in tmp:
-                continue
-            # router.scalr.farm_role_id has int type
-            server['router_role_id'] = int(tmp[server['farm_roleid']])
+        farms_ids = list(set(int(server['farm_id']) for server in servers))
 
-        # get router role id from farm_roles
+        # 1. ec2.vpc.id
+        farms = [{'id': farm_id} for farm_id in farms_ids]
+        names = ['ec2.vpc.id']
+        self.load_farm_settings(farms, names)
+        for server in servers:
+            server.update({k: v for farm in farms for k, v in farm.items()
+                          if farm['id'] == server['farm_id'] and k not in server})
+
+        # 2. router_role_id
+        # 2.1 get router_role_id from farm_role_settings
+        farm_roles_ids = list(set(server['farm_role_id']
+                              for server in servers if 'ec2.vpc.id' in server))
+        farm_roles = [{'id': farm_role_id} for farm_role_id in farm_roles_ids]
+        names = ['router.scalr.farm_role_id']
+        self.load_farm_role_settings(farm_roles, names)
+        for server in servers:
+            server.update({k: v for farm_role in farm_roles for k, v in farm_role.items()
+                          if farm_role['id'] == server['farm_role_id'] and k not in server})
+            if 'router.scalr.farm_role_id' in server:
+                server['router_role_id'] = int(server.pop('router.scalr.farm_role_id'))
+
+        # 2.2 get router_role_id from farm_roles
         query = (
-            "SELECT id router_role_id, farmid "
+            "SELECT id router_role_id, farmid farm_id "
             "FROM farm_roles "
             "WHERE role_id IN "
             "(SELECT role_id FROM role_behaviors WHERE behavior='router') "
             "AND farmid IN ({0})"
-        ).format(str(farms_id).replace('L', '')[1:-1])
+        ).format(str(farms_ids)[1:-1])
         results = self.execute(query)
-        tmp = dict()
-        for result in results:
-            tmp[result['farmid']] = result['router_role_id']
         for server in servers:
-            if 'router_role_id' not in server and server['farm_id'] in tmp:
-                server['router_role_id'] = tmp[server['farm_id']]
+            server.update({k: v for result in results for k, v in result.items()
+                          if result['farm_id'] == server['farm_id'] and k not in server})
 
-        # router_vpc_ip
-        routers_role_id = list(set(_['router_role_id']
-                                   for _ in servers if 'ec2.vpc.id' in _ and 'router_role_id' in _))
-        if not routers_role_id:
-            return
-        query = (
-            "SELECT farm_roleid, value "
-            "FROM farm_role_settings "
-            "WHERE name = 'router.vpc.ip' "
-            "AND farm_roleid IN ({0})"
-        ).format(str(routers_role_id).replace('L', '')[1:-1])
-        results = self.execute(query)
-        tmp = dict()
-        for result in results:
-            tmp[result['farm_roleid']] = result['value']
+        # 3. router_vpc_ip
+        router_roles_ids = list(set(server['router_role_id']
+                                for server in servers
+                                if 'ec2.vpc.id' in server and 'router_role_id' in server))
+        router_roles = [{'id': router_role_id} for router_role_id in router_roles_ids]
+        names = ['router.vpc.ip']
+        self.load_farm_role_settings(router_roles, names)
         for server in servers:
-            if 'router_role_id' in server and server['router_role_id'] in tmp:
-                server['router.vpc.ip'] = tmp[server['router_role_id']]
-
-        return
+            if 'router_role_id' not in server:
+                continue
+            server.update({k: v for router_role in router_roles for k, v in router_role.items()
+                          if router_role['id'] == server['router_role_id'] and k not in server})

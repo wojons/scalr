@@ -21,10 +21,10 @@ Ext.define('Scalr.ui.StoreReaderObject', {
         successProperty: undefined,
         idFieldFromIndex: false,
         transform: function(data) {
-            var me = this,
+            var me = this, i,
                 result = [];
-            for (var i in data) {
-                if (Ext.isString(data[i])) {
+            for (i in data) {
+                if (Ext.isString(data[i]) || Ext.isNumber(data[i])) {
                     result[result.length] = {id: i, name: data[i]}; // format id => name
                 } else {
                     result[result.length] = data[i];
@@ -58,54 +58,54 @@ Ext.define('Scalr.ui.StoreProxyObject', {
 });
 
 Ext.define('Scalr.ui.PagingToolbar', {
-	extend: 'Ext.PagingToolbar',
-	alias: 'widget.scalrpagingtoolbar',
+    extend: 'Ext.PagingToolbar',
+    alias: 'widget.scalrpagingtoolbar',
 
-	pageSizes: [10, 15, 25, 50, 100],
-	pageSizeMessage: '{0} items per page',
-	pageSizeStorageName: 'grid-ui-page-size',
-	autoRefresh: 0,
-	autoRefreshTask: 0,
-	//height: 41,
-	prependButtons: true,
-	beforeItems: [],
-	afterItems: [],
+    pageSizes: [10, 15, 25, 50, 100],
+    pageSizeMessage: '{0} items per page',
+    pageSizeStorageName: 'grid-ui-page-size',
+    autoRefresh: 0,
+    autoRefreshTask: 0,
+    //height: 41,
+    prependButtons: true,
+    beforeItems: [],
+    afterItems: [],
     calculatePageSize: true,
     enableParamsCapture: true,
 
-	checkRefreshHandler: function (item, enabled) {
-		if (enabled) {
-			this.autoRefresh = item.autoRefresh;
-			this.gridContainer.autoRefresh = this.autoRefresh;
-			this.gridContainer.saveState();
-			if (this.autoRefresh) {
-				this.setDelayedRefresh();
-				this.down('#refresh').setIconCls('x-btn-icon-autorefresh');
-			} else {
-				this.clearDelayedRefresh();
-				this.down('#refresh').setIconCls('x-btn-icon-refresh');
-			}
-		}
-	},
+    checkRefreshHandler: function (item, enabled) {
+        if (enabled) {
+            this.autoRefresh = item.autoRefresh;
+            this.gridContainer.autoRefresh = this.autoRefresh;
+            this.gridContainer.saveState();
+            if (this.autoRefresh) {
+                this.setDelayedRefresh();
+                this.down('#refresh').setIconCls('x-btn-icon-autorefresh');
+            } else {
+                this.clearDelayedRefresh();
+                this.down('#refresh').setIconCls('x-btn-icon-refresh');
+            }
+        }
+    },
 
-	getPagingItems: function() {
-		var me = this, items = [ '->' ];
+    getPagingItems: function() {
+        var me = this, items = [ '->' ];
 
-		if (this.beforeItems.length) {
+        if (this.beforeItems.length) {
             for (var i = 0; i < this.beforeItems.length; i++)
                 this.beforeItems[i]['margin'] = '0 12 0 0';
 
-			items = Ext.Array.push(items, this.beforeItems);
-		}
+            items = Ext.Array.push(items, this.beforeItems);
+        }
 
-		items = Ext.Array.merge(items, [{
-			itemId: 'refresh',
-			//	tooltip: me.refreshText,
-			overflowText: me.refreshText,
-			iconCls: 'x-btn-icon-refresh',
-			//ui: 'paging',
-			handler: me.doRefresh,
-			scope: me,
+        items = Ext.Array.merge(items, [{
+            itemId: 'refresh',
+            //	tooltip: me.refreshText,
+            overflowText: me.refreshText,
+            iconCls: 'x-btn-icon-refresh',
+            //ui: 'paging',
+            handler: me.doRefresh,
+            scope: me,
             margin: '0 12 0 0'
         }, {
             itemId: 'settings',
@@ -117,50 +117,50 @@ Ext.define('Scalr.ui.PagingToolbar', {
             scope: me,
             margin: '0 3 0 0'
         }, {
-			itemId: 'first',
-			//tooltip: me.firstText,
-			overflowText: me.firstText,
-			iconCls: Ext.baseCSSPrefix + 'tbar-page-first',
-			ui: 'paging',
-			disabled: true,
-			handler: me.moveFirst,
-			scope: me,
+            itemId: 'first',
+            //tooltip: me.firstText,
+            overflowText: me.firstText,
+            iconCls: Ext.baseCSSPrefix + 'tbar-page-first',
+            ui: 'paging',
+            disabled: true,
+            handler: me.moveFirst,
+            scope: me,
             margin: '0 6 0 0'
-		},{
-			itemId: 'prev',
-			//tooltip: me.prevText,
-			overflowText: me.prevText,
-			iconCls: Ext.baseCSSPrefix + 'tbar-page-prev',
-			ui: 'paging',
-			disabled: true,
-			handler: me.movePrevious,
-			scope: me,
+        },{
+            itemId: 'prev',
+            //tooltip: me.prevText,
+            overflowText: me.prevText,
+            iconCls: Ext.baseCSSPrefix + 'tbar-page-prev',
+            ui: 'paging',
+            disabled: true,
+            handler: me.movePrevious,
+            scope: me,
             margin: '0 6 0 0'
-		}, me.beforePageText, {
-			xtype: 'textfield',
-			itemId: 'inputItem',
-			name: 'inputItem',
-			cls: Ext.baseCSSPrefix + 'tbar-page-number',
-			maskRe: /[0123456789]/,
-			minValue: 1,
-			enableKeyEvents: true,
-			selectOnFocus: true,
-			submitValue: false,
-			// mark it as not a field so the form will not catch it when getting fields
-			isFormField: false,
-			width: 40,
+        }, me.beforePageText, {
+            xtype: 'textfield',
+            itemId: 'inputItem',
+            name: 'inputItem',
+            cls: Ext.baseCSSPrefix + 'tbar-page-number',
+            maskRe: /[0123456789]/,
+            minValue: 1,
+            enableKeyEvents: true,
+            selectOnFocus: true,
+            submitValue: false,
+            // mark it as not a field so the form will not catch it when getting fields
+            isFormField: false,
+            width: 40,
             margin: '0 4',
-			listeners: {
-				scope: me,
-				keydown: me.onPagingKeyDown,
-				blur: me.onPagingBlur
-			}
-		},{
-			xtype: 'tbtext',
-			itemId: 'afterTextItem',
-			text: Ext.String.format(me.afterPageText, 1),
+            listeners: {
+                scope: me,
+                keydown: me.onPagingKeyDown,
+                blur: me.onPagingBlur
+            }
+        },{
+            xtype: 'tbtext',
+            itemId: 'afterTextItem',
+            text: Ext.String.format(me.afterPageText, 1),
             margin: '0 5 0 0'
-		}, {
+        }, {
             itemId: 'next',
             //tooltip: me.nextText,
             overflowText: me.nextText,
@@ -182,44 +182,44 @@ Ext.define('Scalr.ui.PagingToolbar', {
             margin: '0 5 0 0'
         }]);
 
-		if (this.afterItems.length) {
+        if (this.afterItems.length) {
             for (var i = 0; i < this.afterItems.length; i++)
                 this.afterItems[i]['margin'] = '0 12 0 0';
 
             this.afterItems[0]['margin'] = '0 12 0 4';
             this.afterItems[this.afterItems.length - 1]['margin'] = '0 0 0 0';
-			items = Ext.Array.push(items, this.afterItems);
-		}
+            items = Ext.Array.push(items, this.afterItems);
+        }
 
-		return items;
-	},
+        return items;
+    },
 
-	evaluatePageSize: function() {
+    evaluatePageSize: function() {
         return Math.floor((Scalr.application.getHeight()-100) / 31);
-	},
+    },
 
-	getPageSize: function() {
-		var pageSize = 0;
-		if (Ext.state.Manager.get(this.pageSizeStorageName, 'auto') != 'auto') {
+    getPageSize: function() {
+        var pageSize = 0;
+        if (Ext.state.Manager.get(this.pageSizeStorageName, 'auto') != 'auto') {
             pageSize = Ext.state.Manager.get(this.pageSizeStorageName, 'auto');
         } else {
             pageSize = this.evaluatePageSize();
-		}
-		return pageSize;
-	},
+        }
+        return pageSize;
+    },
 
-	setPageSizeAndLoad: function () {
-		var me = this;
+    setPageSizeAndLoad: function () {
+        var me = this;
 
-		var grid = me.gridContainer;
+        var grid = me.gridContainer;
 
-		if (me.calculatePageSize) {
-			var store = grid.getStore();
-			store.setPageSize(me.getPageSize());
+        if (me.calculatePageSize) {
+            var store = grid.getStore();
+            store.setPageSize(me.getPageSize());
 
-			var data = me.data;
+            var data = me.data;
 
-			if (Ext.isObject(data)) {
+            if (Ext.isObject(data)) {
                 // debug message: is it still used ?
                 Scalr.utils.PostError({
                     file: 'scalrpagingtoolbar (using data)',
@@ -228,12 +228,12 @@ Ext.define('Scalr.ui.PagingToolbar', {
                 });
 
                 store.loadData(data.data);
-				store.totalCount = data.total;
-			}
-		}
+                store.totalCount = data.total;
+            }
+        }
 
-		return me;
-	},
+        return me;
+    },
 
     doRefresh : function(){
         var me = this,
@@ -323,65 +323,65 @@ Ext.define('Scalr.ui.PagingToolbar', {
     },
 
     moveNext : function(){
-		var me = this,
-			total = me.getPageData().pageCount,
-			next = me.store.currentPage + 1;
+        var me = this,
+            total = me.getPageData().pageCount,
+            next = me.store.currentPage + 1;
 
-		if (me.store.currentPage == 1 && me.store.pageSize != me.getPageSize() && me.calculatePageSize) {
-			// if page has less records, that it could include, load more records per page
-			if (me.fireEvent('beforechange', me, next) !== false) {
-				me.store.pageSize = me.evaluatePageSize();
-				me.store.load();
-			}
-		} else if (next <= total) {
-			if (me.fireEvent('beforechange', me, next) !== false) {
-				me.store.nextPage();
-			}
-		}
-	},
+        if (me.store.currentPage == 1 && me.store.pageSize != me.getPageSize() && me.calculatePageSize) {
+            // if page has less records, that it could include, load more records per page
+            if (me.fireEvent('beforechange', me, next) !== false) {
+                me.store.pageSize = me.evaluatePageSize();
+                me.store.load();
+            }
+        } else if (next <= total) {
+            if (me.fireEvent('beforechange', me, next) !== false) {
+                me.store.nextPage();
+            }
+        }
+    },
 
-	initComponent: function () {
-		this.callParent();
+    initComponent: function () {
+        this.callParent();
 
-		this.on('added', function (comp, container) {
-			this.gridContainer = container;
+        this.on('added', function (comp, container) {
+            this.gridContainer = container;
 
             // TODO: on back to page event, refresh grid WITH gridHightlightNew
-			this.refreshHandler = Ext.Function.bind(function () {
+            this.refreshHandler = Ext.Function.bind(function () {
                 this.store.gridHightlightNew = true;
-				this.store.load();
-			}, this.gridContainer);
+                this.store.load();
+            }, this.gridContainer);
 
-			this.gridContainer.on('beforeactivate', function () {
-				if (this.store.pageSize != this.getPageSize() || !this.data) {
-					this.setPageSizeAndLoad();
+            this.gridContainer.on('beforeactivate', function () {
+                if (this.store.pageSize != this.getPageSize() || !this.data) {
+                    this.setPageSizeAndLoad();
                 }
-				if (this.autoRefresh) {
-					this.setDelayedRefresh();
+                if (this.autoRefresh) {
+                    this.setDelayedRefresh();
                 }
-			}, this);
+            }, this);
 
-			this.gridContainer.on('deactivate', function () {
-				this.clearDelayedRefresh();
-			}, this);
+            this.gridContainer.on('deactivate', function () {
+                this.clearDelayedRefresh();
+            }, this);
 
-			this.gridContainer.store.on('load', function () {
-				if (this.autoRefreshTask) {
-					this.clearDelayedRefresh();
-					if (this.autoRefresh) {
-						this.setDelayedRefresh();
+            this.gridContainer.store.on('load', function () {
+                if (this.autoRefreshTask) {
+                    this.clearDelayedRefresh();
+                    if (this.autoRefresh) {
+                        this.setDelayedRefresh();
                     }
-				}
-			}, this);
-
-			this.gridContainer.on('staterestore', function(comp) {
-				this.autoRefresh = comp.autoRefresh || 0;
-				if (this.autoRefresh) {
-					this.down('#refresh').setIconCls('x-btn-icon-autorefresh');
                 }
-			}, this);
-		});
-	},
+            }, this);
+
+            this.gridContainer.on('staterestore', function(comp) {
+                this.autoRefresh = comp.autoRefresh || 0;
+                if (this.autoRefresh) {
+                    this.down('#refresh').setIconCls('x-btn-icon-autorefresh');
+                }
+            }, this);
+        });
+    },
     setDelayedRefresh: function() {
         this.clearDelayedRefresh();
         this.autoRefreshTask = setTimeout(this.refreshHandler, this.autoRefresh * 1000);
@@ -403,92 +403,92 @@ Ext.define('Scalr.ui.PagingToolbar', {
 });
 
 Ext.define('Scalr.ui.ToolbarCloudLocation', {
-	extend: 'Ext.form.field.ComboBox',
-	alias: 'widget.fieldcloudlocation',
+    extend: 'Ext.form.field.ComboBox',
+    alias: 'widget.fieldcloudlocation',
 
-	localParamName: 'grid-ui-default-cloud-location',
-	fieldLabel: 'Location',
-	labelWidth: 65,
-	width: 358,
-	matchFieldWidth: false,
-	listConfig: {
-		width: 'auto',
-		minWidth: 300
-	},
-	iconCls: 'no-icon',
-	displayField: 'name',
-	valueField: 'id',
-	editable: false,
-	queryMode: 'local',
-	setCloudLocation: function () {
+    localParamName: 'grid-ui-default-cloud-location',
+    fieldLabel: 'Location',
+    labelWidth: 65,
+    width: 358,
+    matchFieldWidth: false,
+    listConfig: {
+        width: 'auto',
+        minWidth: 300
+    },
+    iconCls: 'no-icon',
+    displayField: 'name',
+    valueField: 'id',
+    editable: false,
+    queryMode: 'local',
+    setCloudLocation: function () {
         if (this.store.getCount() == 0) {
             Scalr.message.ErrorTip('Location\'s list is empty', this);
             this.disable();
             return;
         }
 
-		if (this.cloudLocation) {
-			this.setValue(this.cloudLocation);
-		} else {
-			var cloudLocation = Ext.state.Manager.get(this.localParamName);
-			if (cloudLocation) {
-				var ind = this.store.find('id', cloudLocation);
-				if (ind != -1)
-					this.setValue(cloudLocation);
-				else
-					this.setValue(this.store.getAt(0).get('id'));
-			} else {
-				this.setValue(this.store.getAt(0).get('id'));
-			}
-		}
-		this.gridStore.proxy.extraParams.cloudLocation = this.getValue();
-	},
-	listeners: {
-		change: function () {
-			if (! this.getValue())
-				this.setCloudLocation();
-		},
-		select: function () {
-			Ext.state.Manager.set(this.localParamName, this.getValue());
-			this.gridStore.proxy.extraParams.cloudLocation = this.getValue();
-			this.gridStore.loadPage(1);
-		},
-		added: function () {
-			this.setCloudLocation();
-		}
-	}
+        if (this.cloudLocation) {
+            this.setValue(this.cloudLocation);
+        } else {
+            var cloudLocation = Ext.state.Manager.get(this.localParamName);
+            if (cloudLocation) {
+                var ind = this.store.find('id', cloudLocation);
+                if (ind != -1)
+                    this.setValue(cloudLocation);
+                else
+                    this.setValue(this.store.getAt(0).get('id'));
+            } else {
+                this.setValue(this.store.getAt(0).get('id'));
+            }
+        }
+        this.gridStore.proxy.extraParams.cloudLocation = this.getValue();
+    },
+    listeners: {
+        change: function () {
+            if (! this.getValue())
+                this.setCloudLocation();
+        },
+        select: function () {
+            Ext.state.Manager.set(this.localParamName, this.getValue());
+            this.gridStore.proxy.extraParams.cloudLocation = this.getValue();
+            this.gridStore.loadPage(1);
+        },
+        added: function () {
+            this.setCloudLocation();
+        }
+    }
 });
 
 Ext.define('Scalr.ui.GridRadioColumn', {
-	extend: 'Ext.grid.column.Column',
-	alias: ['widget.radiocolumn'],
+    extend: 'Ext.grid.column.Column',
+    alias: ['widget.radiocolumn'],
 
-	initComponent: function(){
-		var me = this;
-		me.hasCustomRenderer = true;
-		me.callParent(arguments);
-	},
-	width: 35,
+    initComponent: function(){
+        var me = this;
+        me.hasCustomRenderer = true;
+        me.callParent(arguments);
+    },
+    width: 35,
 
-	processEvent: function(type, view, cell, recordIndex, cellIndex, e, record) {
-		var me = this;
-		if (type == 'click' && e.getTarget('input.x-form-radio')) {
-			view.store.each(function(r) {
-				r.set(me.dataIndex, false);
-			})
-			record.set(me.dataIndex, true);
-		}
-		return this.callParent(arguments);
-	},
+    processEvent: function(type, view, cell, recordIndex, cellIndex, e, record) {
+        var me = this;
+        if (type == 'click' && e.getTarget('input.x-form-radio')) {
+            view.store.each(function(r) {
+                r.set(me.dataIndex, false);
+            })
+            record.set(me.dataIndex, true);
+        }
+        return this.callParent(arguments);
+    },
 
-	defaultRenderer: function(value, meta, record) {
-		var result = '<div ';
-		if (value)
-			result += 'class="x-form-cb-checked" '
-		result += 'style="text-align: center" ><input type="button" class="x-form-field x-form-radio" style="border:0" /></div>';
+    defaultRenderer: function(value, meta, record) {
+        var result = '<div ';
+        if (value)
+            result += 'class="x-form-cb-checked" '
+        result += 'style="text-align: center" ><input type="button" class="x-form-field x-form-radio" style="border:0" /></div>';
 
-		return result;
-	}
+        return result;
+    }
 });
 
 Ext.define('Scalr.ui.ActionsMenu', {
@@ -581,17 +581,18 @@ Ext.define('Scalr.ui.ActionsMenu', {
 });
 
 Ext.define('Scalr.ui.GridOptionsColumn', {
-	extend: 'Ext.grid.column.Column',
-	alias: 'widget.optionscolumn',
+    extend: 'Ext.grid.column.Column',
+    alias: 'widget.optionscolumn',
 
-	text: 'Actions',
-	hideable: false,
+    text: 'Actions',
+    hideable: false,
     minWidth: 140,
-	fixed: true,
-	align: 'left',
-	tdCls: 'x-grid-row-options-cell',
+    fixed: true,
+    align: 'left',
+    tdCls: 'x-grid-row-options-cell',
     calculatedMargin: 8,
     calculatedSize: 30,
+    quickActionsLimit: 3,
 
     initComponent: function() {
         var me = this;
@@ -601,11 +602,11 @@ Ext.define('Scalr.ui.GridOptionsColumn', {
         if (Ext.isArray(me.menu)) {
             var i, flag = true;
             for (i = 0; i < me.menu.length; i++) {
-                if (!me.menu[i].showAsQuickAction)
+                if (Ext.isEmpty(me.menu[i].showAsQuickAction))
                     flag = false;
             }
 
-            if (flag && me.menu.length < 5) {
+            if (flag && me.menu.length <= me.quickActionsLimit) {
                 // we don't need menu, we can show all elements
                 me.quickItems = new Ext.util.MixedCollection();
                 i = 1;
@@ -655,37 +656,55 @@ Ext.define('Scalr.ui.GridOptionsColumn', {
         me.addCls(Ext.baseCSSPrefix + 'column-header-align-center');
     },
 
-	renderer: function(value, meta, record, rowIndex, colIndex) {
+    renderer: function(value, meta, record, rowIndex, colIndex) {
         var cmp = this.headerCt.getHeaderAtIndex(colIndex);
-		if (cmp.getVisibility(record)) {
-            var cnt = 0, ret = '', items = cmp.menu ? cmp.menu.items : cmp.quickItems, innerTpl = '';
+        if (cmp.getVisibility(record)) {
+            var cnt = 0, ret = '', items = cmp.menu ? cmp.menu.items : cmp.quickItems, innerTpl = '', visibleItemsCount = 0, quickActions = [], visibleQuickActionsCount = 0;
 
             items.eachKey(function(key, item) {
                 var visibility = Ext.isFunction(item.getVisibility) ? item.getVisibility(record.getData()) : true;
 
-                // if we don't have menu, fill empty cells to keep center align
-                if (item.showAsQuickAction && (cnt < 4) && (visibility || !cmp.menu || cmp.fillEmptyIcons)) {
-                    if (visibility) {
-                        innerTpl = '<div class="x-grid-row-options-quick-action x-grid-icon ' + item.iconCls.replace('x-menu-icon-', 'x-grid-icon-') + '" data-itemid="' + key + '" data-qtip="' + item.text + '"></div>';
+                if (visibility && item.xtype !== 'menuseparator') visibleItemsCount++;
 
-                        if (item.href) {
-                            if (! cmp.linkTplsCache[key]) {
-                                cmp.linkTplsCache[key] = new Ext.Template(item.href).compile();
-                            }
-
-                            var tpl = cmp.linkTplsCache[key];
-                            innerTpl = '<a href="' + tpl.apply(record.getData()) + '">' + innerTpl + '</a>';
-                        }
-                    } else {
-                        innerTpl = '<div class="x-grid-row-options-quick-action-hidden x-grid-icon"></div>';
-                    }
-
-                    ret += innerTpl;
-                    cnt++;
+                if (!Ext.isEmpty(item.showAsQuickAction)) {
+                    quickActions.push({
+                        key: key,
+                        item: item,
+                        visibility: visibility,
+                        showAsQuickAction: item.showAsQuickAction
+                    });
                 }
             });
 
-            if (cmp.menu) {
+            if (quickActions.length > 0) {
+                quickActions = Ext.Array.sort(quickActions, function(item1, item2){
+                    return Ext.Array.numericSortFn(item1.showAsQuickAction, item2.showAsQuickAction);
+                });
+                Ext.each(quickActions, function(quickAction){
+                    // if we don't have menu, fill empty cells to keep center align
+                    if ( (cnt < cmp.quickActionsLimit) && (quickAction.visibility || !cmp.menu || cmp.fillEmptyIcons)) {
+                        if (quickAction.visibility) {
+                            innerTpl = '<div class="x-grid-row-options-quick-action x-grid-icon ' + quickAction.item.iconCls.replace('x-menu-icon-', 'x-grid-icon-') + '" data-itemid="' + quickAction.key + '" data-qtip="' + quickAction.item.text + '"></div>';
+
+                            if (quickAction.item.href) {
+                                if (! cmp.linkTplsCache[quickAction.key]) {
+                                    cmp.linkTplsCache[quickAction.key] = new Ext.Template(quickAction.item.href).compile();
+                                }
+
+                                var tpl = cmp.linkTplsCache[quickAction.key];
+                                innerTpl = '<a href="' + tpl.apply(record.getData()) + '">' + innerTpl + '</a>';
+                            }
+                            visibleQuickActionsCount++;
+                        } else {
+                            innerTpl = '<div class="x-grid-row-options-quick-action-hidden x-grid-icon"></div>';
+                        }
+                        cnt++;
+                        ret += innerTpl;
+                    }
+                });
+            }
+
+            if (cmp.menu && visibleItemsCount > visibleQuickActionsCount) {
                 if (! ret)
                     ret = '<div style="height: 29px">&nbsp</div>';
                 ret += '<div class="x-grid-row-options"><div class="x-grid-row-options-trigger"></div></div>';
@@ -694,11 +713,11 @@ Ext.define('Scalr.ui.GridOptionsColumn', {
             return ret;
         }
 
-	},
+    },
 
-	getVisibility: function(record) {
-		return true;
-	},
+    getVisibility: function(record) {
+        return true;
+    },
 
     processEvent: function(type, view, cell, recordIndex, cellIndex, e, record, row) {
         //prevent row focusing
@@ -725,7 +744,7 @@ Ext.define('Scalr.ui.GridOptionsColumn', {
                     this.menu.setData(record.getData());
                     this.menu.showBy(btnEl, 'tr-br?', [ 0, 1 ]);
                     e.stopPropagation();
-                    return;
+                    return false;
                 }
             }
 
@@ -743,180 +762,33 @@ Ext.define('Scalr.ui.GridOptionsColumn', {
 
 });
 
-Ext.define('Scalr.ui.ButtonGroupColumn', {
-    extend: 'Ext.grid.column.Column',
-    alias: 'widget.buttongroupcolumn',
-
-    stopSelection: true,
-
-    tdCls: Ext.baseCSSPrefix + 'grid-cell-buttongroupcolumn',
-    innerCls: Ext.baseCSSPrefix + 'grid-cell-inner-buttongroupcolumn',
-
-    clickTargetName: 'el',
-
-    processEvent: function(type, view, cell, recordIndex, cellIndex, e, record, row) {
-        var me = this,
-            mousedown = type == 'mousedown',
-            autoFilter = view.store.getAutoFilter(),
-            newValue;
-        if (!me.disabled && mousedown) {
-            Ext.Array.each(Ext.fly(cell).query('.x-btn'), function(btn){
-                var b = Ext.fly(btn);
-                if (e.within(b)) {
-                    if (!b.hasCls('x-pressed')) {
-                        newValue = b.getAttribute('data-value')
-                    }
-                }
-            });
-            if (newValue !== undefined) {
-                if (me.toggleHandler !== undefined){
-                    me.toggleHandler(view, record, newValue);
-                } else {
-                    if (!record.get('locked')) {
-                        view.store.setAutoFilter(false);
-                        record.set(me.dataIndex, newValue);
-                        view.store.setAutoFilter(autoFilter);
-                    }
-                }
-            }
-            e.stopEvent();
-            return false;
-        } else {
-            return me.callParent(arguments);
-        }
-    },
-
-    renderer : function(value, meta, record, rowIndex, colIndex, store, grid) {
-        var column = grid.panel.columns[colIndex],
-            buttons = column.buttons,
-            html = [];
-        value = column.getValue !== undefined ? column.getValue(record) : value;
-        html.push('<div class="x-form-buttongroupfield">');
-        Ext.Array.each(buttons, function(btn, index, arr){
-            html.push('<a ' + (btn.width ? 'style="width:' + btn.width + 'px"' : '') + ' class="x-btn x-unselectable x-btn-default-small' + (value == btn.value ? ' x-btn-pressed' : '') + (record.get('locked') == 1 ? ' x-btn-disabled' : '') +'" data-value="' + btn.value + '">');
-            html.push('<span class="x-btn-wrap"><span class="x-btn-button">');
-            html.push('<span class="x-btn-inner x-btn-inner-default-small" >' + btn.text + '</span>');
-            html.push('</span></span></a>');
-        });
-        html.push('</div>');
-        return html.join('');
-    }
-});
-
-Ext.define('Scalr.ui.MultiCheckboxColumn', {
-    extend: 'Ext.grid.column.Column',
-    alias: 'widget.multicheckboxcolumn',
-
-    stopSelection: true,
-
-    tdCls: Ext.baseCSSPrefix + 'grid-cell-multicheckboxcolumn',
-    innerCls: Ext.baseCSSPrefix + 'grid-cell-inner-multicheckboxcolumn',
-
-    clickTargetName: 'el',
-    itemCls: Ext.baseCSSPrefix + 'multicheckbox-item',
-    itemCheckedCls: Ext.baseCSSPrefix + 'multicheckbox-item-checked',
-    itemDisabledCls: Ext.baseCSSPrefix + 'multicheckbox-item-disabled',
-    itemReadOnlyCls: Ext.baseCSSPrefix + 'multicheckbox-item-readonly',
-
-    config: {
-        readOnly: false
-    },
-
-    processEvent: function(type, view, cell, recordIndex, cellIndex, e, record, row) {
-        var me = this,
-            mousedown = type == 'mousedown',
-            changed = false,
-            autoFilter = view.store.getAutoFilter(),
-            value, name;
-        if (!me.disabled && mousedown) {
-            value = Ext.clone(record.get(me.dataIndex));
-            Ext.fly(cell).select('.' + me.itemCls).each(function(checkbox){
-                if (e.within(checkbox) && !checkbox.hasCls(me.itemDisabledCls) && !me.getReadOnly()) {
-                    name = checkbox.getAttribute('data-value');
-                    if (!checkbox.hasCls(me.itemCheckedCls)) {
-                        value[name] = 1;
-                        changed = true;
-                    } else {
-                        value[name] = 0;
-                        changed = true;
-                    }
-                    return false;
-                }
-            });
-            if (changed) {
-                me.fireEvent('beforechange', me, value, name, record, cell);
-                view.store.setAutoFilter(false);
-                record.set(me.dataIndex, value);
-                view.store.setAutoFilter(autoFilter);
-            }
-            e.stopEvent();
-            return false;
-        } else {
-            return me.callParent(arguments);
-        }
-    },
-
-    isDisabled: function(record) {
-        return false;
-    },
-
-    renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
-        var column = grid.panel.columns[colIndex],
-            isDisabled = column.isDisabled(record),
-            html = [];
-        if (value) {
-            Ext.Object.each(value, function(key, value){
-                var cls = column.itemCls;
-                if (!isDisabled) {
-                    if (value == 1) {
-                        cls += ' ' + column.itemCheckedCls;
-                    }
-                } else if (!column.getReadOnly()){
-                    cls += ' ' + column.itemDisabledCls;
-                }
-
-                // used in account/roles/view.js
-                if (record.get('lockedPermissions') && record.get('lockedPermissions')[key] == 1) {
-                    cls += ' ' + column.itemDisabledCls;
-                }
-
-                if (column.getReadOnly()){
-                    cls += ' ' + column.itemReadOnlyCls;
-                }
-                html.push(' <span class="' + cls + '" data-value="' + key + '"><img src="' + Ext.BLANK_IMAGE_URL + '"/>' + (column.labelRenderer ? column.labelRenderer(key) : key) + '</span>');
-            });
-        }
-        return column.cellRenderer ? column.cellRenderer(html.join(''), record) : html.join('');
-    }
-});
-
 Ext.define('Scalr.ui.RowPointer', {
     extend: 'Ext.AbstractPlugin',
     alias: 'plugin.rowpointer',
 
     disabled: false,
-	client: null,
+    client: null,
 
-	baseCls: 'x-panel-row-pointer',
-	addCls: null,
+    baseCls: 'x-panel-row-pointer',
+    addCls: null,
 
     align: 'left',
 
     width: 32,
     height: 32,
-	addOffset: 0,
-	thresholdOffset: 0,
-	hiddenOffset: -100,
+    addOffset: 0,
+    thresholdOffset: 0,
+    hiddenOffset: -100,
 
-	init: function(client) {
-		this.client = client;
+    init: function(client) {
+        this.client = client;
         this.baseCls += ' ' + this.baseCls + '-' + this.align;
         this.initListeners();
-	},
+    },
 
     initListeners: function() {
         var me = this;
-		me.throttledUpdatePointerPosition = Ext.Function.createThrottled(me.updatePointerPosition, me.throttle, me);
+        me.throttledUpdatePointerPosition = Ext.Function.createThrottled(me.updatePointerPosition, me.throttle, me);
 
         this.client.on('afterrender', function() {
             this.on('afterlayout', me.throttledUpdatePointerPosition, me);
@@ -939,22 +811,22 @@ Ext.define('Scalr.ui.RowPointer', {
     },
 
     pointTo: function(record) {
-		var offset = this.hiddenOffset;
-		if (this.client.view && record) {
+        var offset = this.hiddenOffset;
+        if (this.client.view && record) {
             var row = this.client.view.getRow(record);
             if (row) {
                 offset = Ext.get(row).getOffsetsTo(this.client.el)[1] + this.addOffset;
                 offset = offset < this.thresholdOffset ? this.hiddenOffset : offset;
             }
-		}
-		this.getPointerEl().setStyle('top', offset + 'px');
+        }
+        this.getPointerEl().setStyle('top', offset + 'px');
     },
 
-	updatePointerPosition: function() {
+    updatePointerPosition: function() {
         if (Ext.isFunction(this.getPointerRecord)) {
             this.pointTo(this.getPointerRecord());
         }
-	}
+    }
 
 });
 
@@ -966,24 +838,24 @@ Ext.define('Scalr.ui.FocusedRowPointer', {
 
     width: 0,
     height: 0,
-	thresholdOffset: 70,
+    thresholdOffset: 70,
     addOffset: 5,
 
-	throttle: 100,
+    throttle: 100,
 
     mode: 'selectedRecord', //selModel
 
 
-	init: function(client) {
+    init: function(client) {
         if (!client.findPlugin('selectedrecord')) {
            this.mode = 'selModel';
         }
         this.callParent(arguments);
-	},
+    },
 
     initListeners: function() {
         var me = this;
-		me.throttledUpdatePointerPosition = Ext.Function.createThrottled(me.updatePointerPosition, me.throttle, me);
+        me.throttledUpdatePointerPosition = Ext.Function.createThrottled(me.updatePointerPosition, me.throttle, me);
 
         this.client.on('afterrender', function() {
             this.on('afterlayout', me.throttledUpdatePointerPosition, me);
@@ -1031,6 +903,7 @@ Ext.define('Ext.grid.feature.AddButton', {
     cls: Ext.baseCSSPrefix + 'grid-add-button',
     viewCls: Ext.baseCSSPrefix + 'grid-with-add-button',
     disabledCls: Ext.baseCSSPrefix + 'disabled',
+    hidden: false,
     config: {
         text: 'Add'
     },
@@ -1085,7 +958,7 @@ Ext.define('Ext.grid.feature.AddButton', {
     renderAddButton: function() {
         var me = this;
         if (!me.buttonEl) {
-            me.buttonEl = Ext.core.DomHelper.insertHtml('beforeEnd', me.view.body.el.dom, '<div class="' + me.cls + '' + (me.disabled ? ' ' + me.disabledCls : '') + '" id="' + me.view.id + '-add-button">' + me.getText() + '</div>');
+            me.buttonEl = Ext.core.DomHelper.insertHtml('beforeEnd', me.view.body.el.dom, '<div class="' + me.cls + '' + (me.disabled ? ' ' + me.disabledCls : '') + '" id="' + me.view.id + '-add-button" '+(me.hidden?' style="display:none"':'')+'>' + me.getText() + '</div>');
         } else {
             me.view.body.el.append(me.buttonEl);
         }
@@ -1111,6 +984,16 @@ Ext.define('Ext.grid.feature.AddButton', {
         this.disabled = !!disabled;
     },
 
+    setVisible: function(visible) {
+        if (this.view.isDestroyed) return;
+
+        if (this.buttonEl) {
+            var el = Ext.fly(this.buttonEl);
+            el[visible ? 'show' : 'hide']();
+        }
+        this.hidden = !visible;
+    },
+
     updateButtonPosition: function() {
         var view = this.view,
             height,
@@ -1127,26 +1010,26 @@ Ext.define('Ext.grid.feature.AddButton', {
 });
 
 Ext.define('Scalr.ui.GridStatusColumn', {
-	extend: 'Ext.grid.column.Column',
-	alias: 'widget.statuscolumn',
+    extend: 'Ext.grid.column.Column',
+    alias: 'widget.statuscolumn',
 
-	text: '&nbsp;',
-	hideable: false,
-	width: 150,
+    text: '&nbsp;',
+    hideable: false,
+    width: 150,
     minWidth: 150,
-	//fixed: true,
-	align: 'center',
-	tdCls: 'x-grid-row-colored-status-cell',
+    //fixed: true,
+    align: 'center',
+    tdCls: 'x-grid-row-colored-status-cell',
 
-	renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
+    renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
         var column = grid.panel.columns[colIndex];
         return Scalr.ui.ColoredStatus.getHtml({
             type: column['statustype'],
             params: column['params'],
-            status: record.data.status,
+            status: record.data.status || record.data[column.dataIndex],
             data: record.data
         }, column.qtipConfig);
-	}
+    }
 });
 
 Ext.define('Scalr.ui.SelectedRecord', {
@@ -1243,7 +1126,7 @@ Ext.define('Scalr.ui.SelectedRecord', {
         selectedRecord = this.clearSelectedRecord();
         this.suspendSelectedRecordChangeEvent--;
 
-        if (this.form) {
+        if (this.grid.fireEvent('beforeselectedrecordchange', record) && this.form) {
             if (this.form.loadRecord(record)) {
                 this.selectedRecord = record;
                 this.grid.getView().addItemCls(this.selectedRecord, this.selectedRecordCls);
@@ -1253,7 +1136,7 @@ Ext.define('Scalr.ui.SelectedRecord', {
             }
         } else {
             this.selectedRecord = record;
-            this.grid.getView().addItemCls(this.selectedRecord);
+            this.grid.getView().addItemCls(this.selectedRecord, this.selectedRecordCls);
             this.grid.fireEvent('selectedrecordchange', record, selectedRecord);
         }
     },
@@ -1270,6 +1153,7 @@ Ext.define('Scalr.ui.SelectedRecord', {
         if (selectedRecord) {
             this.selectedRecord = null;
             this.grid.getView().removeItemCls(selectedRecord, this.selectedRecordCls);
+            this.grid.getView().getNavigationModel().setPosition(null, null);
             if (!this.suspendSelectedRecordChangeEvent) {
                 this.grid.fireEvent('selectedrecordchange', null, selectedRecord);
             }
@@ -1551,11 +1435,19 @@ Ext.define('Scalr.ui.ContinuousRenderer', {
             remove: me.onStoreRemove,
             destroyable: true
         });
+
+        this.storeProxyListeners = store.proxy.on({
+            scope: me,
+            exception: me.onStoreProxyException,
+            destroyable: true
+        });
+
         me.store = store;
     },
 
     unbindStore: function() {
         this.storeListeners.destroy();
+        this.storeProxyListeners.destroy();
         this.store = null;
     },
 
@@ -1572,17 +1464,25 @@ Ext.define('Scalr.ui.ContinuousRenderer', {
         if (!view.el.down('#' + view.id + '-buffered-loader')) {
             out.push('<div id="' + view.id + '-buffered-loader" class="x-grid-buffered-loader" style="display:none"><div>Loading...</div></div>');
         }
+        if (!view.el.down('#' + view.id + '-buffered-error')) {
+            out.push('<div id="' + view.id + '-buffered-error" class="x-grid-error" style="display:none"></div>');
+        }
     },
 
     onStoreBeforePrefetch: function(store, records) {
         var view = this.view,
             loader = view.el.down('#' + view.id + '-buffered-loader'),
+            error = view.el.down('#' + view.id + '-buffered-error'),
             emptyText = view.el.down('.x-grid-empty');
         if (loader) {
             loader.show();
         }
         if (emptyText) {
             emptyText.hide();
+        }
+        if (error) {
+            error.setVisibilityMode(Ext.dom.Element.DISPLAY);
+            error.hide();
         }
     },
 
@@ -1608,6 +1508,54 @@ Ext.define('Scalr.ui.ContinuousRenderer', {
                 addRecords: true
             });
         }
+    },
+
+    onStoreProxyException: function(proxy, response, operation, options) {
+        var me = this,
+            message = 'Unable to load data';
+        try {
+            var result = Ext.decode(response.responseText, true);
+            if (result && result.success === false && result.errorMessage)
+                message += ' (' + result.errorMessage + ')';
+            else
+                throw 'Report';
+        } catch (e) {
+            if (response.status == 200 && Ext.isFunction(response.getAllResponseHeaders) && response.getAllResponseHeaders() && response.responseText) {
+                var report = [ "Ext.JSON.decode(): You're trying to decode an invalid JSON String" ];
+                report.push(Scalr.utils.VarDump(response.request.headers));
+                report.push(Scalr.utils.VarDump(response.request.options));
+                report.push(Scalr.utils.VarDump(response.request.options.params));
+                report.push(Scalr.utils.VarDump(response.getAllResponseHeaders()));
+                report.push(response.status);
+                report.push(response.responseText);
+
+                report = report.join("\n\n");
+
+                Scalr.utils.PostError({
+                    message: 't2 ' + report,
+                    url: document.location.href
+                });
+            }
+        }
+        if (me.store.getCount()) {
+            Scalr.message.Error(message);
+        } else {
+            var error = me.view.el.down('#' + me.view.id + '-buffered-error');
+            if (error) {
+                error.update(message);
+                error.show();
+                var emptyText = me.view.el.down('.x-grid-empty');
+                if (emptyText) {
+                    emptyText.hide();
+                }
+            }
+            //me.view.refreshSize();
+        }
+    },
+
+    destroy: function() {
+        var me = this;
+        Ext.destroy(me.viewListeners, me.storeListeners, me.storeProxyListeners);
     }
 });
 
@@ -1694,6 +1642,662 @@ Ext.define('Scalr.ui.ContinuousStore', {
     //we always add new records to the top in continuous store
     add: function(arg) {
         return this.insert(0, arguments.length === 1 ? arg : arguments);
+    }
+});
+
+Ext.define('Scalr.ui.AclResourceColumn', {
+    extend: 'Ext.grid.column.Column',
+    alias: 'widget.aclresourcecolumn',
+
+    tdCls: Ext.baseCSSPrefix + 'grid-cell-aclresourcecolumn',
+    innerCls: Ext.baseCSSPrefix + 'grid-cell-inner-aclresourcecolumn',
+
+    cbCls: Ext.baseCSSPrefix + 'permission-cb',
+    cbModeCls: Ext.baseCSSPrefix + 'mode-cb',
+    cbCheckedCls: Ext.baseCSSPrefix + 'cb-checked',
+    cbDisabledCls: Ext.baseCSSPrefix + 'cb-disabled',
+
+    config: {
+        readOnly: false
+    },
+
+    statics: {
+        hideMenus: function() {
+            if (this.accessButtonMenu) this.accessButtonMenu.hide();
+            if (this.resourceModeMenu) this.resourceModeMenu.hide();
+        },
+        getAccessButtonMenu: function() {
+            if (!this.accessButtonMenu) {
+                this.accessButtonMenu = Ext.create('Ext.menu.Menu', {
+                    cls: 'x-menu-light x-menu-light-no-icon',
+                    width: 140,
+                    setRecord: function(btnEl, record, column){
+                        var items = [],
+                            permissions = record.get('permissions'),
+                            value = btnEl.getAttribute('data-value');
+                        items.push({
+                            xtype: 'menuitem',
+                            text: '<span style="color:#008000">Full access</span>',
+                            value: 'full'
+                        });
+                        if (value === 'limited') {
+                        items.push({
+                            xtype: 'menuitem',
+                                text: 'Limited',
+                                value: 'limited'
+                            });
+                        }
+                        if (!Ext.isEmpty(permissions)) {
+                            items.push({
+                                xtype: 'menuitem',
+                                text: '<span style="color:#B277FD">Read only</span>',
+                                value: 'readonly'
+                            });
+                        }
+                        items.push({
+                            xtype: 'menuitem',
+                            text: '<span style="color:#c00000">No access</span>',
+                            value: 'no'
+                        });
+
+                        Ext.each(items, function(item){
+                            if (item.value === value) {
+                                item.cls = 'x-menu-item-current';
+                                return false;
+                            }
+                        });
+
+                        this.hide();
+                        this.removeAll();
+                        this.add(items);
+
+                        this.resourceRecord = record;
+                        this.parentColumn = column;
+
+                        var xy = btnEl.getXY(), sizeX = xy[1] + btnEl.getHeight() + this.getHeight();
+                        if (sizeX > Scalr.application.getHeight()) {
+                            xy[1] -= sizeX - Scalr.application.getHeight();
+                        }
+                        this.showBy(btnEl, 'tl-bl');//.setPosition([xy[0] - (this.getWidth() - btnEl.getWidth()), xy[1] + btnEl.getHeight() + 1]);
+                        this.focus();
+                    },
+                    defaults: {
+                        handler: function(menuitem) {
+                            var menu = menuitem.parentMenu,
+                                record = menu.resourceRecord,
+                                permissions = record.get('permissions'),
+                                autoFilter,
+                                settings = {};
+                            if (menuitem.value === 'limited') return;
+
+                            //full, no, readonly
+                            settings.granted = menuitem.value === 'no' ? 0 : 1;
+                            if (!Ext.isEmpty(permissions)) {
+                                settings.permissions = {};
+                                Ext.Object.each(permissions, function(name, enabled){
+                                    settings.permissions[name] = menuitem.value === 'full' ? 1 : 0;
+                                });
+                            }
+                            autoFilter = record.store.getAutoFilter();
+                            record.store.setAutoFilter(false);
+                            record.set(settings);
+                            menu.parentColumn.afterChangeResource(settings, record);
+                            record.store.setAutoFilter(autoFilter);
+                        }
+                    }
+                });
+                this.accessButtonMenu.doAutoRender();
+            }
+            return this.accessButtonMenu;
+        },
+        getResourceModeMenu: function() {
+            if (!this.resourceModeMenu) {
+                this.resourceModeMenu = Ext.create('Ext.menu.Menu', {
+                    cls: 'x-menu-light x-menu-light-no-icon',
+                    width: 210,
+                    setRecord: function(btnEl, record, column){
+                        var items = [],
+                            id = record.get('id'),
+                            mode = record.get('mode');
+                        Ext.each(column.definitions[id][4], function(item){
+                            if (item['key'] != 1) {/*MODE_ALL*/
+                        items.push({
+                            xtype: 'menuitem',
+                                    text: item['name'],
+                                    cls: mode == item['key'] ? 'x-menu-item-current' : '',
+                                    value: item['key']
+                        });
+                            }
+
+                        });
+
+                        this.hide();
+                        this.removeAll();
+                        this.add(items);
+
+                        this.resourceRecord = record;
+                        this.parentColumn = column;
+
+                        var xy = btnEl.getXY(), sizeX = xy[1] + btnEl.getHeight() + this.getHeight();
+                        if (sizeX > Scalr.application.getHeight()) {
+                            xy[1] -= sizeX - Scalr.application.getHeight();
+                        }
+
+                        this.showBy(btnEl, 'tl-bl');//.setPosition([xy[0] - (this.getWidth() - btnEl.getWidth()), xy[1] + btnEl.getHeight() + 1]);
+                        this.focus();
+                    },
+                    defaults: {
+                        handler: function(menuitem) {
+                            var menu = menuitem.parentMenu,
+                                record = menu.resourceRecord,
+                                autoFilter;
+                            autoFilter = record.store.getAutoFilter();
+                            record.store.setAutoFilter(false);
+                            record.set('mode', menuitem.value);
+                            record.store.setAutoFilter(autoFilter);
+                        }
+                    }
+                });
+                this.resourceModeMenu.doAutoRender();
+            }
+            return this.resourceModeMenu;
+        }
+    },
+
+    initComponent: function() {
+        this.callParent(arguments);
+        this.on('afterrender', function() {
+            this.getView().on('afterrender', function() {
+                this.getView().el.on('scroll', this.self.hideMenus, this.self);
+                this.getView().on({
+                    groupcollapse: {
+                        fn: this.self.hideMenus,
+                        scope: this.self
+                    },
+                    groupexpand: {
+                        fn: this.self.hideMenus,
+                        scope: this.self
+                    }
+                });
+            }, this, {single: true});
+        }, this, {single: true});
+    },
+
+    isDisabled: function(record) {
+        return false;
+    },
+
+    processEvent: function(type, view, cell, recordIndex, cellIndex, e, record, row) {
+        var me = this,
+            mousedown = type == 'mousedown',
+            changed = false,
+            id = record.get('id'),
+            autoFilter = view.store.getAutoFilter(),
+            mode,
+            target,
+            value, name;
+
+        if (type == 'click') {
+            target = e.getTarget('.x-btn', null, true);
+            if (target) {
+                if (!target.hasCls('x-btn-disabled')) {
+                    //resource access button
+                    var menu = me.self.getAccessButtonMenu();
+                    if (menu.isVisible() && menu.resourceRecord === record) {
+                        menu.hide();
+                    } else {
+                        menu.setRecord(target, record, me);
+                    }
+                }
+            } else {
+                target = e.getTarget('.x-picker-field', null, true);
+                if (target) {
+                    if (!target.hasCls('x-form-readonly')) {
+                        //resource mode combobox
+                        var menu = me.self.getResourceModeMenu();
+                        if (menu.isVisible() && menu.resourceRecord === record) {
+                            menu.hide();
+                        } else {
+                            menu.setRecord(target, record, me);
+                        }
+                    }
+                } else {
+                    view.store.setAutoFilter(false);
+                    target = e.getTarget('.' + me.cbCls, null, true);
+                    if (target) {
+                        if (!target.hasCls(me.cbDisabledCls)) {
+                            //permission checkbox
+                            name = target.getAttribute('data-value');
+                            value = Ext.clone(record.get('permissions'));
+                            value[name] = target.hasCls(me.cbCheckedCls) ? 0 : 1;
+                            me.beforeChangePermission(name, value, record);
+                            record.set('permissions', value);
+                            me.afterChangeResource({permissions: value}, record);
+                        }
+                    } else {
+                        target = e.getTarget('.' + me.cbModeCls, null, true);
+                        if (target && !target.hasCls(me.cbDisabledCls)) {
+                            //mode checkbox
+                            if (target.hasCls(me.cbCheckedCls)) {
+                                value = 1;/*MODE_ALL*/
+                            } else {
+                                if (me.definitions[id] && me.definitions[id][4]) {
+                                    Ext.each(me.definitions[id][4], function(item){
+                                        if (item['key'] != 1) {/*MODE_ALL*/
+                                            value = item['key'];
+                                            return false;
+                                        }
+                                    });
+
+                                }
+                            }
+                            record.set('mode', value);
+                        }
+                    }
+
+                    view.store.setAutoFilter(autoFilter);
+                }
+            }
+
+        }
+        return me.callParent(arguments);
+    },
+
+    renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
+        var column = grid.panel.columns[colIndex],
+            html = [];
+        html.push(column.getResourceHtml(record));
+        html.push(column.getPermissionsHtml(record));
+        return column.cellRenderer ? column.cellRenderer(html.join(''), record) : html.join('');
+    },
+
+    getResourceHtml: function(record) {
+        var html = [];
+        html.push('<div class="x-resource">');
+        html.push(this.getAccessButtonHtml(record));
+        html.push(this.getResourceNameHtml(record));
+        html.push(this.getResourceModeHtml(record));
+        html.push('</div>');
+        return html.join('');
+    },
+    getAccessButtonHtml: function(record) {
+        var html,
+            cls,
+            permissions,
+            text,
+            value,
+            mode,
+            isBtnDisabled,
+            id = record.get('id');
+
+        if (this.getReadOnly()) {
+            isBtnDisabled = true;
+        } else if (id == 264 || id == 265) {
+            var parentRecord = record.store.getById(256);//RESOURCE_FARMS (RESOURCE_OWN/TEAM_FARMS)
+            if (parentRecord.get('granted') == 1) {
+                isBtnDisabled = true;
+            }
+        }
+
+        if (record.get('granted') != 1) {
+            cls = 'x-btn-red' + (isBtnDisabled ? ' scalr-ui-panel-account-roles-btn-no' : '');
+            text = 'No access';
+            value = 'no';
+        } else {
+            permissions = Ext.Object.getValues(record.get('permissions'));
+            if ((Ext.isEmpty(permissions) || !Ext.Array.contains(permissions, 0))) {
+                cls = 'x-btn-green' + (isBtnDisabled ? ' scalr-ui-panel-account-roles-btn-full' : '');
+                text = 'Full access';
+                value = 'full';
+            } else if (!Ext.Array.contains(permissions, 1)) {
+                cls = 'x-btn-purple' + (isBtnDisabled ? ' scalr-ui-panel-account-roles-btn-readonly' : '');
+                text = 'Read only';
+                value = 'readonly';
+            } else {
+                cls = (isBtnDisabled ? ' scalr-ui-panel-account-roles-btn-limitd' : '');
+                text = 'Limited';
+                value = 'limited';
+            }
+        }
+
+        if (isBtnDisabled) {
+            cls += ' x-btn-disabled';
+        }
+
+        html =
+            '<a class="x-btn ' + cls +' x-unselectable x-btn-default-small" data-value="'+value+'">' +
+            '<span style="table-layout:fixed;" class="x-btn-wrap x-btn-wrap-default-small x-btn-split x-btn-split-right">' +
+            '<span class="x-btn-button x-btn-button-default-small x-btn-text x-btn-button-center">' +
+            '<span class="x-btn-icon-el x-btn-icon-el-default-small"></span>' +
+            '<span class="x-btn-inner x-btn-inner-default-small">' + text + '</span>' +
+            '</span>' +
+            '</span>' +
+            '</a>';
+
+        return html;
+    },
+
+    getResourceNameHtml: function(record) {
+        return '<div class="x-resource-name">' + record.get('name') + '</div>';
+    },
+
+    getResourceModeHtml: function(record) {
+        var me = this,
+            html = [],
+            cls = me.cbModeCls,
+            id = record.get('id'),
+            mode = record.get('mode');
+
+        if (me.definitions[id] && me.definitions[id][4] && record.get('granted')) {
+            //resource with modes
+            var currentMode,
+                modeAll,
+                modes = [];
+            Ext.each(me.definitions[id][4], function(item){
+                if (item['key'] == 1) {/*MODE_ALL*/
+                    modeAll = item;
+                } else {
+                    modes.push(item);
+                }
+
+                if (mode == item['key'] || !mode && item['default']) {
+                    currentMode = item;
+                }
+
+            });
+
+            if (modeAll) {
+                if (me.getReadOnly()){
+                    cls += ' ' + me.cbDisabledCls;
+                }
+                if (modeAll !== currentMode) {
+                    cls += ' ' + me.cbCheckedCls;
+                }
+                html.push('<span class="' + cls + ' x-unselectable"><img src="' + Ext.BLANK_IMAGE_URL + '"/>Limit user acces to volumes from</span>');
+            }
+            html.push(
+                '<a style="display:inline-block;vertical-align:top;margin:0 0 0 12px;text-decoration:none" class="x-field x-picker-field x-form-item x-form-item-default x-form-type-text '+(modeAll === currentMode || me.getReadOnly() ? 'x-form-readonly' : '')+'" >' +
+                    '<div class="x-form-item-body x-form-item-body-default x-form-text-field-body x-form-text-field-body-default" style="max-width:210px;min-width:100px">' +
+                        '<div class="x-form-trigger-wrap x-form-trigger-wrap-default">' +
+                            '<div class="x-form-text-wrap x-form-text-wrap-default">' +
+                                '<span type="text" class="x-form-field x-form-required-field x-form-text x-form-text-default " autocomplete="off" readonly="readonly" value="">'+(currentMode && modeAll !== currentMode ? currentMode['name'] : (modes.length ? modes[0]['name'] : ''))+'</span>' +
+                            '</div>' +
+                            '<div class="x-form-trigger x-form-trigger-default x-form-arrow-trigger x-form-arrow-trigger-default "></div>' +
+                        '</div>' +
+                    '</div>' +
+                '</a>'
+            );
+
+        }
+        return html.join('');
+    },
+
+    getPermissionsHtml: function(record) {
+        var me = this,
+            html = [],
+            permissions = record.get('permissions'),
+            id = record.get('id');
+        if (!Ext.isEmpty(permissions) && record.get('granted') && (Ext.Object.getSize(permissions) > 1 || permissions['manage'] === undefined)){
+            Ext.Object.each(permissions, function(name, enabled){
+                var cls = me.cbCls,
+                    resource = me.definitions[record.get('id')],
+                    description = resource && resource[3] && resource[3][name] ? resource[3][name] : '';
+
+                if (enabled == 1) {
+                    cls += ' ' + me.cbCheckedCls;
+                }
+
+                if (me.getReadOnly()){
+                    cls += ' ' + me.cbDisabledCls;
+                } else {
+                    if (id == 264 || id == 265) {
+                        var parentRecord = record.store.getById(256);//RESOURCE_FARMS (RESOURCE_OWN/TEAM_FARMS)
+                        if (parentRecord.get('granted') == 1 && parentRecord.get('permissions')[name] == 1) {
+                            cls += ' ' + me.cbDisabledCls;
+                        }
+                    }
+                }
+
+                html.push('<div class="' + cls + ' x-unselectable" data-value="' + name + '">');
+                html.push('<img src="' + Ext.BLANK_IMAGE_URL + '"/>');
+                html.push('<span class="x-permission-name">' + me.permissionLabelRenderer(name) + '</span>&nbsp;&nbsp;<span style="font-size:85%;color:#ccc;line-height:1.6em">' + description + '</span>');
+                html.push('</div>');
+            });
+        }
+        return html.join('');
+    },
+
+    permissionLabelRenderer: function(label) {
+        var label = label === 'ssh-console' ? 'SSH Launcher' : label;
+        label = Scalr.utils.capitalizeFirstLetter(label.replace('-', ' '));
+        return label;
+    },
+
+    beforeChangePermission: function(name, value, record) {
+        var id = record.get('id');
+        if (id == 260) { //RESOURCE_ROLES_ENVIRONMENT
+            if (value['create'] == 1) {
+                if (name === 'create') {
+                    Ext.apply(value, {bundletasks: 1, manage: 1});
+                } else if ((name === 'bundletasks' || name === 'manage') && value[name] == 0){
+                    value['create'] = 0;
+                }
+            }
+        }
+    },
+
+    afterChangeResource: function(settings, record) {
+        var id = record.get('id');
+        if (id == 256) { //RESOURCE_FARMS (RESOURCE_OWN/TEAM_FARMS)
+            // enable permission in child
+            var childPermissions = {},
+                childRecord;
+
+            Ext.Object.each(settings.permissions, function(name, enabled){
+                if (enabled == 1) {
+                    childPermissions[name] = 1;
+                }
+            });
+
+            childRecord = record.store.getById(264);
+            childRecord.set('permissions', Ext.apply(childRecord.get('permissions'), childPermissions));
+            if (settings.granted === 1) {
+                childRecord.set('granted', 1);
+            }
+            //ExtJS 5.1.0 bug workaround: commiting record, which is not visible(filtered) at the moment, causes error
+            var view = this.getView();
+            if (view) childRecord.commit(!!Ext.isEmpty(view.getNode(childRecord)));
+
+            childRecord = record.store.getById(265);
+            childRecord.set('permissions', Ext.apply(childRecord.get('permissions'), childPermissions));
+            if (settings.granted === 1) {
+                childRecord.set('granted', 1);
+            }
+
+            //ExtJS 5.1.0 bug workaround: commiting record, which is not visible(filtered) at the moment, causes error
+            if (view) childRecord.commit(!!Ext.isEmpty(this.ownerCt.view.getNode(childRecord)));
+        }
+    }
+});
+
+Ext.define('Scalr.ui.RoleEnvironmentsColumn', {
+    extend: 'Ext.grid.column.Column',
+    alias: 'widget.roleenvironmentscolumn',
+
+    tdCls: Ext.baseCSSPrefix + 'grid-cell-aclresourcecolumn',
+    innerCls: Ext.baseCSSPrefix + 'grid-cell-inner-aclresourcecolumn',
+
+    cbCls: Ext.baseCSSPrefix + 'permission-cb',
+    cbModeCls: Ext.baseCSSPrefix + 'mode-cb',
+    cbCheckedCls: Ext.baseCSSPrefix + 'cb-checked',
+    cbDisabledCls: Ext.baseCSSPrefix + 'cb-disabled',
+
+    config: {
+        readOnly: false
+    },
+
+    statics: {
+        hideMenus: function() {
+            if (this.accessButtonMenu) this.accessButtonMenu.hide();
+        },
+        getAccessButtonMenu: function() {
+            if (!this.accessButtonMenu) {
+                this.accessButtonMenu = Ext.create('Ext.menu.Menu', {
+                    cls: 'x-menu-light x-menu-light-no-icon',
+                    width: 140,
+                    setRecord: function(btnEl, record, column){
+                        var items = [],
+                            value = btnEl.getAttribute('data-value');
+                        items.push({
+                            xtype: 'menuitem',
+                            text: '<span style="color:#008000">Available</span>',
+                            value: 1
+                        },{
+                            xtype: 'menuitem',
+                            text: '<span style="color:#c00000">Restricted</span>',
+                            value: 0
+                        });
+
+                        Ext.each(items, function(item){
+                            if (item.value == value) {
+                                item.cls = 'x-menu-item-current';
+                                return false;
+                            }
+                        });
+
+                        this.hide();
+                        this.removeAll();
+                        this.add(items);
+
+                        this.envRecord = record;
+                        this.parentColumn = column;
+
+                        var xy = btnEl.getXY(), sizeX = xy[1] + btnEl.getHeight() + this.getHeight();
+                        if (sizeX > Scalr.application.getHeight()) {
+                            xy[1] -= sizeX - Scalr.application.getHeight();
+                        }
+                        this.showBy(btnEl, 'tl-bl');
+                        this.focus();
+                    },
+                    defaults: {
+                        handler: function(menuitem) {
+                            var menu = menuitem.parentMenu,
+                                record = menu.envRecord,
+                                autoFilter,
+                                settings = {};
+
+                            autoFilter = record.store.getAutoFilter();
+                            record.store.setAutoFilter(false);
+                            record.set({enabled: menuitem.value});
+                            record.store.setAutoFilter(autoFilter);
+                        }
+                    }
+                });
+                this.accessButtonMenu.doAutoRender();
+            }
+            return this.accessButtonMenu;
+        },
+    },
+
+    initComponent: function() {
+        this.callParent(arguments);
+        this.on('afterrender', function() {
+            this.getView().on('afterrender', function() {
+                this.getView().el.on('scroll', this.self.hideMenus, this.self);
+                this.getView().on({
+                    groupcollapse: {
+                        fn: this.self.hideMenus,
+                        scope: this.self
+                    },
+                    groupexpand: {
+                        fn: this.self.hideMenus,
+                        scope: this.self
+                    }
+                });
+            }, this, {single: true});
+        }, this, {single: true});
+    },
+
+    isDisabled: function(record) {
+        return false;
+    },
+
+    processEvent: function(type, view, cell, recordIndex, cellIndex, e, record, row) {
+        var me = this,
+            target;
+
+        if (type == 'click') {
+            target = e.getTarget('.x-btn', null, true);
+            if (target) {
+                if (!target.hasCls('x-btn-disabled')) {
+                    //access button
+                    var menu = me.self.getAccessButtonMenu();
+                    if (menu.isVisible() && menu.envRecord === record) {
+                        menu.hide();
+                    } else {
+                        menu.setRecord(target, record, me);
+                    }
+                }
+            }
+        }
+        return me.callParent(arguments);
+    },
+
+    renderer: function(value, meta, record, rowIndex, colIndex, store, grid) {
+        var column = grid.panel.columns[colIndex],
+            html = [];
+        html.push(column.getAccessHtml(record));
+        return column.cellRenderer ? column.cellRenderer(html.join(''), record) : html.join('');
+    },
+
+    getAccessHtml: function(record) {
+        var html = [];
+        html.push('<div class="x-resource">');
+        html.push(this.getAccessButtonHtml(record));
+        html.push(this.getResourceNameHtml(record));
+        html.push('</div>');
+        return html.join('');
+    },
+    getAccessButtonHtml: function(record) {
+        var html,
+            cls,
+            text,
+            value,
+            isBtnDisabled
+
+        if (this.getReadOnly()) {
+            isBtnDisabled = true;
+        }
+
+        if (record.get('enabled') != 1) {
+            cls = 'x-btn-red' + (isBtnDisabled ? ' scalr-ui-panel-account-roles-btn-no' : '');
+            text = 'Restricted';
+            value = 0;
+        } else {
+            cls = 'x-btn-green' + (isBtnDisabled ? ' scalr-ui-panel-account-roles-btn-full' : '');
+            text = 'Available';
+            value = 1;
+        }
+
+        if (isBtnDisabled) {
+            cls += ' x-btn-disabled';
+        }
+
+        html =
+            '<a class="x-btn ' + cls +' x-unselectable x-btn-default-small" data-value="'+value+'">' +
+            '<span style="table-layout:fixed;" class="x-btn-wrap x-btn-wrap-default-small x-btn-split x-btn-split-right">' +
+            '<span class="x-btn-button x-btn-button-default-small x-btn-text x-btn-button-center">' +
+            '<span class="x-btn-icon-el x-btn-icon-el-default-small"></span>' +
+            '<span class="x-btn-inner x-btn-inner-default-small">' + text + '</span>' +
+            '</span>' +
+            '</span>' +
+            '</a>';
+
+        return html;
+    },
+
+    getResourceNameHtml: function(record) {
+        return '<div class="x-resource-name">' + record.get('name') + '</div>';
     }
 
 });

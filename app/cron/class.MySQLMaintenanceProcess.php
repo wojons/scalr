@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Model\Entity;
+
 class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
 {
     public $ThreadArgs;
@@ -10,7 +12,7 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
     public function __construct()
     {
         // Get Logger instance
-        $this->Logger = Logger::getLogger(__CLASS__);
+        $this->Logger = \Scalr::getContainer()->logger(__CLASS__);
     }
 
     public function OnStartForking()
@@ -66,26 +68,26 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
         //
 
         //Backups
-        if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BCP_ENABLED) && $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BCP_EVERY) != 0)
+        if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BCP_ENABLED) && $DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BCP_EVERY) != 0)
         {
-            if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING) == 1)
+            if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_IS_BCP_RUNNING) == 1)
             {
                 // Wait for timeout time * 2 (Example: NIVs problem with big mysql snapshots)
                 // We must wait for running bundle process.
-                $bcp_timeout = ($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BCP_EVERY)*60)*5;
-                if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_LAST_BCP_TS)+$bcp_timeout < time())
+                $bcp_timeout = ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BCP_EVERY)*60)*5;
+                if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_LAST_BCP_TS)+$bcp_timeout < time())
                     $bcp_timeouted = true;
 
                 if ($bcp_timeouted)
                 {
-                    $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 0, DBFarmRole::TYPE_LCL);
+                    $DBFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_IS_BCP_RUNNING, 0, Entity\FarmRoleSetting::TYPE_LCL);
                     $this->Logger->info("[FarmID: {$DBFarm->ID}] MySQL Backup already running. Timeout. Clear lock.");
                 }
             }
             else
             {
-                $timeout = $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BCP_EVERY)*60;
-                if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_LAST_BCP_TS)+$timeout < time())
+                $timeout = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BCP_EVERY)*60;
+                if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_LAST_BCP_TS)+$timeout < time())
                 {
                     $this->Logger->info("[FarmID: {$DBFarm->ID}] Need new backup");
 
@@ -102,11 +104,11 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
                     {
                         if ($DBServer->status == SERVER_STATUS::RUNNING)
                         {
-                            $msg = new Scalr_Messaging_Msg_Mysql_CreateBackup($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_ROOT_PASSWORD));
+                            $msg = new Scalr_Messaging_Msg_Mysql_CreateBackup($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_ROOT_PASSWORD));
                             $DBServer->SendMessage($msg);
 
-                            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BCP_RUNNING, 1, DBFarmRole::TYPE_LCL);
-                            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_BCP_SERVER_ID, $DBServer->serverId, DBFarmRole::TYPE_LCL);
+                            $DBFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_IS_BCP_RUNNING, 1, Entity\FarmRoleSetting::TYPE_LCL);
+                            $DBFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_BCP_SERVER_ID, $DBServer->serverId, Entity\FarmRoleSetting::TYPE_LCL);
                         }
                     }
                     else
@@ -115,19 +117,19 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
             }
         }
 
-        if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_ENABLED) && $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_EVERY) != 0)
+        if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BUNDLE_ENABLED) && $DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BUNDLE_EVERY) != 0)
         {
-            if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING) == 1)
+            if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_IS_BUNDLE_RUNNING) == 1)
             {
                 // Wait for timeout time * 2 (Example: NIVs problem with big mysql snapshots)
                 // We must wait for running bundle process.
-                $bundle_timeout = $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_EVERY)*(3600*2);
-                if ($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_LAST_BUNDLE_TS)+$bundle_timeout < time())
+                $bundle_timeout = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BUNDLE_EVERY)*(3600*2);
+                if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_LAST_BUNDLE_TS)+$bundle_timeout < time())
                     $bundle_timeouted = true;
 
                 if ($bundle_timeouted)
                 {
-                    $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING, 0, DBFarmRole::TYPE_LCL);
+                    $DBFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_IS_BUNDLE_RUNNING, 0, Entity\FarmRoleSetting::TYPE_LCL);
                     $this->Logger->info("[FarmID: {$DBFarm->ID}] MySQL Bundle already running. Timeout. Clear lock.");
                 }
             }
@@ -136,9 +138,9 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
                 /*
                  * Check bundle window
                  */
-                $bundleEvery = $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_EVERY);
+                $bundleEvery = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BUNDLE_EVERY);
                 $timeout = $bundleEvery*3600;
-                $lastBundleTime = $DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_LAST_BUNDLE_TS);
+                $lastBundleTime = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_LAST_BUNDLE_TS);
 
                 $performBundle = false;
                 if ($bundleEvery % 24 == 0)
@@ -152,8 +154,8 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
                             return;
                     }
 
-                    $pbwFrom = (int)($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_WINDOW_START_HH).$DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_WINDOW_START_MM));
-                    $pbwTo = (int)($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_WINDOW_END_HH).$DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_WINDOW_END_MM));
+                    $pbwFrom = (int)($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BUNDLE_WINDOW_START_HH).$DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BUNDLE_WINDOW_START_MM));
+                    $pbwTo = (int)($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BUNDLE_WINDOW_END_HH).$DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BUNDLE_WINDOW_END_MM));
                     if ($pbwFrom && $pbwTo) {
                         $current_time = (int)date("Hi");
                         if ($pbwFrom <= $current_time && $pbwTo >= $current_time)
@@ -166,8 +168,8 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
                 {
                     //Check timeout
                     if ($lastBundleTime+$timeout < time()) {
-                        $pbwFrom = (int)($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_WINDOW_START_HH).$DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_WINDOW_START_MM));
-                        $pbwTo = (int)($DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_WINDOW_END_HH).$DBFarmRole->GetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_WINDOW_END_MM));
+                        $pbwFrom = (int)($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BUNDLE_WINDOW_START_HH).$DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BUNDLE_WINDOW_START_MM));
+                        $pbwTo = (int)($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BUNDLE_WINDOW_END_HH).$DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_BUNDLE_WINDOW_END_MM));
                         if ($pbwFrom && $pbwTo) {
                             $current_time = (int)date("Hi");
                             if ($pbwFrom <= $current_time && $pbwTo >= $current_time)
@@ -192,8 +194,8 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
                         {
                             $DBServer->SendMessage(new Scalr_Messaging_Msg_Mysql_CreateDataBundle());
 
-                            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_IS_BUNDLE_RUNNING, 1, DBFarmRole::TYPE_LCL);
-                            $DBFarmRole->SetSetting(DBFarmRole::SETTING_MYSQL_BUNDLE_SERVER_ID, $DBServer->serverId, DBFarmRole::TYPE_LCL);
+                            $DBFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_IS_BUNDLE_RUNNING, 1, Entity\FarmRoleSetting::TYPE_LCL);
+                            $DBFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_BUNDLE_SERVER_ID, $DBServer->serverId, Entity\FarmRoleSetting::TYPE_LCL);
                         }
                     }
                     else
@@ -240,18 +242,20 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
                       }
                 }
 
-                   if (!$res)
-                   {
-                       Logger::getLogger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage($DBFarm->ID,
-                           sprintf(_("Scalr cannot connect to server %s:3306 (%s) and check replication status. (Error (%s):%s)"),
-                           $DBServer->remoteIp, $DBServer->serverId, $err, socket_strerror($err)
-                       )));
+                   if (!$res) {
+                       \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
+                            $DBFarm->ID,
+                            sprintf(_("Scalr cannot connect to server %s:3306 (%s) and check replication status. (Error (%s):%s)"),
+                               $DBServer->remoteIp, $DBServer->serverId, $err, socket_strerror($err)
+                            ),
+                            !empty($DBServer->serverId) ? $DBServer->serverId : null
+                       ));
                        continue;
                    }
 
                    // Connect to Mysql on slave
                    $conn = NewADOConnection("mysqli");
-                    $conn->Connect($DBServer->remoteIp, 'scalr_stat', $DBServer->GetFarmRoleObject()->GetSetting(DBFarmRole::SETTING_MYSQL_STAT_PASSWORD), null);
+                   $conn->Connect($DBServer->remoteIp, 'scalr_stat', $DBServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::MYSQL_STAT_PASSWORD), null);
                    $conn->SetFetchMode(ADODB_FETCH_ASSOC);
 
                    // Get Slave status
@@ -263,22 +267,18 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
                    else
                        $replication_status = 0;
 
-                   if ($replication_status != $DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_REPLICATION_STATUS))
-                   {
+                   if ($replication_status != $DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_REPLICATION_STATUS)) {
                        if ($replication_status == 0)
                            Scalr::FireEvent($DBFarm->ID, new MySQLReplicationFailEvent($DBServer));
                        else
                            Scalr::FireEvent($DBFarm->ID, new MySQLReplicationRecoveredEvent($DBServer));
                    }
-               }
-               catch(Exception $e)
-               {
-                   Logger::getLogger(LOG_CATEGORY::FARM)->warn(
-                       new FarmLogMessage(
+               } catch (Exception $e) {
+                   \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
                            $DBFarm->ID,
-                           "Cannot retrieve replication status. {$e->getMessage()}"
-                       )
-                   );
+                           "Cannot retrieve replication status. {$e->getMessage()}",
+                           !empty($DBServer->serverId) ? $DBServer->serverId : null
+                   ));
                }
         }
         }

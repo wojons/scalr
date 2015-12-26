@@ -1,65 +1,66 @@
 <?php
-    class Scalr_Role_Behavior_CfCloudController extends Scalr_Role_Behavior implements Scalr_Role_iBehavior
+
+use Scalr\Model\Entity;
+
+class Scalr_Role_Behavior_CfCloudController extends Scalr_Role_Behavior implements Scalr_Role_iBehavior
+{
+    /** DBFarmRole settings **/
+    const ROLE_VOLUME_ID = 'cf.data_storage.volume_id';
+    const ROLE_VERSION = 'cf.version';
+    const ROLE_DATA_STORAGE_ENGINE = 'cf.data_storage.engine';
+
+    // For EBS storage
+    const ROLE_DATA_STORAGE_EBS_SIZE = 'cf.data_storage.ebs.size';
+
+
+    public function __construct($behaviorName)
     {
-        /** DBFarmRole settings **/
-        const ROLE_VOLUME_ID    = 'cf.data_storage.volume_id';
-        const ROLE_VERSION    	= 'cf.version';
-        const ROLE_DATA_STORAGE_ENGINE = 'cf.data_storage.engine';
+        parent::__construct($behaviorName);
+    }
 
-        // For EBS storage
-        const ROLE_DATA_STORAGE_EBS_SIZE = 'cf.data_storage.ebs.size';
+    public function getSecurityRules()
+    {
+        return array(
+            "tcp:4222:4222:0.0.0.0/0",
+            "tcp:9022:9022:0.0.0.0/0"
+        );
+    }
 
+    public function handleMessage(Scalr_Messaging_Msg $message, DBServer $dbServer)
+    {
+        parent::handleMessage($message, $dbServer);
 
-        public function __construct($behaviorName)
-        {
-            parent::__construct($behaviorName);
+        if (empty($message->cfCloudController)) {
+            return;
         }
 
-        public function getSecurityRules()
-        {
-            return array(
-                "tcp:4222:4222:0.0.0.0/0",
-                "tcp:9022:9022:0.0.0.0/0"
-            );
-        }
+        switch (get_class($message)) {
+            case "Scalr_Messaging_Msg_HostUp":
 
-        public function handleMessage(Scalr_Messaging_Msg $message, DBServer $dbServer)
-        {
-            parent::handleMessage($message, $dbServer);
+                if ($message->cfCloudController->volumeConfig) {
+                    $this->setVolumeConfig($message->cfCloudController->volumeConfig, $dbServer->GetFarmRoleObject(), $dbServer);
 
-            if (!$message->cfCloudController)
-                return;
+                    $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_VERSION, $message->cfCloudController->version, Entity\FarmRoleSetting::TYPE_LCL);
+                } else
+                    throw new Exception("Received hostUp message from CF Cloud Controller server without volumeConfig");
 
-            switch (get_class($message))
-            {
-                case "Scalr_Messaging_Msg_HostUp":
-
-                    if ($message->cfCloudController->volumeConfig) {
-                        $this->setVolumeConfig($message->cfCloudController->volumeConfig, $dbServer->GetFarmRoleObject(), $dbServer);
-
-                        $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_VERSION, $message->cfCloudController->version, DBFarmRole::TYPE_LCL);
-                    }
-                    else
-                        throw new Exception("Received hostUp message from CF Cloud Controller server without volumeConfig");
-
-                    break;
-            }
-        }
-
-        public function extendMessage(Scalr_Messaging_Msg $message, DBServer $dbServer)
-        {
-            $message = parent::extendMessage($message, $dbServer);
-
-            switch (get_class($message))
-            {
-                case "Scalr_Messaging_Msg_HostInitResponse":
-
-                    $message->cfCloudController = new stdClass();
-                    $message->cfCloudController->volumeConfig = $this->getVolumeConfig($dbServer->GetFarmRoleObject(), $dbServer);
-
-                    break;
-            }
-
-            return $message;
+                break;
         }
     }
+
+    public function extendMessage(Scalr_Messaging_Msg $message, DBServer $dbServer)
+    {
+        $message = parent::extendMessage($message, $dbServer);
+
+        switch (get_class($message)) {
+            case "Scalr_Messaging_Msg_HostInitResponse":
+
+                $message->cfCloudController = new stdClass();
+                $message->cfCloudController->volumeConfig = $this->getVolumeConfig($dbServer->GetFarmRoleObject(), $dbServer);
+
+                break;
+        }
+
+        return $message;
+    }
+}

@@ -20,7 +20,15 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
         },
         sorters: [{
             property: 'name'
-        }]
+        }],
+        listeners: {
+            beforeload: function () {
+                grid.down('#add').toggle(false, true);
+            },
+            filterchange: function () {
+                grid.down('#add').toggle(false, true);
+            }
+        }
     });
 
 	var reconfigurePage = function(params) {
@@ -48,12 +56,14 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
         cls: 'x-panel-column-left',
         store: store,
         flex: 1,
-        selModel: {
-            selType: 'selectedmodel',
-            getVisibility: function(record) {
-                return moduleParams['scope'] == record.get('scope') && !record.get('used');
-            }
-        },
+        selModel:
+            Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'manage') ?
+            {
+                selType: 'selectedmodel',
+                getVisibility: function(record) {
+                    return moduleParams['scope'] == record.get('scope') && !record.get('used');
+                }
+            } : null,
         plugins: [ 'focusedrowpointer', {
             ptype: 'selectedrecord',
             disableSelection: false,
@@ -86,7 +96,7 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
             header: 'Actions',
             width: 90,
             minWidth: 90,
-            hidden: moduleParams['scope'] != 'environment',
+            hidden: moduleParams['scope'] != 'environment' || !Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'fire'),
             sortable: false,
             align: 'center', xtype: 'templatecolumn', tpl:
             '<a data-qtip="Fire event" href="#/scripts/events/fire?eventName={name}"><img src="' + Ext.BLANK_IMAGE_URL + '" class="x-grid-icon x-grid-icon-execute" /></a>'
@@ -178,6 +188,7 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
                 text: 'New custom event',
                 cls: 'x-btn-green',
                 enableToggle: true,
+                hidden: !Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'manage'),
                 toggleHandler: function (button, state) {
                     if (state) {
                         grid.clearSelectedRecord();
@@ -195,7 +206,6 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
                 tooltip: 'Refresh',
                 handler: function() {
                     store.load();
-                    grid.down('#add').toggle(false, true);
                 }
             },{
                 itemId: 'delete',
@@ -203,6 +213,7 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
                 cls: 'x-btn-red',
                 disabled: true,
                 tooltip: 'Delete custom event ',
+                hidden: !Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'manage'),
                 handler: function() {
                     var action = this.getItemId(),
                         actionMessages = {
@@ -304,14 +315,14 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
 
                 if (moduleParams['scope'] === scope) {
                     this.disableButtons(false, scope, isEventUsed);
-                    frm.findField('name').setReadOnly(!isNewRecord);
-                    frm.findField('description').setReadOnly(false);
-                    this.down('#formtitle').setTitle(isNewRecord ? 'New custom event' : 'Edit custom event');
+                    frm.findField('name').setReadOnly(!isNewRecord || !Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'manage'));
+                    frm.findField('description').setReadOnly(!Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'manage'));
+                    this.down('#formtitle').setTitle((Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'manage') ? (isNewRecord ? 'New' : 'Edit') : 'View') + ' custom event');
                 } else {
                     this.disableButtons(true, scope, isEventUsed);
                     frm.findField('name').setReadOnly(true);
                     frm.findField('description').setReadOnly(true);
-                    this.down('#formtitle').setTitle('Edit custom event');
+                    this.down('#formtitle').setTitle((Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'manage') ? 'Edit' : 'View') + ' custom event');
                 }
 
                 var c = this.query('component[cls~=hideoncreate], #delete');
@@ -387,6 +398,7 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
             itemId: 'buttons',
             dock: 'bottom',
             cls: 'x-docked-buttons',
+            hidden: !Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'manage'),
             layout: {
                 type: 'hbox',
                 pack: 'center'

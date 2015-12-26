@@ -1,10 +1,13 @@
 <?php
+
 namespace Scalr\Service\CloudStack\Client;
 
+use http\Client\Response;
 use Scalr\Service\CloudStack\Exception\RestClientException;
 use Scalr\Service\CloudStack\CloudStack;
-use \HttpRequest;
-use \HttpException;
+use Scalr\System\Http\Client\Request;
+use Scalr\Util\CallbackInterface;
+use Scalr\Util\CallbackTrait;
 
 /**
  * CloudStack Rest Client
@@ -12,15 +15,10 @@ use \HttpException;
  * @author   Vlad Dobrovolskiy  <v.dobrovolskiy@scalr.com>
  * @since    4.5.2
  */
-class QueryClient implements ClientInterface
+class QueryClient implements ClientInterface, CallbackInterface
 {
 
-    /**
-     * Default useragent
-     *
-     * @var string
-     */
-    protected $useragent;
+    use CallbackTrait;
 
     /**
      * @var string
@@ -73,25 +71,21 @@ class QueryClient implements ClientInterface
         $this->endpoint = $endpoint;
         $this->cloudstack = $cloudstack;
         $this->platformName = $platform;
-        $this->useragent = sprintf('Scalr CloudStack Client (http://scalr.com) PHP/%s pecl_http/%s',
-            phpversion(), phpversion('http')
-        );
     }
 
     /**
-     * Creates new HttpRequest object
+     * Creates new http Request object
      *
-     * @return HttpRequest Returns new HttpRequest object
+     * @return Request Returns new http Request object
      */
     protected function createHttpRequest()
     {
-        $req = new HttpRequest();
-        $req->resetCookies();
+        $req = new Request();
         $req->setOptions(array(
             'redirect'   => 10,
-            'useragent'  => $this->useragent,
             'verifypeer' => false,
-            'verifyhost' => false
+            'verifyhost' => false,
+            'cookiesession' => true
         ));
         return $req;
     }
@@ -99,20 +93,24 @@ class QueryClient implements ClientInterface
     /**
      * Tries to send request on several attempts.
      *
-     * @param    HttpRequest     $httpRequest
+     * @param    Request         $httpRequest
      * @param    int             $attempts     Attempts count.
      * @param    int             $interval     An sleep interval between an attempts in microseconds.
      * @throws   RestClientException
-     * @return   HttpMessage    Returns HttpMessage if success.
+     * @return   Response    Returns http Response if success.
      */
     protected function tryCall($httpRequest, $attempts = 3, $interval = 200)
     {
         try {
-            $message = $httpRequest->send();
-        } catch (HttpException $e) {
+            $response = \Scalr::getContainer()->http->sendRequest($httpRequest);
+
+            if (is_callable($this->callback)) {
+                call_user_func($this->callback, $httpRequest, $response);
+            }
+        } catch (\http\Exception $e) {
             if (--$attempts > 0) {
                 usleep($interval);
-                $message = $this->tryCall($httpRequest, $attempts, $interval * 2);
+                $response = $this->tryCall($httpRequest, $attempts, $interval * 2);
             } else {
                 throw new RestClientException(sprintf(
                         'Cannot establish connection with CloudStack server. (%s).',
@@ -120,7 +118,7 @@ class QueryClient implements ClientInterface
                     ));
             }
         }
-        return $message;
+        return $response;
     }
 
     /**
@@ -161,30 +159,30 @@ class QueryClient implements ClientInterface
         $args['command'] = $command;
         $args['response'] = 'json';
         ksort($args);
-        $query = http_build_query($args);
-        $query = str_replace("+", "%20", $query);
+        $query = http_build_query($args, null, '&', PHP_QUERY_RFC3986);
+
         if ('GET' == $verb) {
             $query .= "&signature=" . $this->getSignature(strtolower($query));
         }
         else {
             $args['signature'] = $this->getSignature(strtolower($query));
         }
-        $httpRequest = new HttpRequest();
-        $httpRequest->setMethod(constant('HTTP_METH_'.$verb));
+        $httpRequest = new Request();
+        $httpRequest->setRequestMethod($verb);
         $url = ('GET' == $verb) ? ($this->endpoint . "?" . $query) : $this->endpoint;
 
-        $httpRequest->setUrl($url);
+        $httpRequest->setRequestUrl($url);
         if ('POST' == $verb) {
-            $httpRequest->setBody($args);
+            $httpRequest->append($args);
         }
         $message = $this->tryCall($httpRequest, $attempts);
 
         $response = new QueryClientResponse($message, $command);
-        $response->setRawRequestMessage($httpRequest->getRawRequestMessage());
+        $response->setRawRequestMessage($httpRequest->toString());
         if ($this->debug) {
-            echo "\nURL: " . $httpRequest->getUrl() . "\n";
-            echo $httpRequest->getRawRequestMessage() . "\n";
-            echo $httpRequest->getRawResponseMessage() . "\n";
+            echo "\nURL: " . $httpRequest->getRequestUrl() . "\n",
+                 "{$httpRequest}\n",
+                 "{$response->getResponse()}\n";
         }
 
         return $response;

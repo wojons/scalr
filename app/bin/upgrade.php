@@ -87,4 +87,7 @@ if (isset($opt['force'])) {
 }
 
 $upgrade = new UpgradeHandler($options);
-$upgrade->run();
+
+if (!$upgrade->run()) {
+    exit (1);
+}

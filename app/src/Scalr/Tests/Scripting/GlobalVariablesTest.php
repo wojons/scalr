@@ -2,17 +2,82 @@
 
 namespace Scalr\Tests\Scripting;
 
+use Scalr\Model\Entity\Farm;
+use Scalr\Model\Entity\FarmRole;
 use Scalr\Tests\TestCase;
 use Scalr_Scripting_GlobalVariables;
+use Scalr\DataType\ScopeInterface;
 
 /**
  * Global variables tests
  *
- * @author    Vlad Dobrovolskiy   <v.dobrovolskiy@scalr.com>
- * @since     5.0
+ * @author    Igor Vodiasov <invar@scalr.com>
+ * @since     5.10.11
  */
 class GlobalVariablesTest extends TestCase
 {
+    /**
+     * Array of Scalr_Scripting_GlobalVariables objects for each scope except SERVER
+     *
+     * @var array
+     */
+    protected static $vars;
+
+    /**
+     * Array of arguments for methods setValues, getValues, listVariables for each scope except SERVER
+     *
+     * @var array
+     */
+    protected static $args;
+
+    public static function setUpBeforeClass()
+    {
+        parent::setUpBeforeClass();
+
+        if (\Scalr::config('scalr.phpunit.skip_functional_tests')) {
+            return;
+        }
+
+        $db = \Scalr::getDb();
+        self::deleteTestVariables();
+
+        $envId = \Scalr::config('scalr.phpunit.envid');
+        if (!$envId) {
+            return;
+        }
+
+        $env = \Scalr_Environment::init()->loadById($envId);
+
+        self::$vars[ScopeInterface::SCOPE_SCALR] = new Scalr_Scripting_GlobalVariables();
+        self::$vars[ScopeInterface::SCOPE_ACCOUNT] = new Scalr_Scripting_GlobalVariables($env->clientId, 0, ScopeInterface::SCOPE_ACCOUNT);
+        self::$vars[ScopeInterface::SCOPE_ENVIRONMENT] = new Scalr_Scripting_GlobalVariables($env->clientId, $env->id, ScopeInterface::SCOPE_ENVIRONMENT);
+        self::$args[ScopeInterface::SCOPE_SCALR] = self::$args[ScopeInterface::SCOPE_ACCOUNT] = self::$args[ScopeInterface::SCOPE_ENVIRONMENT] = [0, 0, 0, ''];
+
+        /* @var Farm $farm */
+        $farm = Farm::findOne([['envId' => $env->id]]);
+        if ($farm) {
+            self::$vars[ScopeInterface::SCOPE_FARM] = new Scalr_Scripting_GlobalVariables($env->clientId, $env->id, ScopeInterface::SCOPE_FARM);
+            self::$args[ScopeInterface::SCOPE_FARM] = [0, $farm->id, 0, ''];
+
+            /* @var FarmRole $farmRole */
+            $farmRole = FarmRole::findOne([['farmId' => $farm->id]]);
+            if ($farmRole) {
+                self::$vars[ScopeInterface::SCOPE_ROLE] = new Scalr_Scripting_GlobalVariables($env->clientId, $env->id, ScopeInterface::SCOPE_ROLE);
+                self::$args[ScopeInterface::SCOPE_ROLE] = [$farmRole->roleId, 0, 0, ''];
+
+                self::$vars[ScopeInterface::SCOPE_FARMROLE] = new Scalr_Scripting_GlobalVariables($env->clientId, $env->id, ScopeInterface::SCOPE_FARMROLE);
+                self::$args[ScopeInterface::SCOPE_FARMROLE] = [$farmRole->roleId, $farm->id, $farmRole->id, ''];
+            }
+        }
+    }
+
+    public static function tearDownAfterClass()
+    {
+        parent::tearDownAfterClass();
+
+        self::deleteTestVariables();
+    }
+
     /**
      * Data provider for the testGlobalVariablesFunctional
      *
@@ -20,129 +85,559 @@ class GlobalVariablesTest extends TestCase
      */
     public function providerLoad()
     {
-        $variables = [];
+        $cases = [];
 
-        $setVars[Scalr_Scripting_GlobalVariables::SCOPE_SCALR] = [
-            'name'      => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR),
-            'default'   => '',
-            'locked'    => '',
+        // TODO: tests for FARM, ROLE, FARMROLE scopes
+
+        /*
+         * TEST 1 (simple variable):
+         *  - variable is not existed
+         *  - add variable
+         *  - check variable in scalr and account scope
+         *  - list variable
+         *  - update variable in account scope
+         *  - check variable in scalr and account scope
+         *  - delete variable in scalr scope
+         *  - check variable in scalr and account scope
+         */
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'get', [
+            'name' => $this->getVarTestName('scalr_var')
+        ], false];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name' => $this->getVarTestName('scalr_var'),
+            'value' => '123'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'get', [
+            'name' => $this->getVarTestName('scalr_var'),
             'current'   => [
-                'name'          => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR),
-                'value'         => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR),
-                'flagFinal'     => 0,
-                'flagRequired'  => Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT,
-                'flagHidden'    => 1,
+                'name'          => $this->getVarTestName('scalr_var'),
+                'value'         => '123',
+                'flagFinal'     => '0',
+                'flagRequired'  => '',
+                'flagHidden'    => '0',
                 'format'        => '',
                 'validator'     => '',
-                'scope'         => Scalr_Scripting_GlobalVariables::SCOPE_SCALR,
+                'description'   => '',
+                'scope'         => ScopeInterface::SCOPE_SCALR,
+                'category'      => ''
             ],
-            'flagDelete' => '',
-            'scopes'     => [Scalr_Scripting_GlobalVariables::SCOPE_SCALR]
-        ];
+            'scopes' => [ScopeInterface::SCOPE_SCALR],
+            'category' => ''
+        ], true];
 
-        $setVars[Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT] = [
-            'name'      => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR),
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'get', [
+            'name' => $this->getVarTestName('scalr_var'),
             'default'   => [
-                'name'      => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR),
-                'value'     => '******',
-                'scope'     => Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT
+                'name'          => $this->getVarTestName('scalr_var'),
+                'value'         => '123',
+                'scope'         => ScopeInterface::SCOPE_SCALR,
             ],
-            'locked'    => [
-                'flagFinal'     => 0,
-                'flagRequired'  => Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT,
-                'flagHidden'    => 1,
-                'value'         => '******',
-                'format'        => '',
-                'validator'     => '',
-                'scope'         => Scalr_Scripting_GlobalVariables::SCOPE_SCALR,
-            ],
-            'current'   => [
-                'name'          => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR),
-                'value'         => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT),
-                'flagFinal'     => 0,
-                'flagRequired'  => '',
-                'flagHidden'    => 0,
-                'format'        => '',
-                'validator'     => '',
-                'scope'         => Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT,
-            ],
-            'flagDelete' => '',
-            'scopes'     => [Scalr_Scripting_GlobalVariables::SCOPE_SCALR, Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT]
-        ];
+            'scopes' => [ScopeInterface::SCOPE_SCALR],
+            'category' => ''
+        ], true];
 
-        $setVars[Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT] = [
-            'name'      => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR),
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'list', [
+            'name' => $this->getVarTestName('scalr_var'),
+            'value' => '123',
+            'private' => 0
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name' => $this->getVarTestName('scalr_var'),
+            'value' => '234',
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'get', [
+            'name' => $this->getVarTestName('scalr_var'),
+            'current'   => [
+                'name'          => $this->getVarTestName('scalr_var'),
+                'value'         => '123',
+                'flagFinal'     => '0',
+                'flagRequired'  => '',
+                'flagHidden'    => '0',
+                'format'        => '',
+                'validator'     => '',
+                'description'   => '',
+                'scope'         => ScopeInterface::SCOPE_SCALR,
+                'category'      => ''
+            ],
+            'scopes' => [ScopeInterface::SCOPE_SCALR],
+            'category' => ''
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'get', [
+            'name' => $this->getVarTestName('scalr_var'),
+            'current' => [
+                'name'          => $this->getVarTestName('scalr_var'),
+                'value'         => '234',
+                'scope'         => ScopeInterface::SCOPE_ACCOUNT,
+                'category'      => '',
+                'flagFinal'     => '0',
+                'flagRequired'  => '',
+                'flagHidden'    => '0',
+                'format'        => '',
+                'validator'     => '',
+                'description'   => ''
+            ],
             'default'   => [
-                'name'      => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR),
-                'value'     => '******',
-                'scope'     => Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT
+                'name'          => $this->getVarTestName('scalr_var'),
+                'value'         => '123',
+                'scope'         => ScopeInterface::SCOPE_SCALR,
             ],
-            'locked'    => [
-                'flagFinal'     => 0,
-                'flagRequired'  => Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT,
-                'flagHidden'    => 1,
-                'format'        => '',
-                'validator'     => '',
-                'scope'         => Scalr_Scripting_GlobalVariables::SCOPE_SCALR,
-                'value'         => '******'
-            ],
+            'scopes' => [ScopeInterface::SCOPE_SCALR, ScopeInterface::SCOPE_ACCOUNT],
+            'category' => ''
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name' => $this->getVarTestName('scalr_var'),
+            'flagDelete' => 1
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'get', [
+            'name' => $this->getVarTestName('scalr_var')
+        ], false];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'get', [
+            'name' => $this->getVarTestName('scalr_var'),
             'current'   => [
-                'name'          => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR),
-                'value'         => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT),
-                'flagFinal'     => 0,
+                'name'          => $this->getVarTestName('scalr_var'),
+                'value'         => '234',
+                'flagFinal'     => '0',
                 'flagRequired'  => '',
-                'flagHidden'    => 0,
+                'flagHidden'    => '0',
                 'format'        => '',
                 'validator'     => '',
-                'scope'         => Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT,
+                'description'   => '',
+                'scope'         => ScopeInterface::SCOPE_ACCOUNT,
+                'category'      => ''
             ],
-            'flagDelete' => '',
-            'scopes'     => [
-                Scalr_Scripting_GlobalVariables::SCOPE_SCALR,
-                Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT,
-                Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT
-            ]
-        ];
+            'scopes' => [ScopeInterface::SCOPE_ACCOUNT],
+            'category' => ''
+        ], true];
 
-        $setVars[Scalr_Scripting_GlobalVariables::SCOPE_FARM] = [
-            'name'      => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_FARM),
-            'default'   => '',
-            'locked'    => '',
+        /*
+         * TEST 2 (required in account scope variable with category):
+         *  - add variable
+         */
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'          => $this->getVarTestName('required_var'),
+            'value'         => '',
+            'flagFinal'     => '0',
+            'flagRequired'  => ScopeInterface::SCOPE_ACCOUNT,
+            'flagHidden'    => '0',
+            'format'        => '',
+            'validator'     => '',
+            'scope'         => ScopeInterface::SCOPE_SCALR,
+            'category'      => 'category_one-test'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name' => $this->getVarTestName('required_var'),
+            'value' => ''
+        ], [$this->getVarTestName('required_var') => ['value' => [sprintf("%s is required variable", $this->getVarTestName('required_var'))]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name' => $this->getVarTestName('required_var'),
+            'value' => '0'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'get', [
+            'name' => $this->getVarTestName('required_var'),
             'current'   => [
-                'name'          => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_FARM),
-                'value'         => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_FARM),
-                'flagFinal'     => 1,
+                'name'          => $this->getVarTestName('required_var'),
+                'value'         => '0',
+                'scope'         => ScopeInterface::SCOPE_ACCOUNT,
+                'category'      => '',
+                'flagFinal'     => '0',
                 'flagRequired'  => '',
-                'flagHidden'    => 0,
-                'scope'         => Scalr_Scripting_GlobalVariables::SCOPE_FARM,
+                'flagHidden'    => '0',
                 'format'        => '',
                 'validator'     => '',
+                'description'   => ''
             ],
-            'flagDelete' => '',
-            'scopes'     => [Scalr_Scripting_GlobalVariables::SCOPE_FARM]
-        ];
+            'locked'   => [
+                'value'         => '',
+                'flagFinal'     => '0',
+                'flagRequired'  => ScopeInterface::SCOPE_ACCOUNT,
+                'flagHidden'    => '0',
+                'format'        => '',
+                'validator'     => '',
+                'description'   => '',
+                'scope'         => ScopeInterface::SCOPE_SCALR,
+                'category'      => 'category_one-test'
+            ],
+            'default'   => [
+                'name'          => $this->getVarTestName('required_var'),
+                'value'         => '',
+                'scope'         => ScopeInterface::SCOPE_SCALR,
+            ],
+            'scopes' => [ScopeInterface::SCOPE_SCALR, ScopeInterface::SCOPE_ACCOUNT],
+            'category' => 'category_one-test'
+        ], true];
 
-        $setVars[Scalr_Scripting_GlobalVariables::SCOPE_ROLE] = [
-            'name'      => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_ROLE),
-            'default'   => '',
-            'locked'    => '',
+        /*
+         * TEST 3 (check validation)
+         */
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'          => $this->getVarTestName('required_var_2'),
+            'value'         => '',
+            'flagFinal'     => '0',
+            'flagRequired'  => ScopeInterface::SCOPE_ACCOUNT,
+            'flagHidden'    => '0',
+            'format'        => '',
+            'validator'     => '/^[12]$/',
+            'scope'         => ScopeInterface::SCOPE_SCALR,
+            'category'      => 'category_one-test'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'get', [
+            'name' => $this->getVarTestName('required_var_2'),
             'current'   => [
-                'name'          => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_ROLE),
-                'value'         => $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_ROLE),
-                'flagFinal'     => 0,
-                'flagRequired'  => Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE,
-                'flagHidden'    => 0,
+                'name'          => $this->getVarTestName('required_var_2'),
+                'value'         => '',
+                'flagFinal'     => '0',
+                'flagRequired'  => ScopeInterface::SCOPE_ACCOUNT,
+                'flagHidden'    => '0',
+                'format'        => '',
+                'validator'     => '/^[12]$/',
+                'description'   => '',
+                'scope'         => ScopeInterface::SCOPE_SCALR,
+                'category'      => 'category_one-test'
+            ],
+            'scopes' => [ScopeInterface::SCOPE_SCALR],
+            'category' => 'category_one-test'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'          => $this->getVarTestName('required_var_2'),
+            'value'         => '3',
+            'validator'     => '/^[12]$/'
+        ], [$this->getVarTestName('required_var_2') => ['value' => ["Value isn't valid because of validation pattern"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $this->getVarTestName('required_var_2'),
+            'value'         => '0'
+        ], [$this->getVarTestName('required_var_2') => ['value' => ["Value isn't valid because of validation pattern"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $this->getVarTestName('required_var_2'),
+            'value'         => '1'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $this->getVarTestName('required_var_2'),
+            'value'         => '2',
+            'flagFinal'     => '1'
+        ], [$this->getVarTestName('required_var_2') => ['flagFinal' => ["You can't redefine advanced settings (flags, format, validator, category)"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $this->getVarTestName('required_var_2'),
+            'value'         => '2',
+            'flagHidden'    => '1'
+        ], [$this->getVarTestName('required_var_2') => ['flagHidden' => ["You can't redefine advanced settings (flags, format, validator, category)"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $this->getVarTestName('required_var_2'),
+            'value'         => '2',
+            'format'        => '%d'
+        ], [$this->getVarTestName('required_var_2') => ['format' => ["You can't redefine advanced settings (flags, format, validator, category)"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $this->getVarTestName('required_var_2'),
+            'value'         => '2',
+            'validator'     => '[0-9]'
+        ], [$this->getVarTestName('required_var_2') => ['validator' => ["You can't redefine advanced settings (flags, format, validator, category)"]]]];
+
+        // check to case sensitivity
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'          => $this->getVarTestName('REQUIRED_var_2'),
+            'value'         => '',
+        ], [$this->getVarTestName('REQUIRED_var_2') => ['name' => [sprintf("Name has been already defined as \"%s\"", $this->getVarTestName('required_var_2'))]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => 'Invalid-name',
+            'value'         => '',
+        ], ['Invalid-name' => ['name' => ["Name should contain only letters, numbers and underscores, start with letter and be from 2 to 128 chars long."]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => '1name',
+            'value'         => '',
+        ], ['1name' => ['name' => ["Name should contain only letters, numbers and underscores, start with letter and be from 2 to 128 chars long."]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => 'a',
+            'value'         => '',
+        ], ['a' => ['name' => ["Name should contain only letters, numbers and underscores, start with letter and be from 2 to 128 chars long."]]]];
+
+        $longName = 'abcdefghikl1abcdefghik21abcdefghik31abcdefghik41abcdefghik51abcdefghik61abcdefghik71abcdefghik81abcdefghik91abcdefghik1abcdefghia';
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $longName,
+            'value'         => '',
+        ], [$longName => ['name' => ["Name should contain only letters, numbers and underscores, start with letter and be from 2 to 128 chars long."]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $this->getVarTestName('name'),
+            'value'         => '',
+            'category'      => 'category.name'
+        ], [$this->getVarTestName('name') => ['category' => ["Category should contain only letters, numbers, dashes and underscores, start and end with letter and be from 2 to 32 chars long"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $this->getVarTestName('name'),
+            'value'         => '',
+            'category'      => 'scalr_ui_defaults'
+        ], [$this->getVarTestName('name') => ['category' => ["Prefix 'SCALR_' is reserved and cannot be used for user GVs"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $this->getVarTestName('name'),
+            'value'         => '',
+            'category'      => 'scalr_1'
+        ], [$this->getVarTestName('name') => ['category' => ["Prefix 'SCALR_' is reserved and cannot be used for user GVs"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'          => 'scalr_test',
+            'value'         => '',
+        ], ['scalr_test' => ['name' => ["'SCALR_' prefix is reserved and cannot be used for user GVs"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $this->getVarTestName('name'),
+            'value'         => '',
+            'flagFinal'     => '1',
+            'flagRequired'  => 'environment'
+        ], [$this->getVarTestName('name') => ['flagFinal' => ["You can't set final and required flags both"], 'flagRequired' => ["You can't set final and required flags both"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'          => $this->getVarTestName('name'),
+            'value'         => '',
+            'validator'     => "/test null" . chr(0) . "byte/"
+        ], [$this->getVarTestName('name') => ['validator' => ["Validation pattern is not valid (NULL byte)"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'          => $this->getVarTestName('name'),
+            'value'         => '',
+            'validator'     => "^[0-9]$"
+        ], [$this->getVarTestName('name') => ['validator' => ["Validation pattern is not valid: invalid structure"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'          => $this->getVarTestName('name'),
+            'value'         => '',
+            'validator'     => "/^[0-9]$/es"
+        ], [$this->getVarTestName('name') => ['validator' => ["Validation pattern is not valid: invalid structure"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'          => $this->getVarTestName('name'),
+            'value'         => '',
+            'validator'     => "/^//test$/i"
+        ], [$this->getVarTestName('name') => ['validator' => ["Validation pattern is not valid: Unknown modifier '/'"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'          => $this->getVarTestName('name'),
+            'value'         => '1',
+            'validator'     => "/^[23]$/is"
+        ], [$this->getVarTestName('name') => ['value' => ["Value isn't valid because of validation pattern"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'          => $this->getVarTestName('name'),
+            'value'         => '0',
+            'validator'     => "/^[23]$/is"
+        ], [$this->getVarTestName('name') => ['value' => ["Value isn't valid because of validation pattern"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'          => $this->getVarTestName('name'),
+            'value'         => '',
+            'format'        => 'd'
+        ], [$this->getVarTestName('name') => ['format' => ["Format isn't valid"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'          => $this->getVarTestName('name'),
+            'value'         => '',
+            'format'        => '%d%f'
+        ], [$this->getVarTestName('name') => ['format' => ["Format isn't valid"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'          => $this->getVarTestName('name'),
+            'value'         => "test null" . chr(0) . "byte"
+        ], [$this->getVarTestName('name') => ['value' => [sprintf("Variable %s contains invalid non-printable characters (e.g. NULL characters).
+                You might have copied it from another application that submitted invalid characters.
+                To solve this issue, you can type in the variable manually.", $this->getVarTestName('name'))]
+        ]]];
+
+        /*
+         * TEST 4 (final variable)
+         */
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'          => $this->getVarTestName('final_var'),
+            'value'         => '5',
+            'flagFinal'     => '1',
+            'flagRequired'  => '',
+            'flagHidden'    => '0',
+            'format'        => '',
+            'validator'     => '',
+            'scope'         => ScopeInterface::SCOPE_SCALR,
+            'category'      => ''
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'get', [
+            'name' => $this->getVarTestName('final_var'),
+            'current'   => [
+                'name'          => $this->getVarTestName('final_var'),
+                'value'         => '5',
+                'flagFinal'     => '1',
+                'flagRequired'  => '',
+                'flagHidden'    => '0',
                 'format'        => '',
                 'validator'     => '',
-                'scope'         => Scalr_Scripting_GlobalVariables::SCOPE_ROLE,
+                'description'   => '',
+                'scope'         => ScopeInterface::SCOPE_SCALR,
+                'category'      => ''
             ],
-            'flagDelete' => '',
-            'scopes'     => [Scalr_Scripting_GlobalVariables::SCOPE_ROLE]
-        ];
+            'scopes' => [ScopeInterface::SCOPE_SCALR],
+            'category' => ''
+        ], true];
 
-        $variables[] = [$setVars];
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'      => $this->getVarTestName('final_var'),
+            'value'     => '0'
+        ], [$this->getVarTestName('final_var') => ['value' => ["You can't change final variable locked on scalr level"]]]];
 
-        return $variables;
+        $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'set', [
+            'name'      => $this->getVarTestName('final_var'),
+            'value'     => '1'
+        ], [$this->getVarTestName('final_var') => ['value' => ["You can't change final variable locked on scalr level"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_FARM, 'set', [
+            'name'      => $this->getVarTestName('final_var'),
+            'value'     => '2'
+        ], [$this->getVarTestName('final_var') => ['value' => ["You can't change final variable locked on scalr level"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
+            'name'      => $this->getVarTestName('final_var'),
+            'value'     => '6'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'get', [
+            'name'      => $this->getVarTestName('final_var'),
+            'default'   => [
+                'name'  => $this->getVarTestName('final_var'),
+                'value' => '6',
+                'scope' => ScopeInterface::SCOPE_SCALR,
+            ],
+            'scopes'    => [ScopeInterface::SCOPE_SCALR],
+            'category'  => ''
+        ], true];
+
+        /*
+         * TEST 5 (ui config vars)
+         */
+        $cases[] = [ScopeInterface::SCOPE_FARM, 'set', [
+            'name'     => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+            'value'    => '1'
+        ], ['SCALR_UI_DEFAULT_STORAGE_RE_USE' => ['name' => ["'SCALR_' prefix is reserved and cannot be used for user GVs"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'     => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+            'value'    => '1'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'list', [
+            'name'  => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+            'value' => '1'
+        ], false];
+
+        $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'getuidefaults', [
+            'name'  => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+            'value' => '1'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'    => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+            'value'   => 'a'
+        ], ['SCALR_UI_DEFAULT_STORAGE_RE_USE' => ['value' => ["Value isn't valid because of validation pattern"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'set', [
+            'name'    => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+            'value'   => 'a'
+        ], ['SCALR_UI_DEFAULT_STORAGE_RE_USE' => ['value' => ["Value isn't valid because of validation pattern"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_FARM, 'set', [
+            'name'     => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+            'value'    => '1'
+        ], ['SCALR_UI_DEFAULT_STORAGE_RE_USE' => ['name' => ["'SCALR_' prefix is reserved and cannot be used for user GVs"]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'set', [
+            'name'   => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+            'value'  => '0'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'getuidefaults', [
+            'name' => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+            'value' => '0'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'set', [
+            'name'    => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+            'value'   => ''
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'getuidefaults', [
+            'name' => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+            'value' => '1'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+            'value'         => '1',
+            'scope'         => ScopeInterface::SCOPE_ACCOUNT,
+            'flagFinal'     => '1'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'get', [
+            'name' => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+            'current'   => [
+                'name'          => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+                'value'         => '1',
+                'flagFinal'     => '1',
+                'flagRequired'  => '',
+                'flagHidden'    => '0',
+                'format'        => '',
+                'validator'     => '/^[01]$/',
+                'description'   => 'Reuse block storage device if an instance is replaced.',
+                'scope'         => ScopeInterface::SCOPE_ACCOUNT,
+                'category'      => 'scalr_ui_defaults'
+            ],
+            'scopes' => [ScopeInterface::SCOPE_ACCOUNT],
+            'category' => 'scalr_ui_defaults'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'get', [
+            'name'      => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+            'default'   => [
+                'name'          => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+                'value'         => '1',
+                'scope'         => ScopeInterface::SCOPE_ACCOUNT,
+            ],
+            'locked'   => [
+                'value'         => '1',
+                'flagFinal'     => '1',
+                'flagRequired'  => '',
+                'flagHidden'    => '0',
+                'format'        => '',
+                'validator'     => '/^[01]$/',
+                'description'   => 'Reuse block storage device if an instance is replaced.',
+                'scope'         => ScopeInterface::SCOPE_ACCOUNT,
+                'category'      => 'scalr_ui_defaults'
+            ],
+            'scopes'    => [ScopeInterface::SCOPE_ACCOUNT],
+            'category'  => 'scalr_ui_defaults'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'set', [
+            'name'          => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
+            'value'         => '0'
+        ], ['SCALR_UI_DEFAULT_STORAGE_RE_USE' => ['value' => ["You can't change final variable locked on account level"]]]];
+
+        return $cases;
     }
 
     /**
@@ -150,368 +645,53 @@ class GlobalVariablesTest extends TestCase
      * @dataProvider providerLoad
      * @functional
      */
-    public function testGlobalVariablesFunctional($setVars)
+    public function testGlobalVariablesFunctional($scope, $action, $var, $expectedResult)
     {
-        $db = \Scalr::getDb();
-        $this->deleteTestVariables();
+        if (empty(self::$vars[$scope]) || empty(self::$args[$scope])) {
+            $this->markTestSkipped(sprintf('No object for scope: %s', $scope));
+        }
 
-        $envId = \Scalr::config('scalr.phpunit.envid');
-        $this->assertNotEmpty($envId);
-
-        $env = \Scalr_Environment::init()->loadById($envId);
-        $this->assertInstanceOf('\\Scalr_Environment', $env);
-
-        $accountId = $env->clientId;
-
-        // create admin variable
-        $adminVars = new Scalr_Scripting_GlobalVariables();
-
-        $this->assertTrue($adminVars->setValues(
-            [$setVars[Scalr_Scripting_GlobalVariables::SCOPE_SCALR]], 0, 0, 0, '', true, true)
-        );
-
-        // check created admin var
-        $values = $adminVars->getValues();
-        $this->assertNotEmpty($values);
-
-        foreach ($values as $value) {
-            if (strpos($value['name'], self::getInstallationId()) !== false) {
-                $this->assertEquals($value['name'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR));
-                $this->assertNotEmpty($value['current']);
-                $this->assertEquals($value['current']['value'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR));
-                $this->assertEquals($value['current']['flagRequired'], Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT);
-                $this->assertEquals($value['current']['flagHidden'], 1);
-                $this->assertEquals($value['current']['flagFinal'], 0);
-                $this->assertEquals($value['current']['scope'], Scalr_Scripting_GlobalVariables::SCOPE_SCALR);
+        switch ($action) {
+            case 'set':
+                $result = call_user_func_array([self::$vars[$scope], 'setValues'], array_merge([[$var]], self::$args[$scope], [false]));
+                $this->assertEquals($expectedResult, $result);
                 break;
-            }
-        }
 
-        unset($values, $value);
+            case 'get':
+                $values = call_user_func_array([self::$vars[$scope], 'getValues'], self::$args[$scope]);
+                $flag = false;
+                foreach ($values as $value) {
+                    if ($value['name'] == $var['name']) {
+                        $flag = true;
+                        $this->assertEquals($var, $value);
+                        break;
+                    }
+                }
 
-        // check another list function
-        $listValues = $adminVars->listVariables();
-
-        foreach ($listValues as $value) {
-            if (strpos($value['name'], self::getInstallationId()) !== false) {
-                $this->assertEquals($value['name'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR));
-                $this->assertEquals($value['value'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR));
-                $this->assertEquals($value['private'], 1);
+                $this->assertEquals($expectedResult, $flag);
                 break;
-            }
-        }
 
-        unset($listValues, $value);
-
-        // get account variable that has been inherited from admin
-        $accountVar = new Scalr_Scripting_GlobalVariables(
-            $accountId,
-            0,
-            Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT
-        );
-
-        $values = $accountVar->getValues();
-
-        foreach ($values as $value) {
-            if (strpos($value['name'], self::getInstallationId()) !== false) {
-                $this->assertEquals($value['name'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR));
-                $this->assertArrayNotHasKey('current', $value);
-                $this->assertNotEmpty($value['locked']);
-                $this->assertNotEmpty($value['default']);
-                $this->assertEquals($value['locked']['flagRequired'], Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT);
-                $this->assertEquals($value['locked']['flagHidden'], 1);
-                $this->assertEquals($value['locked']['flagFinal'], 0);
-                $this->assertEquals($value['default']['value'], "******");
-                $this->assertEquals($value['locked']['value'], "******");
-                $this->assertEquals($value['default']['scope'], Scalr_Scripting_GlobalVariables::SCOPE_SCALR);
-
+            case 'list':
+                $values = call_user_func_array([self::$vars[$scope], 'listVariables'], self::$args[$scope]);
+                $flag = false;
+                foreach ($values as $value) {
+                    if ($value['name'] == $var['name']) {
+                        if ($value['name'] == $var['name']) {
+                            $flag = true;
+                            $this->assertEquals($var, $value);
+                            break;
+                        }
+                    }
+                }
+                $this->assertEquals($expectedResult, $flag);
                 break;
-            }
-        }
 
-        unset($values, $value);
-
-        // override admin var on account lvl
-        $this->assertTrue($accountVar->setValues([$setVars[Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT]], 0, 0, 0, '', true, true));
-
-        $values = $accountVar->getValues();
-        $this->assertNotEmpty($values);
-
-        foreach ($values as $value) {
-            if (strpos($value['name'], self::getInstallationId()) !== false) {
-                $this->assertEquals($value['name'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR));
-                $this->assertNotEmpty($value['current']);
-                $this->assertEquals($value['current']['value'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT));
-                $this->assertEmpty($value['current']['flagRequired']);
-                $this->assertEquals($value['current']['flagHidden'], 0);
-                $this->assertEquals($value['current']['flagFinal'], 0);
-                $this->assertEquals($value['current']['scope'], Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT);
-                $this->assertNotEmpty($value['locked']);
-                $this->assertNotEmpty($value['default']);
-                $this->assertEquals($value['locked']['flagRequired'], Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT);
-                $this->assertEquals($value['locked']['flagHidden'], 1);
-                $this->assertEquals($value['locked']['flagFinal'], 0);
-                $this->assertEquals($value['default']['value'], "******");
-                $this->assertEquals($value['locked']['value'], "******");
-                $this->assertEquals($value['default']['scope'], Scalr_Scripting_GlobalVariables::SCOPE_SCALR);
-                $this->assertEquals(count($value['scopes']), 2);
+            case 'getuidefaults':
+                $values = call_user_func_array([self::$vars[$scope], 'getUiDefaults'], self::$args[$scope]);
+                $this->assertTrue(isset($values[$var['name']]));
+                $this->assertTrue(isset($values[$var['name']]) && $values[$var['name']] === $var['value']);
                 break;
-            }
         }
-
-        unset($values, $value);
-
-        // override account var on environment level
-        $envVar = new Scalr_Scripting_GlobalVariables(
-            $accountId,
-            $envId,
-            Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT
-        );
-
-        $this->assertTrue($envVar->setValues([$setVars[Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT]], 0, 0, 0, '', true, true));
-
-        $values = $envVar->getValues();
-        $this->assertNotEmpty($values);
-
-        foreach ($values as $value) {
-            if (strpos($value['name'], self::getInstallationId()) !== false) {
-                $this->assertEquals($value['name'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR));
-                $this->assertNotEmpty($value['current']);
-                $this->assertEquals($value['current']['value'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT));
-                $this->assertEmpty($value['current']['flagRequired']);
-                $this->assertEquals($value['current']['flagHidden'], 0);
-                $this->assertEquals($value['current']['flagFinal'], 0);
-                $this->assertEquals($value['current']['scope'], Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT);
-                $this->assertNotEmpty($value['locked']);
-                $this->assertEquals($value['locked']['scope'], Scalr_Scripting_GlobalVariables::SCOPE_SCALR);
-                $this->assertNotEmpty($value['default']);
-                $this->assertEquals($value['locked']['flagRequired'], Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT);
-                $this->assertEquals($value['locked']['flagHidden'], 1);
-                $this->assertEquals($value['locked']['flagFinal'], 0);
-                $this->assertEquals($value['default']['value'], "******");
-                $this->assertEquals($value['locked']['value'], "******");
-                $this->assertEquals($value['default']['scope'], Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT);
-                $this->assertEquals(count($value['scopes']), 3);
-                break;
-            }
-        }
-
-        unset($values, $value);
-
-        // test validation errors
-
-        $errorMock = $setVars[Scalr_Scripting_GlobalVariables::SCOPE_SCALR];
-        $errorMock['name'] = 'Invalid-name';
-
-        $errors = $adminVars->validateValues([$errorMock]);
-        $this->assertNotEmpty($errors);
-        $this->assertEquals("Invalid name", $adminVars->getErrorMessage($errors));
-
-        $errorMock = $setVars[Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT];
-        $errorMock['current']['flagFinal'] = 1;
-
-        $errors = $envVar->validateValues([$errorMock]);
-        $this->assertEquals("You can't redefine advanced settings (flags, format, validator)", $envVar->getErrorMessage($errors));
-
-        $errorMock = $setVars[Scalr_Scripting_GlobalVariables::SCOPE_SCALR];
-        $errorMock['current']['flagRequired'] = 'env';
-        $errorMock['current']['flagFinal'] = 1;
-
-        $errors = $adminVars->validateValues([$errorMock]);
-        $this->assertEquals("You can't set final and required flags both", $adminVars->getErrorMessage($errors));
-
-        $errorMock = $setVars[Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT];
-        $errorMock['current']['flagHidden'] = 1;
-
-        $errors = $envVar->validateValues([$errorMock]);
-        $this->assertEquals("You can't redefine advanced settings (flags, format, validator)", $envVar->getErrorMessage($errors));
-
-        $errorMock = $setVars[Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT];
-        $errorMock['current']['format'] = 1;
-
-        $errors = $envVar->validateValues([$errorMock]);
-        $this->assertEquals("You can't redefine advanced settings (flags, format, validator)", $envVar->getErrorMessage($errors));
-
-        $errorMock = $setVars[Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT];
-        $errorMock['current']['validator'] = 1;
-
-        $errors = $envVar->validateValues([$errorMock]);
-        $this->assertEquals("You can't redefine advanced settings (flags, format, validator)", $envVar->getErrorMessage($errors));
-
-        $errorMock = $setVars[Scalr_Scripting_GlobalVariables::SCOPE_SCALR];
-        $errorMock['current']['validator'] = "test null" . chr(0) . "byte";
-
-        $errors = $adminVars->validateValues([$errorMock]);
-        $this->assertContains('Value isn\'t valid because of validation pattern', $envVar->getErrorMessage($errors));
-
-        $errorMock = $setVars[Scalr_Scripting_GlobalVariables::SCOPE_SCALR];
-        $errorMock['current']['value'] = "test null" . chr(0) . "byte";
-
-        $errors = $adminVars->validateValues([$errorMock]);
-        $this->assertContains("contains invalid non-printable characters (e.g. NULL characters)", $envVar->getErrorMessage($errors));
-
-        // delete admin variable
-        $setVars[Scalr_Scripting_GlobalVariables::SCOPE_SCALR]['flagDelete'] = 1;
-        $this->assertTrue($adminVars->setValues([$setVars[Scalr_Scripting_GlobalVariables::SCOPE_SCALR]], 0, 0, 0, '', true, true));
-
-        $values = $adminVars->listVariables();
-
-        foreach ($values as $value) {
-            $this->assertNotEquals($value['name'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR));
-        }
-
-        unset($values, $value);
-
-        // check if account variable exists after deletion parent variable
-        $values = $accountVar->getValues();
-        $this->assertNotEmpty($values);
-
-        foreach ($values as $value) {
-            if (strpos($value['name'], self::getInstallationId()) !== false) {
-                $this->assertEquals($value['name'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR));
-                $this->assertEquals(count($value['scopes']), 1);
-                $this->assertArrayNotHasKey('default', $value);
-                $this->assertArrayNotHasKey('locked', $value);
-                $this->assertNotEmpty($value['current']);
-                $this->assertEmpty($value['current']['flagRequired']);
-                $this->assertEquals($value['current']['flagHidden'], 0);
-                $this->assertEquals($value['current']['flagFinal'], 0);
-                $this->assertEquals($value['current']['value'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT));
-                break;
-            }
-        }
-
-        unset($values, $value);
-
-        // delete account variable
-        $setVars[Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT]['flagDelete'] = 1;
-        $this->assertTrue($accountVar->setValues([$setVars[Scalr_Scripting_GlobalVariables::SCOPE_ACCOUNT]], 0, 0, 0, '', true, true));
-
-        $values = $accountVar->listVariables();
-
-        foreach ($values as $value) {
-            $this->assertNotEquals($value['name'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR));
-        }
-
-        unset($values, $value);
-
-        // delete environment variable
-        $setVars[Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT]['flagDelete'] = 1;
-        $this->assertTrue($envVar->setValues([$setVars[Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT]], 0, 0, 0, '', true, true));
-
-        $values = $envVar->listVariables();
-
-        foreach ($values as $value) {
-            $this->assertNotEquals($value['name'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_SCALR));
-        }
-
-        unset($values, $value);
-
-        // select random farm
-        $farmId = $db->GetOne("SELECT f.id FROM farms f LIMIT 1");
-        $this->assertNotEmpty($farmId);
-
-        $farm = \DBFarm::LoadByID($farmId);
-        $this->assertInstanceOf('\\DBFarm', $farm);
-
-        // create farm variable
-        $farmVar = new Scalr_Scripting_GlobalVariables(
-            $farm->GetEnvironmentObject()->clientId,
-            $farm->GetEnvironmentObject()->id,
-            Scalr_Scripting_GlobalVariables::SCOPE_FARM
-        );
-
-        $this->assertTrue($farmVar->setValues(
-            [$setVars[Scalr_Scripting_GlobalVariables::SCOPE_FARM]], 0, $farmId, 0, '', true, true)
-        );
-
-        $farmRoles = $farm->GetFarmRoles();
-        $this->assertNotEmpty($farmRoles);
-
-        $farmRole = reset($farmRoles);
-        $this->assertInstanceOf('\\DBFarmRole', $farmRole);
-        /* @var $farmRole \DBFarmRole */
-        $role = $farmRole->GetRoleObject();
-        $roleId = $role->id;
-
-        // create role variable
-        $roleVar = new Scalr_Scripting_GlobalVariables(
-            0,
-            0,
-            Scalr_Scripting_GlobalVariables::SCOPE_ROLE
-        );
-
-        $this->assertTrue($roleVar->setValues(
-            [$setVars[Scalr_Scripting_GlobalVariables::SCOPE_ROLE]], $roleId, 0, 0, '', true, true)
-        );
-
-        // check 2 created variables in farm role
-        $farmRoleVar = new Scalr_Scripting_GlobalVariables(
-            $farm->GetEnvironmentObject()->clientId,
-            $farm->GetEnvironmentObject()->id,
-            Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE
-        );
-
-        $values = $farmRoleVar->getValues($roleId, $farmId, $farmRole->ID);
-        $countTestVars = 0;
-
-        foreach ($values as $value) {
-            if ($value['name'] == $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_ROLE)) {
-                $countTestVars++;
-                $this->assertEquals($value['name'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_ROLE));
-                $this->assertArrayNotHasKey('current', $value);
-                $this->assertNotEmpty($value['locked']);
-                $this->assertNotEmpty($value['default']);
-                $this->assertEquals($value['locked']['flagRequired'], Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE);
-                $this->assertEquals($value['locked']['flagHidden'], 0);
-                $this->assertEquals($value['locked']['flagFinal'], 0);
-                $this->assertEquals($value['default']['value'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_ROLE));
-                $this->assertEquals($value['locked']['value'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_ROLE));
-                $this->assertEquals($value['default']['scope'], Scalr_Scripting_GlobalVariables::SCOPE_ROLE);
-            }
-
-            if ($value['name'] == $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_FARM)) {
-                $countTestVars++;
-                $this->assertEquals($value['name'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_FARM));
-                $this->assertArrayNotHasKey('current', $value);
-                $this->assertNotEmpty($value['locked']);
-                $this->assertNotEmpty($value['default']);
-                $this->assertEmpty($value['locked']['flagRequired']);
-                $this->assertEquals($value['locked']['flagHidden'], 0);
-                $this->assertEquals($value['locked']['flagFinal'], 1);
-                $this->assertEquals($value['default']['value'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_FARM));
-                $this->assertEquals($value['locked']['value'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_FARM));
-                $this->assertEquals($value['default']['scope'], Scalr_Scripting_GlobalVariables::SCOPE_FARM);
-            }
-        }
-
-        $this->assertEquals($countTestVars, 2);
-
-        unset($values, $value);
-
-        // delete role variable
-        $setVars[Scalr_Scripting_GlobalVariables::SCOPE_ROLE]['flagDelete'] = 1;
-        $this->assertTrue($roleVar->setValues([$setVars[Scalr_Scripting_GlobalVariables::SCOPE_ROLE]], $roleId, 0, 0, '', true, true));
-
-        $values = $roleVar->listVariables();
-
-        foreach ($values as $value) {
-            $this->assertNotEquals($value['name'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_ROLE));
-        }
-
-        unset($values, $value);
-
-        // delete farm variable
-        $setVars[Scalr_Scripting_GlobalVariables::SCOPE_FARM]['flagDelete'] = 1;
-        $this->assertTrue($farmVar->setValues([$setVars[Scalr_Scripting_GlobalVariables::SCOPE_FARM]], 0, $farmId, 0, '', true, true));
-
-        $values = $farmVar->listVariables();
-
-        foreach ($values as $value) {
-            $this->assertNotEquals($value['name'], $this->getVarTestName(Scalr_Scripting_GlobalVariables::SCOPE_FARM));
-        }
-
-        unset($values, $value);
     }
 
     /**
@@ -519,7 +699,7 @@ class GlobalVariablesTest extends TestCase
      *
      * @throws \Exception
      */
-    private function deleteTestVariables()
+    public static function deleteTestVariables()
     {
         $db = \Scalr::getDb();
 
@@ -534,9 +714,7 @@ class GlobalVariablesTest extends TestCase
         ];
 
         foreach ($tables as $table) {
-            $db->Execute("
-                DELETE FROM $table WHERE name LIKE '%" . self::getInstallationId() . "'
-            ");
+            $db->Execute("DELETE FROM $table WHERE name LIKE '%" . self::getInstallationId() . "' OR name = 'SCALR_UI_DEFAULT_STORAGE_RE_USE'");
         }
 
     }

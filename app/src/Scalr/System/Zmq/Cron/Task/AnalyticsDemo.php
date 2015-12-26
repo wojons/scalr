@@ -2,6 +2,7 @@
 
 namespace Scalr\System\Zmq\Cron\Task
 {
+    use Scalr\Farm\Role\FarmRoleStorageConfig;
     use Scalr\Stats\CostAnalytics\Entity\UsageItemEntity;
     use Scalr\Stats\CostAnalytics\Entity\UsageTypeEntity;
     use Scalr\System\Zmq\Cron\Task\AnalyticsDemo\stdCc;
@@ -19,6 +20,7 @@ namespace Scalr\System\Zmq\Cron\Task
     use Scalr\Stats\CostAnalytics\Entity\UsageHourlyEntity;
     use Scalr\Stats\CostAnalytics\Quarters;
     use Scalr\System\Zmq\Cron\AbstractTask;
+    use Scalr\Model\Entity;
 
     /**
      * AnalyticsDemo task
@@ -48,6 +50,21 @@ namespace Scalr\System\Zmq\Cron\Task
 
             $pricing = new stdPricing();
             $quarters = new Quarters(SettingEntity::getQuarters());
+
+            $price = [];
+
+            $bandwidthItems = [
+                'USE1-APN1-AWS', 'USE1-APS1-AWS', 'USE1-APS2-AWS',
+                'USE1-CloudFront', 'USE1-EU-AWS', 'USE1-SAE1-AWS',
+                'USE1-USW1-AWS ', 'USE1-USW2-AWS'
+            ];
+
+            $usageTypes = [
+                UsageTypeEntity::NAME_COMPUTE_BOX_USAGE, UsageTypeEntity::NAME_STORAGE_EBS,
+                UsageTypeEntity::NAME_STORAGE_EBS_IO, UsageTypeEntity::NAME_STORAGE_EBS_IOPS,
+                UsageTypeEntity::NAME_BANDWIDTH_REGIONAL, UsageTypeEntity::NAME_BANDWIDTH_IN,
+                UsageTypeEntity::NAME_BANDWIDTH_OUT
+            ];
 
             $logger->info('Started AnalyticsDemo process');
 
@@ -148,8 +165,8 @@ namespace Scalr\System\Zmq\Cron\Task
                                 $fro = new stdFarmRole();
                                 $fro->farmRole = $farmRole;
                                 $fro->farm = $fo;
-                                $fro->min = $farmRole->GetSetting(\DBFarmRole::SETTING_SCALING_MIN_INSTANCES);
-                                $fro->max = $farmRole->GetSetting(\DBFarmRole::SETTING_SCALING_MAX_INSTANCES);
+                                $fro->min = $farmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MIN_INSTANCES);
+                                $fro->max = $farmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MAX_INSTANCES);
 
                                 $fo->farmRoles[$farmRole->ID] = $fro;
                                 //$farmRoles[$farmRole->ID] = $fro;
@@ -167,80 +184,116 @@ namespace Scalr\System\Zmq\Cron\Task
 
                         foreach ($fo->farmRoles as $fro) {
                             /* @var $fro stdFarmRole */
-                            $countInstances = rand(max(1, floor($fro->max * 0.7)), min((int) $fro->max, 2));
 
-                            $cost = $pricing->getPrice(
-                                $dt,
-                                $fro->farmRole->Platform,
-                                $fro->farmRole->CloudLocation,
-                                $fro->getInstanceType(),
-                                $fo->env->getUrl($fro->farmRole->Platform),
-                                PriceEntity::OS_LINUX
-                            );
+                            foreach ($usageTypes as $usageType) {
+                                $displayName = null;
 
-                            $type = UsageTypeEntity::NAME_COMPUTE_BOX_USAGE;
-                            $costDistType = UsageTypeEntity::COST_DISTR_TYPE_COMPUTE;
+                                if ($usageType === UsageTypeEntity::NAME_COMPUTE_BOX_USAGE) {
+                                    $countInstances = rand(max(1, floor($fro->max * 0.7)), min((int) $fro->max, 2));
 
-                            $usageTypeEntity = UsageTypeEntity::findOne([
-                                ['costDistrType' => $costDistType],
-                                ['name'          => $type]
-                            ]);
-                            /* @var $usageTypeEntity UsageTypeEntity */
+                                    $cost = $pricing->getPrice(
+                                        $dt,
+                                        $fro->farmRole->Platform,
+                                        $fro->farmRole->CloudLocation,
+                                        $fro->getInstanceType(),
+                                        $fo->env->getUrl($fro->farmRole->Platform),
+                                        PriceEntity::OS_LINUX
+                                    );
 
-                            if ($usageTypeEntity === null) {
-                                $usageTypeEntity = new UsageTypeEntity();
-                                $usageTypeEntity->costDistrType = $costDistType;
-                                $usageTypeEntity->name = $type;
-                                $usageTypeEntity->displayName = 'Compute instances';
-                                $usageTypeEntity->save();
-                            }
+                                    $costDistType = UsageTypeEntity::COST_DISTR_TYPE_COMPUTE;
+                                    $item = $fro->getInstanceType();
+                                    $displayName = 'Compute Instances';
+                                } else if ($fro->farmRole->Platform == \SERVER_PLATFORMS::EC2) {
+                                    if ($usageType === UsageTypeEntity::NAME_STORAGE_EBS || $usageType === UsageTypeEntity::NAME_STORAGE_EBS_IO || $usageType === UsageTypeEntity::NAME_STORAGE_EBS_IOPS) {
+                                        $costDistType = UsageTypeEntity::COST_DISTR_TYPE_STORAGE;
+                                        $configs = FarmRoleStorageConfig::getByFarmRole($fro->farmRole);
 
-                            $item = $fro->getInstanceType();
+                                        $config = reset($configs);
+                                        /* @var $config FarmRoleStorageConfig */
+                                        if (!empty($config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE])) {
+                                            $item = $config->settings[FarmRoleStorageConfig::SETTING_EBS_TYPE];
 
-                            $usageItemEntity = UsageItemEntity::findOne([['usageType' => $usageTypeEntity->id], ['name' => $item]]);
-                            /* @var $usageItemEntity UsageItemEntity */
+                                            if (!isset($price[$item])) {
+                                                $price[$item] = rand(0.01, 0.09);
+                                            }
 
-                            if ($usageItemEntity === null) {
-                                $usageItemEntity = new UsageItemEntity();
-                                $usageItemEntity->usageType = $usageTypeEntity->id;
-                                $usageItemEntity->name = $item;
-                                $usageItemEntity->save();
-                            }
+                                            $countInstances = rand(100, 10000);
+                                        } else {
+                                            continue;
+                                        }
+                                    } else if ($usageType === UsageTypeEntity::NAME_BANDWIDTH_REGIONAL || $usageType === UsageTypeEntity::NAME_BANDWIDTH_IN || $usageType === UsageTypeEntity::NAME_BANDWIDTH_OUT) {
+                                        $costDistType = UsageTypeEntity::COST_DISTR_TYPE_BANDWIDTH;
+                                        $countInstances = rand(0, 10000);
+                                        $key = array_rand($bandwidthItems);
+                                        $item = $bandwidthItems[$key];
+                                        $price[$item] = rand(0.01, 0.09);
+                                    }
 
-                            //Hourly usage
-                            $rec = new UsageHourlyEntity();
-                            $rec->usageId = \Scalr::GenerateUID();
-                            $rec->accountId = $fro->farm->farm->ClientID;
-                            $rec->ccId = $po->cc->cc->ccId;
-                            $rec->projectId = $po->project->projectId;
-                            $rec->cloudLocation = $fro->farmRole->CloudLocation;
-                            $rec->dtime = new DateTime($timestamp, $tzUtc);
-                            $rec->envId = $fo->farm->EnvID;
-                            $rec->farmId = $fo->farm->ID;
-                            $rec->farmRoleId = $fro->farmRole->ID;
-                            $rec->usageItem = $usageItemEntity->id;
-                            $rec->platform = $fro->farmRole->Platform;
-                            $rec->url = $fo->env->getUrl($fro->farmRole->Platform);
-                            $rec->os = PriceEntity::OS_LINUX;
-                            $rec->num = $countInstances;
-                            $rec->cost = $cost * $countInstances;
+                                    $cost = $price[$item];
+                                } else {
+                                    continue;
+                                }
 
-                            $rec->save();
+                                $type = $usageType;
 
-                            $logger->log(
-                                (static::PAST_HOURS_INIT > 0 ? 'DEBUG' : 'INFO'),
-                                "-- role:'%s':%d platform:%s, min:%d - max:%d, cloudLocation:'%s', usageItem:'%s', "
-                                . "cost:%0.4f * %d = %0.3f",
-                                $fro->farmRole->Alias, $fro->farmRole->ID, $fro->farmRole->Platform,
-                                $fro->min, $fro->max,
-                                $fro->farmRole->CloudLocation,
-                                $usageItemEntity->id,
-                                $cost, $countInstances,
-                                $rec->cost
-                            );
+                                $usageTypeEntity = UsageTypeEntity::findOne([
+                                    ['costDistrType' => $costDistType],
+                                    ['name'          => $type]
+                                ]);
+                                /* @var $usageTypeEntity UsageTypeEntity */
 
-                            //Update Daily table
-                            $cadb->Execute("
+                                if ($usageTypeEntity === null) {
+                                    $usageTypeEntity = new UsageTypeEntity();
+                                    $usageTypeEntity->costDistrType = $costDistType;
+                                    $usageTypeEntity->displayName = $displayName;
+                                    $usageTypeEntity->name = $type;
+                                    $usageTypeEntity->save();
+                                }
+
+                                $usageItemEntity = UsageItemEntity::findOne([['usageType' => $usageTypeEntity->id], ['name' => $item]]);
+                                /* @var $usageItemEntity UsageItemEntity */
+
+                                if ($usageItemEntity === null) {
+                                    $usageItemEntity = new UsageItemEntity();
+                                    $usageItemEntity->usageType = $usageTypeEntity->id;
+                                    $usageItemEntity->name = $item;
+                                    $usageItemEntity->save();
+                                }
+
+                                //Hourly usage
+                                $rec = new UsageHourlyEntity();
+                                $rec->usageId = \Scalr::GenerateUID();
+                                $rec->accountId = $fro->farm->farm->ClientID;
+                                $rec->ccId = $po->cc->cc->ccId;
+                                $rec->projectId = $po->project->projectId;
+                                $rec->cloudLocation = $fro->farmRole->CloudLocation;
+                                $rec->dtime = new DateTime($timestamp, $tzUtc);
+                                $rec->envId = $fo->farm->EnvID;
+                                $rec->farmId = $fo->farm->ID;
+                                $rec->farmRoleId = $fro->farmRole->ID;
+                                $rec->usageItem = $usageItemEntity->id;
+                                $rec->platform = $fro->farmRole->Platform;
+                                $rec->url = $fo->env->getUrl($fro->farmRole->Platform);
+                                $rec->os = PriceEntity::OS_LINUX;
+                                $rec->num = $countInstances;
+                                $rec->cost = $cost * $countInstances;
+
+                                $rec->save();
+
+                                $logger->log(
+                                    (static::PAST_HOURS_INIT > 0 ? 'DEBUG' : 'INFO'),
+                                    "-- role:'%s':%d platform:%s, min:%d - max:%d, cloudLocation:'%s', usageItem:'%s', "
+                                    . "cost:%0.4f * %d = %0.3f",
+                                    $fro->farmRole->Alias, $fro->farmRole->ID, $fro->farmRole->Platform,
+                                    $fro->min, $fro->max,
+                                    $fro->farmRole->CloudLocation,
+                                    $usageItemEntity->id,
+                                    $cost, $countInstances,
+                                    $rec->cost
+                                );
+
+                                //Update Daily table
+                                $cadb->Execute("
                                 INSERT usage_d
                                 SET date = ?,
                                     platform = ?,
@@ -251,19 +304,19 @@ namespace Scalr\System\Zmq\Cron\Task
                                     cost = ?
                                 ON DUPLICATE KEY UPDATE cost = cost + ?
                             ", [
-                                $rec->dtime->format('Y-m-d'),
-                                $rec->platform,
-                                ($rec->ccId ? str_replace('-', '', $rec->ccId) : '00000000-0000-0000-0000-000000000000'),
-                                ($rec->projectId ? str_replace('-', '', $rec->projectId) : '00000000-0000-0000-0000-000000000000'),
-                                ($rec->farmId ? $rec->farmId : 0),
-                                ($rec->envId ? $rec->envId : 0),
-                                $rec->cost,
-                                $rec->cost,
-                            ]);
+                                    $rec->dtime->format('Y-m-d'),
+                                    $rec->platform,
+                                    ($rec->ccId ? str_replace('-', '', $rec->ccId) : '00000000-0000-0000-0000-000000000000'),
+                                    ($rec->projectId ? str_replace('-', '', $rec->projectId) : '00000000-0000-0000-0000-000000000000'),
+                                    ($rec->farmId ? $rec->farmId : 0),
+                                    ($rec->envId ? $rec->envId : 0),
+                                    $rec->cost,
+                                    $rec->cost,
+                                ]);
 
-                            //Updates Quarterly Budget
-                            if ($rec->ccId) {
-                                $cadb->Execute("
+                                //Updates Quarterly Budget
+                                if ($rec->ccId) {
+                                    $cadb->Execute("
                                     INSERT quarterly_budget
                                     SET year = ?,
                                         subject_type = ?,
@@ -273,17 +326,17 @@ namespace Scalr\System\Zmq\Cron\Task
                                         cumulativespend = ?
                                     ON DUPLICATE KEY UPDATE cumulativespend = cumulativespend + ?
                                 ", [
-                                    $period->year,
-                                    QuarterlyBudgetEntity::SUBJECT_TYPE_CC,
-                                    str_replace('-', '', $rec->ccId),
-                                    $period->quarter,
-                                    $rec->cost,
-                                    $rec->cost,
-                                ]);
-                            }
+                                        $period->year,
+                                        QuarterlyBudgetEntity::SUBJECT_TYPE_CC,
+                                        str_replace('-', '', $rec->ccId),
+                                        $period->quarter,
+                                        $rec->cost,
+                                        $rec->cost,
+                                    ]);
+                                }
 
-                            if ($rec->projectId) {
-                                $cadb->Execute("
+                                if ($rec->projectId) {
+                                    $cadb->Execute("
                                     INSERT quarterly_budget
                                     SET year = ?,
                                         subject_type = ?,
@@ -293,13 +346,14 @@ namespace Scalr\System\Zmq\Cron\Task
                                         cumulativespend = ?
                                     ON DUPLICATE KEY UPDATE cumulativespend = cumulativespend + ?
                                 ", [
-                                    $period->year,
-                                    QuarterlyBudgetEntity::SUBJECT_TYPE_PROJECT,
-                                    str_replace('-', '', $rec->projectId),
-                                    $period->quarter,
-                                    $rec->cost,
-                                    $rec->cost,
-                                ]);
+                                        $period->year,
+                                        QuarterlyBudgetEntity::SUBJECT_TYPE_PROJECT,
+                                        str_replace('-', '', $rec->projectId),
+                                        $period->quarter,
+                                        $rec->cost,
+                                        $rec->cost,
+                                    ]);
+                                }
                             }
                         }
 
@@ -423,6 +477,7 @@ namespace Scalr\System\Zmq\Cron\Task\AnalyticsDemo
     use Scalr\Modules\PlatformFactory;
     use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
     use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
+    use Scalr\Model\Entity\CloudCredentialsProperty;
 
     class stdPricing extends \stdClass
     {
@@ -460,15 +515,15 @@ namespace Scalr\System\Zmq\Cron\Task\AnalyticsDemo
                 AND p.os = ?
                 LIMIT 1
             ", [
-                        $applied->format('Y-m-d'),
-                        0,
-                        $platform,
-                        $cloudLocation,
-                        $url,
-                        $applied->format('Y-m-d'),
-                        $instanceType,
-                        $os
-                    ]);
+                    $applied->format('Y-m-d'),
+                    0,
+                    $platform,
+                    $cloudLocation,
+                    $url,
+                    $applied->format('Y-m-d'),
+                    $instanceType,
+                    $os
+                ]);
 
                 if (!$this->cache[$key] || $this->cache[$key] <= 0.0001) {
                     $this->cache[$key] = .0123;
@@ -589,6 +644,8 @@ namespace Scalr\System\Zmq\Cron\Task\AnalyticsDemo
                     $property = 'cloudstack.service_offering_id';
                 } else if ($this->farmRole->Platform == \SERVER_PLATFORMS::GCE) {
                     $property = 'gce.machine-type';
+                } else if ($this->farmRole->Platform == \SERVER_PLATFORMS::AZURE) {
+                    $property = 'azure.vm-size';
                 }
 
                 $this->instanceType = $this->farmRole->GetSetting($property);
@@ -625,18 +682,16 @@ namespace Scalr\System\Zmq\Cron\Task\AnalyticsDemo
         public function getUrl($platform)
         {
             if (!isset($this->aUrl[$platform])) {
-                if ($platform == \SERVER_PLATFORMS::EC2) {
+                if ($platform == \SERVER_PLATFORMS::EC2 || $platform == \SERVER_PLATFORMS::GCE || $platform == \SERVER_PLATFORMS::AZURE) {
                     $value = '';
                 } else if (PlatformFactory::isOpenstack($platform)) {
                     $value = CloudLocation::normalizeUrl(
-                        $this->env->getPlatformConfigValue($platform . '.' . OpenstackPlatformModule::KEYSTONE_URL)
+                        $this->env->cloudCredentials($platform)->properties[CloudCredentialsProperty::OPENSTACK_KEYSTONE_URL]
                     );
                 } else if (PlatformFactory::isCloudstack($platform)) {
                     $value = CloudLocation::normalizeUrl(
-                        $this->env->getPlatformConfigValue($platform . '.' . CloudstackPlatformModule::API_URL)
+                        $this->env->cloudCredentials($platform)->properties[CloudCredentialsProperty::CLOUDSTACK_API_URL]
                     );
-                } else if ($platform == \SERVER_PLATFORMS::GCE) {
-                    $value = '';
                 }
 
                 $this->aUrl[$platform] = $value;

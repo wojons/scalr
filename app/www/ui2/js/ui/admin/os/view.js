@@ -5,6 +5,9 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
         value: null,
         iconCls: 'x-icon-osfamily-small'
     }];
+    var customFamilyId = 'Custom family',
+        customGenerationId = 'Custom generation',
+        customVersionId = 'Custom version';
 
     var uniqFamilies = {};
     Ext.each(moduleParams['os'], function(os){
@@ -23,11 +26,11 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
             'id',
             'name',
             'family',
-            'generation',
-            'version',
+            {name: 'generation', sortType: 'asFloat'},
+            {name: 'version', sortType: 'asFloat'},
             {name: 'status', defaultValue: 'active'},
             {name: 'isSystem', defaultValue: 0},
-            'used'
+            {name: 'used', sortType: 'asBool'}
         ],
         data: moduleParams['os'],
 		proxy: {
@@ -194,6 +197,7 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                 width: 150,
                 getItemIconCls: false,
                 hidden: osFilterItems.length === 2,
+                handler: null,
                 changeHandler: function (comp, item) {
                     if (item.value) {
                         store.addFilter({id: 'family', property: 'family', value: item.value});
@@ -215,6 +219,7 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                 name: 'isSystem',
                 width: 140,
                 getItemIconCls: false,
+                handler: null,
                 changeHandler: function (comp, item) {
                     if (Ext.isNumeric(item.value)) {
                         store.addFilter({id: 'isSystem', property: 'isSystem', value: item.value});
@@ -312,7 +317,7 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                     }
                 });
 
-                osFamilies[frm.findField('family').customId] = {family: ''};
+                osFamilies[customFamilyId] = {family: ''};
                 frm.findField('family').store.load({data: osFamilies});
 
 
@@ -339,7 +344,7 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                 } else {
                     field = frm.findField('family');
                     if (!family) {
-                        field.setValue(field.customId);
+                        field.setValue(customFamilyId);
                         field.next('[name="customFamily"]').show().enable().setValue(record.get('family'));
                     } else {
                         field.next('[name="customFamily"]').hide().disable();
@@ -347,7 +352,7 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
 
                     field = frm.findField('generation');
                     if (!generation) {
-                        field.setValue(field.customId);
+                        field.setValue(customGenerationId);
                         field.next('[name="customGeneration"]').show().enable().setValue(record.get('generation'));
                     } else {
                         field.next('[name="customGeneration"]').hide().disable();
@@ -360,7 +365,7 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                             field.reset();
                             field.next('[name="customVersion"]').hide().disable();
                         } else {
-                            field.setValue(field.customId);
+                            field.setValue(customVersionId);
                             field.next('[name="customVersion"]').show().enable().setValue(record.get('version'));
                         }
                     } else {
@@ -404,24 +409,33 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                     xtype: 'combo',
                     name: 'family',
                     valueField: 'id',
-                    displayField: 'id',
+                    displayField: 'title',
                     editable: false,
                     allowBlank: false,
                     flex: 1,
                     hideInputOnReadOnly: true,
-                    customId: 'Custom family',
                     plugins: {
                         ptype: 'fieldinnericon',
                         field: 'family',
                         iconClsPrefix: 'x-icon-osfamily-small x-icon-osfamily-small-'
                     },
                     store: {
-                        fields: ['id', 'generations', 'family'],
+                        fields: [
+                            {
+                                name: 'id',
+                                sortType: function(value) {
+                                    return value == customFamilyId ? 'zz' : value;
+                                }
+                            },
+                            'generations', 'family', {name: 'title', convert: function(v, record) {return Scalr.utils.beautifyOsFamily(record.data.id)}}],
                         proxy: {
                             type: 'object',
                             reader: {
                                 idFieldFromIndex: true
                             }
+                        },
+                        sorters: {
+                            property: 'id'
                         }
                     },
                     listeners: {
@@ -431,7 +445,7 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                                 generationField = frm.findField('generation'),
                                 generations = {},
                                 customFamilyField = comp.next('[name="customFamily"]'),
-                                isCustomFamily = value === comp.customId;
+                                isCustomFamily = value === customFamilyId;
                             if (value) {
                                 customFamilyField.setDisabled(!isCustomFamily).setVisible(isCustomFamily);
                                 if (isCustomFamily && comp.hasFocus) {
@@ -439,10 +453,10 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                                 } else if (record = comp.findRecordByValue(value)) {
                                     generations = Ext.clone(record.get('generations')) || generations;
                                 }
-                                generations[generationField.customId] = {};
+                                generations[customGenerationId] = {};
                                 generationField.store.load({data: generations});
                                 generationField.up().show();
-                                if (generationField.getValue()!==generationField.customId) generationField.reset();
+                                if (generationField.getValue()!==customGenerationId) generationField.reset();
                             } else {
                                 customFamilyField.hide();
                                 generationField.up().hide();
@@ -453,7 +467,7 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                     getSubmitData: function() {
                         var value = this.getValue();
                         return {
-                            family: value == this.customId ? this.next('[name="customFamily"]').getValue() : value
+                            family: value == customFamilyId ? this.next('[name="customFamily"]').getValue() : value
                         };
                     }
                 },{
@@ -483,15 +497,23 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                     flex: 1,
                     autoSetSingleValue: true,
                     hideInputOnReadOnly: true,
-                    customId: 'Custom generation',
                     store: {
-                        fields: ['id', 'versions'],
+                        fields: [
+                            {
+                                name: 'id',
+                                sortType: 'asFloat'
+                            },
+                            'versions'
+                        ],
                         proxy: {
                             type: 'object',
                             reader: {
                                 idFieldFromIndex: true
                             }
-                        }
+                        },
+                        sorters: [{
+                            property: 'id'
+                        }]
                     },
                     listeners: {
                         change: function(comp, value) {
@@ -500,7 +522,7 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                                 versionField = frm.findField('version'),
                                 versions = [],
                                 customGenerationField = comp.next('[name="customGeneration"]'),
-                                isCustomGeneration = value === comp.customId;
+                                isCustomGeneration = value === customGenerationId;
                             if (value) {
                                 customGenerationField.setDisabled(!isCustomGeneration).setVisible(isCustomGeneration);
                                 if (isCustomGeneration && comp.hasFocus) {
@@ -508,10 +530,10 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                                 } else if (record = comp.findRecordByValue(value)) {
                                     versions = Ext.clone(record.get('versions')) || versions;
                                 }
-                                versions.push(versionField.customId);
+                                versions.push(customVersionId);
                                 versionField.store.load({data: Ext.Array.map(versions, function(value){return {id: value};})});
                                 versionField.up().show();
-                                if (versionField.getValue()!==versionField.customId) versionField.reset();
+                                if (versionField.getValue()!==customVersionId) versionField.reset();
                             } else {
                                 versionField.up().hide();
                             }
@@ -520,7 +542,7 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                     getSubmitData: function() {
                         var value = this.getValue();
                         return {
-                            generation: value == this.customId ? this.next('[name="customGeneration"]').getValue() : value
+                            generation: value == customGenerationId ? this.next('[name="customGeneration"]').getValue() : value
                         };
                     }
                 },{
@@ -550,15 +572,17 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                     flex: 1,
                     autoSetSingleValue: true,
                     hideInputOnReadOnly: true,
-                    customId: 'Custom version',
                     store: {
-                        fields: ['id'],
+                        fields: [{
+                            name: 'id',
+                            sortType: 'asFloat'
+                        }],
                         proxy: 'object'
                     },
                     listeners: {
                         change: function(comp, value) {
                             var customVersionField = comp.next('[name="customVersion"]'),
-                                isCustomVersion = value === comp.customId;
+                                isCustomVersion = value === customVersionId;
                             if (value) {
                                 customVersionField.setDisabled(!isCustomVersion).setVisible(isCustomVersion);
                                 if (isCustomVersion && comp.hasFocus) customVersionField.focus(true);
@@ -568,7 +592,7 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                     getSubmitData: function() {
                         var value = this.getValue();
                         return {
-                            version: value == this.customId ? this.next('[name="customVersion"]').getValue() : value
+                            version: value == customVersionId ? this.next('[name="customVersion"]').getValue() : value
                         };
                     }
                 },{
@@ -591,10 +615,10 @@ Scalr.regPage('Scalr.ui.admin.os.view', function (loadParams, moduleParams) {
                     width: 120
                 },
                 items: [{
-                    text: 'Active',
+                    text: 'Enabled',
                     value: 'active'
                 },{
-                    text: 'Inactive',
+                    text: 'Disabled',
                     value: 'inactive'
                 }]
             },{

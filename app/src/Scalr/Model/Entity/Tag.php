@@ -81,7 +81,7 @@ class Tag extends AbstractEntity
             $tag = trim($tag);
             if ($tag) {
                 $t = self::findOne([['name' => $tag], ['accountId' => $accountId]]);
-                if (! $t) {
+                if (!$t) {
                     $t = new Tag();
                     $t->name = $tag;
                     $t->accountId = $accountId;

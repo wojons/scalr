@@ -41,7 +41,7 @@ scalr:
         <<: *connections_mysql
         pool_size: 50
     instances_connection_timeout: 5
-    pool_size: 200
+    pool_size: 500
     log_file: "/var/log/scalr/msg-sender-test.log"
     pid_file: "/var/run/scalr/msg-sender-test.pid"
 
@@ -102,3 +102,7 @@ scalr:
       pool_size: 100
       log_file: '/var/log/scalr/szr-upd-service-test.log'
       pid_file: '/var/run/scalr/szr-upd-service-test.pid'
+
+  azure:
+    app_client_id: aaaaaaaa-bbbb-cccc-dddd-dddddddddddd
+    app_secret_key: 12323sdfgewrt435twqer23q534tdqrcq251513c354=

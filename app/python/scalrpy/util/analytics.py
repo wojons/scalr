@@ -14,25 +14,23 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import sys
 import uuid
 import json
 import datetime
 import threading
-import pymysql.err
 
 from scalrpy.util import helper
 from scalrpy import LOG
+from scalrpy import exceptions
 
 
 # Do not change this UUID
 UUID = uuid.UUID('99c3db97-5c41-4113-874c-159dab36a36c')
 
 
-platforms = [
+PLATFORMS = [
     'cloudstack',
     'ec2',
-    'ecs',
     'gce',
     'idcf',
     'openstack',
@@ -43,25 +41,8 @@ platforms = [
     'mirantis',
     'vio',
     'verizon',
-    'cisco'
+    'cisco',
 ]
-
-server_id_map = {
-    'cloudstack': 'cloudstack.server_id',
-    'ec2': 'ec2.instance-id',
-    'ecs': 'openstack.server-id',
-    'gce': 'gce.server-id',
-    'idcf': 'cloudstack.server_id',
-    'openstack': 'openstack.server-id',
-    'rackspacenguk': 'rs.server-id',
-    'rackspacengus': 'rs.server-id',
-    'ocs': 'openstack.server-id',
-    'nebula': 'openstack.server-id',
-    'mirantis': 'openstack.server-id',
-    'vio': 'openstack.server-id',
-    'verizon': 'openstack.server-id',
-    'cisco': 'openstack.server-id'
-}
 
 url_key_map = {
     'cloudstack': 'api_url',
@@ -69,7 +50,6 @@ url_key_map = {
     'ec2': None,
     'gce': None,
 }
-url_key_map['ecs'] = url_key_map['openstack']
 url_key_map['idcf'] = url_key_map['cloudstack']
 url_key_map['rackspacenguk'] = url_key_map['openstack']
 url_key_map['rackspacengus'] = url_key_map['openstack']
@@ -79,7 +59,6 @@ url_key_map['mirantis'] = url_key_map['openstack']
 url_key_map['vio'] = url_key_map['openstack']
 url_key_map['verizon'] = url_key_map['openstack']
 url_key_map['cisco'] = url_key_map['openstack']
-
 
 os_map = {
     'linux': 0,
@@ -92,8 +71,7 @@ class Credentials(dict):
 
     scheme = {
         'cloudstack': ['api_key', 'secret_key', 'api_url'],
-        'ec2': ['access_key', 'secret_key', 'account_id'],
-        'ecs': ['username', 'api_key', 'password', 'keystone_url', 'tenant_name'],
+        'ec2': ['access_key', 'secret_key', 'account_id', 'account_type'],
         'gce': ['service_account_name', 'key', 'project_id', 'json_key'],
         'idcf': ['api_key', 'secret_key', 'api_url'],
         'openstack': ['username', 'api_key', 'password', 'keystone_url', 'tenant_name'],
@@ -104,7 +82,8 @@ class Credentials(dict):
         'mirantis': ['username', 'api_key', 'password', 'keystone_url', 'tenant_name'],
         'vio': ['username', 'api_key', 'password', 'keystone_url', 'tenant_name'],
         'verizon': ['username', 'api_key', 'password', 'keystone_url', 'tenant_name'],
-        'cisco': ['username', 'api_key', 'password', 'keystone_url', 'tenant_name']
+        'cisco': ['username', 'api_key', 'password', 'keystone_url', 'tenant_name'],
+        'azure': ['tenant_name', 'subscription_id'],
     }
 
     def __init__(self, env_id, platform, data):
@@ -139,9 +118,27 @@ class Credentials(dict):
         if self.platform == 'ec2' and 'account_id' in self:
             unique_key = self['account_id']
         else:
-            unique_key = '; '.join([self[k] for k in self.scheme[self.platform] if k in self])
+            unique_key = '; '.join([str(self[k]) for k in self.scheme[self.platform] if k in self])
         assert unique_key, 'unique_key'
         return unique_key
+
+    @classmethod
+    def test(cls, data, platform):
+        scheme = {
+            'cloudstack': [data.get('api_key'), data.get('secret_key'), data.get('api_url')],
+            'ec2': [data.get('access_key'), data.get('secret_key')],
+            'gce': [data.get('service_account_name'), data.get('project_id'), data.get('key') or data.get('json_key')],
+            'openstack': [data.get('username'), data.get('api_key') or data.get('password'), data.get('keystone_url')],
+        }
+        scheme['idcf'] = scheme['cloudstack']
+        scheme['rackspacenguk'] = scheme['rackspacengus'] = scheme['openstack']
+        scheme['ocs'] = scheme['nebula'] = scheme['mirantis'] = scheme['openstack']
+        scheme['vio'] = scheme['verizon'] = scheme['cisco'] = scheme['openstack']
+        if None in scheme[platform]:
+            if [None] * len(scheme[platform]) == scheme[platform]:
+                raise exceptions.MissingCredentialsError()
+            else:
+                raise exceptions.IncompleteCredentialsError()
 
 
 class Analytics(object):
@@ -151,81 +148,57 @@ class Analytics(object):
         self.analytics_db = analytics_db
 
         self._quarters_calendar = None
-        self._table_lock = threading.Lock()
 
         self.usage_types = {}
         self.usage_items = {}
 
-    def get_server_id_by_instance_id(self, servers, envs_ids, platform, cloud_location, url=None):
+        self.usage_items_lock = threading.Lock()
+        self.farm_usage_d_lock = threading.Lock()
+        self.lock = threading.Lock()
+
+    def get_server_id_by_instance_id(self, servers, platform, cloud_location=None, envs_ids=None, url=None):
+        if platform != 'ec2':
+            assert cloud_location
+            assert envs_ids
         instances_ids = list(set([str(server['instance_id']) for server in servers]))
+        instances_ids = map(str, instances_ids)
         if not instances_ids:
             return tuple()
+        query = (
+            "SELECT sh.server_id, sh.cloud_server_id instance_id, sh.env_id "
+            "FROM servers_history sh "
+        )
         if url:
-            query = (
-                "SELECT sp.server_id, sp.value AS instance_id, s.env_id "
-                "FROM server_properties sp "
-                "JOIN servers s ON sp.server_id=s.server_id "
-                "JOIN client_environment_properties cep ON s.env_id=cep.env_id "
-                "WHERE sp.name='{name}' "
-                "AND s.platform='{platform}' "
-                "AND s.cloud_location='{cloud_location}' "
+            query += "JOIN client_environment_properties cep ON sh.env_id=cep.env_id "
+        query += (
+            "WHERE sh.platform='{platform}' "
+            "AND sh.cloud_server_id IN ({instances_ids}) "
+        )
+        if url:
+            query += (
                 "AND cep.name='{platform}.{url_key}' "
                 "AND cep.value='{url}' "
-                "AND sp.value IN ({value})"
-            ).format(
-                name=server_id_map[platform],
-                platform=platform,
-                cloud_location=cloud_location,
-                url_key=url_key_map[platform],
-                url=url,
-                value=str(instances_ids)[1:-1])
-        else:
-            query = (
-                "SELECT sp.server_id, sp.value AS instance_id, s.env_id "
-                "FROM server_properties sp "
-                "JOIN servers s ON sp.server_id=s.server_id "
-                "WHERE sp.name='{name}' "
-                "AND s.platform='{platform}' "
-                "AND s.cloud_location='{cloud_location}' "
-                "AND sp.value IN ({value})"
-            ).format(
-                name=server_id_map[platform],
-                platform=platform,
-                cloud_location=cloud_location,
-                value=str(instances_ids)[1:-1])
+            )
+        if cloud_location:
+            query += "AND sh.cloud_location='{cloud_location}' "
 
+        kwds = {
+            'platform': platform,
+            'cloud_location': cloud_location,
+            'url_key': url_key_map[platform],
+            'url': url,
+            'instances_ids': str(instances_ids)[1:-1]
+        }
+        query = query.format(**kwds)
         results = self.scalr_db.execute(query, retries=1)
-        results_ids = [result['instance_id'] for result in results]
-        missing_ids = list(set(instances_ids) - set(results_ids))
-        if missing_ids:
-            if url:
-                query = (
-                    "SELECT sh.server_id, sh.cloud_server_id AS instance_id, sh.env_id "
-                    "FROM servers_history sh "
-                    "JOIN client_environment_properties cep ON sh.env_id=cep.env_id "
-                    "WHERE sh.platform='{platform}' "
-                    "AND cep.name='{platform}.{url_key}' "
-                    "AND cep.value='{url}' "
-                    "AND sh.cloud_server_id IN ({instance_id})"
-                ).format(
-                    platform=platform,
-                    instance_id=str(missing_ids)[1:-1],
-                    url_key=url_key_map[platform],
-                    url=url)
-            else:
-                query = (
-                    "SELECT sh.server_id, sh.cloud_server_id AS instance_id, sh.env_id "
-                    "FROM servers_history sh "
-                    "WHERE sh.platform='{platform}' "
-                    "AND sh.cloud_server_id IN ({instance_id})"
-                ).format(
-                    platform=platform,
-                    instance_id=str(missing_ids)[1:-1])
-            results += self.scalr_db.execute(query, retries=1)
 
-        envs_ids = map(int, envs_ids)
-        results_map = dict((result['instance_id'], result)
-                           for result in results if int(result['env_id']) in envs_ids)
+        if envs_ids:
+            envs_ids = map(int, envs_ids)
+            results_map = dict((result['instance_id'], result)
+                               for result in results if int(result['env_id']) in envs_ids)
+        else:
+            results_map = dict((result['instance_id'], result)
+                               for result in results)
         for server in servers:
             server.update(results_map.get(server['instance_id'], {}))
 
@@ -255,33 +228,170 @@ class Analytics(object):
                 json.loads(self.analytics_db.execute(query, retries=1)[0]['value']))
         return self._quarters_calendar
 
-    def load_envs(self, limit=500):
+    def load_envs(self, limit=500, platform=None):
         """
         :returns: generator
         """
-
+        platforms = [platform] if platform else PLATFORMS
         query = (
-            "SELECT ce.id, c.id AS client_id "
+            "SELECT ce.id, ce.client_id "
             "FROM client_environments ce "
             "JOIN clients c ON ce.client_id=c.id "
             "WHERE c.status='Active' "
             "AND ce.status='Active' "
-            "ORDER BY c.id ASC")
+            "ORDER BY ce.id ASC")
         for envs in self.scalr_db.execute_with_limit(query, limit, retries=1):
-            for platform in platforms:
-                names = ['%s.%s' % (platform, element) for element in Credentials.scheme[platform]]
-                names += ['%s.is_enabled' % platform]
-                if platform == 'ec2':
-                    names += [
-                        'ec2.account_type',
-                        'ec2.detailed_billing.bucket',
-                        'ec2.detailed_billing.enabled'
-                    ]
-                self.scalr_db.load_client_environment_properties(envs, names)
+            names = ['%s.is_enabled' % platform for platform in platforms]
+            self.scalr_db.load_client_environment_properties(envs, names)
             yield envs
 
-    def get_creds(self, envs):
-        creds = []
+    def load_env_credentials(self, envs, platform=None):
+        envs_ids = list(set(int(env['id']) for env in envs))
+        if not envs_ids:
+            return
+        platforms = [platform] if platform else PLATFORMS
+        names = list(set([name for pl in platforms for name in Credentials.scheme[pl]]))
+        if platform in (None, 'ec2'):
+            names += [
+                'detailed_billing.bucket',
+                'detailed_billing.region',
+                'detailed_billing.enabled',
+                'detailed_billing.payer_account',
+            ]
+        query = (
+            "SELECT ecc.env_id, ecc.cloud platform, ccp.name, ccp.value "
+            "FROM environment_cloud_credentials ecc "
+            "JOIN cloud_credentials_properties ccp "
+            "ON ecc.cloud_credentials_id=ccp.cloud_credentials_id "
+            "WHERE name IN ({name}) "
+            "AND ecc.env_id IN ({env_id}) "
+        ).format(name=str(names)[1:-1], env_id=str(envs_ids)[1:-1])
+        if platform:
+            query += "AND ecc.cloud='{platform}'".format(platform=platform)
+        results = self.scalr_db.execute(query)
+        for env in envs:
+            env.update({'%s.%s' % (result['platform'], result['name']): result['value']
+                       for result in results
+                       if result['env_id'] == env['id'] and
+                       '%s.%s' % (result['platform'], result['name']) not in env})
+
+    def load_aws_accounts_ids(self):
+        query = (
+            "SELECT DISTINCT ccp.value account_id "
+            "FROM cloud_credentials_properties ccp "
+            "JOIN cloud_credentials cc "
+            "ON ccp.cloud_credentials_id=cc.id "
+            "WHERE cc.cloud='ec2' "
+            "AND ccp.name='account_id' "
+            "AND ccp.value IS NOT NULL "
+            "AND ccp.value != ''")
+        results = self.scalr_db.execute(query)
+        return [result['account_id'] for result in results]
+
+    def load_aws_payers_accounts(self):
+        query = (
+            "SELECT DISTINCT ccp.value payer_account "
+            "FROM cloud_credentials_properties ccp "
+            "JOIN cloud_credentials cc "
+            "ON ccp.cloud_credentials_id=cc.id "
+            "WHERE cc.cloud='ec2' "
+            "AND ccp.name='detailed_billing.payer_account' "
+            "AND ccp.value IS NOT NULL "
+            "AND ccp.value != ''")
+        results = self.scalr_db.execute(query)
+        return [result['payer_account'] for result in results]
+
+    def load_aws_accounts_ids_envs(self, accounts_ids):
+        query = (
+            "SELECT ce.id, ce.client_id "
+            "FROM client_environments ce "
+            "JOIN clients c ON ce.client_id=c.id "
+            "JOIN environment_cloud_credentials ecc "
+            "ON ce.id=ecc.env_id AND ecc.cloud='ec2' "
+            "JOIN cloud_credentials_properties ccp "
+            "ON ecc.cloud_credentials_id=ccp.cloud_credentials_id "
+            "WHERE c.status='Active' "
+            "AND ce.status='Active' "
+            "AND ecc.cloud='ec2' "
+            "AND ccp.name='account_id' "
+            "AND ccp.value IN ({account_id})"
+        ).format(account_id=str(accounts_ids)[1:-1])
+        results = self.scalr_db.execute(query)
+        envs = {}
+        for result in results:
+            envs.setdefault(result['id'], {'id': result['id'], 'client_id': result['client_id']})
+        envs = envs.values()
+        names = [
+            'ec2.is_enabled',
+        ]
+        self.scalr_db.load_client_environment_properties(envs, names)
+        return envs
+
+    def load_aws_payers_accounts_envs(self, payers_accounts):
+        query = (
+            "SELECT ce.id, ce.client_id "
+            "FROM client_environments ce "
+            "JOIN clients c ON ce.client_id=c.id "
+            "JOIN environment_cloud_credentials ecc "
+            "ON ce.id=ecc.env_id AND ecc.cloud='ec2' "
+            "JOIN cloud_credentials_properties ccp "
+            "ON ecc.cloud_credentials_id=ccp.cloud_credentials_id "
+            "WHERE c.status='Active' "
+            "AND ce.status='Active' "
+            "AND ecc.cloud='ec2' "
+            "AND ccp.name='detailed_billing.payer_account' "
+            "AND ccp.value IN ({payer_account})"
+        ).format(payer_account=str(payers_accounts)[1:-1])
+        results = self.scalr_db.execute(query)
+        envs = {}
+        for result in results:
+            envs.setdefault(result['id'], {'id': result['id'], 'client_id': result['client_id']})
+        envs = envs.values()
+        names = [
+            'ec2.is_enabled',
+        ]
+        self.scalr_db.load_client_environment_properties(envs, names)
+        return envs
+
+    def load_azure_subscriptions_ids(self):
+        query = (
+            "SELECT DISTINCT ccp.value subscription_id "
+            "FROM cloud_credentials_properties ccp "
+            "JOIN cloud_credentials cc "
+            "ON ccp.cloud_credentials_id=cc.id "
+            "WHERE ccp.name='subscription_id'")
+        results = self.scalr_db.execute(query)
+        return [result['subscription_id'] for result in results]
+
+    def load_azure_subscriptions_ids_envs(self, subscriptions_ids):
+        query = (
+            "SELECT ce.id, ce.client_id "
+            "FROM client_environments ce "
+            "JOIN clients c ON ce.client_id=c.id "
+            "JOIN environment_cloud_credentials ecc "
+            "ON ce.id=ecc.env_id AND ecc.cloud='azure' "
+            "JOIN cloud_credentials_properties ccp "
+            "ON ecc.cloud_credentials_id=ccp.cloud_credentials_id "
+            "WHERE c.status='Active' "
+            "AND ce.status='Active' "
+            "AND ecc.cloud='azure' "
+            "AND ccp.name='subscription_id' "
+            "AND ccp.value IN ({subscription_id})"
+        ).format(subscription_id=str(subscriptions_ids)[1:-1])
+        results = self.scalr_db.execute(query)
+        envs = {}
+        for result in results:
+            envs.setdefault(result['id'], {'id': result['id'], 'client_id': result['client_id']})
+        envs = envs.values()
+        names = [
+            'azure.is_enabled',
+        ]
+        self.scalr_db.load_client_environment_properties(envs, names)
+        return envs
+
+    def get_credentials(self, envs, platforms=None):
+        platforms = platforms or Credentials.scheme.keys()
+        credentials = []
         for env in envs:
             for platform in Credentials.scheme:
                 key = '%s.%s' % (platform, 'is_enabled')
@@ -292,119 +402,120 @@ class Analytics(object):
                     key = '%s.%s' % (platform, name)
                     if key in env:
                         data[name] = env[key]
-                creds.append(Credentials(env['id'], platform, data))
-        return creds
+                credentials.append(Credentials(env['id'], platform, data))
+        return credentials
 
     def load_servers_data(self, servers):
-        # servers table
         servers_ids = list(set(server['server_id'] for server in servers if server['server_id']))
+        servers_ids = map(str, servers_ids)
         if not servers_ids:
             return
         query = (
-            "SELECT server_id, client_id account_id, farm_id, farm_roleid farm_role_id, "
-            "os_type os, cloud_location "
-            "FROM servers "
-            "WHERE server_id IN ({server_id})"
+            "SELECT sh.server_id, sh.env_id, sh.client_id account_id, sh.farm_id, "
+            "sh.farm_roleid farm_role_id, sh.role_id, sh.type instance_type, sh.os_type os, "
+            "sh.cloud_location, sh.cloud_server_id instance_id, sh.farm_created_by_id user, "
+            "HEX(sh.project_id) project_id, HEX(sh.cc_id) cc_id "
+            "FROM servers_history sh "
+            "WHERE sh.server_id IN ({server_id})"
         ).format(server_id=str(servers_ids)[1:-1])
         results = self.scalr_db.execute(query, retries=1)
-        results_ids = [result['server_id'] for result in results]
-        missing_ids = [server_id for server_id in servers_ids if server_id not in results_ids]
 
-        # servers_history table
-        if missing_ids:
-            query = (
-                "SELECT server_id, client_id account_id, farm_id, farm_roleid farm_role_id, "
-                "type instance_type, cloud_location, cloud_server_id instance_id "
-                "FROM servers_history "
-                "WHERE server_id IN ({server_id})"
-            ).format(server_id=str(missing_ids)[1:-1])
-            results += self.scalr_db.execute(query, retries=1)
-
-        results_map = dict((result['server_id'], result) for result in results)
+        results_map = {result['server_id']: result for result in results}
 
         # remove not managed servers
         alien_servers = [server for server in servers if server['server_id'] not in results_map]
         for alien in alien_servers:
             servers.remove(alien)
 
+        servers_without_project_id = []
+        servers_without_cc_id = []
+        servers_without_role_id = []
         for server in servers:
-            for k, v in results_map[server['server_id']].iteritems():
+            # skip already existed data
+            for k, v in results_map[server['server_id']].items():
                 if k in server and server[k]:
                     continue
                 server[k] = v
-            if server.get('os') in ('linux', 'windows', None):
-                server['os'] = os_map[server.get('os')]
+
+            self.convert_os(server)
+
+            if not server.get('project_id'):
+                servers_without_project_id.append(server)
+            if not server.get('cc_id'):
+                servers_without_cc_id.append(server)
+            if not server.get('role_id'):
+                servers_without_role_id.append(server)
+
+        if servers_without_project_id:
+            self.load_project_id(servers_without_project_id)
+        if servers_without_cc_id:
+            self.load_cc_id(servers_without_cc_id)
+        if servers_without_role_id:
+            self.load_role_id(servers_without_role_id)
+
+    def convert_os(self, server):
+        if server.get('os') in ('linux', 'windows', None):
+            server['os'] = os_map[server.get('os')]
 
     def load_server_properties(self, servers, names):
-        names += server_id_map.values()
         self.scalr_db.load_server_properties(servers, names)
-
+        name_map = {
+            'farm.created_by_id': 'user',
+            'farm.project_id': 'project_id',
+            'os_type': 'os',
+        }
         for server in servers:
-            for k in server_id_map.values():
-                if k not in server:
-                    continue
-                server['instance_id'] = server.pop(k)
-                break
-
-            name_map = {
-                'farm.created_by_id': 'user',
-                'farm.project_id': 'project_id',
-                'env.cc_id': 'cc_id',
-                'role.id': 'role_id',
-                'ec2.instance_type': 'instance_type',
-                'info.instance_type_name': 'instance_type',
-                'os_type': 'os'
-            }
-
-            for k, v in name_map.iteritems():
+            for k, v in name_map.items():
                 if k in names:
                     server[v] = server.get(v) or server.pop(k, None)
+            self.convert_os(server)
 
-            if server.get('os') in ('linux', 'windows', None):
-                server['os'] = os_map[server.get('os')]
-
-    def load_role_id(self, server):
-        query = (
-            "SELECT role_id "
-            "FROM farm_roles "
-            "WHERE id={farm_role_id}"
-        ).format(farm_role_id=server['farm_role_id'])
-        results = self.scalr_db.execute(query, retries=1)
-        assert results, "Can't find role_id for farm_role_id: {0}".format(server['farm_role_id'])
-        server['role_id'] = results[0]['role_id']
-
-    def load_cc_id(self, server):
-        # first attempt
-        if server.get('project_id', None):
-            query = (
-                "SELECT cc_id "
-                "FROM projects "
-                "WHERE project_id = UNHEX('{project_id}')"
-            ).format(project_id=server['project_id'])
-            result = self.scalr_db.execute(query, retries=1)
-            if result and result[0]['cc_id']:
-                server['cc_id'] = result[0]['cc_id']
-
-        # second attempt
-        if not server.get('cc_id', None):
-            environment = {'id': server['env_id']}
-            self.scalr_db.load_client_environment_properties([environment], ['cc_id'])
-            if 'cc_id' in environment:
-                server['cc_id'] = environment['cc_id']
-
-        if not server.get('cc_id', None):
-            msg = "Unable to load cc_id for server: {0}".format(server)
-            LOG.error(msg)
-
-    def load_not_managed_servers_properties(self, servers):
-        environments = [{'id': _['env_id']} for _ in servers if _['env_id'] or _['env_id'] == 0]
-        self.scalr_db.load_client_environment_properties(environments, ['cc_id'])
-        environments_map = dict((_['id'], _) for _ in environments)
+    def load_project_id(self, servers):
+        self.load_server_properties(servers, ['farm.project_id'])
         for server in servers:
-            try:
-                server['cc_id'] = environments_map[server['env_id']]['cc_id']
-            except:
-                server['cc_id'] = None
+            if not server.get('project_id', None):
+                msg = "Unable to load project_id for server: {}".format(server)
+                LOG.warning(msg)
+
+    def load_role_id(self, servers):
+        farm_roles_ids = list(set(int(server['farm_role_id']) for server in servers))
+        query = (
+            "SELECT id farm_role_id, role_id "
+            "FROM farm_roles "
+            "WHERE id IN ({farm_role_id})"
+        ).format(farm_role_id=str(farm_roles_ids)[1:-1])
+        results = self.scalr_db.execute(query, retries=1)
+        for server in servers:
+            server.update({'role_id': result['role_id'] for result in results
+                          if result['farm_role_id'] == server['farm_role_id']
+                          and not server.get('role_id')})
+            if not server.get('role_id'):
+                msg = "Can't find role_id for farm_role_id: {}".format(server['farm_role_id'])
+                LOG.warning(msg)
+
+    def load_cc_id(self, servers):
+        projects_ids = list(set(uuid.UUID(server['project_id']).hex for server in servers
+                            if server.get('project_id')))
+        if projects_ids:
+            query = (
+                "SELECT HEX(cc_id) cc_id, HEX(project_id) project_id "
+                "FROM projects "
+                "WHERE HEX(project_id) IN ({project_id})"
+            ).format(project_id=str(projects_ids)[1:-1])
+            results = self.scalr_db.execute(query, retries=1)
+            for server in servers:
+                server.update({'cc_id': result['cc_id'] for result in results
+                              if result['project_id'] == server.get('project_id')
+                              and not server.get('cc_id')})
+
+        envs_ids = list(set(int(server['env_id']) for server in servers if not server.get('cc_id')))
+        envs = [{'id': env_id} for env_id in envs_ids]
+        self.scalr_db.load_client_environment_properties(envs, ['cc_id'])
+
+        for server in servers:
+            if not server.get('cc_id', None):
+                msg = "Unable to load cc_id for server: {}".format(server)
+                LOG.warning(msg)
 
     def _get_processing_dtime(self, date, hour=None):
         date = datetime.datetime.strptime(str(date), '%Y-%m-%d').date()
@@ -418,11 +529,10 @@ class Analytics(object):
             dtime_to = datetime.datetime(date.year, date.month, date.day, hour, 59, 59)
         return dtime_from, dtime_to
 
-    def get_servers(self, date, hour, limit=500, force=False):
+    def get_poller_servers(self, date, hour, platform=None, limit=500, force=False):
         """
         :returns: generator
         """
-
         dtime_from, dtime_to = self._get_processing_dtime(date, hour)
 
         query = (
@@ -430,9 +540,12 @@ class Analytics(object):
             "ps.account_id, ps.env_id, ps.platform, ps.cloud_location, ps.url "
             "FROM managed m "
             "JOIN poller_sessions ps ON m.sid=ps.sid "
-            "WHERE ps.dtime BETWEEN '{dtime_from}' AND '{dtime_to}' "
-            "ORDER BY m.sid, m.server_id"
+            "WHERE ps.dtime BETWEEN '{dtime_from}' "
+            "AND '{dtime_to}' "
         ).format(dtime_from=dtime_from, dtime_to=dtime_to)
+        if platform:
+            query += "AND ps.platform='{platform}' ".format(platform=platform)
+        query += "ORDER BY m.sid, m.server_id"
 
         for servers in self.analytics_db.execute_with_limit(query, limit, retries=1):
             for server in servers:
@@ -443,30 +556,6 @@ class Analytics(object):
                 servers = [server for server in servers if not self.record_exists(server)]
 
             self.load_servers_data(servers)
-            names = [
-                'farm.created_by_id',
-                'farm.project_id',
-                'env.cc_id',
-                'role.id',
-            ]
-            self.load_server_properties(servers, names)
-            for server in servers:
-                if not server.get('cc_id', None):
-                    try:
-                        self.load_cc_id(server)
-                        assert server['cc_id']
-                    except:
-                        msg = 'Unable to load cc_id for server: {0}, reason: {1}'
-                        msg = msg.format(server, helper.exc_info(where=False))
-                        LOG.warning(msg)
-                if not server.get('role_id', None):
-                    try:
-                        self.load_role_id(server)
-                        assert server['role_id']
-                    except:
-                        msg = 'Unable to load role_id for server: {0}, reason: {1}'
-                        msg = msg.format(server, helper.exc_info(where=False))
-                        LOG.warning(msg)
 
             yield servers
 
@@ -476,55 +565,17 @@ class Analytics(object):
             "FROM usage_h u "
             "JOIN usage_servers_h us "
             "ON u.usage_id=us.usage_id "
-            "WHERE u.dtime='{dtime}' "
+            "WHERE u.env_id={env_id} "
+            "AND u.dtime='{dtime}' "
             "AND us.server_id=UNHEX('{server_id}')"
-        ).format(dtime=record['dtime'], server_id=record['server_id'].replace('-', ''))
-        return bool(self.analytics_db.execute(query, retries=1))
-
-    def get_not_managed_servers(self, date, hour, limit=500, force=False):
-        """
-        :returns: generator
-        """
-
-        dtime_from, dtime_to = self._get_processing_dtime(date, hour)
-
-        query = (
-            "SELECT DISTINCT nm.instance_id, nm.instance_type, nm.os,"
-            "ps.account_id, ps.env_id, ps.platform, ps.cloud_location, ps.url "
-            "FROM notmanaged nm "
-            "JOIN poller_sessions ps ON nm.sid=ps.sid "
-            "WHERE ps.dtime BETWEEN '{dtime_from}' AND '{dtime_to}' "
-            "ORDER BY nm.sid, nm.instance_id"
-        ).format(dtime_from=dtime_from, dtime_to=dtime_to)
-
-        for servers in self.analytics_db.execute_with_limit(query, limit, retries=1):
-            for server in servers:
-                server['dtime'] = dtime_from
-
-            if not force:
-                servers = [server for server in servers if not self.not_managed_record_exists(server)]
-
-            self.load_not_managed_servers_properties(servers)
-            yield servers
-
-    def not_managed_record_exists(self, record):
-        usage_id = NM_usage_h(record)['usage_id']
-        instance_id = record['instance_id']
-        query = (
-            "SELECT HEX(nmu.usage_id) "
-            "FROM nm_usage_h nmu "
-            "JOIN nm_usage_servers_h nmus ON nmu.usage_id=nmus.usage_id "
-            "WHERE nmu.usage_id=UNHEX('{usage_id}') "
-            "AND nmus.instance_id='{instance_id}' "
-            "LIMIT 1"
-        ).format(usage_id=usage_id, instance_id=instance_id)
+        ).format(env_id=record['env_id'], dtime=record['dtime'],
+                 server_id=record['server_id'].replace('-', ''))
         return bool(self.analytics_db.execute(query, retries=1))
 
     def get_records(self, date, hour, platform, amazon_billing=False, limit=1000):
         """
         :returns: generator
         """
-
         dtime_from, dtime_to = self._get_processing_dtime(date, hour)
 
         query = (
@@ -540,51 +591,24 @@ class Analytics(object):
         for results in self.analytics_db.execute_with_limit(query, limit, retries=1):
             if not amazon_billing:
                 envs_ids = list(set(result['env_id'] for result in results))
-                query = (
-                    "SELECT env_id "
-                    "FROM client_environment_properties "
-                    "WHERE name='ec2.detailed_billing.enabled' "
-                    "AND value='1' "
-                    "AND env_id IN ({env_id})"
-                ).format(env_id=str(envs_ids).replace('L', '')[1:-1])
-                amazon_billing_envs = set(r['env_id'] for r in self.scalr_db.execute(query, retries=1))
-                amazon_billing_envs = map(int, amazon_billing_envs)
-                results = [r for r in results if r['env_id'] not in amazon_billing_envs]
-            yield list(results)
-
-    def get_nm_records(self, date, hour, platform, limit=1000):
-        """
-        :returns: generator
-        """
-
-        dtime_from, dtime_to = self._get_processing_dtime(date, hour)
-
-        query = (
-            "SELECT HEX(nm_u.usage_id) as usage_id, nm_u.platform, nm_u.url,"
-            "nm_u.cloud_location, nm_u.usage_item, nm_u.os, nm_u.num, nm_u.cost,"
-            "nm_s.account_id "
-            "FROM nm_usage_h nm_u "
-            "JOIN nm_usage_subjects_h nm_u_s ON nm_u_s.usage_id=nm_u.usage_id "
-            "JOIN nm_subjects_h nm_s ON nm_s.subject_id=nm_u_s.subject_id "
-            "WHERE nm_u.dtime='{dtime}' "
-            "AND nm_u.platform='{platform}' "
-            "ORDER BY nm_u.usage_id"
-        ).format(dtime=dtime_from, platform=platform)
-        for results in self.analytics_db.execute_with_limit(query, limit, retries=1):
-            for result in results:
-                result['dtime'] = dtime_from
+                envs = [{'id': env_id} for env_id in envs_ids]
+                names = ['ec2.detailed_billing.enabled']
+                self.scalr_db.load_client_environment_properties(envs, names)
+                amazon_billing_envs_ids = [env['id'] for env in envs
+                                           if env.get('ec2.detailed_billing.enabled', None) == '1']
+                amazon_billing_envs_ids = map(int, amazon_billing_envs_ids)
+                results = [r for r in results if r['env_id'] not in amazon_billing_envs_ids]
             yield list(results)
 
     def _get_raw_prices(self, servers):
         """
         :returns: generator
         """
-
         date_map = {}
         for server in servers:
             date_map.setdefault(server['dtime'].date(), set([0])).add(server['account_id'])
 
-        for date, accounts_ids in date_map.iteritems():
+        for date, accounts_ids in date_map.items():
             accounts_ids = list(accounts_ids)
             base_query = (
                 "SELECT ph1.account_id, ph1.platform, ph1.cloud_location, ph1.url, "
@@ -605,7 +629,8 @@ class Analytics(object):
                 ") "
                 "WHERE ph2.price_id IS NULL "
                 "AND ph1.applied<='{date}' "
-                "AND ph1.account_id IN ({account_id})")
+                "AND ph1.account_id IN ({account_id})"
+            )
             i, chunk_size = 0, 100
             while True:
                 chunk_accounts_ids = accounts_ids[i * chunk_size:(i + 1) * chunk_size]
@@ -623,7 +648,6 @@ class Analytics(object):
         """
         :returns: dict {account_id: {platform_url: {cloud_location: {instance_type: {os: cost}}}}}
         """
-
         prices = dict()
         for raw_prices in self._get_raw_prices(servers):
             for raw_price in raw_prices:
@@ -643,8 +667,8 @@ class Analytics(object):
                         cloud_location].setdefault(instance_type, dict())
                     prices[account_id][platform_url][cloud_location][instance_type][os_type] = cost
                 except KeyError:
-                    msg = "Unable to get price from raw price, reason: {error}"
-                    msg = msg.format(error=helper.exc_info())
+                    msg = "Unable to get price from raw price. Reason: {}"
+                    msg = msg.format(helper.exc_info())
                     LOG.warning(msg)
         return prices
 
@@ -656,6 +680,8 @@ class Analytics(object):
         if 'instance_type' in server:
             instance_type = server['instance_type']
         else:
+            if server['usage_item'] not in self.usage_items:
+                self.load_usage_items()
             instance_type = self.usage_items[server['usage_item']]['name']
         os = server['os']
         platform_url = '%s;%s' % (platform, url)
@@ -667,30 +693,36 @@ class Analytics(object):
         except KeyError:
             cost = None
             msg = (
-                "Unable to get cost for account_id: {0}, platform: {1}, url: {2}, "
-                "cloud_location: {3}, instance_type: {4}, os: {5}. Use 0.0, reason: {6}"
+                "Unable to get cost for account_id: {}, platform: {}, url: {}, "
+                "cloud_location: {}, instance_type: {}, os: {}. Use 0.0. Reason: {}"
             ).format(account_id, platform, url, cloud_location,
                      instance_type, os, helper.exc_info())
             LOG.debug(msg)
         return cost
 
     def set_usage_item(self, record):
-        with self._table_lock:
+        with self.usage_items_lock:
             data = {
                 'cost_distr_type': record.get('cost_distr_type', 1),
                 'name': record.get('usage_type_name', 'BoxUsage'),
                 'display_name': None,
             }
-            for key, row in self.usage_types.iteritems():
-                if data['cost_distr_type'] == row['cost_distr_type'] and data['name'] == row['name']:
-                    usage_type_id = key
+
+            def get_usage_type_id():
+                for key, row in self.usage_types.items():
+                    if data['cost_distr_type'] == row['cost_distr_type'] and data['name'] == row['name']:
+                        return key
+                return None
+
+            while True:
+                usage_type_id = get_usage_type_id()
+                if usage_type_id:
                     break
-            else:
                 usage_type_id = uuid.uuid4().hex[0:8]
                 data['id'] = usage_type_id
                 usage_types = Usage_types(data)
                 self.analytics_db.execute(usage_types.insert_query())
-                self.usage_types[usage_type_id] = dict(usage_types)
+                self.load_usage_types()
 
             data = {
                 'usage_type': usage_type_id,
@@ -698,20 +730,26 @@ class Analytics(object):
                 'display_name': None,
             }
             assert data['name'], record
-            for key, row in self.usage_items.iteritems():
-                if data['usage_type'] == row['usage_type'] and data['name'] == row['name']:
-                    usage_item_id = key
+
+            def get_usage_item_id():
+                for key, row in self.usage_items.items():
+                    if data['usage_type'] == row['usage_type'] and data['name'] == row['name']:
+                        return key
+                return None
+
+            while True:
+                usage_item_id = get_usage_item_id()
+                if usage_item_id:
                     break
-            else:
                 usage_item_id = uuid.uuid4().hex[0:8]
                 data['id'] = usage_item_id
                 usage_items = Usage_items(data)
                 self.analytics_db.execute(usage_items.insert_query())
-                self.usage_items[usage_item_id] = dict(usage_items)
+                self.load_usage_items()
 
-        record['usage_item'] = usage_item_id
+        record['usage_item'] = usage_item_id.lower()
 
-    def insert_record(self, record):
+    def insert_record(self, record, callback=None):
         try:
             record = record.copy()
             self.set_usage_item(record)
@@ -720,17 +758,14 @@ class Analytics(object):
 
             if record['platform'] == 'gce':
                 record['instance_id'] = record['server_id']
-
             record['date'] = record['dtime'].date()
-            if 'user' not in record:
-                record['user'] = None
 
             self.analytics_db.autocommit(False)
             try:
-                if record['platform'] == 'ec2' and record.get('record_id'):
+                if record['platform'] in ('ec2', 'azure') and record.get('record_id'):
                     query = (
                         """INSERT INTO aws_billing_records (record_id, date) """
-                        """VALUES ('{record_id}', '{date}') """
+                        """VALUES ('{record_id}', '{record_date}') """
                     ).format(**record)
                     self.analytics_db.execute(query, retries=1)
 
@@ -745,8 +780,8 @@ class Analytics(object):
                     usage_servers_h = Usage_servers_h(record)
                     self.analytics_db.execute(usage_servers_h.insert_query(), retries=1)
 
-                    value_id_map = {6: record['user']}
-                    for tag_id, value_id in value_id_map.iteritems():
+                    value_id_map = {6: record.get('user')}
+                    for tag_id, value_id in value_id_map.items():
                         record['tag_id'] = tag_id
                         record['value_id'] = value_id
 
@@ -763,8 +798,9 @@ class Analytics(object):
                 self.analytics_db.execute(usage_d.insert_query(), retries=1)
 
                 # insert quarterly_budget
-                record['year'] = record['date'].year
-                record['quarter'] = self.get_quarters_calendar().quarter_for_date(record['date'])
+                quarters_calendar = self.get_quarters_calendar()
+                record['year'] = quarters_calendar.year_for_date(record['date'])
+                record['quarter'] = quarters_calendar.quarter_for_date(record['date'])
                 record['cumulativespend'] = record['cost']
                 record['spentondate'] = record['dtime']
                 if record['cc_id']:
@@ -785,54 +821,105 @@ class Analytics(object):
             finally:
                 self.analytics_db.autocommit(True)
         except:
-            msg = "Unable to insert record: {record}, reason: {error}"
-            msg = msg.format(record=record, error=helper.exc_info())
-            if isinstance(sys.exc_info()[1], pymysql.err.Error):
-                LOG.error(msg)
-            else:
-                LOG.exception(msg)
+            msg = "Unable to insert record: {}"
+            msg = msg.format(record=record)
+            helper.handle_error(message=msg)
             raise
 
-    def _find_subject_id(self, record):
-        nm_subjects_h = NM_subjects_h(record)
-        r = self.analytics_db.execute(nm_subjects_h.subject_id_query(), retries=1)
-        return r[0]['subject_id'] if r else None
+        if callable(callback):
+            callback(record)
 
-    def insert_not_managed_record(self, record):
+    def remove_existing_records_with_record_id(self, records):
+        records_ids = [record['record_id'] for record in records if record.get('record_id')]
+        if records_ids:
+            query = (
+                """SELECT record_id """
+                """FROM aws_billing_records """
+                """WHERE record_id IN ({records_ids})"""
+            ).format(records_ids=str(records_ids)[1:-1])
+            results = self.analytics_db.execute(query, retries=1)
+            existing_records_ids = [result['record_id'] for result in results]
+            records = [record for record in records if record['record_id'] not in existing_records_ids]
+        return records
+
+    def insert_records(self, records, callback=None):
         try:
-            record = record.copy()
+            records = [record for record in records if record.get('cloud_location')]
+            if not records:
+                return
 
-            LOG.debug('Insert not managed record: %s' % record)
+            cost_distr_type_1_records = []
+            records_with_record_id = []
+            for record in records:
+                self.set_usage_item(record)
+                record['usage_id'] = Usage_h(record)['usage_id']
+                if record['platform'] == 'gce':
+                    record['instance_id'] = record['server_id']
+                if record['cost_distr_type'] == 1:
+                    cost_distr_type_1_records.append(record)
+                if record['platform'] in ('ec2', 'azure') and record.get('record_id'):
+                    records_with_record_id.append(record)
+                record['date'] = record['dtime'].date()
 
-            record['date'] = record['dtime'].date()
+            # remove dulplicate records
+            records = {'%s;%s' % (r['usage_id'], r['server_id']): r for r in records}.values()
 
-            with self._table_lock:
-                server_exists = self._not_managed_server_exists(record)
-                subject_id = self._find_subject_id(record)
+            LOG.debug('Insert {} records'.format(len(records)))
 
-                self.analytics_db.autocommit(False)
+            with self.lock:
                 try:
-                    if subject_id:
-                        record['subject_id'] = uuid.UUID(subject_id).hex
-                    else:
-                        record['subject_id'] = uuid.uuid4().hex
-                        nm_subjects_h = NM_subjects_h(record)
-                        self.analytics_db.execute(nm_subjects_h.insert_query(), retries=1)
+                    self.analytics_db.autocommit(False)
 
-                    if not server_exists:
-                        nm_usage_h = NM_usage_h(record)
-                        record['usage_id'] = nm_usage_h['usage_id']
-                        self.analytics_db.execute(nm_usage_h.insert_query(), retries=1)
+                    # billing_records table
+                    if records_with_record_id:
+                        query = Billing_records.insert_many_query(records_with_record_id)
+                        self.analytics_db.execute(query, retries=1)
 
-                        nm_usage_subjects_h = NM_usage_subjects_h(record)
-                        self.analytics_db.execute(nm_usage_subjects_h.insert_query(), retries=1)
+                    # usage_h table
+                    query = Usage_h.insert_many_query(records)
+                    self.analytics_db.execute(query, retries=1)
 
-                        nm_usage_servers_h = NM_usage_servers_h(record)
-                        self.analytics_db.execute(nm_usage_servers_h.insert_query(), retries=1)
+                    # usage_servers_h, account_tag_values, usage_h_tags tables
+                    if cost_distr_type_1_records:
+                        value_id_map = {6: 'user'}
+                        for tag_id, value_id in value_id_map.items():
+                            for record in cost_distr_type_1_records:
+                                record['tag_id'] = tag_id
+                                record['value_id'] = record.get(value_id)
+                            query = Account_tag_values.insert_many_query(cost_distr_type_1_records)
+                            self.analytics_db.execute(query, retries=1)
+                            query = Usage_h_tags.insert_many_query(cost_distr_type_1_records)
+                            self.analytics_db.execute(query, retries=1)
+                        query = Usage_servers_h.insert_many_query(cost_distr_type_1_records)
+                        self.analytics_db.execute(query, retries=1)
 
-                        # insert nm_usage_d table
-                        nm_usage_d = NM_usage_d(record)
-                        self.analytics_db.execute(nm_usage_d.insert_query(), retries=1)
+                    # usage_d table
+                    query = Usage_d.insert_many_query(records)
+                    self.analytics_db.execute(query, retries=1)
+
+                    # quarterly_budget
+                    quarters_calendar = self.get_quarters_calendar()
+                    for record in records:
+                        record['year'] = quarters_calendar.year_for_date(record['date'])
+                        record['quarter'] = quarters_calendar.quarter_for_date(record['date'])
+                        record['cumulativespend'] = record['cost']
+                        record['spentondate'] = record['dtime']
+
+                    subject_type_1_records = [r for r in records if r.get('cc_id')]
+                    if subject_type_1_records:
+                        for record in subject_type_1_records:
+                            record['subject_type'] = 1
+                            record['subject_id'] = record['cc_id']
+                        query = Quarterly_budget.insert_many_query(subject_type_1_records)
+                        self.analytics_db.execute(query, retries=1)
+
+                    subject_type_2_records = [r for r in records if r.get('project_id')]
+                    if subject_type_2_records:
+                        for record in subject_type_1_records:
+                            record['subject_type'] = 2
+                            record['subject_id'] = record['project_id']
+                        query = Quarterly_budget.insert_many_query(subject_type_2_records)
+                        self.analytics_db.execute(query, retries=1)
 
                     self.analytics_db.commit()
                 except:
@@ -840,16 +927,18 @@ class Analytics(object):
                     raise
                 finally:
                     self.analytics_db.autocommit(True)
+
+            if callable(callback):
+                callback(records)
         except:
-            msg = "Unable to insert not managed record: {record}, reason: {error}"
-            msg = msg.format(record=record, error=helper.exc_info())
-            LOG.error(msg)
-            raise
+            helper.handle_error('Unable to insert records')
+
+    def _find_subject_id(self, record):
+        nm_subjects_h = NM_subjects_h(record)
+        r = self.analytics_db.execute(nm_subjects_h.subject_id_query(), retries=1)
+        return r[0]['subject_id'] if r else None
 
     def fill_farm_usage_d(self, date, hour, platform=None):
-        two_weeks_ago = (datetime.datetime.utcnow() + datetime.timedelta(days=-14)).date()
-        assert_msg = 'Processing is not supported for dtime-from more than two weeks ago'
-        assert date > two_weeks_ago, assert_msg
         query = (
             "INSERT INTO farm_usage_d "
             "(account_id, farm_role_id, usage_item, cc_id, project_id, date, "
@@ -891,7 +980,8 @@ class Analytics(object):
         query = ("SELECT MIN(dtime) dtime FROM usage_h")
         min_dtime = self.analytics_db.execute(query, retries=1)[0]['dtime']
         if min_dtime and min_dtime.date() > dtime_from.date():
-            raise Exception("Attempt to recalculate the non-existent or deleted data")
+            LOG.warning("Recalculating not available or data has been deleted")
+            return
 
         usage_d = Usage_d({'platform': platform, 'date': dtime_from.date()})
         self.analytics_db.execute(usage_d.delete_query(), retries=1)
@@ -910,92 +1000,69 @@ class Analytics(object):
         ).format(platform=platform, dtime_from=dtime_from, dtime_to=dtime_to)
         self.analytics_db.execute(query, retries=1)
 
-    def recalculate_nm_usage_d(self, date, platform):
-        dtime_from, dtime_to = self._get_processing_dtime(date)
-
-        query = ("SELECT MIN(dtime) dtime FROM nm_usage_h")
-        min_dtime = self.analytics_db.execute(query, retries=1)[0]['dtime']
-        if min_dtime and min_dtime.date() > dtime_from.date():
-            raise Exception("Attempt to recalculate the non-existent or deleted data")
-
-        nm_usage_d = NM_usage_d({'platform': platform, 'date': dtime_from.date()})
-        self.analytics_db.execute(nm_usage_d.delete_query(), retries=1)
-        query = (
-            "INSERT INTO nm_usage_d "
-            "(date, platform, cc_id, env_id, cost) "
-            "SELECT date, platform, cc_id, env_id, cost "
-            "FROM (SELECT DATE(nu.dtime) date, nu.platform, s.cc_id, "
-            "s.env_id, SUM(nu.cost) cost "
-            "FROM nm_subjects_h s "
-            "JOIN nm_usage_subjects_h us ON us.subject_id=s.subject_id "
-            "JOIN nm_usage_h nu ON nu.usage_id=us.usage_id "
-            "WHERE nu.dtime BETWEEN '{dtime_from}' AND '{dtime_to}' "
-            "AND nu.platform='{platform}' "
-            "GROUP BY s.cc_id, s.env_id) t "
-            "ON DUPLICATE KEY UPDATE nm_usage_d.cost=nm_usage_d.cost+t.cost"
-        ).format(platform=platform, dtime_from=dtime_from, dtime_to=dtime_to)
-        self.analytics_db.execute(query, retries=1)
-
     def recalculate_quarterly_budget(self, year, quarter):
         date_from, date_to = self.get_quarters_calendar().date_for_quarter(quarter, year)
 
         quarterly_budget = Quarterly_budget({'year': year, 'quarter': quarter})
-        self.analytics_db.execute(quarterly_budget.clear_query(), retries=1)
 
-        query = (
-            "SELECT YEAR(date) year, {quarter} quarter, 1 subject_type, "
-            "HEX(cc_id) subject_id, SUM(cost) cumulativespend, date spentondate "
-            "FROM usage_d "
-            "WHERE date BETWEEN '{date_from}' AND '{date_to}' "
-            "AND cc_id IS NOT NULL "
-            "GROUP BY cc_id,date "
-            "ORDER BY date ASC"
-        ).format(quarter=quarter, date_from=date_from, date_to=date_to)
-        cc_results = self.analytics_db.execute(query, retries=1)
-
-        query = (
-            "SELECT YEAR(date) year, {quarter} quarter, 2 subject_type, "
-            "HEX(project_id) subject_id, SUM(cost) cumulativespend, date spentondate "
-            "FROM usage_d "
-            "WHERE date BETWEEN '{date_from}' AND '{date_to}' "
-            "AND project_id IS NOT NULL "
-            "GROUP BY project_id,date "
-            "ORDER BY date ASC"
-        ).format(quarter=quarter, date_from=date_from, date_to=date_to)
-        prj_results = self.analytics_db.execute(query, retries=1)
-
-        query = (
-            "INSERT INTO quarterly_budget "
-            "(year, quarter, subject_type, subject_id, cumulativespend) "
-            "VALUES ({year}, {quarter}, {subject_type}, UNHEX('{subject_id}'), {cumulativespend}) "
-            "ON DUPLICATE KEY UPDATE "
-            "cumulativespend=cumulativespend+{cumulativespend}, "
-            "spentondate=IF(budget>0 "
-            "AND spentondate IS NULL "
-            "AND cumulativespend>=budget, '{spentondate}', spentondate)")
-
-        for result in cc_results + prj_results:
-            self.analytics_db.execute(query.format(**result), retries=1)
-
-    def update_record(self, record):
         try:
+            self.analytics_db.autocommit(False)
+            self.analytics_db.execute(quarterly_budget.clear_query(), retries=1)
+
+            query = (
+                "SELECT YEAR(date) year, {quarter} quarter, 1 subject_type, "
+                "HEX(cc_id) subject_id, SUM(cost) cumulativespend, date spentondate "
+                "FROM usage_d "
+                "WHERE date BETWEEN '{date_from}' AND '{date_to}' "
+                "AND cc_id IS NOT NULL "
+                "GROUP BY cc_id, date "
+                "ORDER BY date ASC"
+            ).format(quarter=quarter, date_from=date_from, date_to=date_to)
+            cc_results = self.analytics_db.execute(query, retries=1)
+
+            query = (
+                "SELECT YEAR(date) year, {quarter} quarter, 2 subject_type, "
+                "HEX(project_id) subject_id, SUM(cost) cumulativespend, date spentondate "
+                "FROM usage_d "
+                "WHERE date BETWEEN '{date_from}' AND '{date_to}' "
+                "AND project_id IS NOT NULL "
+                "GROUP BY project_id, date "
+                "ORDER BY date ASC"
+            ).format(quarter=quarter, date_from=date_from, date_to=date_to)
+            prj_results = self.analytics_db.execute(query, retries=1)
+
+            query = (
+                "INSERT INTO quarterly_budget "
+                "(year, quarter, subject_type, subject_id, cumulativespend) "
+                "VALUES ({year}, {quarter}, {subject_type}, UNHEX('{subject_id}'), {cumulativespend}) "
+                "ON DUPLICATE KEY UPDATE "
+                "cumulativespend=cumulativespend+{cumulativespend}, "
+                "spentondate=IF(budget>0 "
+                "AND spentondate IS NULL "
+                "AND cumulativespend>=budget, '{spentondate}', spentondate)")
+
+            for result in cc_results + prj_results:
+                self.analytics_db.execute(query.format(**result), retries=1)
+
+            self.analytics_db.commit()
+        except:
+            self.analytics_db.rollback()
+            raise
+        finally:
+            self.analytics_db.autocommit(True)
+
+    def update_record(self, record, callback=None):
+        try:
+            LOG.debug('Update record: %s' % record)
             query = Usage_h(record).update_query()
             self.analytics_db.execute(query, retries=1)
         except:
-            msg = 'Unable to update usage_h record: {record}, reason: {error}'
-            msg = msg.format(record=record, error=helper.exc_info())
-            LOG.error(msg)
+            msg = 'Unable to update usage_h record: {record}'
+            msg = msg.format(record=record)
+            helper.handle_error(message=msg, level='error')
             raise
-
-    def update_nm_record(self, record):
-        try:
-            query = NM_usage_h(record).update_query()
-            self.analytics_db.execute(query, retries=1)
-        except:
-            msg = 'Unable to update nm_usage_h record: {record}, reason: {error}'
-            msg = msg.format(record=record, error=helper.exc_info())
-            LOG.error(msg)
-            raise
+        if callable(callback):
+            callback(record)
 
 
 class QuartersCalendar(object):
@@ -1051,6 +1118,13 @@ class QuartersCalendar(object):
         end_date = next_start_date + datetime.timedelta(seconds=-1)
         return start_date, end_date
 
+    def dtime_for_quarter(self, quarter, year=None):
+        start_date, end_date = self.date_for_quarter(quarter, year=year)
+        start_dtime = datetime.datetime.combine(start_date, datetime.time())
+        end_dtime = datetime.datetime.combine(end_date, datetime.time()).replace(
+                hour=23, minute=59, second=59)
+        return start_dtime, end_dtime
+
     def year_for_date(self, date):
         quarter_number = self.quarter_for_date(date)
         if '-'.join(str(date).split('-')[-2:]) >= self.calendar[quarter_number - 1]:
@@ -1060,415 +1134,10 @@ class QuartersCalendar(object):
         year = int(str(date).split('-')[0])
         return year - year_correction
 
-
-class Table(dict):
-
-    def __init__(self):
-        self._types = {}
-
-    def _format(self):
-        formatted = {}
-        for k, v in self.iteritems():
-            if k in self._types:
-                formatted[k] = self._types[k](v)
-        return formatted
-
-    def _fill(self, record):
-        record = record or {}
-        for k, v in record.iteritems():
-            if k in self._types:
-                self[k] = v
-
-
-class Usage_h(Table):
-
-    def __init__(self, record=None):
-        Table.__init__(self)
-        self._types = {
-            'usage_id': UUIDType,
-            'account_id': NoQuoteType,
-            'dtime': QuoteType,
-            'platform': QuoteType,
-            'url': QuoteType,
-            'cloud_location': QuoteType,
-            'usage_item': QuoteType,
-            'os': NoQuoteType,
-            'num': NoQuoteType,
-            'cost': NoQuoteType,
-            'env_id': NoQuoteType,
-            'farm_id': NoQuoteType,
-            'farm_role_id': NoQuoteType,
-            'role_id': NoQuoteType,
-            'cc_id': UUIDType,
-            'project_id': UUIDType,
-        }
-        self._fill(record)
-        if 'usage_id' not in self:
-            try:
-                formatted = self._format()
-                unique = '; '.join(
-                    [
-                        str(formatted['account_id']).strip(), str(formatted['dtime']).strip(),
-                        str(formatted['platform']).strip(), str(
-                            formatted['cloud_location']).strip(),
-                        str(formatted['usage_item']).strip(), str(formatted['os']).strip(),
-                        str(formatted['cc_id']).strip(), str(formatted['project_id']).strip(),
-                        str(formatted['env_id']).strip(), str(formatted['farm_id']).strip(),
-                        str(formatted['farm_role_id']).strip(), str(formatted['url']).strip(),
-                    ]
-                )
-                self['usage_id'] = uuid.uuid5(UUID, unique).hex
-            except KeyError:
-                msg = "Can't set managed usage_id for record: {record}, reason: {error}"
-                msg = msg.format(record=record, error=helper.exc_info())
-                LOG.warning(msg)
-
-    def insert_query(self):
-        query = (
-            "INSERT INTO usage_h "
-            "(usage_id, account_id, dtime, platform, url, cloud_location, usage_item, "
-            "os, cc_id, project_id, env_id, farm_id, farm_role_id, role_id, num, cost) "
-            "VALUES (UNHEX({usage_id}), {account_id}, {dtime}, {platform}, {url}, "
-            "{cloud_location}, UNHEX({usage_item}), {os}, UNHEX({cc_id}), UNHEX({project_id}), "
-            "{env_id}, {farm_id}, {farm_role_id}, {role_id}, {num}, {cost}) "
-            "ON DUPLICATE KEY UPDATE num=num+{num}, cost=cost+{cost}"
-        ).format(**self._format())
-        return query
-
-    def update_query(self):
-        query = (
-            "INSERT INTO usage_h "
-            "(usage_id, account_id, dtime, platform, url, cloud_location, usage_item, "
-            "os, cc_id, project_id, env_id, farm_id, farm_role_id, role_id, num, cost) "
-            "VALUES (UNHEX({usage_id}), {account_id}, {dtime}, {platform}, {url}, "
-            "{cloud_location}, UNHEX({usage_item}), {os}, UNHEX({cc_id}), UNHEX({project_id}), "
-            "{env_id}, {farm_id}, {farm_role_id}, {role_id}, {num}, {cost}) "
-            "ON DUPLICATE KEY UPDATE cost={cost}"
-        ).format(**self._format())
-        return query
-
-
-class Usage_types(Table):
-
-    def __init__(self, record=None):
-        super(Usage_types, self).__init__()
-        self._types = {
-            'id': QuoteType,
-            'cost_distr_type': NoQuoteType,
-            'name': QuoteType,
-            'display_name': QuoteType,
-        }
-        self._fill(record)
-
-    def insert_query(self):
-        query = (
-            "INSERT IGNORE INTO usage_types "
-            "(id, cost_distr_type, name, display_name) "
-            "VALUES (UNHEX({id}), {cost_distr_type}, {name}, {display_name})"
-        ).format(**self._format())
-        return query
-
-
-class Usage_items(Table):
-
-    def __init__(self, record=None):
-        super(Usage_items, self).__init__()
-        self._types = {
-            'id': QuoteType,
-            'usage_type': QuoteType,
-            'name': QuoteType,
-            'display_name': QuoteType,
-        }
-        self._fill(record)
-
-    def insert_query(self):
-        query = (
-            "INSERT IGNORE INTO usage_items "
-            "(id, usage_type, name, display_name) "
-            "VALUES (UNHEX({id}), UNHEX({usage_type}), {name}, {display_name})"
-        ).format(**self._format())
-        return query
-
-
-class Usage_servers_h(Table):
-
-    def __init__(self, record=None):
-        Table.__init__(self)
-        self._types = {
-            'instance_id': QuoteType,
-            'usage_id': UUIDType,
-            'server_id': UUIDType,
-        }
-        self._fill(record)
-
-    def insert_query(self):
-        query = (
-            "INSERT INTO usage_servers_h "
-            "(usage_id, server_id, instance_id) "
-            "VALUES (UNHEX({usage_id}), UNHEX({server_id}), {instance_id})"
-        ).format(**self._format())
-        return query
-
-
-class Usage_h_tags(Table):
-
-    def __init__(self, record=None):
-        Table.__init__(self)
-        self._types = {
-            'tag_id': NoQuoteType,
-            'value_id': QuoteType,
-            'usage_id': UUIDType,
-        }
-        self._fill(record)
-
-    def insert_query(self):
-        query = (
-            "INSERT IGNORE INTO usage_h_tags "
-            "(usage_id, tag_id, value_id) "
-            "VALUES (UNHEX({usage_id}), {tag_id}, {value_id})"
-        ).format(**self._format())
-        return query
-
-
-class Account_tag_values(Table):
-
-    def __init__(self, record=None):
-        Table.__init__(self)
-        self._types = {
-            'account_id': NoQuoteType,
-            'tag_id': NoQuoteType,
-            'value_id': QuoteType,
-        }
-        self._fill(record)
-
-    def insert_query(self):
-        query = (
-            "INSERT IGNORE INTO account_tag_values "
-            "(account_id, tag_id, value_id) "
-            "VALUES ({account_id}, {tag_id}, {value_id})"
-        ).format(**self._format())
-        return query
-
-
-class Usage_d(Table):
-
-    def __init__(self, record=None):
-        Table.__init__(self)
-        self._types = {
-            'date': QuoteType,
-            'platform': QuoteType,
-            'cc_id': UUIDType,
-            'project_id': UUIDType,
-            'env_id': NoQuoteType,
-            'farm_id': NoQuoteType,
-            'cost': NoQuoteType,
-        }
-        self._fill(record)
-
-    def insert_query(self):
-        query = (
-            "INSERT INTO usage_d "
-            "(date, platform, cc_id, project_id, env_id, farm_id, cost) "
-            "VALUES ({date}, {platform}, IFNULL(UNHEX({cc_id}), ''), "
-            "IFNULL(UNHEX({project_id}), ''), IFNULL({env_id}, 0), IFNULL({farm_id}, 0), {cost}) "
-            "ON DUPLICATE KEY UPDATE cost=cost+{cost}"
-        ).format(**self._format())
-        return query
-
-    def delete_query(self):
-        query = (
-            "DELETE FROM usage_d "
-            "WHERE platform={platform} "
-            "AND date={date}"
-        ).format(**self._format())
-        return query
-
-
-class NM_usage_d(Table):
-
-    def __init__(self, record=None):
-        Table.__init__(self)
-        self._types = {
-            'date': QuoteType,
-            'platform': QuoteType,
-            'cc_id': UUIDType,
-            'env_id': NoQuoteType,
-            'cost': NoQuoteType,
-        }
-        self._fill(record)
-
-    def insert_query(self):
-        query = (
-            "INSERT INTO nm_usage_d "
-            "(date, platform, cc_id, env_id, cost) "
-            "VALUES ({date}, {platform}, IFNULL(UNHEX({cc_id}), ''), {env_id}, {cost}) "
-            "ON DUPLICATE KEY UPDATE cost=cost+{cost}"
-        ).format(**self._format())
-        return query
-
-    def delete_query(self):
-        query = (
-            "DELETE FROM nm_usage_d "
-            "WHERE platform={platform} "
-            "AND date={date}"
-        ).format(**self._format())
-        return query
-
-
-class Quarterly_budget(Table):
-
-    def __init__(self, record=None):
-        Table.__init__(self)
-        self._types = {
-            'year': NoQuoteType,
-            'subject_type': NoQuoteType,
-            'quarter': NoQuoteType,
-            'cumulativespend': NoQuoteType,
-            'spentondate': QuoteType,
-            'subject_id': UUIDType,
-        }
-        self._fill(record)
-
-    def insert_query(self):
-        query = (
-            "INSERT quarterly_budget "
-            "(year, quarter, subject_type, subject_id, cumulativespend) "
-            "VALUES ({year}, {quarter}, {subject_type}, IFNULL(UNHEX({subject_id}), ''), "
-            "{cumulativespend}) "
-            "ON DUPLICATE KEY UPDATE "
-            "cumulativespend=cumulativespend+{cumulativespend}, "
-            "spentondate=IF(budget>0 AND spentondate IS NULL AND cumulativespend>=budget, {spentondate}, spentondate)"
-        ).format(**self._format())
-        return query
-
-    def clear_query(self):
-        query = (
-            "UPDATE quarterly_budget "
-            "SET cumulativespend=0,spentondate=NULL "
-            "WHERE year={year} "
-            "AND quarter={quarter}"
-        ).format(**self._format())
-        return query
-
-
-class NM_usage_h(Table):
-
-    def __init__(self, record=None):
-        Table.__init__(self)
-        self._types = {
-            'usage_id': UUIDType,
-            'dtime': QuoteType,
-            'platform': QuoteType,
-            'url': QuoteType,
-            'cloud_location': QuoteType,
-            'instance_type': QuoteType,
-            'os': NoQuoteType,
-            'num': NoQuoteType,
-            'cost': NoQuoteType,
-        }
-        self._fill(record)
-        if 'usage_id' not in self:
-            try:
-                formatted = self._format()
-                unique = '; '.join(
-                    [
-                        str(formatted['dtime']).strip(), str(formatted['platform']).strip(),
-                        str(formatted['url']).strip(), str(formatted['cloud_location']).strip(),
-                        str(formatted['instance_type']).strip(), str(formatted['os']).strip(),
-                    ]
-                )
-                self['usage_id'] = uuid.uuid5(UUID, unique).hex
-            except KeyError:
-                msg = "Can't set not managed usage_id for record: {record}, reason: {error}"
-                msg = msg.format(record=record, error=helper.exc_info())
-                LOG.warning(msg)
-
-    def insert_query(self):
-        query = (
-            "INSERT INTO nm_usage_h "
-            "(usage_id, dtime, platform, url, cloud_location, instance_type, os, num, cost) "
-            "VALUES (UNHEX({usage_id}), {dtime}, {platform}, {url}, "
-            "{cloud_location}, {instance_type}, {os}, {num}, {cost}) "
-            "ON DUPLICATE KEY UPDATE num=num+{num},cost=cost+{cost}"
-        ).format(**self._format())
-        return query
-
-    def update_query(self):
-        query = (
-            "UPDATE nm_usage_h "
-            "SET cost={cost} "
-            "WHERE usage_id=UNHEX({usage_id})"
-        ).format(**self._format())
-        return query
-
-
-class NM_usage_servers_h(Table):
-
-    def __init__(self, record=None):
-        Table.__init__(self)
-        self._types = {
-            'instance_id': QuoteType,
-            'usage_id': UUIDType,
-        }
-        self._fill(record)
-
-    def insert_query(self):
-        query = (
-            "INSERT INTO nm_usage_servers_h "
-            "(usage_id, instance_id) "
-            "VALUES (UNHEX({usage_id}), {instance_id})"
-        ).format(**self._format())
-        return query
-
-
-class NM_subjects_h(Table):
-
-    def __init__(self, record=None):
-        Table.__init__(self)
-        self._types = {
-            'env_id': NoQuoteType,
-            'account_id': NoQuoteType,
-            'subject_id': UUIDType,
-            'cc_id': UUIDType,
-        }
-        self._fill(record)
-
-    def insert_query(self):
-        query = (
-            "INSERT INTO nm_subjects_h "
-            "(subject_id, env_id, cc_id, account_id) "
-            "VALUES (UNHEX({subject_id}), {env_id}, UNHEX({cc_id}),{account_id})"
-        ).format(**self._format())
-        return query
-
-    def subject_id_query(self):
-        query = (
-            "SELECT HEX(subject_id) as subject_id "
-            "FROM nm_subjects_h "
-            "WHERE env_id={env_id} "
-            "AND cc_id=UNHEX({cc_id}) "
-            "LIMIT 1"
-        ).format(**self._format())
-        return query
-
-
-class NM_usage_subjects_h(Table):
-
-    def __init__(self, record=None):
-        Table.__init__(self)
-        self._types = {
-            'usage_id': UUIDType,
-            'subject_id': UUIDType,
-        }
-        self._fill(record)
-
-    def insert_query(self):
-        query = (
-            "INSERT IGNORE INTO nm_usage_subjects_h "
-            "(usage_id, subject_id) "
-            "VALUES (UNHEX({usage_id}), UNHEX({subject_id}))"
-        ).format(**self._format())
-        return query
+    def next_quarter(self, quarter, year):
+        year += quarter // 4
+        quarter = quarter % 4 + 1
+        return quarter, year
 
 
 class QuoteType(object):
@@ -1514,3 +1183,491 @@ class UUIDType(object):
 
     def __repr__(self):
         return self.__str__()
+
+
+class Table(dict):
+
+    types = {}
+
+    def __init__(self, record=None):
+        if record is None:
+            record = {}
+        self._fill(record)
+
+    def format(self):
+        formatted = {}
+        for k, v in self.items():
+            if k in self.types:
+                formatted[k] = self.types[k](v)
+        return formatted
+
+    def _fill(self, record):
+        for k, v in record.items():
+            if k in self.types:
+                self[k] = v
+
+
+class Usage_h(Table):
+
+    types = {
+        'usage_id': UUIDType,
+        'account_id': NoQuoteType,
+        'dtime': QuoteType,
+        'platform': QuoteType,
+        'url': QuoteType,
+        'cloud_location': QuoteType,
+        'usage_item': QuoteType,
+        'os': NoQuoteType,
+        'num': NoQuoteType,
+        'cost': NoQuoteType,
+        'env_id': NoQuoteType,
+        'farm_id': NoQuoteType,
+        'farm_role_id': NoQuoteType,
+        'role_id': NoQuoteType,
+        'cc_id': UUIDType,
+        'project_id': UUIDType,
+    }
+
+    def __init__(self, record=None):
+        super(Usage_h, self).__init__(record)
+        if 'usage_id' not in self:
+            try:
+                formatted = self.format()
+                unique = '; '.join(
+                    [
+                        str(formatted['account_id']).strip(), str(formatted['dtime']).strip(),
+                        str(formatted['platform']).strip(),
+                        str(formatted['cloud_location']).strip(),
+                        str(formatted['usage_item']).strip(), str(formatted['os']).strip(),
+                        str(formatted['cc_id']).strip(), str(formatted['project_id']).strip(),
+                        str(formatted['env_id']).strip(), str(formatted['farm_id']).strip(),
+                        str(formatted['farm_role_id']).strip(), str(formatted['url']).strip(),
+                    ]
+                )
+                self['usage_id'] = uuid.uuid5(UUID, unique).hex
+            except KeyError:
+                msg = "Can't set managed usage_id for record: {}. Reason: {}"
+                msg = msg.format(record, helper.exc_info())
+                LOG.warning(msg)
+
+    def insert_query(self):
+        query = (
+            "INSERT INTO usage_h "
+            "(usage_id, account_id, dtime, platform, url, cloud_location, usage_item, "
+            "os, cc_id, project_id, env_id, farm_id, farm_role_id, role_id, num, cost) "
+            "VALUES (UNHEX({usage_id}), {account_id}, {dtime}, {platform}, {url}, "
+            "{cloud_location}, UNHEX({usage_item}), {os}, UNHEX({cc_id}), UNHEX({project_id}), "
+            "{env_id}, {farm_id}, {farm_role_id}, {role_id}, {num}, {cost}) "
+            "ON DUPLICATE KEY UPDATE num=num+{num}, cost=cost+{cost}"
+        ).format(**self.format())
+        return query
+
+    def update_query(self):
+        query = (
+            "INSERT INTO usage_h "
+            "(usage_id, account_id, dtime, platform, url, cloud_location, usage_item, "
+            "os, cc_id, project_id, env_id, farm_id, farm_role_id, role_id, num, cost) "
+            "VALUES (UNHEX({usage_id}), {account_id}, {dtime}, {platform}, {url}, "
+            "{cloud_location}, UNHEX({usage_item}), {os}, UNHEX({cc_id}), UNHEX({project_id}), "
+            "{env_id}, {farm_id}, {farm_role_id}, {role_id}, {num}, {cost}) "
+            "ON DUPLICATE KEY UPDATE cost={cost}"
+        ).format(**self.format())
+        return query
+
+    @classmethod
+    def insert_many_query(cls, records):
+        values = ','.join([(
+            "(UNHEX({usage_id}), {account_id}, {dtime}, {platform}, {url}, "
+            "{cloud_location}, UNHEX({usage_item}), {os}, UNHEX({cc_id}), UNHEX({project_id}), "
+            "{env_id}, {farm_id}, {farm_role_id}, {role_id}, {num}, {cost})"
+        ).format(**Usage_h(record).format()) for record in records])
+        query = (
+            "INSERT INTO usage_h "
+            "(usage_id, account_id, dtime, platform, url, cloud_location, usage_item, "
+            "os, cc_id, project_id, env_id, farm_id, farm_role_id, role_id, num, cost) "
+            "VALUES {} "
+            "ON DUPLICATE KEY UPDATE num=num+VALUES(num), cost=cost+VALUES(cost)"
+        ).format(values)
+        return query
+
+
+class Usage_types(Table):
+
+    types = {
+        'id': QuoteType,
+        'cost_distr_type': NoQuoteType,
+        'name': QuoteType,
+        'display_name': QuoteType,
+    }
+
+    def insert_query(self):
+        query = (
+            "INSERT IGNORE INTO usage_types "
+            "(id, cost_distr_type, name, display_name) "
+            "VALUES (UNHEX({id}), {cost_distr_type}, {name}, {display_name})"
+        ).format(**self.format())
+        return query
+
+
+class Usage_items(Table):
+
+    types = {
+        'id': QuoteType,
+        'usage_type': QuoteType,
+        'name': QuoteType,
+        'display_name': QuoteType,
+    }
+
+    def insert_query(self):
+        query = (
+            "INSERT IGNORE INTO usage_items "
+            "(id, usage_type, name, display_name) "
+            "VALUES (UNHEX({id}), UNHEX({usage_type}), {name}, {display_name})"
+        ).format(**self.format())
+        return query
+
+
+class Usage_servers_h(Table):
+
+    types = {
+        'instance_id': QuoteType,
+        'usage_id': UUIDType,
+        'server_id': UUIDType,
+    }
+
+    def insert_query(self):
+        query = (
+            "INSERT INTO usage_servers_h "
+            "(usage_id, server_id, instance_id) "
+            "VALUES (UNHEX({usage_id}), UNHEX({server_id}), {instance_id})"
+        ).format(**self.format())
+        return query
+
+    @classmethod
+    def insert_many_query(cls, records):
+        values = ','.join([(
+            "(UNHEX({usage_id}), UNHEX({server_id}), {instance_id})"
+        ).format(**Usage_servers_h(record).format()) for record in records])
+        query = (
+            "INSERT INTO usage_servers_h "
+            "(usage_id, server_id, instance_id) "
+            "VALUES {}"
+        ).format(values)
+        return query
+
+
+class Usage_h_tags(Table):
+
+    types = {
+        'tag_id': NoQuoteType,
+        'value_id': QuoteType,
+        'usage_id': UUIDType,
+    }
+
+    def insert_query(self):
+        query = (
+            "INSERT IGNORE INTO usage_h_tags "
+            "(usage_id, tag_id, value_id) "
+            "VALUES (UNHEX({usage_id}), {tag_id}, {value_id})"
+        ).format(**self.format())
+        return query
+
+    @classmethod
+    def insert_many_query(cls, records):
+        values = ','.join([(
+            "(UNHEX({usage_id}), {tag_id}, {value_id})"
+        ).format(**Usage_h_tags(record).format()) for record in records])
+        query = (
+            "INSERT IGNORE INTO usage_h_tags "
+            "(usage_id, tag_id, value_id) "
+            "VALUES {}"
+        ).format(values)
+        return query
+
+
+class Account_tag_values(Table):
+
+    types = {
+        'account_id': NoQuoteType,
+        'tag_id': NoQuoteType,
+        'value_id': QuoteType,
+    }
+
+    def insert_query(self):
+        query = (
+            "INSERT IGNORE INTO account_tag_values "
+            "(account_id, tag_id, value_id) "
+            "VALUES ({account_id}, {tag_id}, {value_id})"
+        ).format(**self.format())
+        return query
+
+    @classmethod
+    def insert_many_query(cls, records):
+        values = ','.join([(
+            "({account_id}, {tag_id}, {value_id})"
+        ).format(**Account_tag_values(record).format()) for record in records])
+        query = (
+            "INSERT IGNORE INTO account_tag_values "
+            "(account_id, tag_id, value_id) "
+            "VALUES {}"
+        ).format(values)
+        return query
+
+
+class Usage_d(Table):
+
+    types = {
+        'date': QuoteType,
+        'platform': QuoteType,
+        'cc_id': UUIDType,
+        'project_id': UUIDType,
+        'env_id': NoQuoteType,
+        'farm_id': NoQuoteType,
+        'cost': NoQuoteType,
+    }
+
+    def insert_query(self):
+        query = (
+            "INSERT INTO usage_d "
+            "(date, platform, cc_id, project_id, env_id, farm_id, cost) "
+            "VALUES ({date}, {platform}, IFNULL(UNHEX({cc_id}), ''), "
+            "IFNULL(UNHEX({project_id}), ''), IFNULL({env_id}, 0), IFNULL({farm_id}, 0), {cost}) "
+            "ON DUPLICATE KEY UPDATE cost=cost+{cost}"
+        ).format(**self.format())
+        return query
+
+    @classmethod
+    def insert_many_query(cls, records):
+        values = ','.join([(
+            "({date}, {platform}, IFNULL(UNHEX({cc_id}), ''), "
+            "IFNULL(UNHEX({project_id}), ''), IFNULL({env_id}, 0), IFNULL({farm_id}, 0), {cost}) "
+        ).format(**Usage_d(record).format()) for record in records])
+        query = (
+            "INSERT INTO usage_d "
+            "(date, platform, cc_id, project_id, env_id, farm_id, cost) "
+            "VALUES {} "
+            "ON DUPLICATE KEY UPDATE cost=cost+VALUES(cost)"
+        ).format(values)
+        return query
+
+    def delete_query(self):
+        query = (
+            "DELETE FROM usage_d "
+            "WHERE platform={platform} "
+            "AND date={date}"
+        ).format(**self.format())
+        return query
+
+
+class NM_usage_d(Table):
+
+    types = {
+        'date': QuoteType,
+        'platform': QuoteType,
+        'cc_id': UUIDType,
+        'env_id': NoQuoteType,
+        'cost': NoQuoteType,
+    }
+
+    def insert_query(self):
+        query = (
+            "INSERT INTO nm_usage_d "
+            "(date, platform, cc_id, env_id, cost) "
+            "VALUES ({date}, {platform}, IFNULL(UNHEX({cc_id}), ''), {env_id}, {cost}) "
+            "ON DUPLICATE KEY UPDATE cost=cost+{cost}"
+        ).format(**self.format())
+        return query
+
+    def delete_query(self):
+        query = (
+            "DELETE FROM nm_usage_d "
+            "WHERE platform={platform} "
+            "AND date={date}"
+        ).format(**self.format())
+        return query
+
+
+class Billing_records(Table):
+
+    types = {
+        'record_id': QuoteType,
+        'record_date': QuoteType,
+    }
+
+    def insert_query(self):
+        query = (
+            "INSERT INTO aws_billing_records (record_id, date) "
+            "VALUES ({record_id}, {record_date})"
+        ).format(**self.format())
+        return query
+
+    @classmethod
+    def insert_many_query(cls, records):
+        values = ','.join([(
+            "({record_id}, {record_date})"
+        ).format(**Billing_records(record).format()) for record in records])
+        query = (
+            "INSERT INTO aws_billing_records (record_id, date) "
+            "VALUES {}"
+        ).format(values)
+        return query
+
+
+class Quarterly_budget(Table):
+
+    types = {
+        'year': NoQuoteType,
+        'subject_type': NoQuoteType,
+        'quarter': NoQuoteType,
+        'cumulativespend': NoQuoteType,
+        'spentondate': QuoteType,
+        'subject_id': UUIDType,
+    }
+
+    def insert_query(self):
+        query = (
+            "INSERT quarterly_budget "
+            "(year, quarter, subject_type, subject_id, cumulativespend) "
+            "VALUES ({year}, {quarter}, {subject_type}, IFNULL(UNHEX({subject_id}), ''), "
+            "{cumulativespend}) "
+            "ON DUPLICATE KEY UPDATE "
+            "cumulativespend=cumulativespend+{cumulativespend}, "
+            "spentondate=IF(budget>0 AND spentondate IS NULL AND cumulativespend>=budget, {spentondate}, spentondate)"
+        ).format(**self.format())
+        return query
+
+    @classmethod
+    def insert_many_query(cls, records):
+        values = ','.join([(
+            "({year},{quarter},{subject_type},IFNULL(UNHEX({subject_id}),''),{cumulativespend},"
+            "IF(year IS NULL AND quarter IS NULL, NULL, {spentondate}))"
+        ).format(**Quarterly_budget(record).format()) for record in records])
+        query = (
+            "INSERT quarterly_budget "
+            "(year, quarter, subject_type, subject_id, cumulativespend, spentondate) "
+            "VALUES {} "
+            "ON DUPLICATE KEY UPDATE "
+            "cumulativespend=cumulativespend+VALUES(cumulativespend), "
+            "spentondate=IF(budget>0 AND spentondate IS NULL AND cumulativespend>=budget, VALUES(spentondate), spentondate)"
+        ).format(values)
+        return query
+
+    def clear_query(self):
+        query = (
+            "UPDATE quarterly_budget "
+            "SET cumulativespend=0,spentondate=NULL "
+            "WHERE year={year} "
+            "AND quarter={quarter}"
+        ).format(**self.format())
+        return query
+
+
+class NM_usage_h(Table):
+
+    types = {
+        'usage_id': UUIDType,
+        'dtime': QuoteType,
+        'platform': QuoteType,
+        'url': QuoteType,
+        'cloud_location': QuoteType,
+        'instance_type': QuoteType,
+        'os': NoQuoteType,
+        'num': NoQuoteType,
+        'cost': NoQuoteType,
+    }
+
+    def __init__(self, record=None):
+        super(NM_usage_h, self).__init__(record)
+        if 'usage_id' not in self:
+            try:
+                formatted = self.format()
+                unique = '; '.join(
+                    [
+                        str(formatted['dtime']).strip(), str(formatted['platform']).strip(),
+                        str(formatted['url']).strip(), str(formatted['cloud_location']).strip(),
+                        str(formatted['instance_type']).strip(), str(formatted['os']).strip(),
+                    ]
+                )
+                self['usage_id'] = uuid.uuid5(UUID, unique).hex
+            except KeyError:
+                msg = "Can't set not managed usage_id for record: {}. Reason: {}"
+                msg = msg.format(record, helper.exc_info())
+                LOG.warning(msg)
+
+    def insert_query(self):
+        query = (
+            "INSERT INTO nm_usage_h "
+            "(usage_id, dtime, platform, url, cloud_location, instance_type, os, num, cost) "
+            "VALUES (UNHEX({usage_id}), {dtime}, {platform}, {url}, "
+            "{cloud_location}, {instance_type}, {os}, {num}, {cost}) "
+            "ON DUPLICATE KEY UPDATE num=num+{num},cost=cost+{cost}"
+        ).format(**self.format())
+        return query
+
+    def update_query(self):
+        query = (
+            "UPDATE nm_usage_h "
+            "SET cost={cost} "
+            "WHERE usage_id=UNHEX({usage_id})"
+        ).format(**self.format())
+        return query
+
+
+class NM_usage_servers_h(Table):
+
+    types = {
+        'instance_id': QuoteType,
+        'usage_id': UUIDType,
+    }
+
+    def insert_query(self):
+        query = (
+            "INSERT INTO nm_usage_servers_h "
+            "(usage_id, instance_id) "
+            "VALUES (UNHEX({usage_id}), {instance_id})"
+        ).format(**self.format())
+        return query
+
+
+class NM_subjects_h(Table):
+
+    types = {
+        'env_id': NoQuoteType,
+        'account_id': NoQuoteType,
+        'subject_id': UUIDType,
+        'cc_id': UUIDType,
+    }
+
+    def insert_query(self):
+        query = (
+            "INSERT INTO nm_subjects_h "
+            "(subject_id, env_id, cc_id, account_id) "
+            "VALUES (UNHEX({subject_id}), {env_id}, UNHEX({cc_id}),{account_id})"
+        ).format(**self.format())
+        return query
+
+    def subject_id_query(self):
+        query = (
+            "SELECT HEX(subject_id) as subject_id "
+            "FROM nm_subjects_h "
+            "WHERE env_id={env_id} "
+            "AND cc_id=UNHEX({cc_id}) "
+            "LIMIT 1"
+        ).format(**self.format())
+        return query
+
+
+class NM_usage_subjects_h(Table):
+
+    types = {
+        'usage_id': UUIDType,
+        'subject_id': UUIDType,
+    }
+
+    def insert_query(self):
+        query = (
+            "INSERT IGNORE INTO nm_usage_subjects_h "
+            "(usage_id, subject_id) "
+            "VALUES (UNHEX({usage_id}), UNHEX({subject_id}))"
+        ).format(**self.format())
+        return query

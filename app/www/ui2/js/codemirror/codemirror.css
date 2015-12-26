@@ -270,7 +270,7 @@ div.CodeMirror span.CodeMirror-nonmatchingbracket {color: #f22;}
 
 .cm-s-default {
     background: white;
-    border-radius: 2px;
+    border-radius: 0;
     color: #224164;
     padding: 3px 7px 3px 7px;
 }

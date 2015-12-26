@@ -13,9 +13,8 @@ FARMS:
   - /farms/xGetFarm
   FARMS_CLONE:
   - /farms/xClone
-  FARMS_LAUNCH:
+  FARMS_LAUNCH_TERMINATE:
   - /farms/xLaunch
-  FARMS_TERMINATE:
   - /farms/xTerminate
   - /farms/xGetTerminationDetails
   FARMS_NOT_OWNED_FARMS:

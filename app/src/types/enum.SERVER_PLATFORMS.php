@@ -4,12 +4,11 @@ final class SERVER_PLATFORMS
 {
     const EC2		= 'ec2';
     const RACKSPACE = 'rackspace';
-    const EUCALYPTUS= 'eucalyptus';
     const GCE		= 'gce';
+    const AZURE     = 'azure';
 
     // Openstack based
     const OPENSTACK = 'openstack';
-    const ECS = 'ecs';
     const OCS = 'ocs';
     const NEBULA = 'nebula';
     const MIRANTIS = 'mirantis';
@@ -32,21 +31,20 @@ final class SERVER_PLATFORMS
         return array(
             self::EC2 			=> 'Amazon EC2',
             self::GCE			=> 'Google Compute Engine',
-            self::EUCALYPTUS 	=> 'Eucalyptus',
             self::RACKSPACE		=> 'Legacy Rackspace',
             self::CLOUDSTACK	=> 'Cloudstack',
             self::OPENSTACK		=> 'Openstack',
             self::IDCF			=> 'IDC Frontier',
             self::RACKSPACENG_US=> 'Rackspace',
             self::RACKSPACENG_UK=> 'Rackspace UK',
-            self::ECS           => 'Enter Cloud Suite',
             self::OCS           => 'CloudScaling',
             self::NEBULA        => 'Nebula',
             self::MIRANTIS      => 'Mirantis',
             self::VIO           => 'VMWare VIO',
             self::VERIZON       => 'Verizon',
-            self::CISCO         => 'Cisco Openstack',
+            self::CISCO         => 'Cisco Metapod',
             self::HPCLOUD       => 'HP Helion',
+            self::AZURE         => 'Azure'
         );
     }
 

@@ -122,14 +122,16 @@ class Router
     /**
      * Gets all matched routes
      *
-     * @param    string       $method     The HTTP method
-     * @param    string       $uri        Resource uri
-     * @return   array[\Scalr\Api\Rest\Routing\Route] Returns array of the matched routes
+     * @param   string      $method                  The HTTP method
+     * @param   string      $uri                     Resource uri
+     * @param   callable    $preprocessor   optional The path preprocessor, should take the first argument - the method, the second - the path, returns array, the first element of which is the method, the second - the path
+     *
+     * @return array [\Scalr\Api\Rest\Routing\Route] Returns array of the matched routes
      */
-    public function getMatchedRoutes($method, $uri)
+    public function getMatchedRoutes($method, $uri, callable $preprocessor = null)
     {
         if ($this->matchedRoutes === null) {
-            $this->matchedRoutes = $this->routingTable->getMatchedRoutes($method, $uri);
+            $this->matchedRoutes = $this->routingTable->getMatchedRoutes(...(isset($preprocessor) ? $preprocessor($method, $uri) : [$method, $uri]));
         }
 
         return $this->matchedRoutes;

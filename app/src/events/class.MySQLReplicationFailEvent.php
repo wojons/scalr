@@ -1,6 +1,6 @@
 <?php
 
-class MySQLReplicationFailEvent extends Event
+class MySQLReplicationFailEvent extends AbstractServerEvent
 {
 
     /**

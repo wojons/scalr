@@ -1,4 +1,6 @@
 Scalr.regPage('Scalr.ui.admin.analytics.dashboard.view', function (loadPararams, moduleParams) {
+    var panelMinWidth = 1060,
+        panelMaxWidth = 1440;
     Scalr.utils.Quarters.days = moduleParams['quarters'];
 
     var reconfigurePage = function(params) {
@@ -37,16 +39,21 @@ Scalr.regPage('Scalr.ui.admin.analytics.dashboard.view', function (loadPararams,
             }
         },
         stateId: 'panel-admin-analytics',
-        autoScroll: true,
+        scrollable: true,
         preserveScrollPosition: true,
-        layout: 'anchor',
+        layout: 'auto',
         bodyCls: 'x-panel-column-left-with-tabs x-container-fieldset',
-        cls: 'x-costanalytics',
+        cls: 'x-costanalytics x-costanalytics-admin-dashboard',
         listeners: {
+
             boxready: function() {
                 this.down('costanalyticsperiod').restorePreservedValue('quarter');
             },
             applyparams: reconfigurePage
+        },
+        defaults: {
+            minWidth: panelMinWidth,
+            maxWidth: panelMaxWidth
         },
         items: [{
             xtype: 'container',
@@ -140,10 +147,13 @@ Scalr.regPage('Scalr.ui.admin.analytics.dashboard.view', function (loadPararams,
         },{
             xtype: 'container',
             itemId: 'dashboard',
-            minWidth: 1160,
             loadData: function(mode, quarter, startDate, endDate, data) {
                 this.down('dashboardboxes').loadData(mode, quarter, startDate, endDate, data);
                 this.down('dashboardtopboxes').loadData(mode, quarter, startDate, endDate, data);
+            },
+            defaults: {
+                minWidth: panelMinWidth,
+                maxWidth: panelMaxWidth
             },
             items: [{
                 xtype: 'dashboardboxes',
@@ -158,7 +168,11 @@ Scalr.regPage('Scalr.ui.admin.analytics.dashboard.view', function (loadPararams,
                 }
             },{
                 xtype: 'dashboardtopboxes',
-                margin: '8 0 0'
+                margin: '8 0 0',
+                defaults: {
+                    minWidth: panelMinWidth,
+                    maxWidth: panelMaxWidth
+                }
             }]
         }]
     });
@@ -572,7 +586,7 @@ Ext.define('Scalr.ui.DashboardTopBoxes', {
             xtype: 'container',
             flex: 1,
             cls: 'x-cabox3',
-            minHeight: 120
+            minHeight: 100
         },
         items: [{
             items: [{
@@ -580,95 +594,93 @@ Ext.define('Scalr.ui.DashboardTopBoxes', {
                 cls: 'x-cabox-title',
                 html: 'Total spend'
             },{
-                xtype: 'dataview',
+                xtype: 'container',
                 itemId: 'totalspend',
                 flex: 1,
-                itemSelector: '.x-top5-item',
-                margin: '20 0 0',
-                emptyText: 'No data available',
+                margin: '16 0 0',
+                layout: 'hbox',
                 loadData: function(type, data) {
                     var maxCost,
-                        rows = [];
-
-                    this.tpl.type = type;
-                    Ext.each(data, function(row){
-                        row = Ext.clone(row);
-                        rows.push(row);
-                        row['pctOfMax'] = 0;
-                        maxCost = maxCost > row['cost'] ? maxCost : row['cost'];
-                    });
-                    maxCost = Math.round(maxCost);
-                    if (maxCost != 0) {
-                        Ext.each(rows, function(row){
-                            row['pctOfMax'] = row['cost']/maxCost*100;
+                        rows = [],
+                        items1 = [],
+                        items2 = [];
+                    this.removeAll();
+                    if (data.length) {
+                        Ext.each(data, function(row){
+                            row = Ext.clone(row);
+                            rows.push(row);
+                            row['pctOfMax'] = 0;
+                            maxCost = maxCost > row['cost'] ? maxCost : row['cost'];
                         });
+                        if (Math.round(maxCost) != 0) {
+                            Ext.each(rows, function(row){
+                                row['pctOfMax'] = row['cost']/maxCost*100;
+                            });
+                        }
+                        var top5 = new Ext.util.MixedCollection();
+                        top5.addAll(rows);
+                        top5.sort('cost', 'DESC');
+
+
+                        Ext.each(top5.getRange(0,4), function(item, index){
+                            items1.push({
+                                xtype: 'component',
+                                style: 'text-align:left',
+                                height: 66,
+                                data: item,
+                                tpl:
+                                    '<tpl if="id">' +
+                                        '<a href="#/admin/analytics/' + type + '?' + (type === 'costcenters' ? 'cc' : 'project') + 'Id={id}">' +
+                                    '</tpl>' +
+                                        '<div style="white-space:nowrap;width:100%;text-overflow:ellipsis;overflow:hidden;" class="link" data-qtip="{name}">{name}</div>' +
+                                        '<div style="margin-top:4px"><div class="bar-inner" style="margin:0;width:{pctOfMax}%;text-decoration:none"><span>{[this.currency(values.cost)]}</span></div></div>' +
+                                    '<tpl if="id">' +
+                                        '</a>' +
+                                    '</tpl>'
+                            });
+                            items2.push({
+                                xtype: 'component',
+                                height: 66,
+                                data: item,
+                                tpl: '<div style="margin-bottom:4px">' + (index == 0 ? '<b>% of total</b>' : '&nbsp;') + '</div>{costPct}%'
+                            });
+                        });
+                        this.add([{
+                            xtype: 'container',
+                            flex: 1,
+                            items: items1
+                        },{
+                            xtype: 'container',
+                            width: 75,
+                            padding: '0 0 0 6',
+                            items: items2
+                        }]);
+                    } else {
+                        this.add({xtype: 'component',  flex: 1, html: 'No data available'});
                     }
-                    this.store.loadData(rows);
-                },
-                store: {
-                    proxy: 'object',
-                    sorters: {
-                        property: 'cost',
-                        direction: 'DESC'
-                    },
-                    fields: ['id', 'name', 'cost', 'costPct', 'pctOfMax']
-                },
-                tpl: new Ext.XTemplate(
-                    '<table>' +
-                        '<tpl for=".">' +
-                            '<tpl if="xindex&lt;6">' +
-                                '<tr class="x-top5-item">' +
-                                    '<td>' +
-                                        '<tpl if="id">' +
-                                            '<a href="#/admin/analytics/{[this.type]}?{[this.type==\'costcenters\'?\'cc\':\'project\']}Id={id}">' +
-                                        '</tpl>' +
-                                            '<div style="max-width:250px" class="link">{name}</div>' +
-                                            '<div style="margin-top:4px"><div class="bar-inner" style="margin:0;width:{pctOfMax}%"><span>{[this.currency(values.cost)]}</span></div></div>' +
-                                        '<tpl if="id">' +
-                                            '</a>' +
-                                        '</tpl>' +
-                                    '</td>'+
-                                    '<td style="text-align:center;width:75px;"><div style="margin-bottom:4px"><tpl if="xindex==1"><b>% of total</b></tpl>&nbsp;</div>{costPct}%</td>'+
-                                '</tr>' +
-                            '</tpl>'+
-                        '</tpl>'+
-                    '</table>'
-                )
+
+                }
             }]
         },{
             items: [{
-                xtype: 'component',
-                cls: 'x-cabox-title',
-                itemId: 'box2title',
-                html: 'Change over previous period'
-            },{
                 xtype: 'container',
+                cls: 'x-cabox-title',
                 itemId: 'sorters',
-                hidden: true,
-                margin: '4 0 0',
                 layout: {
                     type: 'hbox',
-                    align: 'middle'
+                    pack: 'center'
                 },
                 items: [{
-                    xtype: 'tbfill'
-                },{
-                    xtype: 'label',
-                    text: 'rank by',
-                    hidden: true,
-                    margin: '0 6 0 0'
+                   xtype: 'component',
+                   html: 'Change over previous period'
                 },{
                     xtype: 'buttongroupfield',
                     itemId: 'mode',
                     value: '$',
-                    style: 'z-index:2',
-                    defaults: {
-                        padding: 0,
-                        width: 35
-                    },
+                    cls: 'x-mode-btn',
                     listeners: {
                         change: function(comp, value){
-                            this.up().next('dataview').setMode(value);
+                            this.up().next('#changeoverpp').setMode(value);
                         }
                     },
                     items: [{
@@ -680,27 +692,31 @@ Ext.define('Scalr.ui.DashboardTopBoxes', {
                         tooltip: 'Order by growth percentage',
                         value: '%'
                     }]
+
                 }]
             },{
-                xtype: 'dataview',
+                xtype: 'container',
                 itemId: 'changeoverpp',
                 flex: 1,
-                itemSelector: '.x-item',
-                margin: '-10 0 0',
+                margin: '16 0 0',
+                layout: 'hbox',
                 loadData: function(type, data) {
                     this.data = new Ext.util.MixedCollection();
                     this.data.addAll(data);
-                    this.tpl.type = type;
+                    this.type = type;
                     this.setMode();
 
                 },
                 setMode: function(mode) {
-                    var sorters,
+                    var me = this,
+                        sorters,
                         data,
-                        maxCost;
+                        maxCost,
+                        items1 = [],
+                        items2 = [];
 
                     mode = mode || this.up().down('#mode').getValue();
-                    this.tpl.pctLabelMode = mode === '$' ? 'invert' : 'default';
+                    me.pctLabelMode = mode === '$' ? 'invert' : 'default';
 
                     if (mode === '$') {
                         sorters = {
@@ -727,59 +743,67 @@ Ext.define('Scalr.ui.DashboardTopBoxes', {
                         }];
                     }
 
-                    this.data.sort(sorters);
+                    me.data.sort(sorters);
 
-                    data = this.data.getRange(0, 5);
-                    Ext.each(data, function(row){
-                        row['pctOfMax'] = 0;
-                        row['prevPctOfMax'] = 0;
-                        maxCost = maxCost > row['cost'] ? maxCost : row['cost'];
-                        maxCost = maxCost > row['prevCost'] ? maxCost : row['prevCost'];
-                    });
-                    maxCost = Math.round(maxCost);
-                    if (maxCost != 0) {
+                    me.removeAll();
+                    data = me.data.getRange(0, 5);
+                    me.up().down('#sorters').setVisible(data.length > 0);
+                    if (data.length > 0) {
                         Ext.each(data, function(row){
-                            row['pctOfMax'] = row['cost']/maxCost*100;
-                            row['prevPctOfMax'] = row['prevCost']/maxCost*100;
+                            row['pctOfMax'] = 0;
+                            row['prevPctOfMax'] = 0;
+                            maxCost = maxCost > row['cost'] ? maxCost : row['cost'];
+                            maxCost = maxCost > row['prevCost'] ? maxCost : row['prevCost'];
                         });
+                        if (Math.round(maxCost) != 0) {
+                            Ext.each(data, function(row){
+                                row['pctOfMax'] = row['cost']/maxCost*100;
+                                row['prevPctOfMax'] = row['prevCost']/maxCost*100;
+                            });
+                        }
+                        Ext.each(data, function(item, index){
+                            items1.push({
+                                xtype: 'component',
+                                style: 'text-align:left',
+                                height: 66,
+                                data: item,
+                                tpl:
+                                    '<tpl if="id">' +
+                                        '<a href="#/admin/analytics/' + me.type + '?' + (me.type === 'costcenters' ? 'cc' : 'project') + 'Id={id}">' +
+                                    '</tpl>' +
+                                        '<div style="white-space:nowrap;width:100%;text-overflow:ellipsis;overflow:hidden;" class="link" data-qtip="{name}">{name}</div>' +
+                                        '<div title="Current period" style="margin-top:4px"><div class="bar-inner" style="background: #337cc6;width:{pctOfMax}%"><span>{[this.currency(values.cost)]}</span></div></div>' +
+                                        '<div title="Previous period" style="margin:2px 0 0;"><div class="bar-inner" style="background:#a8c5e3;width:{prevPctOfMax}%"><span>{[this.currency(values.prevCost)]}</span></div></div>' +
+                                    '<tpl if="id">' +
+                                        '</a>' +
+                                    '</tpl>'
+                            });
+                            items2.push({
+                                xtype: 'component',
+                                height: 66,
+                                data: item,
+                                padding: '22 0 0 18',
+                                tpl:
+                                    '<tpl if="growth!=0">' +
+                                        '{[this.pctLabel(values.growth, values.growthPct, \'small\', \'fixed\', \''+ me.pctLabelMode + '\')]}' +
+                                    '</tpl>'
+
+                            });
+                        });
+                        this.add([{
+                            xtype: 'container',
+                            flex: 1,
+                            items: items1
+                        },{
+                            xtype: 'container',
+                            padding: '0 0 0 6',
+                            items: items2
+                        }]);
+                    } else {
+                        this.add({xtype: 'component',  flex: 1, html: 'No data available'});
                     }
-                    this.up().down('#sorters').setVisible(data.length>0);
-                    this.store.loadData(data);
-                },
-                store: {
-                    proxy: 'object',
-                    fields: ['id', 'name', 'cost', 'costPct', 'prevCost', 'growth', 'growthPct', 'pctOfMax', 'prevPctOfMax']
-                },
-                emptyText: '<div style="margin-top:30px;">No data available</div>',
-                tpl: new Ext.XTemplate(
-                    '<tpl if="length">' +
-                        '<table>' +
-                            '<tpl for=".">' +
-                                '<tpl if="xindex&lt;6">' +
-                                    '<tr class="x-top5-item">' +
-                                        '<td>' +
-                                            '<tpl if="id">' +
-                                                '<a href="#/admin/analytics/{[this.type]}?{[this.type==\'costcenters\'?\'cc\':\'project\']}Id={id}">' +
-                                            '</tpl>' +
-                                                '<div style="white-space:nowrap;max-width:250px" class="link">{name}</div>' +
-                                                '<div title="Current period" style="margin-top:4px"><div class="bar-inner" style="background: #337cc6;width:{pctOfMax}%"><span>{[this.currency(values.cost)]}</span></div></div>' +
-                                                '<div title="Previous period" style="margin:2px 0 0;"><div class="bar-inner" style="background:#a8c5e3;width:{prevPctOfMax}%"><span>{[this.currency(values.prevCost)]}</span></div></div>' +
-                                            '<tpl if="id">' +
-                                                '</a>' +
-                                            '</tpl>' +
-                                        '</td>'+
-                                        '<td style="width:1%;padding:19px 0 0 18px;text-align:right">'+
-                                            '<tpl if="growth!=0">' +
-                                                '{[this.pctLabel(values.growth, values.growthPct, \'small\', \'fixed\', this.pctLabelMode)]}' +
-                                            '</tpl>'+
-                                        '</td>'+
-                                    '</tr>' +
-                                '</tpl>'+
-                            '</tpl>'+
-                        '</table>'+
-                        '<div style="padding-top:10px;text-align:center"><img src="'+Ext.BLANK_IMAGE_URL+'" style="width:10px;height:10px;border-radius:5px;background:#337cc6;" />&nbsp;Current period<img src="'+Ext.BLANK_IMAGE_URL+'" style="margin:0 0 0 20px;width:10px;height:10px;border-radius:5px;background:#a8c5e3;" />&nbsp;Previous period</div>' +
-                    '</tpl>'
-                )
+
+                }
             }]
         },{
             items: [{
@@ -787,25 +811,26 @@ Ext.define('Scalr.ui.DashboardTopBoxes', {
                 cls: 'x-cabox-title',
                 html: 'Quarter budget'
             },{
-                xtype: 'dataview',
+                xtype: 'container',
                 itemId: 'budget',
                 flex: 1,
-                itemSelector: '.x-item',
-                margin: '20 0 0',
+                layout: 'hbox',
+                margin: '16 0 0',
                 loadData: function(type, data) {
-                    this.tpl.type = type;
-                    this.store.loadData(data);
-                },
-                store: {
-                    proxy: 'object',
-                    sorters: {
-                        sorterFn: function(rec1, rec2) {
-                            var v1 = rec1.get('budgetSpentPct'),
-                                v2 = rec2.get('budgetSpentPct');
+                    var items1 = [],
+                        items2 = [],
+                        items3 = [];
+                    this.removeAll();
+                    if (data.length) {
+                        var top5 = new Ext.util.MixedCollection();
+                        top5.addAll(data);
+                        top5.sort(function(rec1, rec2) {
+                            var v1 = rec1['budgetSpentPct'],
+                                v2 = rec2['budgetSpentPct'];
                             if (v1 === v2) {
                                 if (v1 !== null) {
-                                    v1 = rec1.get('budgetSpent')*1;
-                                    v2 = rec2.get('budgetSpent')*1;
+                                    v1 = rec1['budgetSpent']*1;
+                                    v2 = rec2['budgetSpent']*1;
                                 }
                                 if (v1 === v2) {
                                     return 0;
@@ -815,43 +840,74 @@ Ext.define('Scalr.ui.DashboardTopBoxes', {
                             } else {
                                 return v1 > v2 || v2 === null ? 1 : -1;
                             }
-                        },
-                        direction: 'DESC'
-                    },
-                    fields: ['id', 'name', 'budget', 'budgetSpent', 'budgetSpentPct', 'budgetRemain', 'budgetRemainPct']
-                },
-                emptyText: 'No data available',
-                tpl: new Ext.XTemplate(
-                    '<table>' +
-                        '<tpl for=".">' +
-                            '<tpl if="xindex&lt;6">' +
-                                '<tr class="x-top5-item">' +
-                                    '<td>' +
-                                        '<a href="#/admin/analytics/{[this.type]}?{[this.type==\'costcenters\'?\'cc\':\'project\']}Id={id}">' +
-                                        '<div style="max-width:250px" class="link">{name}</div>' +
+                        }, 'DESC');
+
+                        Ext.each(top5.getRange(0,4), function(item, index){
+                            items1.push({
+                                xtype: 'component',
+                                style: 'text-align:left',
+                                height: 66,
+                                data: item,
+                                tpl: new Ext.XTemplate(
+                                    '<tpl if="id">' +
+                                        '<a href="#/admin/analytics/' + type + '?' + (type === 'costcenters' ? 'cc' : 'project') + 'Id={id}">' +
+                                    '</tpl>' +
+                                        '<div style="white-space:nowrap;width:100%;text-overflow:ellipsis;overflow:hidden;" class="link" data-qtip="{name}">{name}</div>' +
                                         '<div class="bar-wrapper" style="margin-top:4px"><div class="bar-inner x-costanalytics-bg-{[this.getColorCls(values)]}" style="width:{[values.budget > 0 ? 100-values.budgetRemainPct : 0]}%"><span>{[this.currency(values.budgetSpent)]}</span></div></div>' +
+                                    '<tpl if="id">' +
                                         '</a>' +
-                                    '</td>'+
-                                    '<td style="text-align:center;width:20%;padding-left:20px"><div style="margin-bottom:4px"><tpl if="xindex==1"><b>Budget</b><tpl else>&nbsp;</tpl></div>{[this.currency(values.budget)]}</td>'+
-                                    '<td style="text-align:center;width:80px;padding-left:10px"><div style="margin-bottom:4px"><tpl if="xindex==1"><b>Remaining</b><tpl else>&nbsp;</tpl></div><tpl if="budget"><span class="x-costanalytics-{[this.getColorCls(values)]}">{budgetRemainPct}%</span><tpl else>&ndash;</tpl> </td>'+
-                                '</tr>' +
-                            '</tpl>'+
-                        '</tpl>'+
-                    '</table>',
-                    {
-                        getColorCls: function(values) {
-                            var cls = 'green';
-                            if (values.budget) {
-                                if (values.budgetRemainPct < 5) {
-                                    cls = 'red';
-                                } else if (values.budgetRemainPct < 25) {
-                                    cls = 'orange';
-                                }
-                            }
-                            return cls;
-                        }
+                                    '</tpl>',
+                                    {
+                                        getColorCls: function(values) {
+                                            var cls = 'green';
+                                            if (values.budget) {
+                                                if (values.budgetRemainPct < 5) {
+                                                    cls = 'red';
+                                                } else if (values.budgetRemainPct < 25) {
+                                                    cls = 'orange';
+                                                }
+                                            }
+                                            return cls;
+                                        }
+                                    }
+                                )
+                            });
+                            items2.push({
+                                xtype: 'component',
+                                height: 66,
+                                data: item,
+                                tpl: '<div style="margin-bottom:4px">' + (index === 0 ? '<b>Budget</b>' : '&nbsp;') + '</div>{[this.currency(values.budget)]}'
+                            });
+                            items3.push({
+                                xtype: 'component',
+                                height: 66,
+                                data: item,
+                                tpl:
+                                    '<div style="margin-bottom:4px">' +
+                                        (index === 0 ? '<b>Remaining</b>' : '&nbsp;') +
+                                    '</div>' +
+                                    '<tpl if="budget"><span class="x-costanalytics-{[this.getColorCls(values)]}">{budgetRemainPct}%</span><tpl else>&ndash;</tpl>'
+                            });
+                        });
+                        this.add([{
+                            xtype: 'container',
+                            flex: 1,
+                            items: items1
+                        },{
+                            xtype: 'container',
+                            padding: '0 0 0 20',
+                            items: items2
+                        },{
+                            xtype: 'container',
+                            padding: '0 0 0 10',
+                            items: items3,
+                            width: 90
+                        }]);
+
+                    } else {
+                        this.add({xtype: 'component',  flex: 1, html: 'No data available'});
                     }
-                )
+                }
             }]
         }]
     }]

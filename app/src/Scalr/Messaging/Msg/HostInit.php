@@ -3,8 +3,6 @@
 class Scalr_Messaging_Msg_HostInit extends Scalr_Messaging_Msg {
     public $cryptoKey;
     public $sshPubKey;
-    public $snmpPort;
-    public $snmpCommunityName;
 
     public $serverIndex;
 

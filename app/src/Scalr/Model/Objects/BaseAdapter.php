@@ -4,6 +4,7 @@ namespace Scalr\Model\Objects;
 
 use Scalr\Model\AbstractEntity;
 use Scalr\Api\DataType\ApiEntityAdapter;
+use UnexpectedValueException;
 
 /**
  * BaseAdapter
@@ -192,7 +193,7 @@ class BaseAdapter implements AdapterInterface, \Iterator, \OuterIterator
                         //It is callable
                         $this->{$key}($data, $entity, self::ACT_CONVERT_TO_ENTITY);
                     } else {
-                        $entity->$key = ($bconvert ? ApiEntityAdapter::convertInputValue($it->getField($key)->column->type, $data->$property) : $data->$property);
+                        $entity->$key = $bconvert ? static::convertInputValue($it->getField($key)->column->type, $data->$property, $property) : $data->$property;
                     }
                 }
             }
@@ -205,7 +206,7 @@ class BaseAdapter implements AdapterInterface, \Iterator, \OuterIterator
                     //It is callable
                     $this->{$key}($data, $entity, self::ACT_CONVERT_TO_ENTITY);
                 } elseif (isset($data->$key)) {
-                    $entity->$key = ($bconvert ? ApiEntityAdapter::convertInputValue($field->column->type, $data->$key) : $data->$key);
+                    $entity->$key = $bconvert ? static::convertInputValue($field->column->type, $data->$key, $key) : $data->$key;
                 }
             }
         }
@@ -278,5 +279,55 @@ class BaseAdapter implements AdapterInterface, \Iterator, \OuterIterator
     public function valid()
     {
         return $this->getInnerIterator()->valid();
+    }
+
+    /**
+     * Converts input value which comes from the request
+     *
+     * @param   string  $fieldType           Field type
+     * @param   string  $value               A value taken from input
+     * @param   string  $fieldName  optional Field name
+     *
+     * @return mixed Returns value which can be stored in the Entity
+     */
+    public static function convertInputValue($fieldType, $value, $fieldName = '')
+    {
+        switch ($fieldType) {
+            case 'boolean':
+                $result = is_string($value) ? (strtolower($value) === 'false' ? false : (bool) $value) : (bool) $value;
+                break;
+
+            case 'UTCDatetime':
+            case 'UTCDate':
+                try {
+                    $result = new \DateTime($value, new \DateTimeZone('UTC'));
+                } catch (\Exception $e) {
+                    throw new UnexpectedValueException("Invalid timestamp {$fieldName}");
+                }
+                break;
+
+            case 'date':
+            case 'datetime':
+                try {
+                    $result = new \DateTime($value, new \DateTimeZone('UTC'));
+                } catch (\Exception $e) {
+                    throw new UnexpectedValueException("Invalid timestamp {$fieldName}");
+                }
+                //According to API documentation we should accept timestamps in UTC
+                //even though it is stored in database in the server timezone
+                if (date_default_timezone_get() !== 'UTC') {
+                    $result->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+                }
+                break;
+
+            default:
+                if (is_array($value) || (is_object($value) && !method_exists($value, '__toString'))) {
+                    throw new UnexpectedValueException(sprintf("Unexpected type '%s' in {$fieldName}", is_object($value) ? get_class($value) : gettype($value)));
+                }
+
+                $result = $value;
+        }
+
+        return $result;
     }
 }

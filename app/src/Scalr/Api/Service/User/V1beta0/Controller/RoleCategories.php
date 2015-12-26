@@ -57,7 +57,7 @@ class RoleCategories extends ApiController
      */
     public function describeAction()
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_ROLES);
+        $this->checkPermissions(Acl::RESOURCE_ROLES_ENVIRONMENT);
 
         return $this->adapter('roleCategory')->getDescribeResult($this->getDefaultCriteria());
     }
@@ -70,7 +70,7 @@ class RoleCategories extends ApiController
      */
     public function fetchAction($roleCategoryId)
     {
-        $this->checkPermissions(Acl::RESOURCE_FARMS_ROLES);
+        $this->checkPermissions(Acl::RESOURCE_ROLES_ENVIRONMENT);
 
         $roleCategory = $this->getRoleCategory($roleCategoryId);
 

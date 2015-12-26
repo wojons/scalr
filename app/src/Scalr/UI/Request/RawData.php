@@ -26,10 +26,11 @@ class RawData implements ObjectInitializingInterface
     }
 
     /**
-     * @param mixed $value
-     * @return RawData
+     * {@inheritdoc}
+     * @see     ObjectInitializingInterface::initFromRequest()
+     * @return  RawData
      */
-    public static function initFromRequest($value)
+    public static function initFromRequest($value, $name = '')
     {
         $obj = new self($value);
         return $obj;

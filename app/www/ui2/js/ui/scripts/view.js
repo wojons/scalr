@@ -1,4 +1,13 @@
 Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
+    var isManageAllowed = true,
+        isForkAllowed = true;
+    if (Scalr.scope === 'environment') {
+        isManageAllowed = Scalr.isAllowed('SCRIPTS_ENVIRONMENT', 'manage');
+        isForkAllowed = Scalr.isAllowed('SCRIPTS_ENVIRONMENT', 'fork');
+    } else if (Scalr.scope === 'account') {
+        isManageAllowed = Scalr.isAllowed('SCRIPTS_ACCOUNT', 'manage');
+        isForkAllowed = Scalr.isAllowed('SCRIPTS_ACCOUNT', 'fork');
+    }
 
     var globalVariablesInfo =
 
@@ -72,13 +81,13 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
         }]
     };
 
-	var store = Ext.create('Scalr.ui.ContinuousStore', {
+    var store = Ext.create('Scalr.ui.ContinuousStore', {
 
         fields: [
-			{ name: 'id', type: 'int' },
+            { name: 'id', type: 'int' },
             { name: 'accountId', type: 'int' },
-			'name', 'description', 'version', 'isSync', 'os', 'envId'
-		],
+            'name', 'description', 'version', 'isSync', 'os', 'envId'
+        ],
 
         proxy: {
             type: 'ajax',
@@ -91,6 +100,12 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
             }
         },
 
+        listeners: {
+            beforeload: function () {
+                grid.down('#add').toggle(false, true);
+            }
+        },
+
         removeByScriptId: function (ids) {
             store.remove(Ext.Array.map(
                 ids, function (id) {
@@ -98,15 +113,15 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
                 }
             ));
         }
-	});
+    });
 
-	var grid =  Ext.create('Ext.grid.Panel', {
+    var grid =  Ext.create('Ext.grid.Panel', {
 
         cls: 'x-panel-column-left',
         flex: .8,
         minWidth: 660,
         scrollable: true,
-		store: store,
+        store: store,
 
         plugins: [ 'applyparams', 'focusedrowpointer', {
             ptype: 'selectedrecord',
@@ -117,16 +132,21 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
             ptype: 'continuousrenderer'
         }],
 
-		viewConfig: {
-			emptyText: 'No scripts found'
-		},
-
-        selModel: {
-            selType: 'selectedmodel',
-            getVisibility: function (record) {
-                return Scalr.scope === record.get('scope');
-            }
+        viewConfig: {
+            emptyText: 'No scripts found'
         },
+
+        selModel:
+            isManageAllowed ? {
+                selType: 'selectedmodel',
+                getVisibility: function (record) {
+                    return Scalr.scope === record.get('scope') && (
+                        Scalr.user.type === 'ScalrAdmin' ||
+                        Scalr.scope === 'environment' && Scalr.isAllowed('SCRIPTS_ENVIRONMENT', 'manage') ||
+                        Scalr.scope === 'account' && Scalr.isAllowed('SCRIPTS_ACCOUNT', 'manage')
+                    );
+                }
+            } : null,
 
         listeners: {
             selectionchange: function(selModel, selections) {
@@ -221,9 +241,9 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
             return me;
         },
 
-		columns: [
-			{ header: 'ID', width: 80, dataIndex: 'id', sortable: true },
-			{
+        columns: [
+            { header: 'ID', width: 80, dataIndex: 'id', sortable: true },
+            {
                 text: 'Script',
                 flex: 1,
                 dataIndex: 'name',
@@ -237,40 +257,43 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
                     }
                 )
             },
-            //{ header: 'Execution mode', width: 150, dataIndex: 'isSync', sortable: false, resizable: false, xtype: 'statuscolumn', statustype: 'script'},
-			{ header: 'Version', width: 80, dataIndex: 'version', sortable: false, resizable: false, align:'center' },
-			{ header: 'OS', width: 60, sortable: false, align:'center', xtype: 'templatecolumn', tpl:
-				'<tpl if="os == &quot;linux&quot;"><img src="/ui2/images/ui/scripts/linux.png" height="15" title="Linux"></tpl>' +
-				'<tpl if="os == &quot;windows&quot;"><img src="/ui2/images/ui/scripts/windows.png" height="15" title="Windows"></tpl>'
-            }, {
-				xtype: 'optionscolumn',
-                hidden: !(Scalr.scope === 'environment' && Scalr.isAllowed('ADMINISTRATION_SCRIPTS', 'execute')),
-				menu: [{
-					iconCls: 'x-menu-icon-execute',
-					text: 'Execute',
+            { header: 'Version', width: 80, dataIndex: 'version', sortable: false, resizable: false, align:'center' },
+            { header: 'OS', width: 60, sortable: false, align:'center', xtype: 'templatecolumn', tpl:[
+                '<tpl if="os == \'linux\'">',
+                    '<img class="x-icon-osfamily-small x-icon-osfamily-small-oel" src="' + Ext.BLANK_IMAGE_URL + '"/>',
+                '<tpl elseif="os == \'windows\'">',
+                    '<img class="x-icon-osfamily-small x-icon-osfamily-small-windows" src="' + Ext.BLANK_IMAGE_URL + '"/>',
+                '</tpl>'
+            ]}, {
+                xtype: 'optionscolumn',
+                hidden: !(Scalr.scope === 'environment' && Scalr.isAllowed('SCRIPTS_ENVIRONMENT', 'execute')),
+                menu: [{
+                    iconCls: 'x-menu-icon-execute',
+                    text: 'Execute',
                     showAsQuickAction: true,
-					href: '#/scripts/{id}/execute'
-				}]
-			}
-		],
+                    href: '#/scripts/{id}/execute'
+                }]
+            }
+        ],
 
-		dockedItems: [{
-			xtype: 'toolbar',
-			store: store,
+        dockedItems: [{
+            xtype: 'toolbar',
+            store: store,
             dock: 'top',
             ui: 'simple',
             defaults: {
                 margin: '0 0 0 12'
             },
-			items: [{
-				xtype: 'filterfield',
-				store: store,
+            items: [{
+                xtype: 'filterfield',
+                store: store,
                 margin: 0
-			}, ' ', {
+            }, ' ', {
                 xtype: 'cyclealt',
                 name: 'scope',
                 getItemIconCls: false,
-                hidden: Scalr.user.type === 'ScalrAdmin',
+                hidden: Scalr.scope == 'scalr',
+                disabled: Scalr.scope == 'scalr',
                 width: 130,
                 margin: 0,
                 changeHandler: function (me, menuItem) {
@@ -281,9 +304,9 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
                 getItemText: function (item) {
                     return item.value
                         ? 'Scope: &nbsp;<img src="'
-                            + Ext.BLANK_IMAGE_URL
-                            + '" class="' + item.iconCls
-                            + '" title="' + item.text + '" />'
+                    + Ext.BLANK_IMAGE_URL
+                    + '" class="' + item.iconCls
+                    + '" title="' + item.text + '" />'
                         : item.text;
                 },
                 menu: {
@@ -304,16 +327,18 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
                         text: 'Environment scope',
                         value: 'environment',
                         iconCls: 'scalr-scope-environment',
-                        hidden: Scalr.scope !== 'environment'
+                        hidden: Scalr.scope !== 'environment',
+                        disabled: Scalr.scope !== 'environment'
                     }]
                 }
-			}, {
+            }, {
                 xtype: 'tbfill'
             }, {
                 text: 'New script',
                 itemId: 'add',
                 cls: 'x-btn-green',
                 enableToggle: true,
+                hidden: !isManageAllowed,
                 toggleHandler: function (button, state) {
                     if (state) {
                         grid.clearSelectedRecord();
@@ -342,7 +367,6 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
                 tooltip: 'Refresh',
                 handler: function () {
                     store.clearAndLoad();
-                    grid.down('#add').toggle(false, true);
                 }
             }, {
                 itemId: 'delete',
@@ -350,12 +374,13 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
                 cls: 'x-btn-red',
                 tooltip: 'Select one or more scripts to delete them',
                 disabled: true,
+                hidden: !isManageAllowed,
                 handler: function() {
                     grid.deleteSelectedScripts();
                 }
             }]
-		}]
-	});
+        }]
+    });
 
     var form = Ext.create('Ext.form.Panel', {
 
@@ -365,11 +390,14 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 
         scope: Scalr.scope,
 
-        allowFork: Scalr.user.type === 'ScalrAdmin'
-            || Scalr.isAllowed('ADMINISTRATION_SCRIPTS', 'fork'),
+        allowFork: isForkAllowed,
 
         isScriptEditable: function (scriptScope) {
-            return scriptScope === this.scope;
+            return scriptScope === this.scope && (
+                Scalr.user.type === 'ScalrAdmin' ||
+                Scalr.scope === 'environment' && Scalr.isAllowed('SCRIPTS_ENVIRONMENT') ||
+                Scalr.scope === 'account' && Scalr.isAllowed('SCRIPTS_ACCOUNT')
+            );
         },
 
         maximizeEditor: function () {
@@ -486,10 +514,10 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 
             me.down('[name=version]').
                 getStore()
-                    .loadData(versions);
+                .loadData(versions);
 
             me.down('#removeVersion').
-                show().
+                setVisible(isManageAllowed).
                 setDisabled(!!readOnly || versions.length < 2);
 
             me.down('#save').
@@ -524,7 +552,7 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
                 applyScriptVersions(data.versions, data.version, readOnly).
                 applyScriptTags(data.tags).
                 getRecord().
-                    set(data);
+                set(data);
 
             return me;
         },
@@ -698,15 +726,15 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
         setFormEditable: function (scope) {
             var me = this;
 
-            var readOnly = !me.isScriptEditable(scope);
+            var readOnly = !me.isScriptEditable(scope) || !isManageAllowed;
 
             me.
-                hideForkButton(false, !me.allowFork).
-                hideDeleteButton(false, readOnly).
+                hideForkButton(!me.allowFork, !me.allowFork).
+                hideDeleteButton(!isManageAllowed, readOnly).
                 setDeleteTooltip(readOnly ? Scalr.utils.getForbiddenActionTip('script', scope) : '').
                 hideCreateButton(true).
                 disableSaveButton(readOnly, scope).
-                hideSaveButton(false).
+                hideSaveButton(!isManageAllowed).
                 hideScriptVersion(false).
                 setFormReadOnly(readOnly);
 
@@ -805,7 +833,7 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 
                     timeoutField.emptyText = moduleParams['timeouts'][
                         value ? 'sync' : 'async'
-                    ];
+                        ];
 
                     timeoutField.applyEmptyText();
                 },
@@ -830,6 +858,11 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
         }, {
             xtype: 'fieldset',
             cls: 'x-fieldset-separator-none',
+
+            title: 'Script content'
+                + '<img style="margin-left: 6px" src="'
+                + Ext.BLANK_IMAGE_URL + '" class="x-icon-info" data-qclickable="1" data-qtip=\''
+                + globalVariablesInfo + '\' />',
 
             defaults: {
                 anchor: '100%'
@@ -876,17 +909,25 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
                 name: 'toolbar',
                 layout: 'hbox',
                 margin: '0 0 12 0',
-                items: [{
+                items: [/*{
                     xtype: 'component',
                     html:
-                        '<div style="padding: 0 0 0 32px; margin-bottom: 0" class="x-fieldset-subheader">'
-                            + '<span>Script content</span>'
-                            + '<img style="margin-left: 6px" src="'
-                            + Ext.BLANK_IMAGE_URL
-                            + '" class="x-icon-info" data-qclickable="1" data-qtip=\''
-                            + globalVariablesInfo
-                            + '\' />'
-                        + '</div>'
+                    '<div style="padding: 0 0 0 32px; margin-bottom: 0" class="x-fieldset-subheader">'
+                    + '<span>Script content</span>'
+                    + '<img style="margin-left: 6px" src="'
+                    + Ext.BLANK_IMAGE_URL
+                    + '" class="x-icon-info" data-qclickable="1" data-qtip=\''
+                    + globalVariablesInfo
+                    + '\' />'
+                    + '</div>'
+                },*/ {
+                    xtype: 'checkbox',
+                    name: 'allowScriptParameters',
+                    boxLabel: 'Enable Script Parameter interpolation.',
+                    plugins: {
+                        ptype: 'fieldicons',
+                        icons: [{id: 'info', tooltip: 'Visit the documentation on <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/QBUb">Script Parameters</a> for more details'}]
+                    }
                 }, {
                     xtype: 'tbfill'
                 }, {
@@ -940,6 +981,7 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
                     iconCls: 'x-btn-icon-delete',
                     margin: '0 0 0 12',
                     tooltip: 'Delete selected version',
+                    hidden: true,
                     handler: function () {
                         form.deleteScriptVersion();
                     }
@@ -980,14 +1022,6 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
                     }
                 }]
             }, {
-                xtype: 'checkbox',
-                name: 'allowScriptParameters',
-                boxLabel: 'Enable Script Parameter Interpolation',
-                plugins: {
-                    ptype: 'fieldicons',
-                    icons: [{id: 'info', tooltip: 'Visit the documentation on <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/QBUb">Script Parameters</a> for more details'}]
-                }
-            }, {
                 xtype: 'fieldcontainer',
                 itemId: 'scriptSource',
                 defaults: {
@@ -1025,6 +1059,7 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
             xtype: 'container',
             dock: 'bottom',
             cls: 'x-docked-buttons',
+            hidden: !isManageAllowed && !isForkAllowed,
             layout: {
                 type: 'hbox',
                 pack: 'center'
@@ -1053,9 +1088,9 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
                         saveAsNewButton.setDisabled(
                             form.down('[name=content]').getValue()
                             === form.down('[name=version]').
-                                    getStore().
-                                        findRecord('version', saveAsNewButton.version).
-                                            get('content')
+                                getStore().
+                                findRecord('version', saveAsNewButton.version).
+                                get('content')
 
                         );
                     }
@@ -1160,90 +1195,3 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
         }]
     });
 });
-
-/*
-Ext.define('Scalr.ui.ScriptManager', {
-
-    singleton: true,
-
-    forkAction: '/scripts/xFork',
-
-    removeAction: '/scripts/xRemove',
-
-    _getForkConfirm: function (name) {
-        return {
-            formValidate: true,
-            formSimple: true,
-            type: 'action',
-            msg: 'Are you sure want to fork script "'
-                + name + '" ?',
-            form: {
-                xtype: 'textfield',
-                name: 'name',
-                fieldLabel: 'New script name',
-                labelAlign: 'top',
-                labelWidth: 110,
-                allowBlank: false,
-                value: 'Custom ' + name
-            }
-        };
-    },
-
-    _getRemoveConfirm: function (name) {
-        return {
-            type: 'delete',
-            msg: 'Delete script <b>' + name + '</b> ?'
-        };
-    },
-
-    fork: function (id, name, callback) {
-        var me = this;
-
-        Scalr.Request({
-            url: me.forkAction,
-            confirmBox: me._getForkConfirm(
-                Ext.isString(name) ? name : ''
-            ),
-            processBox: {
-                type: 'action'
-            },
-            params: {
-                scriptId: Ext.isNumber(id)
-                    ? id
-                    : parseInt(id)
-            },
-            success: function () {
-                if (Ext.isFunction(callback)) {
-                    callback();
-                }
-            }
-        });
-
-        return me;
-    },
-
-    remove: function (id, name, callback) {
-        var me = this;
-
-        Scalr.Request({
-            url: me.removeAction,
-            confirmBox: me._getRemoveConfirm(
-                Ext.isString(name) ? name : ''
-            ),
-            processBox: {
-                type: 'delete'
-            },
-            params: {
-                scriptId: Ext.encode([id])
-            },
-            success: function () {
-                if (Ext.isFunction(callback)) {
-                    callback();
-                }
-            }
-        });
-
-        return me;
-    }
-});
-*/

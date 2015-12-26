@@ -182,9 +182,4 @@ class ConnectionPool
         }
         return call_user_func_array(array($conn, $name), $arguments);
     }
-
-    public static function __callStatic($name, $arguments)
-    {
-        return call_user_func_array(get_class($this->getConnection()) . "::" . $name, $arguments);
-    }
 }

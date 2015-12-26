@@ -26,16 +26,16 @@ class RoleAdapter extends ApiEntityAdapter
         //Allows all entity properties to be converted from entity into data result object.
         //[entityProperty1 => resultProperty1, ... or  entityProperty1, entityProperty2, ...]
         self::RULE_TYPE_TO_DATA     => [
-            'id', 'name', 'description',
+            'id', 'name', 'description', 'isQuickStart' => 'quickStart', 'isDeprecated' => 'deprecated',
             '_scope'    => 'scope',
             '_os'       => 'os',
             '_category' => 'category'
         ],
 
         //The alterable properties
-        self::RULE_TYPE_ALTERABLE   => ['name', 'description', 'os', 'category'],
+        self::RULE_TYPE_ALTERABLE   => ['name', 'description', 'os', 'category', 'quickStart', 'deprecated'],
 
-        self::RULE_TYPE_FILTERABLE  => ['name', 'id', 'os', 'category', 'scope'],
+        self::RULE_TYPE_FILTERABLE  => ['name', 'id', 'os', 'category', 'scope', 'quickStart', 'deprecated'],
         self::RULE_TYPE_SORTING     => [self::RULE_TYPE_PROP_DEFAULT => ['id' => true]],
     ];
 
@@ -51,25 +51,31 @@ class RoleAdapter extends ApiEntityAdapter
         if ($action == self::ACT_CONVERT_TO_OBJECT) {
             $to->scope = $from->getScope();
         } else if ($action == self::ACT_CONVERT_TO_ENTITY) {
-            if (empty($from->scope)) {
-                //Default is environment scope
-                $to->accountId = $this->controller->getEnvironment()->accountId;
-                $to->envId = $this->controller->getEnvironment()->id;
-                $to->origin = Entity\Role::ORIGIN_CUSTOM;
-            } else if ($from->scope === ScopeInterface::SCOPE_SCALR) {
-                $to->accountId = null;
-                $to->envId = null;
-                $to->origin = Entity\Role::ORIGIN_SHARED;
-            } else if ($from->scope === ScopeInterface::SCOPE_ACCOUNT) {
-                $to->accountId = $this->controller->getEnvironment()->accountId;
-                $to->envId = null;
-                $to->origin = Entity\Role::ORIGIN_CUSTOM;
-            } else if ($from->scope === ScopeInterface::SCOPE_ENVIRONMENT) {
-                $to->accountId = $this->controller->getEnvironment()->accountId;
-                $to->envId = $this->controller->getEnvironment()->id;
-                $to->origin = Entity\Role::ORIGIN_CUSTOM;
-            } else {
-                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Unexpected scope value");
+            if (empty ($from->scope)) {
+                $from->scope = $this->controller->getScope();
+            }
+
+            switch ($from->scope) {
+                case ScopeInterface::SCOPE_SCALR:
+                    $to->accountId = null;
+                    $to->envId = null;
+                    $to->origin = Entity\Role::ORIGIN_SHARED;
+                    break;
+
+                case ScopeInterface::SCOPE_ACCOUNT:
+                    $to->accountId = $this->controller->getUser()->accountId;
+                    $to->envId = null;
+                    $to->origin = Entity\Role::ORIGIN_CUSTOM;
+                    break;
+
+                case ScopeInterface::SCOPE_ENVIRONMENT:
+                    $to->accountId = $this->controller->getUser()->accountId;
+                    $to->envId = $this->controller->getEnvironment()->id;
+                    $to->origin = Entity\Role::ORIGIN_CUSTOM;
+                    break;
+
+                default:
+                    throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Unexpected scope value");
             }
         } else if ($action == self::ACT_GET_FILTER_CRITERIA) {
             if (empty($from->scope)) {
@@ -79,8 +85,8 @@ class RoleAdapter extends ApiEntityAdapter
             if ($from->scope === ScopeInterface::SCOPE_SCALR) {
                 return [['accountId' => null], ['envId' => null]];
             } else if ($from->scope === ScopeInterface::SCOPE_ACCOUNT) {
-                return [['accountId' => $this->controller->getEnvironment()->accountId], ['envId' => null]];
-            } else if ($from->scope === ScopeInterface::SCOPE_ENVIRONMENT) {
+                return [['accountId' => $this->controller->getUser()->accountId], ['envId' => null]];
+            } else if ($from->scope === ScopeInterface::SCOPE_ENVIRONMENT && $this->controller->getEnvironment() !== null) {
                 return [['envId' => $this->controller->getEnvironment()->id]];
             } else {
                 throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Unexpected scope value");
@@ -94,21 +100,18 @@ class RoleAdapter extends ApiEntityAdapter
             $to->os = !empty($from->osId) ? ['id' => $from->osId] : null;
         } else if ($action == self::ACT_CONVERT_TO_ENTITY) {
             $osId = ApiController::getBareId($from, 'os');
-
-            if (!empty($osId)) {
-                if (!is_string($osId) || !preg_match('/^' . Entity\Os::ID_REGEXP . '$/', $osId)) {
-                    throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid identifier of the OS");
-                }
-                $to->osId = $osId;
-            } else {
-                $to->osId = null;
-            }
-        } else if ($action == self::ACT_GET_FILTER_CRITERIA) {
-            if (empty($from->os) || !preg_match('/^' . Entity\Os::ID_REGEXP . '$/', $from->os)) {
+            if (empty($osId)) {
+                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property 'os.id'");
+            } else if (!(is_string($osId) && preg_match('/^' . Entity\Os::ID_REGEXP . '$/', $osId))) {
                 throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid identifier of the OS");
             }
-
-            return [['osId' => $from->os]];
+            $to->osId = $osId;
+        } else if ($action == self::ACT_GET_FILTER_CRITERIA) {
+            $osId = ApiController::getBareId($from, 'os');
+            if (!(is_string($osId) && preg_match('/^' . Entity\Os::ID_REGEXP . '$/', $osId))) {
+                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid identifier of the OS");
+            }
+            return [['osId' => $osId]];
         }
     }
 
@@ -132,7 +135,7 @@ class RoleAdapter extends ApiEntityAdapter
                 throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid identifier of the category");
             }
 
-            return [['catId' => $from->category]];
+            return [['catId' => ApiController::getBareId($from, 'category')]];
         }
     }
 
@@ -167,7 +170,7 @@ class RoleAdapter extends ApiEntityAdapter
             $entity->addedByUserId = $this->controller->getUser()->id;
         }
 
-        if (!$entity::validateName($entity->name)) {
+        if (!$entity::isValidName($entity->name)) {
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid name of the Role");
         }
 
@@ -180,9 +183,9 @@ class RoleAdapter extends ApiEntityAdapter
         }
 
         //We only allow to either create or modify Environment Scope Roles
-        if ($entity->getScope() !== ScopeInterface::SCOPE_ENVIRONMENT) {
+        if ($entity->getScope() !== $this->controller->getScope()) {
             throw new ApiErrorException(403, ErrorMessage::ERR_SCOPE_VIOLATION, sprintf(
-                "Only %s scope is allowed.", ScopeInterface::SCOPE_ENVIRONMENT
+                "Invalid scope"
             ));
         }
 
@@ -207,15 +210,13 @@ class RoleAdapter extends ApiEntityAdapter
             );
         }
 
-        //Validates OS
-        if (!empty($entity->osId)) {
-            //Tries to find out the specified OS
-            $os = Entity\Os::findPk($entity->osId);
-            if (!($os instanceof Entity\Os)) {
-                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Specified OS does not exist");
-            }
-        } else {
-            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "OS must be provided with the request.");
+        if (empty($entity->osId)) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property 'os.id'");
+        }
+
+        //Tries to find out the specified OS
+        if (empty(Entity\Os::findPk($entity->osId))) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "OS with id '{$entity->osId}' not found.");
         }
     }
 
@@ -227,7 +228,7 @@ class RoleAdapter extends ApiEntityAdapter
     {
         parent::validateObject($object, $method);
 
-        if (isset($object->scope) && $object->scope !== ScopeInterface::SCOPE_ENVIRONMENT) {
+        if (isset($object->scope) && $object->scope !== $this->controller->getScope()) {
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid scope");
         }
     }

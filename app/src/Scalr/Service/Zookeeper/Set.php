@@ -30,7 +30,7 @@ class Scalr_Service_Zookeeper_Set implements Scalr_Util_Set {
         foreach ($config as $k => $v) {
             $this->{$k} = $v;
         }
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
         $this->lock = new Scalr_Service_Zookeeper_Lock(array(
             "zookeeper" => $this->zookeeper,
             "path" => "{$this->path}/lock",

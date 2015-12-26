@@ -3,6 +3,3 @@ OPENSTACK_VOLUMES:
 
 OPENSTACK_SNAPSHOTS:
 - [/tools/openstack/snapshots, ~, all]
-
-OPENSTACK_PUBLIC_IPS:
-- [/tools/openstack/ips, ~, all]

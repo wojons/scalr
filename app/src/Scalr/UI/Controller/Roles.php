@@ -6,6 +6,14 @@ use Scalr\UI\Request\JsonData;
 use Scalr\Model\Entity\Role;
 use Scalr\Model\Entity\RoleImage;
 use Scalr\Model\Entity\Os;
+use Scalr\Model\Entity\Image;
+use Scalr\Model\Entity\Farm;
+use Scalr\Model\Entity\FarmRole;
+use Scalr\Model\Entity\RoleProperty;
+use Scalr\DataType\ScopeInterface;
+use Scalr\Model\Entity\CloudCredentialsProperty;
+use Scalr\Model\Entity\Account\Environment;
+use Scalr\Model\Entity\RoleEnvironment;
 
 class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 {
@@ -25,7 +33,7 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
     */
     public function xGetListAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_ROLES);
+        $this->request->restrictFarmAccess(null, Acl::PERM_FARMS_MANAGE);
 
         $total = 0;
         $roles = array();
@@ -36,26 +44,27 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 
         $filterPlatform = $this->getParam('platform');
 
-        $ec2Locations = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2)->getLocations($this->environment);
-        $e_platforms = $this->getEnvironment()->getEnabledPlatforms();
+        $ec2Locations = array_keys(PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2)->getLocations($this->environment));
+        $enabledPlatforms = $this->getEnvironment()->getEnabledPlatforms();
         $platforms = array();
         $l_platforms = SERVER_PLATFORMS::GetList();
-        foreach ($e_platforms as $platform)
+        foreach ($enabledPlatforms as $platform)
             $platforms[$platform] = $l_platforms[$platform];
 
         if ($filterPlatform)
             if (!$platforms[$filterPlatform])
                 throw new Exception("Selected cloud not enabled in current environment");
 
-        $globalVars = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_FARMROLE);
+        $globalVars = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), ScopeInterface::SCOPE_FARMROLE);
 
         if ($filterCatId === 'shared') {
-            $args = [];
+            $args = [$this->user->getAccountId(), $this->getEnvironmentId(true), $this->getEnvironmentId(true), Os::STATUS_ACTIVE];
 
             $roles_sql = "SELECT DISTINCT(roles.id) FROM roles
                 INNER JOIN role_images ON role_images.role_id = roles.id
                 INNER JOIN os ON os.id = roles.os_id
-                WHERE is_deprecated='0' AND roles.generation = '2' AND roles.env_id IS NULL";
+                LEFT JOIN role_environments re ON re.role_id = roles.id
+                WHERE roles.is_quick_start = '1' AND roles.is_deprecated = '0' AND (roles.client_id IS NULL OR roles.client_id = ? AND roles.env_id IS NULL AND (re.env_id IS NULL OR re.env_id = ?) OR roles.env_id = ?) AND os.status = ?";
 
             if (!$filterPlatform)
                 $roles_sql .= " AND role_images.platform IN ('".implode("','", array_keys($platforms))."')";
@@ -67,6 +76,15 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
             if ($filterOsFamily) {
                 $roles_sql .= ' AND family = ?';
                 $args[] = $filterOsFamily;
+            }
+
+            if (in_array(SERVER_PLATFORMS::EC2, $enabledPlatforms)) {
+                if (empty($ec2Locations)) {
+                    throw new Exception('EC2 locations list is empty');
+                }
+                $roles_sql .= " AND (role_images.platform != ? OR role_images.cloud_location IN (" . rtrim(str_repeat("?,", count($ec2Locations)), ',') . "))";
+                $args[] = SERVER_PLATFORMS::EC2;
+                $args = array_merge($args, $ec2Locations);
             }
 
             $dbRoles = $this->db->Execute($roles_sql, $args);
@@ -89,6 +107,7 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
                 'vpcrouter' => 130
             );
             foreach ($dbRoles as $role) {
+                /* @var DBRole $dbRole */
                 $dbRole = DBRole::loadById($role['id']);
 
                 // Get type
@@ -119,18 +138,32 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
                 elseif ($dbRole->hasBehavior(ROLE_BEHAVIORS::MYSQL))
                     continue;
 
-                $images = $dbRole->__getNewRoleObject()->fetchImagesArray();
+                $images = [];
+                foreach ($dbRole->__getNewRoleObject()->fetchImagesArray() as $platform => $image) {
+                    if ($this->getEnvironment()->isPlatformEnabled($platform)) {
+                        if ($platform == SERVER_PLATFORMS::EC2) {
+                            foreach ($image as $cloudlocation => $img) {
+                                if (in_array($cloudlocation, $ec2Locations)) {
+                                    $images[$platform][$cloudlocation] = $img;
+                                }
+                            }
+                        } else {
+                            $images[$platform] = $image;
+                        }
+                    }
+                }
                 if (!empty($images)) {
                     $item = array(
                         'role_id'       => $dbRole->id,
-                        'name'		    => $dbRole->name,
+                        'name'          => $dbRole->name,
                         'behaviors'     => $dbRole->getBehaviors(),
                         'origin'        => $dbRole->origin,
-                        'cat_name'	    => $dbRole->getCategoryName(),
-                        'cat_id'	    => $dbRole->catId,
+                        'cat_name'      => $dbRole->getCategoryName(),
+                        'cat_id'        => $dbRole->catId,
                         'osId'          => $dbRole->getOs()->id,
                         'images'        => $images,
                         'description'   => $dbRole->description,
+                        'scope'         => $dbRole->clientId ? ($dbRole->envId ? ScopeInterface::SCOPE_ENVIRONMENT : ScopeInterface::SCOPE_ACCOUNT) : ScopeInterface::SCOPE_SCALR,
                         'variables'     => $globalVars->getValues($dbRole->id),
                     );
 
@@ -143,13 +176,14 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
             }
             $software = array_values($software);
         } else {
-            $args[] = $this->getEnvironmentId();
+            $args = [$this->user->getAccountId(), $this->getEnvironmentId(), $this->getEnvironmentId(), Os::STATUS_ACTIVE];
             $roles_sql = "
                 SELECT DISTINCT(r.id), r.env_id
                 FROM roles r
                 INNER JOIN role_images as i ON i.role_id = r.id
                 INNER JOIN os as o ON o.id = r.os_id
-                WHERE r.generation = '2' AND (r.env_id IS NULL OR r.env_id = ?)
+                LEFT JOIN role_environments re ON re.role_id = r.id
+                WHERE r.generation = '2' AND r.is_deprecated = '0' AND (r.client_id IS NULL OR r.client_id = ? AND r.env_id IS NULL AND (re.env_id IS NULL OR re.env_id = ?) OR r.env_id = ?) AND o.status = ?
                 AND i.platform
             ";
             if (!$filterPlatform)
@@ -176,6 +210,15 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
                 $args[] = $filterOsFamily;
             }
 
+            if (in_array(SERVER_PLATFORMS::EC2, $enabledPlatforms)) {
+                if (empty($ec2Locations)) {
+                    throw new Exception('EC2 locations list is empty');
+                }
+                $roles_sql .= " AND (i.platform != ? OR i.cloud_location IN (" . rtrim(str_repeat("?,", count($ec2Locations)), ',') . "))";
+                $args[] = SERVER_PLATFORMS::EC2;
+                $args = array_merge($args, $ec2Locations);
+            }
+
             $roles_sql .= ' GROUP BY r.id';
 
             if ($filterCatId === 'recent') {
@@ -187,16 +230,32 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
             foreach ($dbRoles as $role) {
                 $dbRole = DBRole::loadById($role['id']);
 
-                $images = $dbRole->__getNewRoleObject()->fetchImagesArray();
+                $images = [];
+                foreach ($dbRole->__getNewRoleObject()->fetchImagesArray() as $platform => $image) {
+                    if ($this->getEnvironment()->isPlatformEnabled($platform)) {
+                        if ($platform == SERVER_PLATFORMS::EC2) {
+                            foreach ($image as $cloudlocation => $img) {
+                                if (in_array($cloudlocation, $ec2Locations)) {
+                                    $images[$platform][$cloudlocation] = $img;
+                                }
+                            }
+                        } else {
+                            $images[$platform] = $image;
+                        }
+                    }
+                }
                 if (!empty($images)) {
                     $roles[] = array(
                         'role_id'       => $dbRole->id,
-                        'name'		    => $dbRole->name,
+                        'name'          => $dbRole->name,
                         'behaviors'     => $dbRole->getBehaviors(),
                         'origin'        => $dbRole->origin,
-                        'cat_name'	    => $dbRole->getCategoryName(),
-                        'cat_id'	    => $dbRole->catId,
+                        'cat_name'      => $dbRole->getCategoryName(),
+                        'cat_id'        => $dbRole->catId,
                         'osId'          => $dbRole->getOs()->id,
+                        'isQuickStart'  => $dbRole->isQuickStart,
+                        'isDeprecated'  => $dbRole->isDeprecated,
+                        'scope'         => $dbRole->clientId ? ($dbRole->envId ? ScopeInterface::SCOPE_ENVIRONMENT : ScopeInterface::SCOPE_ACCOUNT) : ScopeInterface::SCOPE_SCALR,
                         'images'        => $images,
                         'variables'     => $globalVars->getValues($dbRole->id, 0, 0),
                         'shared'        => $role['env_id'] == 0,
@@ -209,7 +268,7 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 
         $moduleParams = array(
             'roles' => $roles,
-            'software' => $software,
+            'software' => isset($software)?$software:[],
             'total' => $total
         );
         $this->response->data($moduleParams);
@@ -222,21 +281,18 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
      */
     public function xCloneAction($roleId, $newRoleName)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CLONE);
+        $this->restrictAccess('ROLES', 'CLONE');
 
         $dbRole = DBRole::loadById($roleId);
         if (!empty($dbRole->envId)) {
             $this->user->getPermissions()->validate($dbRole);
         }
 
-        if (! preg_match("/^[A-Za-z0-9]+[A-Za-z0-9-]*[A-Za-z0-9]+$/si", $newRoleName))
+        if (! Role::isValidName($newRoleName)) {
             throw new Exception(_("Role name is incorrect"));
+        }
 
-        $chkRoleId = $this->db->GetOne("SELECT id FROM roles WHERE name=? AND (env_id IS NULL OR env_id = ?) LIMIT 1",
-            array($newRoleName, $this->getEnvironmentId(true))
-        );
-
-        if ($chkRoleId) {
+        if (Role::isNameUsed($newRoleName, $this->user->getAccountId(), $this->getEnvironmentId(true))) {
             throw new Exception('Selected role name is already used. Please select another one.');
         }
 
@@ -253,7 +309,8 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
      */
     public function xRemoveAction(JsonData $roles)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_MANAGE);
+        $this->restrictAccess('ROLES', 'MANAGE');
+
         $errors = [];
         $processed = [];
 
@@ -262,8 +319,7 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
                 /* @var $role Role */
                 $role = Role::findPk($id);
                 if ($role) {
-                    if ($this->user->getType() != Scalr_Account_User::TYPE_SCALR_ADMIN)
-                        $this->user->getPermissions()->validate($role);
+                    $this->checkPermissions($role, true);
 
                     if ($role->isUsed()) {
                         throw new Exception(sprintf(_("Role '%s' is used by at least one farm, and cannot be removed."), $role->name));
@@ -285,13 +341,14 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
     }
 
     /**
-     * @param   string      $devel
+     * @param   bool        $devel
      * @param   string      $serverId
      * @throws  Exception
      */
     public function builderAction($devel = false, $serverId = null)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE);
+        $this->request->restrictAccess(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_BUILD);
+
         $enabledPlatforms = self::loadController('Platforms')->getEnabledPlatforms(false);
         if (empty($enabledPlatforms)) {
             $this->response->failure('Please <a href="#/account/environments?envId='.$this->getEnvironmentId().'">configure cloud credentials</a> before using Role Builder.', true);
@@ -300,7 +357,7 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 
         $platforms = array();
         foreach ($enabledPlatforms as $k => $v) {
-            if (in_array($k, array(SERVER_PLATFORMS::ECS, SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::EC2, SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::RACKSPACENG_US, SERVER_PLATFORMS::RACKSPACENG_UK))) {
+            if (in_array($k, array(SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::EC2, SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::RACKSPACENG_US, SERVER_PLATFORMS::RACKSPACENG_UK))) {
                 $platforms[$k] = array('name' => $v);
             }
         }
@@ -314,9 +371,12 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
         foreach ($platforms as $k => $v) {
             if ($k == SERVER_PLATFORMS::EC2) {
                 $locations = PlatformFactory::NewPlatform($k)->getLocations($this->environment);
+                $ccProps = $this->getEnvironment()->cloudCredentials(SERVER_PLATFORMS::EC2)->properties;
+
+                $enabledInstanceStore = $ccProps[CloudCredentialsProperty::AWS_CERTIFICATE] && $ccProps[CloudCredentialsProperty::AWS_PRIVATE_KEY];
                 $platforms[$k]['images'] = array();
                 foreach ($images[$k] as $image) {
-                    if (isset($locations[$image['cloud_location']])) {
+                    if (isset($locations[$image['cloud_location']]) && ($enabledInstanceStore || $image['root_device_type'] != 'instance-store')) {
                         $platforms[$k]['images'][] = $image;
                     }
                 }
@@ -354,7 +414,7 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
             'platforms'     => $platforms,
             'environment'   => '#/account/environments/view?envId=' . $this->getEnvironmentId(),
             'server'        => $server,
-        ), array('ui/services/chef/chefsettings.js'), array('ui/roles/builder.css'));
+        ), array('ui/services/chef/chefsettings.js', 'ui/bundletasks/view.js'), array('ui/roles/builder.css'));
     }
 
     /**
@@ -373,22 +433,25 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
      */
     public function xBuildAction($platform, $architecture, JsonData $behaviors, $name = '', $createImage = false, $imageId, $cloudLocation, $osId, $hvm = 0, JsonData $advanced, JsonData $chef)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_CREATE);
+        $this->request->restrictAccess(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_BUILD);
 
-        if (! \Scalr\Model\Entity\Role::validateName($name))
+        if (!Role::isValidName($name)) {
             throw new Exception(_("Name is incorrect"));
+        }
 
-        if (! $createImage && $this->db->GetOne("SELECT id FROM roles WHERE name=? AND (env_id IS NULL OR env_id = ?) LIMIT 1",
-                array($name, $this->getEnvironmentId()))
-        )
+        if (!$createImage) {
+            $this->request->restrictAccess(Acl::RESOURCE_ROLES_ENVIRONMENT, Acl::PERM_ROLES_ENVIRONMENT_MANAGE);
+        }
+
+        if (!$createImage && Role::isNameUsed($name, $this->user->getAccountId(), $this->getEnvironmentId())) {
             throw new Exception('Selected role name is already used. Please select another one.');
+        }
 
         $behaviours = implode(",", array_values($behaviors->getArrayCopy()));
 
         $os = Os::findPk($osId);
         if (!$os)
             throw new Exception('Operating system not found.');
-
 
         // Create server
         $creInfo = new ServerCreateInfo($platform, null, 0, 0);
@@ -425,29 +488,6 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
         $platformObj = PlatformFactory::NewPlatform($platform);
 
         switch($platform) {
-            case SERVER_PLATFORMS::ECS:
-                    $launchOptions->serverType = 10;
-                    if ($cloudLocation == 'all') {
-                        $locations = array_keys($platformObj->getLocations($this->environment));
-                        $launchOptions->cloudLocation = $locations[0];
-                    }
-
-                    //Network here:
-                    $osClient = $platformObj->getOsClient($this->environment, $launchOptions->cloudLocation);
-                    $networks = $osClient->network->listNetworks();
-                    $tenantId = $osClient->getConfig()->getAuthToken()->getTenantId();
-                    foreach ($networks as $network) {
-                        if ($network->status == 'ACTIVE') {
-                            if ($network->{"router:external"} != true) {
-                                if ($tenantId == $network->tenant_id) {
-                                    $launchOptions->networks = array($network->id);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                break;
             case SERVER_PLATFORMS::IDCF:
                     $launchOptions->serverType = 24;
                 break;
@@ -505,7 +545,6 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
                 }
 
                 $launchOptions->cloudLocation = $locations[0];
-
                 $bundleType = SERVER_SNAPSHOT_CREATION_TYPE::GCE_STORAGE;
                 break;
         }
@@ -546,6 +585,7 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
 
         try {
             $platformObj->LaunchServer($dbServer, $launchOptions);
+            $dbServer->Save();
             $bundleTask->Log(_("Temporary server launched. Waiting for running state..."));
         }
         catch(Exception $e) {
@@ -568,255 +608,297 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
     */
     public function managerAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_ROLES);
+        $this->restrictAccess('ROLES');
 
         $this->response->page('ui/roles/manager.js', array(
-            'categories' => $this->db->GetAll("SELECT * FROM `role_categories` WHERE env_id IS NULL OR env_id = ?", array($this->user->isScalrAdmin() ? null : $this->getEnvironmentId()))
+            'categories' => $this->db->GetAll("SELECT * FROM `role_categories` WHERE env_id IS NULL OR env_id = ?", array($this->user->isScalrAdmin() ? null : $this->getEnvironmentId(true)))
         ));
-    }
-
-    //todo: restrictAccess check?
-    public function xGetRoleParamsAction()
-    {
-        $this->request->defineParams(array(
-            'roleId' => array('type' => 'int'),
-            'farmId' => array('type' => 'int'),
-            'cloudLocation'
-        ));
-
-        try {
-            $dbRole = DBRole::loadById($this->getParam('roleId'));
-            if ($dbRole->envId != 0)
-                $this->user->getPermissions()->validate($dbRole);
-        }
-        catch (Exception $e) {
-            $this->response->data(array('params' => array()));
-            return;
-        }
-
-        $params = $this->db->GetAll("SELECT * FROM role_parameters WHERE role_id=? AND hash NOT IN('apache_http_vhost_template','apache_https_vhost_template')",
-            array($dbRole->id)
-        );
-
-        foreach ($params as $key => $param) {
-            $value = false;
-
-            try {
-                if($this->getParam('farmId')) {
-                    $dbFarmRole = DBFarmRole::Load($this->getParam('farmId'), $this->getParam('roleId'), $this->getParam('cloudLocation'));
-
-                    $value = $this->db->GetOne("SELECT value FROM farm_role_options WHERE farm_roleid=? AND hash=? LIMIT 1",
-                        array($dbFarmRole->ID, $param['hash'])
-                    );
-                }
-            }
-            catch(Exception $e) {}
-
-            // Get field value
-            if ($value === false || $value === null)
-                $value = $param['defval'];
-
-            $params[$key]['value'] = str_replace("\r", "", $value);
-        }
-
-        $this->response->data(array('params' => $params));
     }
 
     /**
-    * Get list of roles for listView
-    */
-    public function xListRolesAction()
+     * Get list of roles for listView
+     *
+     * @param   int     $roleId         optional
+     * @param   string  $platform       optional
+     * @param   string  $cloudLocation  optional
+     * @param   string  $imageId        optional
+     * @param   string  $scope          optional
+     * @param   int     $chefServerId   optional
+     * @param   int     $catId          optional
+     * @param   string  $osFamily       optional
+     * @param   bool    $isQuickStart   optional
+     * @param   bool    $isDeprecated   optional
+     * @param   string  $status         optional
+     * @param   JsonData $addImage      optional
+     */
+    public function xListRolesAction($roleId = null, $platform = null, $cloudLocation = null, $imageId = null, $scope = null,
+                                     $chefServerId = null, $catId = null, $osFamily = null, $isQuickStart = false, $isDeprecated = false,
+                                     $status = null, JsonData $addImage = null)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_ROLES);
+        $this->restrictAccess('ROLES');
 
-        $this->request->defineParams(array(
-            'client_id' => array('type' => 'int'),
-            'roleId' => array('type' => 'int'),
-            'platform', 'cloudLocation', 'scope', 'query', 'catId', 'osFamily',
-            'sort' => array('type' => 'json'),
-            'addImage' => array('type' => 'json')
-        ));
+        $args = [];
+        $inUseJoin = '';
+        $envId = $this->getEnvironmentId(true);
+        $accountId = $this->user->getAccountId() ?: NULL;
 
-        if ($this->user->isScalrAdmin()) {
-            $sql = 'SELECT DISTINCT(roles.id), roles.name as name, os.name as os_name
-                    FROM roles
-                    LEFT JOIN role_images ON role_images.role_id = roles.id
-                    LEFT JOIN os ON os.id = roles.os_id
-                    WHERE roles.env_id IS NULL
-                    AND :FILTER:';
-            $args = array();
-        } else {
-            $sql = 'SELECT DISTINCT(roles.id), roles.name as name, os.name as os_name
-                    FROM roles
-                    LEFT JOIN role_images ON role_images.role_id = roles.id
-                    LEFT JOIN os ON os.id = roles.os_id
-                    WHERE (roles.env_id = ? OR roles.env_id IS NULL AND role_images.role_id IS NOT NULL)
-                    AND roles.generation=?
-                    AND :FILTER:';
-            $args = array($this->getEnvironmentId(), 2);
+        if ($accountId) {
+            $inUseJoin = " JOIN farms ON farm_roles.farmid = farms.id AND farms.clientid = ? ";
+            $args[] = $accountId;
+            if ($envId) {
+                $inUseJoin .= " AND farms.env_id = ?";
+                $args[] = $envId;
+            }
         }
 
-        if ($this->getParam('roleId')) {
-            $sql .= ' AND roles.id = ?';
-            $args[] = $this->getParam('roleId');
+        $role = new Role();
+        $sql = "
+            SELECT DISTINCT ". $role->fields('r') .", os.name as osName, os.family as osFamily,
+            (SELECT EXISTS(SELECT 1 FROM farm_roles " . $inUseJoin . "
+                WHERE farm_roles.role_id = r.id)) AS inUse,
+            (SELECT GROUP_CONCAT(name SEPARATOR ',') FROM `client_environments` ce LEFT JOIN role_environments re ON ce.id = re.env_id
+                WHERE re.role_id = r.id) AS environments
+            FROM " . $role->table('r') . "
+            LEFT JOIN role_images ON r.id = role_images.role_id
+            LEFT JOIN os ON r.os_id = os.id
+            LEFT JOIN role_environments re ON re.role_id = r.id
+            WHERE
+        ";
+
+        if ($this->request->getScope() == ScopeInterface::SCOPE_SCALR) {
+            $sql .= " r.client_id IS NULL";
+        } else if ($this->request->getScope() == ScopeInterface::SCOPE_ACCOUNT) {
+            $sql .= " (r.client_id IS NULL AND role_images.role_id IS NOT NULL OR r.client_id = ? AND r.env_id IS NULL) AND r.generation = ?";
+            $args = array_merge($args, [$accountId, 2]);
         } else {
-            if ($this->getParam('platform')) {
-                $sql .= ' AND role_images.platform = ?';
-                $args[] = $this->getParam('platform');
+            $sql .= " (r.client_id IS NULL AND role_images.role_id IS NOT NULL OR r.client_id = ? AND r.env_id IS NULL AND (re.env_id IS NULL OR re.env_id = ?) OR r.env_id = ?) AND r.generation = ?";
+            $args = array_merge($args, [$accountId, $envId,
+                $envId, 2]);
+        }
+
+        if ($roleId) {
+            $sql .= " AND r.id = ?";
+            $args[] = $roleId;
+        } else {
+            $sql .= " AND :FILTER: ";
+
+            if ($scope == ScopeInterface::SCOPE_SCALR) {
+                $sql .= " AND r.client_id IS NULL";
+            } else if ($scope == ScopeInterface::SCOPE_ACCOUNT) {
+                $sql .= " AND r.client_id = ? AND r.env_id IS NULL";
+                $args[] = $accountId;
+            } else if ($scope == ScopeInterface::SCOPE_ENVIRONMENT) {
+                $sql .= " AND r.env_id = ?";
+                $args[] = $envId;
             }
 
-            if ($this->getParam('cloudLocation')) {
-                $sql .= ' AND role_images.cloud_location = ?';
-                $args[] = $this->getParam('cloudLocation');
+            if ($platform) {
+                $sql .= " AND role_images.platform = ?";
+                $args[] = $platform;
             }
 
-            if ($this->getParam('imageId')) {
-                $sql .= ' AND role_images.image_id = ?';
-                $args[] = $this->getParam('imageId');
+            if ($cloudLocation) {
+                $sql .= " AND role_images.cloud_location = ?";
+                $args[] = $cloudLocation;
             }
 
-            if ($this->getParam('catId')) {
-                $sql .= ' AND roles.cat_id = ?';
-                $args[] = $this->getParam('catId');
+            if ($imageId) {
+                $sql .= " AND role_images.image_id = ?";
+                $args[] = $imageId;
             }
 
-            if ($this->getParam('osFamily')) {
-                $sql .= ' AND os.family = ?';
-                $args[] = $this->getParam('osFamily');
+            if ($catId) {
+                $sql .= " AND r.cat_id = ?";
+                $args[] = $catId;
             }
 
-            if ($this->getParam('scope')) {
-                $sql .= ' AND origin = ?';
-                $args[] = $this->getParam('scope') == 'scalr' ? 'Shared' : 'Custom';
+            if ($osFamily) {
+                $sql .= " AND os.family = ?";
+                $args[] = $osFamily;
             }
 
-            if ($this->getParam('status')) {
-                $sql .= ' AND (';
-                $used = $this->getParam('status') == 'Used' ? true : false;
+            if ($scope) {
+                $sql .= " AND r.origin = ?";
+                $args[] = $scope == 'scalr' ? 'Shared' : 'Custom';
+            }
+
+            if ($status) {
+                $sql .= " AND (";
+                $used = $status == 'inUse' ? true : false;
+
                 if ($this->user->getAccountId() != 0) {
-                    $sql .= 'roles.id ' . ($used ? '' : 'NOT') . ' IN(SELECT role_id FROM farm_roles WHERE farmid IN(SELECT id from farms WHERE env_id = ?))';
-                    $sql .= ' OR roles.id ' . ($used ? '' : 'NOT') . ' IN(SELECT new_role_id FROM farm_roles WHERE farmid IN(SELECT id from farms WHERE env_id = ?))';
-                    $args[] = $this->getEnvironmentId();
-                    $args[] = $this->getEnvironmentId();
+                    $sql .= "r.id " . ($used ? '' : "NOT") . " IN (SELECT role_id FROM farm_roles WHERE farmid IN (SELECT id from farms WHERE env_id = ?))";
+                    $args[] = $envId;
+                    $args[] = $envId;
                 } else {
-                    $sql .= 'roles.id ' . $used ? '' : 'NOT' . ' IN(SELECT role_id FROM farm_roles)';
-                    $sql .= ' OR ' . $used ? '' : 'NOT' . ' roles.id IN(SELECT new_role_id FROM farm_roles)';
+                    $sql .= "r.id " . $used ? '' : "NOT" . " IN (SELECT role_id FROM farm_roles)";
                 }
+
                 $sql .= ')';
             }
 
-            if ($this->getParam('chefServerId')) {
-                $sql .= ' AND roles.id  IN(SELECT role_id FROM role_properties WHERE name = ? AND value = ?)';
-                $sql .= ' AND roles.id  IN(SELECT role_id FROM role_properties WHERE name = ? AND value = ?)';
+            if ($chefServerId) {
+                $sql .= " AND r.id  IN (SELECT role_id FROM role_properties WHERE name = ? AND value = ?)";
+                $sql .= " AND r.id  IN (SELECT role_id FROM role_properties WHERE name = ? AND value = ?)";
                 $args[] = \Scalr_Role_Behavior_Chef::ROLE_CHEF_SERVER_ID;
-                $args[] = (int)$this->getParam('chefServerId');
+                $args[] = $chefServerId;
                 $args[] = \Scalr_Role_Behavior_Chef::ROLE_CHEF_BOOTSTRAP;
                 $args[] = 1;
             }
 
-            $addImage = $this->getParam('addImage');
-            if ($addImage) {
-                $sql .= ' AND os_id = ?';
+            if ($addImage && isset($addImage['osId'])) {
+                $sql .= " AND r.os_id = ?";
                 $args[] = $addImage['osId'];
+            }
+
+            if ($isQuickStart) {
+                $sql .= " AND r.is_quick_start = 1";
+            }
+
+            if ($isDeprecated) {
+                $sql .= " AND r.is_deprecated = 1";
             }
         }
 
-        $response = $this->buildResponseFromSql2($sql, array('name', 'os_id'), array('roles.name'), $args);
+        $response = $this->buildResponseFromSql2($sql, ['id', 'name', 'os_id'], ['r.name'], $args);
+        $data = [];
 
-        foreach ($response['data'] as &$row) {
-            $row = $this->getInfo($row['id'], false, $addImage);
+        $allPlatforms = array_flip(array_keys(SERVER_PLATFORMS::GetList()));
+
+        foreach ($response['data'] as $r) {
+            $role = new Role();
+            $role->load($r);
+
+            $row = new stdClass;
+
+            $row->name = $role->name;
+            $row->behaviors = $role->getBehaviors();
+            $row->id = $role->id;
+            $row->accountId = $role->accountId;
+            $row->envId = $role->envId;
+            $row->status = $r['inUse'] ? 'In use' : 'Not used';
+            $row->scope = $role->getScope();
+            $row->os = $r['osName'];
+            $row->osId = $role->osId;
+            $row->osFamily = $r['osFamily'];
+            $row->dtAdded = $role->added ? Scalr_Util_DateTime::convertTz($role->added) : null;
+            $row->dtLastUsed = $role->lastUsed ? Scalr_Util_DateTime::convertTz($role->lastUsed) : null;
+            $row->isQuickStart = $role->isQuickStart ? "1" : "0";
+            $row->isDeprecated = $role->isDeprecated ? "1" : "0";
+            $row->client_name = $role->accountId == 0 ? 'Scalr' : 'Private';
+            $row->environments = $r['environments'] ? explode(',' , $r['environments']) : [];
+
+            $platforms = array_keys($role->fetchImagesArray());
+            usort($platforms, function($a, $b) use($allPlatforms) {
+                return $allPlatforms[$a] > $allPlatforms[$b] ? 1 : -1;
+            });
+            $row->platforms = $platforms;
+
+            if ($addImage->count()) {
+                try {
+                    $role->getImage($addImage['platform'], $addImage['cloudLocation']);
+                    $row->canAddImage = false;
+                } catch (Exception $e) {
+                    $row->canAddImage = true;
+                }
+            }
+
+            $data[] = $row;
         }
 
-        $this->response->data($response);
+        $this->response->data([
+            'total' => $response['total'],
+            'data'  => $data
+        ]);
     }
 
-    public function xGetInfoAction()
+    /**
+     * @param   int     $roleId
+     * @throws  Scalr_Exception_InsufficientPermissions
+     */
+    public function xGetInfoAction($roleId)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_ROLES);
+        $this->restrictAccess('ROLES');
 
-        $this->request->defineParams(array(
-            'roleId' => array('type' => 'int')
-        ));
-
-        $role = $this->getInfo($this->getParam('roleId'), true);
+        $role = $this->getInfo($roleId, true);
 
         $this->response->data(array(
             'role' => $role
         ));
     }
 
-    private function getInfo($roleId, $extended = false, $canAddImage = false)
+    /**
+     * Get information about role
+     *
+     * @param   int     $roleId      Identifier of role
+     * @param   bool    $extended    Get extended information about role
+     * @param   array   $canAddImage Array of platform, cloudLocation to check if role has image in that location
+     * @return  array
+     * @throws  Exception
+     * @throws  Scalr_Exception_Core
+     * @throws  Scalr_Exception_InsufficientPermissions
+     */
+    private function getInfo($roleId, $extended = false, $canAddImage = null)
     {
-        $dbRole = DBRole::loadById($roleId);
+        /* @var $role Role */
+        $role = Role::findPk($roleId);
 
-        if ($dbRole->envId != 0) {
-            $this->user->getPermissions()->validate($dbRole);
+        if (!$role) {
+            throw new Scalr_Exception_Core(sprintf(_("Role ID#%s not found in database"), $roleId));
         }
 
-        if ($this->user->getAccountId() != 0) {
-            $usedBy = $dbRole->getFarmRolesCount($this->getEnvironmentId());
-        } else {
-            $usedBy = $dbRole->getFarmRolesCount();
-        }
+        $this->checkPermissions($role);
+        $usedBy = $role->getFarmsCount($this->user->getAccountId(), $this->getEnvironmentId(true));
 
-        $status = 'Not used';
-        if ($usedBy > 0) {
-            $status = 'In use';
-        }
+        $platforms = array_keys($role->fetchImagesArray());
+        $allPlatforms = array_flip(array_keys(SERVER_PLATFORMS::GetList()));
+        usort($platforms, function($a, $b) use($allPlatforms) {
+            return $allPlatforms[$a] > $allPlatforms[$b] ? 1 : -1;
+        });
 
-        $role = array(
-            'name'			=> $dbRole->name,
-            'behaviors'		=> $dbRole->getBehaviors(),
-            'id'			=> (int) $dbRole->id,
-            'client_id'		=> $dbRole->clientId,
-            'env_id'		=> $dbRole->envId,
-            'status'		=> $status,
-            'origin'		=> $dbRole->origin,
-            'os'			=> $dbRole->getOs()->name,
-            'osId'          => $dbRole->osId,
-            'osFamily'      => $dbRole->getOs()->family,
-            'dtAdded'       => $dbRole->dateAdded ? Scalr_Util_DateTime::convertTz($dbRole->dateAdded) : NULL,
-            'dtLastUsed'    => $dbRole->dtLastUsed ? Scalr_Util_DateTime::convertTz($dbRole->dtLastUsed): NULL,
-            'platforms'		=> array_keys($dbRole->__getNewRoleObject()->fetchImagesArray()),
-            'client_name'   => $dbRole->clientId == 0 ? 'Scalr' : 'Private'
+        $result = array(
+            'name'          => $role->name,
+            'behaviors'     => $role->getBehaviors(),
+            'id'            => $role->id,
+            'accountId'     => $role->accountId,
+            'envId'         => $role->envId,
+            'status'        => $usedBy > 0 ? 'In use' : 'Not used',
+            'scope'         => $role->getScope(),
+            'os'            => $role->getOs()->name,
+            'osId'          => $role->osId,
+            'osFamily'      => $role->getOs()->family,
+            'dtAdded'       => $role->added ? Scalr_Util_DateTime::convertTz($role->added) : NULL,
+            'dtLastUsed'    => $role->lastUsed ? Scalr_Util_DateTime::convertTz($role->lastUsed): NULL,
+            'isQuickStart'  => $role->isQuickStart,
+            'isDeprecated'  => $role->isDeprecated,
+            'platforms'     => $platforms,
+            'environments'  => !empty($envs = $role->getAllowedEnvironments()) ?
+                $this->db->GetCol("SELECT name FROM client_environments WHERE id IN(" . join(',', $envs) . ")") :
+                []
         );
-
-        try {
-            $envId = $this->getEnvironmentId();
-            $role['used_servers'] = $this->db->GetOne("SELECT COUNT(*) FROM servers LEFT JOIN farm_roles ON servers.farm_roleid = farm_roles.id WHERE farm_roles.role_id=? AND env_id=?",
-                array($dbRole->id, $envId)
-            );
-        }
-        catch(Exception $e) {
-            if ($this->user->getAccountId() == 0) {
-                $role['used_servers'] = $this->db->GetOne("SELECT COUNT(*) FROM servers LEFT JOIN farm_roles ON servers.farm_roleid = farm_roles.id WHERE farm_roles.role_id=?",
-                    array($dbRole->id)
-                );
-
-                if ($this->db->GetOne("SELECT COUNT(*) FROM farm_roles WHERE role_id=?", array($dbRole->id)) > 0) {
-                    $role['status'] = 'In use';
-                }
-            }
-        }
 
         if ($canAddImage) {
             try {
-                $dbRole->__getNewRoleObject()->getImage($canAddImage['platform'], $canAddImage['cloudLocation']);
-                $role['canAddImage'] = false;
+                $role->getImage($canAddImage['platform'], $canAddImage['cloudLocation']);
+                $result['canAddImage'] = false;
             } catch (Exception $e) {
-                $role['canAddImage'] = true;
+                $result['canAddImage'] = true;
             }
         }
 
         if ($extended) {
-            $role['description'] = $dbRole->description;
-            $role['images'] = [];
-            foreach (RoleImage::find([['roleId' => $dbRole->id]]) as $image) {
+            $result['description'] = $role->description;
+            $result['images'] = [];
+            foreach (RoleImage::find([['roleId' => $role->id]]) as $image) {
                 /* @var $image RoleImage */
-                $ext = get_object_vars($image->getImage());
-                $ext['software'] = $image->getImage()->getSoftwareAsString();
+                $im = $image->getImage();
+                $ext = [];
+                if ($im) {
+                    $ext = get_object_vars($im);
+                    $ext['software'] = $im->getSoftwareAsString();
+                }
 
-                $role['images'][] = [
+                $result['images'][] = [
                     'imageId' => $image->imageId,
                     'platform' => $image->platform,
                     'cloudLocation' => $image->cloudLocation,
@@ -824,54 +906,81 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
                 ];
             }
 
-            if ($role['status'] == 'In use' && $this->user->getAccountId() != 0) {
-                $usedBy = $dbRole->getFarms($this->getEnvironmentId());
-                $farms = $this->db->GetAll('SELECT id, name FROM farms WHERE env_id = ? AND id IN(' . implode(',', $usedBy) . ')', [$this->getEnvironmentId()]);
-                $role['usedBy'] = [ 'farms' => $farms, 'cnt' => count($usedBy)];
+            if ($result['status'] == 'In use' && $this->getEnvironmentId(true)) {
+                $farms = [];
+                $f = [];
+                foreach (FarmRole::find([['roleId' => $role->id]]) as $farmRole) {
+                    /* @var $farmRole FarmRole */
+                    $f[] = $farmRole->farmId;
+                }
+                $f = array_unique($f);
+
+                if (count($f)) {
+                    foreach (Farm::find([['id' => ['$in' => $f]], ['envId' => $this->getEnvironmentId()]]) as $fm) {
+                        /* @var $fm Farm */
+                        $farms[] = ['id' => $fm->id, 'name' => $fm->name];
+                    }
+                }
+
+                $result['usedBy'] = [ 'farms' => $farms, 'cnt' => count($farms)];
             }
         }
 
-        return $role;
-
+        return $result;
     }
 
-    public function editAction()
+    /**
+     * @param   int   $roleId
+     * @throws  Exception
+     * @throws  Scalr_Exception_Core
+     * @throws  Scalr_Exception_InsufficientPermissions
+     * @throws  Scalr_UI_Exception_NotFound
+     */
+    public function editAction($roleId = 0)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_MANAGE);
-
-        $this->request->defineParams(array(
-            'roleId' => array('type' => 'int')
-        ));
+        $this->restrictAccess('ROLES', 'MANAGE');
 
         $params = array();
 
         $params['scriptData'] = \Scalr\Model\Entity\Script::getScriptingData($this->user->getAccountId(), $this->getEnvironmentId(true));
-        $params['categories'] = $this->db->GetAll("SELECT * FROM role_categories WHERE env_id IS NULL OR env_id = ?", [$this->user->isScalrAdmin() ? null : $this->getEnvironmentId()]);
+        $params['categories'] = $this->db->GetAll("SELECT * FROM role_categories WHERE env_id IS NULL OR env_id = ?", [ $this->getEnvironmentId(true) ]);
         $params['accountScripts'] = [];
 
         if (!$this->user->isScalrAdmin()) {
-            foreach (self::loadController('Orchestration', 'Scalr_UI_Controller_Account2')->getOrchestrationRules() as $script) {
+            foreach (Scalr_UI_Controller_Account2_Orchestration::controller()->getOrchestrationRules() as $script) {
                 $script['system'] = 'account';
                 $params['accountScripts'][] = $script;
             }
         }
 
-        $variables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->user->isScalrAdmin() ? 0 : $this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_ROLE);
+        $envs = [];
+        if ($this->request->getScope() == ScopeInterface::SCOPE_ACCOUNT) {
+            foreach (Environment::find([['accountId' => $this->user->getAccountId()]], null, ['name' => true]) as $env) {
+                /* @var Environment $env */
+                $envs[] = ['id' => $env->id, 'name' => $env->name, 'enabled' => 1];
+            }
+        }
 
-        if ($this->getParam('roleId')) {
-            $dbRole = DBRole::loadById($this->getParam('roleId'));
+        $variables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(true), ScopeInterface::SCOPE_ROLE);
 
-            if (!$this->user->isScalrAdmin()) {
-                $this->user->getPermissions()->validate($dbRole);
+        if ($roleId) {
+            /* @var $role Role */
+            $role = Role::findPk($roleId);
+
+            if (!$role) {
+                throw new Scalr_Exception_Core(sprintf(_("Role ID#%s not found in database"), $roleId));
             }
 
+            $this->checkPermissions($role, true);
+
             $images = array();
-            foreach (RoleImage::find([['roleId' => $dbRole->id]]) as $image) {
+            foreach (RoleImage::find([['roleId' => $role->id]]) as $image) {
                 /* @var $image RoleImage */
                 $im = $image->getImage();
                 $a = get_object_vars($image);
                 if ($im) {
                     $b = get_object_vars($im);
+                    $b['scope'] = $im->getScope();
                     $b['dtAdded'] = Scalr_Util_DateTime::convertTz($b['dtAdded']);
                     $b['software'] = $im->getSoftwareAsString();
                     $a['name'] = $im->name;
@@ -881,175 +990,215 @@ class Scalr_UI_Controller_Roles extends Scalr_UI_Controller
                 $images[] = $a;
             }
 
-            $params['role'] = array(
-                'roleId'		=> $dbRole->id,
-                'name'			=> $dbRole->name,
-                'catId'         => $dbRole->catId,
-                'os'			=> $dbRole->getOs()->name,
-                'osId'          => $dbRole->osId,
-                'osFamily'		=> $dbRole->getOs()->family,
-                'osGeneration'	=> $dbRole->getOs()->generation,
-                'osVersion'     => $dbRole->getOs()->version,
-                'description'	=> $dbRole->description,
-                'behaviors'		=> $dbRole->getBehaviors(),
-                'images'		=> $images,
-                'scripts'       => $dbRole->getScripts(),
-                'dtadded'       => Scalr_Util_DateTime::convertTz($dbRole->dateAdded),
-                'addedByEmail'  => $dbRole->addedByEmail,
-                'chef'          => $dbRole->getProperties('chef.')
-            );
-
-            $params['role']['variables'] = $variables->getValues($dbRole->id);
-
-            if ($this->user->isScalrAdmin()) {
-                $params['roleUsage'] = array (
-                    'farms'     => $dbRole->getFarmRolesCount(),
-                    'instances' => $this->db->GetOne("SELECT COUNT(*) FROM servers LEFT JOIN farm_roles ON servers.farm_roleid = farm_roles.id WHERE farm_roles.role_id=?", array($dbRole->id))
-                );
-            } else {
-                $params['roleUsage'] = array (
-                    'farms'     => $dbRole->getFarmRolesCount($this->getEnvironmentId()),
-                    'instances' => $this->db->GetOne("SELECT COUNT(*) FROM servers LEFT JOIN farm_roles ON servers.farm_roleid = farm_roles.id WHERE farm_roles.role_id=? AND env_id=?", array($dbRole->id, $this->getEnvironmentId()))
-                );
-
+            $properties = [];
+            foreach (RoleProperty::find([['roleId' => $role->id], ['name' => ['$like' => 'chef.%']]]) as $prop) {
+                /* @var $prop RoleProperty */
+                $properties[$prop->name] = $prop->value;
             }
 
+            $params['role'] = array(
+                'roleId'        => $role->id,
+                'name'          => $role->name,
+                'catId'         => $role->catId,
+                'os'            => $role->getOs()->name,
+                'osId'          => $role->osId,
+                'osFamily'      => $role->getOs()->family,
+                'osGeneration'  => $role->getOs()->generation,
+                'osVersion'     => $role->getOs()->version,
+                'description'   => $role->description,
+                'behaviors'     => $role->getBehaviors(),
+                'images'        => $images,
+                'scripts'       => $role->getScripts(),
+                'dtadded'       => Scalr_Util_DateTime::convertTz($role->added),
+                'addedByEmail'  => $role->addedByEmail,
+                'chef'          => $properties,
+                'isQuickStart'  => $role->isQuickStart,
+                'isDeprecated'  => $role->isDeprecated,
+                'environments'  => []
+            );
+
+            if ($this->request->getScope() == ScopeInterface::SCOPE_ACCOUNT) {
+                $allowedEnvs = $role->getAllowedEnvironments();
+                if (!empty($allowedEnvs)) {
+                    foreach ($envs as &$env) {
+                        $env['enabled'] = in_array($env['id'], $allowedEnvs) ? 1 : 0;
+                    }
+                }
+
+                $params['role']['environments'] = $envs;
+            }
+
+            $params['role']['variables'] = $variables->getValues($role->id);
+
+            $params['roleUsage'] = [
+                'farms' => $role->getFarmsCount($this->user->getAccountId(), $this->getEnvironmentId(true)),
+                'instances' => $role->getServersCount($this->user->getAccountId(), $this->getEnvironmentId(true))
+            ];
         } else {
             $params['role'] = array(
-                'roleId'	    => 0,
-                'name'			=> '',
-                'arch'			=> 'x86_64',
-                'agent'			=> 2,
-                'description'	=> '',
-                'behaviors'		=> array(),
-                'images'		=> array(),
+                'roleId'        => 0,
+                'name'          => '',
+                'arch'          => 'x86_64',
+                'agent'         => 2,
+                'description'   => '',
+                'behaviors'     => array(),
+                'images'        => array(),
                 'scripts'       => array(),
                 'tags'          => array(),
+                'environments'  => [],
                 'variables'     => $variables->getValues()
             );
+
+            if ($this->request->getScope() == ScopeInterface::SCOPE_ACCOUNT) {
+                $params['role']['environments'] = $envs;
+            }
         }
-        $this->response->page('ui/roles/edit.js', $params, array(
+
+        $this->response->page('ui/roles/edit.js', $params, [
             'ui/roles/edit/overview.js',
             'ui/roles/edit/images.js',
             'ui/roles/edit/scripting.js',
             'ui/roles/edit/variables.js',
             'ui/roles/edit/chef.js',
+            'ui/roles/edit/environments.js',
             'ui/scripts/scriptfield.js',
             'ui/core/variablefield.js',
             'ui/services/chef/chefsettings.js'
-        ), array(
+        ], [
             'ui/roles/edit.css',
             'ui/scripts/scriptfield.css'
-        ));
+        ]);
     }
 
-    //todo: remove
-    public function edit2Action()
+    /**
+     * @param   int         $roleId
+     * @param   string      $name
+     * @param   string      $description
+     * @param   string      $osId
+     * @param   int         $catId
+     * @param   bool        $isQuickStart
+     * @param   bool        $isDeprecated
+     * @param   JsonData    $behaviors
+     * @param   JsonData    $images
+     * @param   JsonData    $scripts
+     * @param   JsonData    $variables
+     * @param   JsonData    $chef
+     * @param   JsonData    $environments
+     * @throws  Exception
+     * @throws  Scalr_Exception_Core
+     * @throws  Scalr_Exception_InsufficientPermissions
+     */
+    public function xSaveAction($roleId = 0, $name, $description, $osId, $catId, $isQuickStart = false, $isDeprecated = false,
+                                JsonData $behaviors, JsonData $images, JsonData $scripts, JsonData $variables, JsonData $chef, JsonData $environments)
     {
-        $this->editAction();
-    }
+        $this->restrictAccess('ROLES', 'MANAGE');
 
-    public function xSaveAction()
-    {
-        $this->request->restrictAccess(Acl::RESOURCE_FARMS_ROLES, Acl::PERM_FARMS_ROLES_MANAGE);
+        if ($roleId == 0) {
+            $accountId = $this->user->getAccountId() ?: NULL;
 
-        $this->request->defineParams(array(
-            'roleId' => array('type' => 'int'),
-            'behaviors' => array('type' => 'json'),
-            'tags' => array('type' => 'json'),
-            'description', 'name',
-            'parameters' => array('type' => 'json'),
-            'removedImages' => array('type' => 'json'),
-            'images' => array('type' => 'json'),
-            'properties' => array('type' => 'json'),
-            'scripts' => array('type' => 'json'),
-            'variables' => array('type' => 'json'),
-            'chef' => array('type' => 'json')
-        ));
-
-        $id = $this->getParam('roleId');
-
-        if ($id == 0) {
-            if ($this->user->isScalrAdmin()) {
-                $origin = ROLE_TYPE::SHARED;
-                $envId = null;
-                $clientId = null;
-            } else {
-                $origin = ROLE_TYPE::CUSTOM;
-                $envId = $this->environment->id;
-                $clientId = $this->user->getAccountId();
+            if (! Role::isValidName($name)) {
+                throw new Exception(_("Role name is incorrect"));
             }
 
-            // TODO: validate role name via Scalr\Model\Entity\Role::validateName(), validate other fields
+            if (Role::isNameUsed($name, $accountId, $this->getEnvironmentId(true))) {
+                throw new Exception('Selected role name is already used. Please select another one.');
+            }
 
-            $dbRole = new DBRole(0);
+            if (! Os::findPk($osId)) {
+                throw new Exception(sprintf('%s is not valid osId', $osId));
+            }
 
-            $dbRole->generation = 2;
-            $dbRole->origin = $origin;
-            $dbRole->envId = $envId;
-            $dbRole->clientId = $clientId;
-            $dbRole->catId = $this->getParam('catId');
-            $dbRole->name = $this->getParam('name');
+            $role = new Role();
+            $role->generation = 2;
+            $role->origin = $this->user->isScalrAdmin() ? ROLE_TYPE::SHARED : ROLE_TYPE::CUSTOM;
+            $role->accountId = $accountId;
+            $role->envId = $this->getEnvironmentId(true);
+            $role->name = $name;
+            $role->catId = $catId;
+            $role->osId = $osId;
 
-            //TODO: VALIDATE osId
+            $role->addedByUserId = $this->user->getId();
+            $role->addedByEmail = $this->user->getEmail();
 
-            $dbRole->osId = $this->getParam('osId');
-
-            $dbRole->addedByEmail = $this->user->getEmail();
-            $dbRole->addedByUserId = $this->user->getId();
-
-            $dbRole->save();
-
-            $dbRole->setBehaviors(array_values($this->getParam('behaviors')));
-
+            $role->setBehaviors((array) $behaviors);
+            $role->save();
         } else {
-            $dbRole = DBRole::loadById($id);
+            $role = Role::findPk($roleId);
 
-            if (!$this->user->isScalrAdmin()) {
-                $this->user->getPermissions()->validate($dbRole);
+            if (!$role) {
+                throw new Scalr_Exception_Core(sprintf(_("Role ID#%s not found in database"), $roleId));
+            }
+
+            $this->checkPermissions($role, true);
+        }
+
+        $globalVariables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(true), ScopeInterface::SCOPE_ROLE);
+        $globalVariables->setValues($variables, $role->id);
+
+        foreach (RoleProperty::find([['roleId' => $role->id], ['name' => ['$like' => ['chef.%']]]]) as $prop) {
+            $prop->delete();
+        }
+
+        foreach ($chef as $name => $value) {
+            $prop = new RoleProperty();
+            $prop->roleId = $role->id;
+            $prop->name = $name;
+            $prop->value = $value;
+            $prop->save();
+        }
+
+        $role->description = $description;
+        $role->isQuickStart = $isQuickStart;
+        $role->isDeprecated = $isDeprecated;
+
+        foreach ($images as $i) {
+            if (isset($i['platform']) && isset($i['cloudLocation']) && isset($i['imageId'])) {
+                $role->setImage(
+                    $i['platform'],
+                    $i['cloudLocation'],
+                    $i['imageId'],
+                    $this->user->getId(),
+                    $this->user->getEmail()
+                );
             }
         }
 
-        if ($dbRole->origin == ROLE_TYPE::CUSTOM && $this->user->getAccountId()) {
-            $variables = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_ROLE);
-            $variables->setValues(is_array($this->getParam('variables')) ? $this->getParam('variables') : [], $dbRole->id);
-        } else if ($this->user->isScalrAdmin()) {
-            $variables = new Scalr_Scripting_GlobalVariables(0, 0, Scalr_Scripting_GlobalVariables::SCOPE_ROLE);
-            $variables->setValues(is_array($this->getParam('variables')) ? $this->getParam('variables') : [], $dbRole->id);
-        }
+        $role->setScripts((array) $scripts);
+        $role->save();
 
-        $dbRole->clearProperties('chef.');
-        if (!is_null($this->getParam('chef'))) {
-            $dbRole->setProperties($this->getParam('chef'));
-        }
+        if ($this->request->getScope() == ScopeInterface::SCOPE_ACCOUNT) {
+            foreach (RoleEnvironment::find([['roleId' => $roleId]]) as $re) {
+                $re->delete();
+            }
+            $accountEnvironments = [];
+            $allowedEnvironments = [];
+            foreach (Environment::find([['accountId' => $this->user->getAccountId()]]) as $env) {
+                $accountEnvironments[] = $env->id;
+            }
 
-        $dbRole->description = $this->getParam('description');
+            foreach ($environments as $e) {
+                if ($e['enabled'] == 1 && in_array($e['id'], $accountEnvironments)) {
+                    $allowedEnvironments[] = $e['id'];
+                }
+            }
 
-        $images = $this->getParam('images');
-        if (!empty($images)) {
-            foreach($images as $i) {
-                $dbRole->__getNewRoleObject()->setImage($i['platform'], $i['cloudLocation'], $i['imageId'], $this->user->getId(), $this->user->getEmail());
+            if (count($allowedEnvironments) < count($accountEnvironments)) {
+                foreach ($allowedEnvironments as $id) {
+                    $re = new RoleEnvironment();
+                    $re->roleId = $role->id;
+                    $re->envId = $id;
+                    $re->save();
+                }
             }
         }
 
-        $scripts = $this->getParam('scripts');
-        if (is_null($scripts))
-            $scripts = [];
-        $dbRole->setScripts($scripts);
-
-        $dbRole->save();
-        $this->response->data(['role' => $this->getInfo($dbRole->id, true)]);
+        $this->response->data(['role' => $this->getInfo($role->id, true)]);
         $this->response->success('Role saved');
-    }
-
-    //todo: remove
-    public function xSave2Action()
-    {
-        $this->xSaveAction();
     }
 
     public function createAction()
     {
+        $this->request->restrictAccess(Acl::RESOURCE_ROLES_ENVIRONMENT, Acl::PERM_ROLES_ENVIRONMENT_MANAGE);
         $this->response->page('ui/roles/create.js');
     }
 }

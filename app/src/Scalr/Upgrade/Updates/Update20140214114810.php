@@ -19,7 +19,6 @@ class Update20140214114810 extends AbstractUpdate implements SequenceInterface
         \SERVER_PLATFORMS::IDCF => \SERVER_PLATFORMS::IDCF,
         \SERVER_PLATFORMS::CLOUDSTACK => \SERVER_PLATFORMS::CLOUDSTACK,
         \SERVER_PLATFORMS::OPENSTACK => \SERVER_PLATFORMS::OPENSTACK,
-        \SERVER_PLATFORMS::ECS => \SERVER_PLATFORMS::ECS,
         'general' => 'general'
     );
 
@@ -63,7 +62,7 @@ class Update20140214114810 extends AbstractUpdate implements SequenceInterface
         if ($this->db->GetOne("SELECT 1 FROM governance WHERE category = '' LIMIT 1")) {
             return false;
         }
-        if ($this->db->GetOne("SELECT 1 FROM governance WHERE name LIKE " . $this->db->qstr(\SERVER_PLATFORMS::IDCF . '.%') . " OR name LIKE " . $this->db->qstr(\SERVER_PLATFORMS::ECS . '.%') . " LIMIT 1")) {
+        if ($this->db->GetOne("SELECT 1 FROM governance WHERE name LIKE " . $this->db->qstr(\SERVER_PLATFORMS::IDCF . '.%') . " LIMIT 1")) {
             return false;
         }
 
@@ -85,12 +84,6 @@ class Update20140214114810 extends AbstractUpdate implements SequenceInterface
             UPDATE `governance`
             SET name = REPLACE(name, " . $this->db->qstr(\SERVER_PLATFORMS::IDCF) . ", " . $this->db->qstr(\SERVER_PLATFORMS::CLOUDSTACK) . ")
             WHERE name LIKE " . $this->db->qstr(\SERVER_PLATFORMS::IDCF . '.%')
-        );
-
-        $this->db->Execute("
-            UPDATE `governance`
-            SET name = REPLACE(name, " . $this->db->qstr(\SERVER_PLATFORMS::ECS) . ", " . $this->db->qstr(\SERVER_PLATFORMS::OPENSTACK) . ")
-            WHERE name LIKE " . $this->db->qstr(\SERVER_PLATFORMS::ECS . '.%')
         );
     }
 

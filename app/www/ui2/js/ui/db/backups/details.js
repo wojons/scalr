@@ -5,12 +5,18 @@ Scalr.regPage( 'Scalr.ui.db.backups.details', function ( loadParams, moduleParam
 			'modal': true
 		},
 		width: 850,
+		layout: 'hbox',
+		defaults: {
+			flex: 1
+		},
 		items: [{
 			xtype: 'fieldset',
 			title: 'General',
+			cls: 'x-fieldset-separator-none',
 			defaults: {
 				xtype: 'displayfield',
-				anchor: '100%'
+				anchor: '100%',
+				labelWidth: 120
 			},
 			items: [{
 				fieldLabel: 'Created At',
@@ -31,18 +37,19 @@ Scalr.regPage( 'Scalr.ui.db.backups.details', function ( loadParams, moduleParam
 		},{
 			xtype: 'fieldset',
 			title: 'Download backup',
+			cls: 'x-fieldset-separator-left',
 			itemId: 'downloadBackup',
-			collapsible: true,
-			collapsed: true
+			scrollable: true
 		}],
 		dockedItems: [{
 			xtype: 'container',
+            hidden: !Scalr.isAllowed('DB_BACKUPS', 'remove'),
 			dock: 'bottom',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
 			},
-			cls: 'x-docked-buttons',
+			cls: 'x-docked-buttons x-fieldset-separator-top',
 			items: {
 				xtype: 'button',
 				cls: 'x-btn-red',
@@ -93,10 +100,10 @@ Scalr.regPage( 'Scalr.ui.db.backups.details', function ( loadParams, moduleParam
 			+ moduleParams['backup']['type']
 			+ '</a>'
 		);
-		
+
 		var linksResult = '';
 		var links = moduleParams['backup']['links'];
-		
+
         for (var i in links) {
             var size = links[i]['size'] ? (links[i]['size'] + 'Mb') : ' unknown';
             linksResult += '<div style="padding-top: 5px;">'

@@ -6,6 +6,9 @@ use Scalr\UI\Request\JsonData;
 use Scalr\UI\Request\Validator;
 use Scalr\Util\CryptoTool;
 use Scalr\Model\Entity\Account\User\ApiKeyEntity;
+use Scalr\DataType\ScopeInterface;
+use Scalr\System\Http\Client;
+use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 {
@@ -79,49 +82,12 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 
     public function aboutAction()
     {
-        $data = array(
-            'version' => @file_get_contents(APPPATH . '/etc/version')
-        );
-
+        $key = "short";
         if (!Scalr::isHostedScalr() || $this->user->isScalrAdmin() || $this->request->getHeaderVar('Interface-Beta')) {
-            $manifest = @file_get_contents(APPPATH . '/../manifest.json');
-            if ($manifest) {
-                $info = @json_decode($manifest, true);
-                if ($info) {
-                    if (stristr($info['edition'], 'ee'))
-                        $data['edition'] = 'Enterprise Edition';
-                    else
-                        $data['edition'] = 'Open Source Edition';
-
-                    $data['gitFullHash'] = $info['full_revision'];
-                    $data['gitDate'] = $info['date'];
-                    $data['gitRevision'] = $info['revision'];
-                }
-            }
-
-            if (!$data['edition']) {
-                @exec("git show --format='%h|%ci|%H' HEAD", $output);
-                $info = @explode("|", $output[0]);
-                $data['gitRevision'] = trim($info[0]);
-                $data['gitDate'] = trim($info[1]);
-                $data['gitFullHash'] = trim($info[2]);
-
-                @exec("git remote -v", $output2);
-                if (stristr($output2[0], 'int-scalr'))
-                    $data['edition'] = 'Enterprise Edition';
-                else
-                    $data['edition'] = 'Open Source Edition';
-            }
-
-            if ($this->user->isScalrAdmin() || $this->request->getHeaderVar('Interface-Beta')) {
-                @exec("git rev-parse --abbrev-ref HEAD", $branch);
-                $data['branch'] = trim($branch[0]);
-            }
-
-            $data['id'] = SCALR_ID;
+            $key = $this->user->isScalrAdmin() || $this->request->getHeaderVar('Interface-Beta') ? "beta" : "full";
         }
 
-        $this->response->page('ui/core/about.js', $data);
+        $this->response->page('ui/core/about.js', Scalr::getContainer()->version($key));
     }
 
     public function supportAction()
@@ -208,6 +174,18 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
         }
 
         $apiKeyEntity = new ApiKeyEntity($this->user->getId());
+
+        //It should prevents wiping out existing keys
+        $attempts = 3;
+        do {
+            //Generates API KEY explicitly before saving
+            $apiKeyEntity->keyId = $apiKeyEntity->getIterator()->getField('keyId')->getType()->generateValue($apiKeyEntity);
+
+            if ($attempts-- == 0) {
+                throw new RuntimeException("Could not generate uniquie API Key");
+            }
+        } while (ApiKeyEntity::findPk($apiKeyEntity->keyId) !== null);
+        // Saving a new API key
         $apiKeyEntity->save();
 
         $row = get_object_vars($apiKeyEntity);
@@ -362,7 +340,8 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
             'security2faGgl' => $this->user->getSetting(Scalr_Account_User::SETTING_SECURITY_2FA_GGL) ? '1' : '',
             'security2faCode' => Scalr_Util_Google2FA::generateSecretKey(),
             'securityIpWhitelist' => join(', ', $whitelist),
-            'currentIp' => $this->request->getRemoteAddr()
+            'currentIp' => $this->request->getRemoteAddr(),
+            'isAdmin' => $this->user->isAccountOwner() || $this->user->isAccountAdmin() || $this->user->isAdmin()
         );
 
         $this->response->page('ui/core/security.js', $params, ['ux-qrext.js']);
@@ -371,19 +350,18 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
     /**
      * @param RawData $password
      * @param RawData $cpassword
-     * @param $securityIpWhitelist
+     * @param string  $securityIpWhitelist
      * @param RawData $currentPassword optional
      */
     public function xSecuritySaveAction(RawData $password, RawData $cpassword, $securityIpWhitelist, RawData $currentPassword = null)
     {
         $validator = new Validator();
-        if ($password != '******') {
-            $validator->addErrorIf(!$this->user->checkPassword($currentPassword), ['currentPassword'], 'Invalid password');
-        }
+        $password = (string) $password;
 
-        $validator->validate($password, 'password', Validator::NOEMPTY);
-        $validator->validate($cpassword, 'cpassword', Validator::NOEMPTY);
-        $validator->addErrorIf(($password && $cpassword && ($password != $cpassword)), ['password','cpassword'], 'Two passwords are not equal');
+        if ($password) {
+            $validator->validate($password, 'password', Validator::PASSWORD, $this->user->isAccountOwner() || $this->user->isAccountAdmin() || $this->user->isAdmin() ? ['admin'] : []);
+            $validator->addErrorIf(!$this->user->checkPassword($currentPassword, false), ['currentPassword'], 'Invalid password');
+        }
 
         $subnets = array();
         $securityIpWhitelist = trim($securityIpWhitelist);
@@ -405,7 +383,7 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
         if ($validator->isValid($this->response)) {
             $updateSession = false;
 
-            if ($password != '******') {
+            if ($password) {
                 $this->user->updatePassword($password);
                 $updateSession = true;
 
@@ -464,8 +442,8 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
     }
 
     /**
-     * @param $qr
-     * @param $code
+     * @param string $qr
+     * @param string $code
      * @throws Exception
      */
     public function xSettingsEnable2FaGglAction($qr, $code)
@@ -500,36 +478,41 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 
     public function settingsAction()
     {
-        if ($this->user->isAdmin())
+        if ($this->user->isAdmin()) {
             throw new Scalr_Exception_InsufficientPermissions();
+        }
 
         $panel = $this->user->getDashboard($this->getEnvironmentId(true));
+        $params = [
+            'scalrId' => SCALR_ID,
+            'userEmail' => $this->user->getEmail(),
+            'userFullname' => $this->user->fullname,
+            'dashboardColumns' => count($panel['configuration']),
+            'timezonesList' => Scalr_Util_DateTime::getTimezones(),
+            'gravatarHash' => $this->user->getGravatarHash(),
+        ];
+        $params = array_merge($params, $this->user->getSshConsoleSettings());
 
-        $params = array_merge(
-            $this->user->getSshConsoleSettings(),
-            array(
-                'gravatar_email' => $this->user->getSetting(Scalr_Account_User::SETTING_GRAVATAR_EMAIL) ? $this->user->getSetting(Scalr_Account_User::SETTING_GRAVATAR_EMAIL) : '',
-                'gravatar_hash' => $this->user->getGravatarHash(),
-                'timezone' => $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE),
-                'timezones_list' => Scalr_Util_DateTime::getTimezones(),
-                'user_email' => $this->user->getEmail(),
-                'user_fullname' => $this->user->fullname,
-                'dashboard_columns' => count($panel['configuration']),
-                'scalr.id' => SCALR_ID
-            )
-        );
+        foreach ([Scalr_Account_User::SETTING_GRAVATAR_EMAIL, Scalr_Account_User::SETTING_UI_TIMEZONE] as $setting) {
+            $v = $this->user->getSetting($setting);
+            $params[$setting] = $v ? $v : '';
+        }
 
         $this->response->page('ui/core/settings.js', $params);
     }
 
-    public function xSaveSettingsAction()
+    /**
+     * @param   int     $dashboardColumns   Number of dashboard columns
+     * @param   string  $userFullname       Full name of user
+     * @throws  Scalr_Exception_InsufficientPermissions
+     */
+    public function xSaveSettingsAction($dashboardColumns, $userFullname)
     {
-        if ($this->user->isAdmin())
+        if ($this->user->isAdmin()) {
             throw new Scalr_Exception_InsufficientPermissions();
+        }
 
-        $this->request->defineParams(array(
-            'rss_login', 'rss_pass', 'default_environment',
-            Scalr_Account_User::VAR_SSH_CONSOLE_LAUNCHER,
+        $sshSettings = [
             Scalr_Account_User::VAR_SSH_CONSOLE_USERNAME,
             Scalr_Account_User::VAR_SSH_CONSOLE_IP,
             Scalr_Account_User::VAR_SSH_CONSOLE_PORT,
@@ -538,54 +521,44 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
             Scalr_Account_User::VAR_SSH_CONSOLE_LOG_LEVEL,
             Scalr_Account_User::VAR_SSH_CONSOLE_PREFERRED_PROVIDER,
             Scalr_Account_User::VAR_SSH_CONSOLE_ENABLE_AGENT_FORWARDING
-        ));
-
-        $rssLogin = $this->getParam('rss_login');
-        $rssPass = $this->getParam('rss_pass');
-
-        if ($rssLogin != '' || $rssPass != '') {
-            if (strlen($rssLogin) < 6)
-                $err['rss_login'] = "RSS feed login must be 6 chars or more";
-
-            if (strlen($rssPass) < 6)
-                $err['rss_pass'] = "RSS feed password must be 6 chars or more";
+        ];
+        $sshParams = [];
+        foreach ($sshSettings as $s) {
+            $sshParams[$s] = $this->request->getParam($s);
         }
-
-        if (count($err)) {
-            $this->response->failure();
-            $this->response->data(array('errors' => $err));
-            return;
-        }
+        $this->user->setSshConsoleSettings($sshParams);
 
         $panel = $this->user->getDashboard($this->getEnvironmentId(true));
-        if ($this->getParam('dashboard_columns') > count($panel['configuration'])) {
-            while ($this->getParam('dashboard_columns') > count($panel['configuration'])) {
-                $panel['configuration'][] = array();
-            }
-        }
-        if ($this->getParam('dashboard_columns') < count($panel['configuration'])) {
-            for ($i = count($panel['configuration']); $i > $this->getParam('dashboard_columns'); $i--) {
-                foreach($panel['configuration'][$i-1] as $widg) {
-                    $panel['configuration'][0][] = $widg;
+        $currentColumns = count($panel['configuration']);
+        if ($dashboardColumns != $currentColumns) {
+            if ($dashboardColumns > $currentColumns) {
+                while ($dashboardColumns > count($panel['configuration'])) {
+                    $panel['configuration'][] = array();
                 }
-                unset($panel['configuration'][$i-1]);
+            } else {
+                for (; $currentColumns > $dashboardColumns; $currentColumns--) {
+                    foreach($panel['configuration'][$currentColumns - 1] as $widg) {
+                        $panel['configuration'][0][] = $widg;
+                    }
+                    unset($panel['configuration'][$currentColumns - 1]);
+                }
             }
+
+            $this->user->setDashboard($this->getEnvironmentId(true), $panel);
+            $this->response->data(['dashboard' => $panel = Scalr_UI_Controller_Dashboard::controller()->fillDash($panel)]);
         }
-        $this->user->setDashboard($this->getEnvironmentId(true), $panel);
 
-        $panel = self::loadController('Dashboard')->fillDash($panel);
 
-        $this->user->setSetting(Scalr_Account_User::SETTING_UI_TIMEZONE, $this->getParam('timezone'));
+        $uiSettings = [ Scalr_Account_User::SETTING_GRAVATAR_EMAIL, Scalr_Account_User::SETTING_UI_TIMEZONE ];
+        foreach ($uiSettings as $s) {
+            $this->user->setSetting($s, $this->request->getParam($s));
+        }
 
-        $gravatarEmail = $this->getParam('gravatar_email');
-        $this->user->setSetting(Scalr_Account_User::SETTING_GRAVATAR_EMAIL, $gravatarEmail);
-        $this->user->setSshConsoleSettings($this->request->getParams());
-
-        $this->user->fullname = $this->getParam('user_fullname');
+        $this->user->fullname = $userFullname;
         $this->user->save();
 
         $this->response->success('Settings successfully updated');
-        $this->response->data(array('panel' => $panel, 'gravatarHash' => $this->user->getGravatarHash()));
+        $this->response->data([ 'gravatarHash' => $this->user->getGravatarHash() ]);
     }
 
     public function variablesAction()
@@ -593,26 +566,32 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
         if ($this->user->isAdmin())
             throw new Scalr_Exception_InsufficientPermissions();
 
-        $this->request->restrictAccess(Acl::RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES);
-        $vars = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT);
+        $this->request->restrictAccess(Acl::RESOURCE_GLOBAL_VARIABLES_ENVIRONMENT);
+        $vars = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), ScopeInterface::SCOPE_ENVIRONMENT);
         $this->response->page('ui/core/variables.js', array('variables' => json_encode($vars->getValues())), array('ui/core/variablefield.js'));
     }
 
     /**
      * @param JsonData $variables JSON encoded structure
+     * @throws Scalr_Exception_Core
+     * @throws Scalr_Exception_InsufficientPermissions
+     * @throws \Scalr\Exception\ValidationErrorException
      */
     public function xSaveVariablesAction(JsonData $variables)
     {
         if ($this->user->isAdmin())
             throw new Scalr_Exception_InsufficientPermissions();
 
-        $this->request->restrictAccess(Acl::RESOURCE_ENVADMINISTRATION_GLOBAL_VARIABLES);
+        $this->request->restrictAccess(Acl::RESOURCE_GLOBAL_VARIABLES_ENVIRONMENT, Acl::PERM_GLOBAL_VARIABLES_ENVIRONMENT_MANAGE);
 
-        $vars = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT);
+        $vars = new Scalr_Scripting_GlobalVariables($this->user->getAccountId(), $this->getEnvironmentId(), ScopeInterface::SCOPE_ENVIRONMENT);
         $result = $vars->setValues($variables, 0, 0, 0, '', false);
-        if ($result === true)
+        if ($result === true) {
             $this->response->success('Variables saved');
-        else {
+            $this->response->data([
+                'defaults' => $vars->getUiDefaults()
+            ]);
+        } else {
             $this->response->failure();
             $this->response->data(array(
                 'errors' => array(
@@ -620,5 +599,169 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
                 )
             ));
         }
+    }
+
+    /**
+     * @param   bool    $enabled
+     * @throws  Scalr_Exception_InsufficientPermissions
+     */
+    public function xSaveDebugAction($enabled = false)
+    {
+        $session = Scalr_Session::getInstance();
+        if ($session->isVirtual() || $this->user->isScalrAdmin()) {
+            Scalr_Session::getInstance()->setDebugMode($enabled);
+
+            if ($enabled) {
+                $this->response->data(['js' => $this->response->getModuleName('ui-debug.js')]);
+            }
+
+            $this->response->success();
+        } else {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+    }
+
+    /**
+     * @param   string  $query
+     * @throws  Scalr_Exception_Core
+     */
+    public function xSearchResourcesAction($query)
+    {
+        if (trim($query) == '') {
+            $this->response->data(['data' => []]);
+            return;
+        }
+
+        $environments = $this->request->getScope() == ScopeInterface::SCOPE_ACCOUNT ?
+            array_map(function($r) { return $r['id']; }, $this->user->getEnvironments()) :
+            [$this->getEnvironmentId()];
+
+        $f = new Entity\Farm();
+        $s = new Entity\Server();
+        $fr = new Entity\FarmRole();
+        $e = new Entity\Account\Environment();
+        $at = new Entity\Account\Team();
+        $sp = new Entity\Server\Property();
+
+        $farmSql = [];
+        $serverSql = [];
+        $queryEnc = "%{$query}%";
+
+        foreach ($environments as $envId) {
+            $acl = $this->user->getAclRolesByEnvironment($envId);
+            $isTermporaryServerPerm = $acl->isAllowed(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_BUILD) ||
+                                      $acl->isAllowed(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_IMPORT);
+
+            if ($acl->isAllowed(Acl::RESOURCE_FARMS)) {
+                $farmSql[] = "{$f->columnEnvId} = $envId";
+                if ($isTermporaryServerPerm) {
+                    $serverSql[] = "{$s->columnEnvId} = {$envId}";
+                } else {
+                    $serverSql[] = "{$s->columnEnvId} = {$envId} AND {$s->columnFarmId} IS NOT NULL";
+                }
+            } else {
+                $q = [];
+                if ($acl->isAllowed(Acl::RESOURCE_TEAM_FARMS)) {
+                    $t = array_map(function($t) { return $t['id']; }, $this->user->getTeams());
+                    if (count($t)) {
+                        $q[] = "{$f->columnTeamId} IN (" . join(',', $t) . ")";
+                    }
+                }
+
+                if ($acl->isAllowed(Acl::RESOURCE_OWN_FARMS)) {
+                    $q[] = "{$f->columnCreatedById} = {$this->user->getId()}";
+                }
+
+                if (count($q)) {
+                    $farmSql[] = "{$f->columnEnvId} = {$envId} AND (" . join(" OR ", $q) . ")";
+                }
+
+                if ($isTermporaryServerPerm) {
+                    $q[] = "{$s->columnStatus} IN ('" . Entity\Server::STATUS_IMPORTING . "', '" . Entity\Server::STATUS_TEMPORARY . "') AND {$s->columnFarmId} IS NULL";
+                }
+
+                if (count($q)) {
+                    $serverSql[] = "{$s->columnEnvId} = {$envId} AND (" . join(" OR ", $q) . ")";
+                }
+            }
+        }
+
+        $farms = [];
+
+        if (count($farmSql)) {
+            $farmStmt = $this->db->Execute("
+                SELECT {$f->columnId} AS id, {$f->columnName} AS name, {$f->columnEnvId} AS envId, {$f->columnStatus} AS status,
+                {$f->columnAdded} AS added, {$f->columnCreatedByEmail} AS createdByEmail, {$at->columnName} AS teamName, {$e->columnName} AS `envName`
+                FROM {$f->table()}
+                LEFT JOIN {$at->table()} ON {$at->columnId} = {$f->columnTeamId}
+                LEFT JOIN {$e->table()} ON {$f->columnEnvId} = {$e->columnId}
+                WHERE ({$f->columnName} LIKE ?) AND (" . join(" OR ", $farmSql) . ")",
+                [$queryEnc]
+            );
+            while (($farm = $farmStmt->FetchRow())) {
+                $farm['status'] = Entity\Farm::getStatusName($farm['status']);
+                $farm['added'] = Scalr_Util_DateTime::convertTz($farm['added'], 'M j, Y H:i');
+
+                $farms[] = [
+                    'entityName' => 'farm',
+                    'envId'      => $farm['envId'],
+                    'envName'    => $farm['envName'],
+                    'matchField' => 'Name',
+                    'matchValue' => $farm['name'],
+                    'data'       => $farm
+                ];
+            }
+        }
+
+        $servers = [];
+
+        if (count($serverSql)) {
+            $serverStmt = $this->db->Execute("
+                SELECT {$s->columnServerId} AS serverId, {$s->columnFarmId} AS farmId, {$s->columnFarmRoleId} AS farmRoleId,
+                {$s->columnEnvId} AS envId, {$s->columnPlatform} AS platform, {$s->columnInstanceTypeName} AS instanceTypeName,
+                {$s->columnStatus} AS status, {$s->columnCloudLocation} AS cloudLocation, {$s->columnRemoteIp} AS publicIp,
+                {$s->columnLocalIp} AS privateIp, {$s->columnAdded} AS added, {$f->columnName} AS farmName,
+                {$fr->columnAlias} AS farmRoleName, {$e->columnName} AS `envName`, {$fr->columnRoleId} AS roleId,
+                {$sp->columnValue('sp1', 'hostname')}
+                FROM {$s->table()}
+                LEFT JOIN {$f->table()} ON {$f->columnId} = {$s->columnFarmId}
+                LEFT JOIN {$fr->table()} ON {$fr->columnId} = {$s->columnFarmRoleId}
+                LEFT JOIN {$e->table()} ON {$e->columnId} = {$s->columnEnvId}
+                LEFT JOIN {$sp->table('sp1')} ON {$sp->columnServerId('sp1')} = {$s->columnServerId} AND {$sp->columnName('sp1')} = ?
+                WHERE ({$s->columnRemoteIp} LIKE ? OR {$s->columnLocalIp} LIKE ? OR {$sp->columnValue('sp1')} LIKE ?) AND (" . join(" OR ", $serverSql) . ")
+                GROUP BY {$s->columnServerId}",
+                [Scalr_Role_Behavior::SERVER_BASE_HOSTNAME, $queryEnc, $queryEnc, $queryEnc]
+            );
+
+            $names = [
+                'publicIp'  => 'Public IP',
+                'privateIp' => 'Private IP',
+                'hostname'  => 'Hostname'
+            ];
+
+            while (($server = $serverStmt->FetchRow())) {
+                $server['added'] = Scalr_Util_DateTime::convertTz($server['added'], 'M j, Y H:i');
+                if (strstr($server['publicIp'], $query)) {
+                    $m = 'publicIp';
+                } else if (strstr($server['privateIp'], $query)) {
+                    $m = 'privateIp';
+                } else {
+                    $m = 'hostname';
+                }
+
+                $servers[] = [
+                    'entityName'    => 'server',
+                    'envId'         => $server['envId'],
+                    'envName'       => $server['envName'],
+                    'matchField'    => $names[$m],
+                    'matchValue'    => $server[$m],
+                    'data'          => $server
+                ];
+            }
+        }
+
+        $this->response->data([
+            'data' => array_merge($farms, $servers)
+        ]);
     }
 }

@@ -1,6 +1,7 @@
 <?php
 
 use \Scalr\Server\Alerts;
+use Scalr\Model\Entity;
 
 class Scalr_Cronjob_MetricCheck extends Scalr_System_Cronjob_MultiProcess_DefaultWorker
 {
@@ -22,7 +23,7 @@ class Scalr_Cronjob_MetricCheck extends Scalr_System_Cronjob_MultiProcess_Defaul
     }
 
     /**
-     * @var Logger
+     * @var \Scalr\Logger
      */
     private $logger;
 
@@ -33,8 +34,8 @@ class Scalr_Cronjob_MetricCheck extends Scalr_System_Cronjob_MultiProcess_Defaul
 
     public function __construct()
     {
-        $this->logger = Logger::getLogger(__CLASS__);
-        $this->timeLogger = Logger::getLogger('time');
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
+        $this->timeLogger = \Scalr::getContainer()->logger('time');
         $this->db = $this->getContainer()->adodb;
     }
 
@@ -200,7 +201,7 @@ class Scalr_Cronjob_MetricCheck extends Scalr_System_Cronjob_MultiProcess_Defaul
 
 
                 //Not supported by VPC yet.
-                if ($dbFarm->GetSetting(DBFarm::SETTING_EC2_VPC_ID))
+                if ($dbFarm->GetSetting(Entity\FarmSetting::EC2_VPC_ID))
                     continue;
 
                 $ip = $dbServer->getSzrHost();

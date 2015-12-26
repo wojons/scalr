@@ -2,9 +2,6 @@
 
 namespace Scalr\Acl\Role;
 
-use Scalr\Acl\Resource\ResourceObject;
-use Scalr\Acl\Exception;
-
 /**
  * AccountRoleObject class
  *
@@ -197,8 +194,7 @@ class AccountRoleObject extends RoleObject
      */
     public function isOverridden($resourceId, $permissionId = null)
     {
-        $overridden = parent::isAllowed($resourceId, $permissionId) !== null;
-        return $overridden;
+        return parent::isAllowed($resourceId, $permissionId) !== null;
     }
 
     /**

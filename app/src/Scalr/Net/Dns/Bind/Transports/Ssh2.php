@@ -14,7 +14,7 @@
         public function __construct(Scalr_Net_Dns_Bind_Transports_Ssh2_AuthInfo $authInfo, $host, $port, $rndcPath, $zonesPath)
         {
             $this->ssh2Client = new Scalr_Net_Ssh2_Client();
-            $this->logger = Logger::getLogger(__CLASS__);
+            $this->logger = \Scalr::getContainer()->logger(__CLASS__);
 
             $this->rndcPath = $rndcPath;
             $this->zonesPath = $zonesPath;

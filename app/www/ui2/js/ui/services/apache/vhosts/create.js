@@ -47,7 +47,7 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.create', function (loadParams, mo
 				plugins: [{
 					ptype: 'comboaddnew',
 					url: '/services/ssl/certificates/create',
-                    disabled: !Scalr.isAllowed('SERVICES_SSL')
+                    disabled: !Scalr.isAllowed('SERVICES_SSL', 'manage')
 				}]
 			}],
 			listeners: {

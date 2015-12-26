@@ -9,12 +9,16 @@ Scalr.regPage('Scalr.ui.admin.analytics.costcenters.edit', function (loadParams,
 			anchor: '100%',
             labelWidth: 90
 		},
-		width: 700,
+		width: 740,
         items: {
             xtype: 'fieldset',
             cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
             items: [{
-                xtype: 'hidden',
+                xtype: 'textfield',
+                readOnly: true,
+                fieldLabel: 'ID',
+                hidden: !moduleParams.cc.ccId,
+                hideInputOnReadOnly: true,
                 name: 'ccId'
             },{
                 xtype: 'fieldcontainer',
@@ -138,7 +142,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.costcenters.edit', function (loadParams,
                 tooltip: !moduleParams.cc.removable && moduleParams.cc.warning ? moduleParams.cc.warning : '',
                 handler: function() {
                     Scalr.Request({
-                        confirmBox: 
+                        confirmBox:
                             moduleParams.cc.removable ?
                             {
                                 msg: 'Delete cost center <b>' + moduleParams.cc.name + '</b> ?',
@@ -179,6 +183,6 @@ Scalr.regPage('Scalr.ui.admin.analytics.costcenters.edit', function (loadParams,
         }
         createdField.show().setValue(created);
     }
-    
+
 	return form;
 });

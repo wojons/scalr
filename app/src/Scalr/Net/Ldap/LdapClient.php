@@ -467,6 +467,77 @@ class LdapClient
     }
 
     /**
+     * Retrieves information (for now only displayname/description) about groups from LDAP
+     *
+     * @param  array $groups List of group ids
+     * @return array Returns array of groups with their description
+     * @throws Exception\LdapException
+     */
+    public function getGroupsDetails($groups)
+    {
+        $result = array();
+
+        $this->log('%s is called.', __FUNCTION__);
+
+        if (empty($this->config->user) || !isset($this->config->password)) {
+            throw new Exception\LdapException(
+                "Both LDAP user and password must be provided in the config "
+              . "for the scalr.connections.ldap parameter's bag."
+            );
+        }
+
+        $this->getConnection();
+
+        $ret = $this->bindRdn();
+
+        //Ldap bind
+        if ($ret === false) {
+            throw new Exception\LdapException(sprintf(
+                "Could not bind LDAP. %s",
+                $this->getLdapError()
+            ));
+        }
+
+        if (empty($groups)) {
+            return $result;
+        }
+
+        $baseDn = !empty($this->config->baseDnGroups) ? $this->config->baseDnGroups : $this->config->baseDn;
+
+        $filter = "(&" . $this->config->groupFilter .  "(|";
+        foreach ($groups as $group) {
+            $filter .= "(" . $this->getConfig()->groupnameAttribute . "=" . self::realEscape($group) . ")";
+        }
+        $filter .= "))";
+
+        $search = @ldap_search(
+            $this->conn, $baseDn, $filter, array($this->getConfig()->groupnameAttribute, $this->getConfig()->groupDisplayNameAttribute)
+        );
+
+        $this->log("Query group details baseDn:%s filter:%s - %s",
+            $baseDn, $filter,
+            ($search !== false ? 'OK' : 'Failed ('. ldap_error($this->conn) . ')')
+        );
+
+        if ($search === false) {
+            throw new Exception\LdapException(sprintf(
+                "Could not perform ldap_search. %s",
+                $this->getLdapError()
+            ));
+        }
+
+        $results = ldap_get_entries($this->conn, $search);
+
+        for ($item = 0; $item < $results['count']; $item++) {
+            $id = $results[$item][strtolower($this->getConfig()->groupnameAttribute)][0];
+            $name = $results[$item][strtolower($this->getConfig()->groupDisplayNameAttribute)][0];
+            $result[$id] = $name;
+        }
+
+        return $result;
+    }
+
+    /**
      * Gets the list of the groups in which specified user has memberships.
      *
      * @return  array     Returns array of the sAMAccount name of the Groups

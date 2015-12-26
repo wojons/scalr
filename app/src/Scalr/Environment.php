@@ -1,13 +1,15 @@
 <?php
 
+use Scalr\Modules\Platforms\Azure\AzurePlatformModule;
 use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
-use Scalr\Modules\Platforms\Eucalyptus\EucalyptusPlatformModule;
 use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
 use Scalr\Modules\Platforms\Idcf\IdcfPlatformModule;
 use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
 use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
+use Scalr\DataType\ScopeInterface;
+use Scalr\Model\Entity;
 
 /**
  * Scalr_Environment class
@@ -38,12 +40,6 @@ use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
  * @property \Scalr_Account_User $user
  *           The Scalr_Account_User instance which is property for the request.
  *
- * @property \Scalr\Logger\AuditLog $auditLog
- *           The AuditLog.
- *
- * @property \Scalr\Logger\LoggerStorageInterface $auditLogStorage
- *           The AuditLogStorage
- *
  * @property \Scalr\SimpleMailer $mailer
  *           Returns the new instance of the SimpleMailer class.
  *           This is not a singletone.
@@ -69,6 +65,21 @@ use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
  * @property \Scalr\Logger $logger
  *           Gets logger service
  *
+ * @property \Scalr\Util\CryptoTool $crypto
+ *           Gets cryptotool
+ *
+ * @property \Scalr\Util\CryptoTool $srzcrypto
+ *           Gets Scalarizr cryptotool
+ *
+ * @property \Scalr\System\Http\Client $http
+ *           Gets PECL http 2.x client
+ *
+ * @property \Scalr\System\Http\Client $srzhttp
+ *           Gets PECL http 2.x client configured for scalarizr
+ *
+ * @property array $version
+ *           Gets information about Scalr version
+ *
  *
  * @method   mixed config()
  *           config(string $name)
@@ -90,6 +101,28 @@ use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
  * @method   \Scalr\Logger logger()
  *           logger(string $name = null)
  *           Gets logger for specified category or class
+ *
+ * @method   \Scalr\DependencyInjection\Container warmup()
+ *           warmup()
+ *           Releases static cache from the dependency injection service
+ *
+ * @method   \Scalr\Util\CryptoTool crypto(string $algo = MCRYPT_RIJNDAEL_256, string $method = MCRYPT_MODE_CFB, mixed $cryptoKey = null, int $keySize = null, int $blockSize = null)
+ *           crypto(string $algo = MCRYPT_RIJNDAEL_256, string $method = MCRYPT_MODE_CFB, string|resource|SplFileObject|array $cryptoKey = null, int $keySize = null, int $blockSize = null)
+ *           Gets cryptographic tool with a given algorithm
+ *
+ * @method   \Scalr\Util\CryptoTool srzcrypto(mixed $cryptoKey = null)
+ *           srzcrypto(string|resource|SplFileObject|array $cryptoKey = null)
+ *           Gets Scalarizr cryptographic tool
+ *
+ * @method   \Scalr\System\Http\Client http()
+ *           Gets PECL http 2.x client
+ *
+ * @method   \Scalr\System\Http\Client srzhttp()
+ *           Gets PECL http 2.x client configured for scalarizr
+ *
+ * @method   array version()
+ *           version(string $part = 'full')
+ *           Gets information about Scalr version
  */
 class Scalr_Environment extends Scalr_Model
 {
@@ -195,23 +228,6 @@ class Scalr_Environment extends Scalr_Model
     }
 
     /**
-     * Gets Eucalyptus cloud client
-     *
-     * @param   string|\DBServer|\DBFarmRole    $cloudLocation
-     *          The cloud location or object which has both Scalr_Environment instance and cloud location itself
-     *
-     * @return  \Scalr\Service\Eucalyptus Returns Eucalyptus instance
-     */
-    public function eucalyptus($cloudLocation)
-    {
-        $arguments = func_get_args();
-        $arguments[0] = $cloudLocation;
-        $arguments[1] = $this;
-
-        return $this->__call('eucalyptus', $arguments);
-    }
-
-    /**
      * Gets an OpenStack client instance
      *
      * This method ensures that openstack instance is always from the current
@@ -257,6 +273,108 @@ class Scalr_Environment extends Scalr_Model
         }
         //Retrieves an instance from the DI container
         return $this->__call('cloudstack', $arguments);
+    }
+
+    /**
+     * Gets an Azure client instance
+     *
+     * This method ensures that azure instance is always from the current
+     * environment scope
+     *
+     * @return  \Scalr\Service\Azure Returns azure instance from DI container
+     */
+    public function azure()
+    {
+        $arguments[0] = $this;
+        //Retrieves an instance from the DI container
+        return $this->__call('azure', $arguments);
+    }
+
+    /**
+     * Gets specified cloud credentials for this environment
+     *
+     * @param   string  $cloud  The cloud name
+     *
+     * @return Entity\CloudCredentials
+     */
+    public function cloudCredentials($cloud)
+    {
+        return $this->getContainer()->cloudCredentials($cloud, $this->id);
+    }
+
+    /**
+     * Gets cloud credentials for listed clouds
+     *
+     * @param   string[]    $clouds             optional Clouds list
+     * @param   array       $credentialsFilter  optional Criteria to filter by CloudCredentials properties
+     * @param   array       $propertiesFilter   optional Criteria to filter by CloudCredentialsProperties
+     * @param   bool        $cacheResult        optional Cache result
+     *
+     * @return Entity\CloudCredentials[]
+     */
+    public function cloudCredentialsList(array $clouds = null, array $credentialsFilter = [], array $propertiesFilter = [], $cacheResult = true)
+    {
+        if (!is_array($clouds)) {
+            $clouds = (array) $clouds;
+        }
+
+        $cloudCredentials = new Entity\CloudCredentials();
+        $envCloudCredentials = new Entity\EnvironmentCloudCredentials();
+        $cloudCredProps = new Entity\CloudCredentialsProperty();
+
+        $criteria = array_merge($credentialsFilter, [
+            \Scalr\Model\AbstractEntity::STMT_FROM => $cloudCredentials->table(),
+            \Scalr\Model\AbstractEntity::STMT_WHERE => ''
+        ]);
+
+        if (!empty($clouds)) {
+            $criteria[\Scalr\Model\AbstractEntity::STMT_FROM] .= "
+                JOIN {$envCloudCredentials->table('cecc')} ON
+                    {$cloudCredentials->columnId()} = {$envCloudCredentials->columnCloudCredentialsId('cecc')} AND
+                    {$cloudCredentials->columnCloud()} = {$envCloudCredentials->columnCloud('cecc')}
+            ";
+
+            $clouds = implode(", ", array_map(function ($cloud) use ($envCloudCredentials) {
+                return $envCloudCredentials->qstr('cloud', $cloud);
+            }, $clouds));
+
+            $criteria[\Scalr\Model\AbstractEntity::STMT_WHERE] = "
+                {$envCloudCredentials->columnEnvId('cecc')} = {$envCloudCredentials->qstr('envId', $this->id)} AND
+                {$envCloudCredentials->columnCloud('cecc')} IN ({$clouds})
+            ";
+        }
+
+        if (!empty($propertiesFilter)) {
+            foreach ($propertiesFilter as $property => $propCriteria) {
+                $criteria[\Scalr\Model\AbstractEntity::STMT_FROM] .= "
+                    LEFT JOIN {$cloudCredProps->table('ccp')} ON
+                        {$cloudCredentials->columnId()} = {$cloudCredProps->columnCloudCredentialsId('ccp')} AND
+                        {$cloudCredProps->columnName('ccp')} = {$cloudCredProps->qstr('name', $property)}
+                ";
+
+                $conjunction = empty($criteria[\Scalr\Model\AbstractEntity::STMT_WHERE]) ? "" : "AND";
+
+                $criteria[\Scalr\Model\AbstractEntity::STMT_WHERE] .= "
+                    {$conjunction} {$cloudCredProps->_buildQuery($propCriteria, 'AND', 'ccp')}
+                ";
+            }
+        }
+
+        /* @var $cloudsCredentials Entity\CloudCredentials[] */
+        $cloudsCredentials = Entity\CloudCredentials::find($criteria);
+
+        $result = [];
+        $cont = \Scalr::getContainer();
+        foreach ($cloudsCredentials as $cloudCredentials) {
+            $result[$cloudCredentials->cloud] = $cloudCredentials;
+
+            if ($cacheResult) {
+                $cloudCredentials->bindEnvironment($this->id);
+                $cloudCredentials->cache($cont);
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -340,9 +458,9 @@ class Scalr_Environment extends Scalr_Model
     }
 
     /**
-     * Gets client_environment_properties value.
+     * Gets client_environment_properties
      *
-     * @return  mixed      Returns config value on success or NULL if value does not exist.
+     * @return  array   Returns all config entries
      */
     public function getFullConfiguration()
     {
@@ -393,25 +511,32 @@ class Scalr_Environment extends Scalr_Model
 
     public function isPlatformEnabled($platform)
     {
-        // constant from SERVER_PLATFORMS class
-        return $this->getPlatformConfigValue($platform . '.is_enabled', false);
+        return $this->cloudCredentials($platform)->isEnabled();
     }
 
-    public function getEnabledPlatforms()
+    public function getEnabledPlatforms($cacheResult = false, $clouds = null)
     {
-        $enabled = array();
-        foreach (array_keys(SERVER_PLATFORMS::getList()) as $value) {
-            if ($this->isPlatformEnabled($value))
-                $enabled[] = $value;
+        $cloudsList = array_keys(SERVER_PLATFORMS::getList());
+
+        if (isset($clouds)) {
+            $cloudsList = array_intersect($cloudsList, (array) $clouds);
         }
-        return $enabled;
+
+        return array_values(array_intersect($cloudsList, array_keys($this->cloudCredentialsList(
+            $cloudsList,
+            [[
+                'status' => ['$in' => Entity\CloudCredentials::getEnabledStatuses()]
+            ]],
+            [],
+            $cacheResult
+        ))));
     }
 
     public function getLocations()
     {
         if (!$this->cache['locations']) {
             $this->cache['locations'] = array();
-            foreach ($this->getEnabledPlatforms() as $platform) {
+            foreach ($this->getEnabledPlatforms(true) as $platform) {
                 $class = 'Scalr\\Modules\\Platforms\\' . ucfirst($platform) . '\\' . ucfirst($platform) . 'PlatformModule';
                 $locs = call_user_func(array($class, "getLocations"), $this);
                 foreach ($locs as $k => $v)
@@ -446,7 +571,7 @@ class Scalr_Environment extends Scalr_Model
             }
 
             // Add custom variables
-            $gv = new Scalr_Scripting_GlobalVariables($this->clientId, $this->id, Scalr_Scripting_GlobalVariables::SCOPE_ENVIRONMENT);
+            $gv = new Scalr_Scripting_GlobalVariables($this->clientId, $this->id, ScopeInterface::SCOPE_ENVIRONMENT);
             $vars = $gv->listVariables();
             foreach ($vars as $v)
                 $this->globalVariablesCache[$v['name']] = $v['value'];
@@ -464,16 +589,41 @@ class Scalr_Environment extends Scalr_Model
         return preg_replace("/{[A-Za-z0-9_-]+}/", "", $retval);
     }
 
-    public function enablePlatform($platform, $enabled = true)
+    /**
+     * Gets AWS tags that should be applied to the resource
+     *
+     * @return  array  Returns list of the AWS tags
+     */
+    public function getAwsTags()
     {
-        $props = array($platform . '.is_enabled' => $enabled ? 1 : 0);
-        if (!$enabled) {
-            foreach ($this->getLinkedVariables($platform) as $key)
-                $props[$key] = null;
+        $tags = [[
+            'key'   => \Scalr_Governance::SCALR_META_TAG_NAME,
+            'value' => $this->applyGlobalVarsToValue(\Scalr_Governance::SCALR_META_TAG_VALUE)
+        ]];
+
+        //Tags governance
+        $governance = new \Scalr_Governance($this->id);
+        $gTags = (array) $governance->getValue('ec2', \Scalr_Governance::AWS_TAGS);
+
+        if (count($gTags) > 0) {
+            foreach ($gTags as $tKey => $tValue) {
+                $tags[] = [
+                    'key'   => $tKey,
+                    'value' => $this->applyGlobalVarsToValue($tValue)
+                ];
+            }
         }
 
-        $this->setPlatformConfig($props, false);
-        $this->cache['locations'] = null;
+        return $tags;
+    }
+
+    public function enablePlatform($platform, $enabled = true)
+    {
+        $cloudCredentials = $this->cloudCredentials($platform);
+        if (!($enabled || empty($cloudCredentials->id))) {
+            $cloudCredentials->delete();
+            $cloudCredentials->release($this->getContainer());
+        }
     }
 
     /**
@@ -618,6 +768,7 @@ class Scalr_Environment extends Scalr_Model
     }
 
     /**
+     * TODO: remove all variables encapsulated in cloud credentials
      * Gets the list of the variables which need to be encrypted when we store them to database.
      *
      * @return  array Returns the array of variables looks like array(variablename => true);
@@ -630,6 +781,12 @@ class Scalr_Environment extends Scalr_Model
                 SERVER_PLATFORMS::CLOUDSTACK . "."  . CloudstackPlatformModule::API_URL,
                 SERVER_PLATFORMS::CLOUDSTACK . "."  . CloudstackPlatformModule::SECRET_KEY,
 
+                AzurePlatformModule::ACCESS_TOKEN,
+                AzurePlatformModule::REFRESH_TOKEN,
+                AzurePlatformModule::CLIENT_TOKEN,
+                AzurePlatformModule::TENANT_NAME,
+                AzurePlatformModule::AUTH_CODE,
+
                 SERVER_PLATFORMS::IDCF . "." . IdcfPlatformModule::API_KEY,
                 SERVER_PLATFORMS::IDCF . "." . IdcfPlatformModule::API_URL,
                 SERVER_PLATFORMS::IDCF . "." . IdcfPlatformModule::SECRET_KEY,
@@ -639,6 +796,7 @@ class Scalr_Environment extends Scalr_Model
                 SERVER_PLATFORMS::OPENSTACK . "." . OpenstackPlatformModule::KEYSTONE_URL,
                 SERVER_PLATFORMS::OPENSTACK . "." . OpenstackPlatformModule::PASSWORD,
                 SERVER_PLATFORMS::OPENSTACK . "." . OpenstackPlatformModule::TENANT_NAME,
+                SERVER_PLATFORMS::OPENSTACK . "." . OpenstackPlatformModule::DOMAIN_NAME,
                 SERVER_PLATFORMS::OPENSTACK . "." . OpenstackPlatformModule::USERNAME,
                 SERVER_PLATFORMS::OPENSTACK . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
 
@@ -647,6 +805,7 @@ class Scalr_Environment extends Scalr_Model
                 SERVER_PLATFORMS::OCS . "." . OpenstackPlatformModule::KEYSTONE_URL,
                 SERVER_PLATFORMS::OCS . "." . OpenstackPlatformModule::PASSWORD,
                 SERVER_PLATFORMS::OCS . "." . OpenstackPlatformModule::TENANT_NAME,
+                SERVER_PLATFORMS::OCS . "." . OpenstackPlatformModule::DOMAIN_NAME,
                 SERVER_PLATFORMS::OCS . "." . OpenstackPlatformModule::USERNAME,
                 SERVER_PLATFORMS::OCS . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
 
@@ -655,6 +814,7 @@ class Scalr_Environment extends Scalr_Model
                 SERVER_PLATFORMS::NEBULA . "." . OpenstackPlatformModule::KEYSTONE_URL,
                 SERVER_PLATFORMS::NEBULA . "." . OpenstackPlatformModule::PASSWORD,
                 SERVER_PLATFORMS::NEBULA . "." . OpenstackPlatformModule::TENANT_NAME,
+                SERVER_PLATFORMS::NEBULA . "." . OpenstackPlatformModule::DOMAIN_NAME,
                 SERVER_PLATFORMS::NEBULA . "." . OpenstackPlatformModule::USERNAME,
                 SERVER_PLATFORMS::NEBULA . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
 
@@ -663,14 +823,16 @@ class Scalr_Environment extends Scalr_Model
                 SERVER_PLATFORMS::MIRANTIS . "." . OpenstackPlatformModule::KEYSTONE_URL,
                 SERVER_PLATFORMS::MIRANTIS . "." . OpenstackPlatformModule::PASSWORD,
                 SERVER_PLATFORMS::MIRANTIS . "." . OpenstackPlatformModule::TENANT_NAME,
+                SERVER_PLATFORMS::MIRANTIS . "." . OpenstackPlatformModule::DOMAIN_NAME,
                 SERVER_PLATFORMS::MIRANTIS . "." . OpenstackPlatformModule::USERNAME,
                 SERVER_PLATFORMS::MIRANTIS . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
-                
+
                 SERVER_PLATFORMS::VIO . "." . OpenstackPlatformModule::API_KEY,
                 SERVER_PLATFORMS::VIO . "." . OpenstackPlatformModule::AUTH_TOKEN,
                 SERVER_PLATFORMS::VIO . "." . OpenstackPlatformModule::KEYSTONE_URL,
                 SERVER_PLATFORMS::VIO . "." . OpenstackPlatformModule::PASSWORD,
                 SERVER_PLATFORMS::VIO . "." . OpenstackPlatformModule::TENANT_NAME,
+                SERVER_PLATFORMS::VIO . "." . OpenstackPlatformModule::DOMAIN_NAME,
                 SERVER_PLATFORMS::VIO . "." . OpenstackPlatformModule::USERNAME,
                 SERVER_PLATFORMS::VIO . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
 
@@ -679,6 +841,7 @@ class Scalr_Environment extends Scalr_Model
                 SERVER_PLATFORMS::VERIZON . "." . OpenstackPlatformModule::KEYSTONE_URL,
                 SERVER_PLATFORMS::VERIZON . "." . OpenstackPlatformModule::PASSWORD,
                 SERVER_PLATFORMS::VERIZON . "." . OpenstackPlatformModule::TENANT_NAME,
+                SERVER_PLATFORMS::VERIZON . "." . OpenstackPlatformModule::DOMAIN_NAME,
                 SERVER_PLATFORMS::VERIZON . "." . OpenstackPlatformModule::USERNAME,
                 SERVER_PLATFORMS::VERIZON . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
 
@@ -687,6 +850,7 @@ class Scalr_Environment extends Scalr_Model
                 SERVER_PLATFORMS::CISCO . "." . OpenstackPlatformModule::KEYSTONE_URL,
                 SERVER_PLATFORMS::CISCO . "." . OpenstackPlatformModule::PASSWORD,
                 SERVER_PLATFORMS::CISCO . "." . OpenstackPlatformModule::TENANT_NAME,
+                SERVER_PLATFORMS::CISCO . "." . OpenstackPlatformModule::DOMAIN_NAME,
                 SERVER_PLATFORMS::CISCO . "." . OpenstackPlatformModule::USERNAME,
                 SERVER_PLATFORMS::CISCO . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
 
@@ -695,16 +859,9 @@ class Scalr_Environment extends Scalr_Model
                 SERVER_PLATFORMS::HPCLOUD . "." . OpenstackPlatformModule::KEYSTONE_URL,
                 SERVER_PLATFORMS::HPCLOUD . "." . OpenstackPlatformModule::PASSWORD,
                 SERVER_PLATFORMS::HPCLOUD . "." . OpenstackPlatformModule::TENANT_NAME,
+                SERVER_PLATFORMS::HPCLOUD . "." . OpenstackPlatformModule::DOMAIN_NAME,
                 SERVER_PLATFORMS::HPCLOUD . "." . OpenstackPlatformModule::USERNAME,
                 SERVER_PLATFORMS::HPCLOUD . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
-
-                SERVER_PLATFORMS::ECS . "." . OpenstackPlatformModule::API_KEY,
-                SERVER_PLATFORMS::ECS . "." . OpenstackPlatformModule::AUTH_TOKEN,
-                SERVER_PLATFORMS::ECS . "." . OpenstackPlatformModule::KEYSTONE_URL,
-                SERVER_PLATFORMS::ECS . "." . OpenstackPlatformModule::PASSWORD,
-                SERVER_PLATFORMS::ECS . "." . OpenstackPlatformModule::TENANT_NAME,
-                SERVER_PLATFORMS::ECS . "." . OpenstackPlatformModule::USERNAME,
-                SERVER_PLATFORMS::ECS . "." . OpenstackPlatformModule::SSL_VERIFYPEER,
 
                 SERVER_PLATFORMS::RACKSPACENG_UK . "." . OpenstackPlatformModule::API_KEY,
                 SERVER_PLATFORMS::RACKSPACENG_UK . "." . OpenstackPlatformModule::AUTH_TOKEN,
@@ -721,19 +878,9 @@ class Scalr_Environment extends Scalr_Model
                 SERVER_PLATFORMS::RACKSPACENG_US . "." . OpenstackPlatformModule::USERNAME,
 
                 Ec2PlatformModule::ACCESS_KEY,
-                Ec2PlatformModule::ACCOUNT_ID,
                 Ec2PlatformModule::CERTIFICATE,
                 Ec2PlatformModule::PRIVATE_KEY,
                 Ec2PlatformModule::SECRET_KEY,
-
-                EucalyptusPlatformModule::ACCESS_KEY,
-                EucalyptusPlatformModule::ACCOUNT_ID,
-                EucalyptusPlatformModule::CERTIFICATE,
-                EucalyptusPlatformModule::CLOUD_CERTIFICATE,
-                EucalyptusPlatformModule::EC2_URL,
-                EucalyptusPlatformModule::PRIVATE_KEY,
-                EucalyptusPlatformModule::S3_URL,
-                EucalyptusPlatformModule::SECRET_KEY,
 
                 GoogleCEPlatformModule::ACCESS_TOKEN,
                 GoogleCEPlatformModule::CLIENT_ID,
@@ -752,6 +899,7 @@ class Scalr_Environment extends Scalr_Model
     }
 
     /**
+     * TODO: migrate to the new cloud credentials entities
      * Gets array of the linked variables
      *
      * @param   string  $linkid  optional If provided it will return variables from given group id
@@ -806,7 +954,6 @@ class Scalr_Environment extends Scalr_Model
             }
 
             foreach (array(SERVER_PLATFORMS::OPENSTACK,
-                           SERVER_PLATFORMS::ECS,
                            SERVER_PLATFORMS::OCS,
                            SERVER_PLATFORMS::NEBULA,
                            SERVER_PLATFORMS::MIRANTIS,
@@ -818,9 +965,28 @@ class Scalr_Environment extends Scalr_Model
                     $platform . "." . OpenstackPlatformModule::KEYSTONE_URL,
                     $platform . "." . OpenstackPlatformModule::PASSWORD,
                     $platform . "." . OpenstackPlatformModule::TENANT_NAME,
+                    $platform . "." . OpenstackPlatformModule::DOMAIN_NAME,
                     $platform . "." . OpenstackPlatformModule::USERNAME,
                 );
             }
+
+            $ret[SERVER_PLATFORMS::AZURE] = [
+                AzurePlatformModule::SUBSCRIPTION_ID,
+                AzurePlatformModule::ACCESS_TOKEN,
+                AzurePlatformModule::ACCESS_TOKEN_EXPIRE,
+                AzurePlatformModule::AUTH_CODE,
+                AzurePlatformModule::AUTH_STEP,
+                AzurePlatformModule::CLIENT_OBJECT_ID,
+                AzurePlatformModule::CLIENT_TOKEN,
+                AzurePlatformModule::CLIENT_TOKEN_EXPIRE,
+                AzurePlatformModule::CONTRIBUTOR_ID,
+                AzurePlatformModule::REFRESH_TOKEN,
+                AzurePlatformModule::REFRESH_TOKEN_EXPIRE,
+                AzurePlatformModule::STORAGE_ACCOUNT_NAME,
+                AzurePlatformModule::TENANT_NAME,
+                AzurePlatformModule::ROLE_ASSIGNMENT_ID
+            ];
+
             //Computes fast access keys
             foreach ($ret as $platform => $linkedKeys) {
                 foreach ($linkedKeys as $variable) {

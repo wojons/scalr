@@ -174,10 +174,10 @@ class Script extends AbstractEntity implements ScopeInterface, AccessPermissions
      */
     public function getVersion($version)
     {
-        return ScriptVersion::findOne(array(
-            array('scriptId' => $this->id),
-            array('version' => $version)
-        ));
+        return ScriptVersion::findOne([
+            ['scriptId' => $this->id],
+            ['version' => $version],
+        ]);
     }
 
     /**
@@ -188,7 +188,7 @@ class Script extends AbstractEntity implements ScopeInterface, AccessPermissions
     public function fetchVersions()
     {
         $this->_versions = ScriptVersion::result(ScriptVersion::RESULT_ENTITY_COLLECTION)->find(
-            [['scriptId' => $this->id]], ['version' => 'ASC']
+            [['scriptId' => $this->id]], null, ['version' => true]
         );
 
         return $this->_versions;
@@ -204,7 +204,7 @@ class Script extends AbstractEntity implements ScopeInterface, AccessPermissions
     public function getLatestVersion()
     {
         /* @var $version ScriptVersion */
-        $version = ScriptVersion::findOne([['scriptId' => $this->id]], ['version' => '']);
+        $version = ScriptVersion::findOne([['scriptId' => $this->id]], null, ['version' => false]);
 
         if (!$version) {
             throw new Exception(sprintf('No version found for script %d', $this->id));
@@ -225,7 +225,7 @@ class Script extends AbstractEntity implements ScopeInterface, AccessPermissions
 
         parent::save();
 
-        if (! $id) {
+        if (!$id) {
             // we should create first version
             $version = new ScriptVersion();
             $version->scriptId = $this->id;
@@ -336,7 +336,7 @@ class Script extends AbstractEntity implements ScopeInterface, AccessPermissions
         $script->isSync = $this->isSync;
         $script->allowScriptParameters = $this->allowScriptParameters;
         $script->timeout = $this->timeout;
-        $script->accountId = $user->getAccountId() ? $user->getAccountId() : NULL;
+        $script->accountId = $user->getAccountId() ?: NULL;
         $script->envId = $envId ? $envId : $this->envId;
         $script->createdById = $user->getId();
         $script->createdByEmail = $user->getEmail();
@@ -404,7 +404,7 @@ class Script extends AbstractEntity implements ScopeInterface, AccessPermissions
                     ];
                 }, $script->getVersions()->getArrayCopy())
             ];
-        }, self::find($criteria, ['name' => 'ASC'])->getArrayCopy());
+        }, self::find($criteria, null, ['name' => true])->getArrayCopy());
     }
 
     public static function getScriptingData($accountId, $envId)

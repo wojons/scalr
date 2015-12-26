@@ -1,7 +1,6 @@
 <?php
 namespace Scalr\Service\Aws;
 
-use Scalr\Service\Eucalyptus;
 use Scalr\Service\Aws;
 
 /**
@@ -70,16 +69,12 @@ class S3 extends AbstractService implements ServiceInterface
     {
         $aws = $this->getAws();
 
-        if ($aws instanceof Eucalyptus) {
-            $url = rtrim($aws->getUrl('s3'), '/ ');
-        } else {
-            $region = $this->getAws()->getRegion();
+        $region = $this->getAws()->getRegion();
 
-            if (strpos($region, 'cn-') === 0) {
-                $url = 's3.' . $region . '.amazonaws.com.cn';
-            } else {
-                $url = 's3' . ($region && $region != Aws::REGION_US_EAST_1 ? '-' . $region : '') . '.amazonaws.com';
-            }
+        if (strpos($region, 'cn-') === 0) {
+            $url = 's3.' . $region . '.amazonaws.com.cn';
+        } else {
+            $url = 's3' . ($region && $region != Aws::REGION_US_EAST_1 ? '-' . $region : '') . '.amazonaws.com';
         }
 
         return $url;

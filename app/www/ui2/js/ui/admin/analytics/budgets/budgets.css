@@ -35,7 +35,7 @@
 
 .x-budgets-grid .x-tree-elbow-img {
     height: 22px;
-    width: 22px;
+    width: 22px!important;
     margin: 11px 15px 10px 15px;
     float: left;
 }

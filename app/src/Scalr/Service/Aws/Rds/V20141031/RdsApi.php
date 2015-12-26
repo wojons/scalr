@@ -5,7 +5,12 @@ use Scalr\Service\Aws\Rds\DataType\AvailabilityZoneData;
 use Scalr\Service\Aws\Rds\DataType\AvailabilityZoneList;
 use Scalr\Service\Aws\Rds\DataType\CharacterSetData;
 use Scalr\Service\Aws\Rds\DataType\CharacterSetList;
+use Scalr\Service\Aws\Rds\DataType\CreateDBClusterRequestData;
 use Scalr\Service\Aws\Rds\DataType\CreateDBInstanceReadReplicaData;
+use Scalr\Service\Aws\Rds\DataType\DBClusterData;
+use Scalr\Service\Aws\Rds\DataType\DBClusterList;
+use Scalr\Service\Aws\Rds\DataType\DBClusterSnapshotData;
+use Scalr\Service\Aws\Rds\DataType\DBClusterSnapshotList;
 use Scalr\Service\Aws\Rds\DataType\DBEngineVersionList;
 use Scalr\Service\Aws\Rds\DataType\DBEngineVersionData;
 use Scalr\Service\Aws\Rds\DataType\DBSubnetGroupList;
@@ -14,6 +19,7 @@ use Scalr\Service\Aws\Rds\DataType\DescribeOrderableDBInstanceOptionsData;
 use Scalr\Service\Aws\Rds\DataType\EventData;
 use Scalr\Service\Aws\Rds\DataType\EventList;
 use Scalr\Service\Aws\Rds\DataType\DescribeEventRequestData;
+use Scalr\Service\Aws\Rds\DataType\ModifyDBClusterRequestData;
 use Scalr\Service\Aws\Rds\DataType\ModifyDBSubnetGroupRequestData;
 use Scalr\Service\Aws\Rds\DataType\OptionData;
 use Scalr\Service\Aws\Rds\DataType\OptionGroupData;
@@ -23,6 +29,7 @@ use Scalr\Service\Aws\Rds\DataType\OptionSettingData;
 use Scalr\Service\Aws\Rds\DataType\OptionSettingList;
 use Scalr\Service\Aws\Rds\DataType\OrderableDBInstanceOptionsData;
 use Scalr\Service\Aws\Rds\DataType\OrderableDBInstanceOptionsList;
+use Scalr\Service\Aws\Rds\DataType\RestoreDBClusterFromSnapshotRequestData;
 use Scalr\Service\Aws\Rds\DataType\RestoreDBInstanceFromDBSnapshotRequestData;
 use Scalr\Service\Aws\Rds\DataType\DBSnapshotData;
 use Scalr\Service\Aws\Rds\DataType\DBSnapshotList;
@@ -182,6 +189,7 @@ class RdsApi extends AbstractApi
             }
 
             $item->dBInstanceIdentifier = $dbInstanceIdentifier;
+            $item->dBClusterIdentifier = $this->get($sxml->DBClusterIdentifier);
             $item->allocatedStorage = $this->exist($sxml->AllocatedStorage) ? (int) $sxml->AllocatedStorage : null;
             $item->autoMinorVersionUpgrade = $this->exist($sxml->AutoMinorVersionUpgrade) ?
                 (((string)$sxml->AutoMinorVersionUpgrade) == 'true') : null;
@@ -213,6 +221,8 @@ class RdsApi extends AbstractApi
             $item->secondaryAvailabilityZone = $this->exist($sxml->SecondaryAvailabilityZone) ?
                 (string) $sxml->SecondaryAvailabilityZone : null;
             $item->iops = $this->exist($sxml->Iops) ? (int) $sxml->Iops : null;
+            $item->storageEncrypted = $this->get($sxml->StorageEncrypted, 'bool');
+            $item->kmsKeyId = $this->get($sxml->KmsKeyId);
             $item->storageType = $this->exist($sxml->StorageType) ? (string) $sxml->StorageType : null;
 
             $item->readReplicaDBInstanceIdentifiers = array();
@@ -520,6 +530,37 @@ class RdsApi extends AbstractApi
                 throw new RdsException(sprintf(self::UNEXPECTED, 'modify DBIntance'));
             }
             $result = $this->_loadDBInstanceData($sxml->ModifyDBInstanceResult->DBInstance);
+        }
+        return $result;
+    }
+
+    /**
+     * ModifyDBCluster action
+     *
+     * Modify settings for a DB Cluster.
+     * You can change one or more database configuration parameters by
+     * specifying these parameters and the new values in the request.
+     *
+     * @param   ModifyDBClusterRequestData  $request    Modify DB Cluster request object
+     *
+     * @return  DBClusterData  Returns modified DBCluster
+     *
+     * @throws  ClientException
+     * @throws  RdsException
+     */
+    public function modifyDBCluster(ModifyDBClusterRequestData $request)
+    {
+        $result = null;
+        $options = $request->getQueryArray();
+
+        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+            if (!$this->exist($sxml->ModifyDBClusterResult)) {
+                throw new RdsException(sprintf(self::UNEXPECTED, 'modify DBCluster'));
+            }
+            $result = $this->_loadDBClusterData($sxml->ModifyDBClusterResult->DBCluster);
         }
         return $result;
     }
@@ -2186,6 +2227,505 @@ class RdsApi extends AbstractApi
         if ($response->getError() === false) {
             $sxml = simplexml_load_string($response->getRawContent());
             $result = true;
+        }
+
+        return $result;
+    }
+
+    /**
+     * CreateDBCluster action
+     *
+     * Creates a new DB Cluster.
+     *
+     * @param   CreateDBClusterRequestData  $request    Created DB Instance request object
+     *
+     * @return  DBInstanceData  Returns created DBInstance
+     *
+     * @throws  ClientException
+     * @throws  RdsException
+     */
+    public function createDBCluster(CreateDBClusterRequestData $request)
+    {
+        $result = null;
+        $options = $request->getQueryArray();
+
+        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+            if (!$this->exist($sxml->CreateDBClusterResult)) {
+                throw new RdsException(sprintf(self::UNEXPECTED, 'create DBCluster'));
+            }
+
+            $result = $this->_loadDBClusterData($sxml->CreateDBClusterResult->DBCluster);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Loads DBClusterData from simple xml object
+     *
+     * @param   \SimpleXMLElement $sxml
+     * @return  DBClusterData Returns DBClusterData
+     */
+    protected function _loadDBClusterData(\SimpleXMLElement $sxml)
+    {
+        $item = null;
+
+        if ($this->exist($sxml)) {
+            $dbClusterIdentifier = (string) $sxml->DBClusterIdentifier;
+            $item = $this->rds->getEntityManagerEnabled() ? $this->rds->dbCluster->get($dbClusterIdentifier) : null;
+
+            if ($item === null) {
+                $item = new DBClusterData();
+                $item->setRds($this->rds);
+                $bAttach = true;
+            } else {
+                $item->resetObject();
+                $bAttach = false;
+            }
+
+            $this->fill($item, $sxml, [
+                'dBClusterIdentifier',
+                'dBClusterParameterGroup',
+                'allocatedStorage',
+                'dBSubnetGroup',
+                'backupRetentionPeriod',
+                'backupRetentionPeriod',
+                'characterSetName',
+                'status',
+                'databaseName',
+                'engine',
+                'engineVersion',
+                'latestRestorableTime' => 'DateTime',
+                'masterUsername',
+                'preferredBackupWindow',
+                'preferredMaintenanceWindow',
+                'port' => 'int',
+                'endpoint',
+                'availabilityZones' => '_loadAvailabilityZonesList',
+                'vpcSecurityGroups' => '_loadVpcSecurityGroupMembershipList',
+                'dBClusterOptionGroupMemberships' => '_loadOptionGroupMembershipList',
+                'dBClusterMembers' => '_loadDBClusterMembers'
+            ]);
+
+            if ($bAttach && $this->rds->getEntityManagerEnabled()) {
+                $this->getEntityManager()->attach($item);
+            }
+        }
+
+        return $item;
+    }
+
+    /**
+     * Loads DBClusterMembers from simple xml object
+     *
+     * @param   \SimpleXMLElement $sxml
+     * @return  Rds\DataType\ClusterMembersList Returns ClusterMembersList
+     */
+    protected function _loadDBClusterMembers(\SimpleXMLElement $sxml)
+    {
+        $list = new Rds\DataType\ClusterMembersList();
+        $list->setRds($this->rds);
+
+        if (!empty($sxml->DBClusterMember)) {
+            foreach ($sxml->DBClusterMember as $member) {
+                $item = new Rds\DataType\ClusterMemberData(
+                    $this->get($member->DBInstanceIdentifier),
+                    $this->get($member->IsClusterWriter, 'bool'),
+                    $this->get($member->DBClusterParameterGroupStatus)
+                );
+                $item->setRds($this->rds);
+                $list->append($item);
+                unset($item);
+            }
+        }
+
+        return $list;
+    }
+
+    /**
+     * Loads AvailabilityZoneList from simple xml object
+     *
+     * @param \SimpleXMLElement $sxml
+     * @return AvailabilityZoneList
+     */
+    protected function _loadAvailabilityZonesList(\SimpleXMLElement $sxml)
+    {
+        $result = new AvailabilityZoneList();
+        $result->setRds($this->rds);
+
+        if (isset($sxml->AvailabilityZone)) {
+            foreach ($sxml->AvailabilityZone as $zone) {
+                $item = new AvailabilityZoneData();
+                $item->setRds($this->rds);
+
+                $item->name = (string) $zone;
+
+                $result->append($item);
+                unset($item);
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * DescribeDBClusters action
+     *
+     * Returns information about provisioned RDS clusters. This API supports pagination
+     *
+     * @param   string          $dbClusterIdentifier  optional The user-specified cluster identifier.
+     * @param   string          $marker               optional The response includes only records beyond the marker.
+     * @param   int             $maxRecords           optional The maximum number of records to include in the response.
+     *
+     * @return  DBClusterList  Returns the list of DB Clusters
+     *
+     * @throws  ClientException
+     * @throws  RdsException
+     */
+    public function describeDBClusters($dbClusterIdentifier = null, $marker = null, $maxRecords = null)
+    {
+        $result = null;
+        $options = array();
+        if ($dbClusterIdentifier !== null) {
+            $options['DBClusterIdentifier'] = (string) $dbClusterIdentifier;
+        }
+
+        if ($marker !== null) {
+            $options['Marker'] = (string) $marker;
+        }
+
+        if ($maxRecords !== null) {
+            $options['MaxRecords'] = (int) $maxRecords;
+        }
+
+        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+            $result = new DBClusterList();
+            $result->setRds($this->rds);
+            $result->marker = $this->exist($sxml->DescribeDBClustersResult->Marker) ?
+                (string) $sxml->DescribeDBClustersResult->Marker : null;
+            if (isset($sxml->DescribeDBClustersResult->DBClusters->DBCluster)) {
+                foreach ($sxml->DescribeDBClustersResult->DBClusters->DBCluster as $cluster) {
+                    $item = $this->_loadDBClusterData($cluster);
+                    $result->append($item);
+                    unset($item);
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * DeleteDBCluster action
+     *
+     * The DeleteDBCluster action deletes a previously provisioned DB cluster.
+     * A successful response from the web service indicates the request was
+     * received correctly. When you delete a DB cluster, all automated backups
+     * for that DB cluster are deleted and cannot be recovered. Manual DB cluster
+     * snapshots of the DB cluster to be deleted are not deleted.
+     *
+     * @param   string       $dBClusterIdentifier                The DB Cluster identifier for the DB Instance to be deleted.
+     * @param   bool         $skipFinalSnapshot         optional Determines whether a final DB Snapshot is created before the DB Cluster is deleted
+     * @param   string       $finalDBSnapshotIdentifier optional The DBSnapshotIdentifier of the new DBSnapshot created when SkipFinalSnapshot is set to false
+     *
+     * @return  DBClusterData  Returns deleted DBCluster
+     *
+     * @throws  ClientException
+     * @throws  RdsException
+     */
+    public function deleteDBCluster($dBClusterIdentifier, $skipFinalSnapshot = true, $finalDBSnapshotIdentifier = null)
+    {
+        $result = null;
+        $options = [ 'DBClusterIdentifier' => (string) $dBClusterIdentifier ];
+
+        $options['SkipFinalSnapshot'] = $skipFinalSnapshot ? 'true' : 'false';
+
+        if ($finalDBSnapshotIdentifier !== null) {
+            $options['FinalDBSnapshotIdentifier'] = (string) $finalDBSnapshotIdentifier;
+            if (isset($options['SkipFinalSnapshot']) && $options['SkipFinalSnapshot'] === 'true') {
+                throw new \InvalidArgumentException(sprintf(
+                    'Specifiying FinalDBSnapshotIdentifier and also setting the '
+                    . 'SkipFinalSnapshot parameter to true is forbidden.'
+                ));
+            }
+        }
+
+        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+            if (!$this->exist($sxml->DeleteDBClusterResult)) {
+                throw new RdsException(sprintf(self::UNEXPECTED, 'delete DBCluster'));
+            }
+            $result = $this->_loadDBClusterData($sxml->DeleteDBClusterResult->DBCluster);
+        }
+        return $result;
+    }
+
+    /**
+     * CreateDBClusterSnapshot action
+     *
+     * Creates a new DB cluster snapshot.
+     *
+     * @param   string          $dbClusterIdentifier            The identifier of the DB cluster to create a snapshot for. This parameter is not case-sensitive.
+     * @param   string          $dbClusterSnapshotIdentifier    The identifier of the DB cluster snapshot. This parameter is stored as a lowercase string.
+     * @param   TagsList  $tags                                 optional The tags to be assigned to the DB cluster snapshot.
+     *
+     * @return  DBClusterSnapshotData  Returns created DB cluster snapshot
+     *
+     * @throws  ClientException
+     * @throws  RdsException
+     */
+    public function createDBClusterSnapshot($dbClusterIdentifier, $dbClusterSnapshotIdentifier, TagsList $tags = null)
+    {
+        $result = null;
+        $options = [];
+
+        if (count($tags) > 0) {
+            $options = $tags->getQueryArray();
+        }
+
+        if ($dbClusterIdentifier !== null) {
+            $options['DBClusterIdentifier'] = (string) $dbClusterIdentifier;
+        }
+
+        if ($dbClusterSnapshotIdentifier !== null) {
+            $options['DBClusterSnapshotIdentifier'] = (string) $dbClusterSnapshotIdentifier;
+        }
+
+        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+            if (!$this->exist($sxml->CreateDBClusterSnapshotResult)) {
+                throw new RdsException(sprintf(self::UNEXPECTED, 'create DBClusterSnapshot'));
+            }
+
+            $result = $this->_loadDBClusterSnapshotData($sxml->CreateDBClusterSnapshotResult->DBClusterSnapshot);
+        }
+
+        return $result;
+    }
+
+    /**
+     * CopyDBClusterSnapshot action
+     *
+     * Creates a new DB cluster snapshot.
+     *
+     * @param   string          $sourceDbClusterSnapshotIdentifier  The identifier of the DB cluster snapshot to copy. This parameter is not case-sensitive.
+     * @param   string          $targetDbClusterSnapshotIdentifier  The identifier of the new DB cluster snapshot to create from the source DB cluster snapshot. This parameter is not case-sensitive.
+     * @param   TagsList  $tags                               optional A list of tags.
+     *
+     * @return  DBClusterSnapshotData  Returns created DB cluster snapshot
+     *
+     * @throws  ClientException
+     * @throws  RdsException
+     */
+    public function copyDBClusterSnapshot($sourceDbClusterSnapshotIdentifier, $targetDbClusterSnapshotIdentifier, TagsList $tags = null)
+    {
+        $result = null;
+        $options = [];
+
+        if (count($tags) > 0) {
+            $options = $tags->getQueryArray();
+        }
+
+        if ($sourceDbClusterSnapshotIdentifier !== null) {
+            $options['SourceDBClusterSnapshotIdentifier'] = (string) $sourceDbClusterSnapshotIdentifier;
+        }
+
+        if ($targetDbClusterSnapshotIdentifier !== null) {
+            $options['TargetDBClusterSnapshotIdentifier'] = (string) $targetDbClusterSnapshotIdentifier;
+        }
+
+        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+            if (!$this->exist($sxml->CopyDBClusterSnapshotResult)) {
+                throw new RdsException(sprintf(self::UNEXPECTED, 'copy DBClusterSnapshot'));
+            }
+
+            $result = $this->_loadDBClusterSnapshotData($sxml->CopyDBClusterSnapshotResult->DBClusterSnapshot);
+        }
+
+        return $result;
+    }
+
+    /**
+     * DescribeDBClusterSnapshots action
+     *
+     * Returns information about DB cluster snapshots. This API supports pagination
+     *
+     * @param   string          $dbClusterIdentifier            optional A DB cluster identifier to retrieve the list of DB cluster snapshots for.
+     *                                                          This parameter cannot be used in conjunction with the DBClusterSnapshotIdentifier parameter.
+     *                                                          This parameter is not case-sensitive.
+     *
+     * @param   string          $dbClusterSnapshotIdentifier    optional A specific DB cluster snapshot identifier to describe.
+     *                                                          This parameter cannot be used in conjunction with the DBClusterIdentifier parameter.
+     *                                                          This value is stored as a lowercase string.
+     *
+     * @param   string          $snapshotType                   optional The type of DB cluster snapshots that will be returned.
+     *                                                          Values can be automated or manual.
+     *                                                          If this parameter is not specified, the returned results will include all snapshot types.
+     *
+     * @param   string          $marker                         optional The response includes only records beyond the marker.
+     * @param   int             $maxRecords                     optional The maximum number of records to include in the response.
+     *
+     * @return  DBClusterSnapshotList  Returns the list of DB Cluster Snapshots
+     *
+     * @throws  ClientException
+     * @throws  RdsException
+     */
+    public function describeDBClusterSnapshots($dbClusterIdentifier = null, $dbClusterSnapshotIdentifier = null, $snapshotType = null, $marker = null, $maxRecords = null)
+    {
+        $result = null;
+        $options = [];
+
+        if ($dbClusterIdentifier !== null) {
+            $options['DBClusterIdentifier'] = (string) $dbClusterIdentifier;
+        }
+
+        if ($dbClusterSnapshotIdentifier !== null) {
+            $options['DBClusterSnapshotIdentifier'] = (string) $dbClusterSnapshotIdentifier;
+        }
+
+        if ($snapshotType !== null) {
+            $options['SnapshotType'] = (string) $snapshotType;
+        }
+
+        if ($marker !== null) {
+            $options['Marker'] = (string) $marker;
+        }
+
+        if ($maxRecords !== null) {
+            $options['MaxRecords'] = (int) $maxRecords;
+        }
+
+        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+            $result = new DBClusterSnapshotList();
+            $result->setRds($this->rds);
+            $result->marker = $this->exist($sxml->DescribeDBClusterSnapshotsResult->Marker) ?
+                (string) $sxml->DescribeDBClusterSnapshotsResult->Marker : null;
+
+            if (isset($sxml->DescribeDBClusterSnapshotsResult->DBClusterSnapshots->DBClusterSnapshot)) {
+                foreach ($sxml->DescribeDBClusterSnapshotsResult->DBClusterSnapshots->DBClusterSnapshot as $clusterSnapshot) {
+                    $item = $this->_loadDBClusterSnapshotData($clusterSnapshot);
+                    $result->append($item);
+                    unset($item);
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Loads DBClusterSnapshotData from simple xml object
+     *
+     * @param   \SimpleXMLElement $sxml
+     * @return  DBClusterSnapshotData Returns DBClusterSnapshotData object
+     */
+    protected function _loadDBClusterSnapshotData(\SimpleXMLElement $sxml)
+    {
+        $item = null;
+
+        if ($this->exist($sxml)) {
+            $item = new DBClusterSnapshotData();
+            $item->setRds($this->rds);
+
+            $this->fill($item, $sxml, [
+                'allocatedStorage' => 'int',
+                'clusterCreateTime' => 'DateTime',
+                'dBClusterIdentifier',
+                'dBClusterSnapshotIdentifier',
+                'engine',
+                'engineVersion',
+                'licenseModel',
+                'masterUsername',
+                'percentProgress' => 'int',
+                'port' => 'int',
+                'snapshotCreateTime' => 'DateTime',
+                'snapshotType',
+                'status',
+                'vpcId',
+                'availabilityZones' => '_loadAvailabilityZonesList',
+            ]);
+        }
+
+        return $item;
+    }
+
+    /**
+     * DeleteDBClusterSnapshot action
+     *
+     * Deletes a DB cluster snapshot. If the snapshot is being copied, the copy operation is terminated.
+     * The DB cluster snapshot must be in the available state to be deleted.
+     *
+     * @param   string     $dbClusterSnapshotIdentifier     The identifier of the DB cluster snapshot to delete.
+     *
+     * @return  DBClusterSnapshotData  Returns deleted DB Cluster Snapshot
+     *
+     * @throws  ClientException
+     * @throws  RdsException
+     */
+    public function deleteDBClusterSnapshot($dbClusterSnapshotIdentifier)
+    {
+        $result = null;
+        $options = ['DBClusterSnapshotIdentifier' => (string) $dbClusterSnapshotIdentifier];
+
+        $response = $this->client->call(ucfirst(__FUNCTION__), $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+
+            if (!$this->exist($sxml->DeleteDBClusterSnapshotResult)) {
+                throw new RdsException(sprintf(self::UNEXPECTED, 'delete DBClusterSnapshot'));
+            }
+
+            $result = $this->_loadDBClusterSnapshotData($sxml->DeleteDBClusterSnapshotResult->DBClusterSnapshot);
+        }
+
+        return $result;
+    }
+
+    /**
+     * RestoreDBClusterFromSnapshot action
+     *
+     * Creates a new DB cluster from a DB cluster snapshot.
+     * The target DB cluster is created from the source DB cluster restore point with the same configuration as the original source DB cluster,
+     * except that the new DB cluster is created with the default security group.
+     *
+     * @param   RestoreDBClusterFromSnapshotRequestData $request The request object.
+     * @return  DBClusterData Returns DBClusterData on success or throws an exception.
+     * @throws  ClientException
+     * @throws  RdsException
+     */
+    public function restoreDBClusterFromSnapshot(RestoreDBClusterFromSnapshotRequestData $request)
+    {
+        $result = null;
+        $options = $request->getQueryArray();
+        $action = ucfirst(__FUNCTION__);
+
+        $response = $this->client->call($action, $options);
+
+        if ($response->getError() === false) {
+            $sxml = simplexml_load_string($response->getRawContent());
+
+            if (!$this->exist($sxml->{$action . 'Result'})) {
+                throw new RdsException(sprintf(self::UNEXPECTED, $action));
+            }
+
+            $ptr = $sxml->{$action . 'Result'};
+            $result = $this->_loadDBClusterData($ptr->DBCluster);
         }
 
         return $result;

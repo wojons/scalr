@@ -12,22 +12,34 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
         return true;
     }
 
-    private function canManageServers()
+    /**
+     * Read only access
+     *
+     * @return bool
+     */
+    private function canViewServers()
     {
-        return ($this->request->getScope() == ChefServer::SCOPE_ENVIRONMENT && $this->request->isAllowed(Acl::RESOURCE_SERVICES_ENVADMINISTRATION_CHEF) && !$this->user->isScalrAdmin() ||
-               $this->request->getScope() == ChefServer::SCOPE_ACCOUNT && $this->request->isAllowed(Acl::RESOURCE_SERVICES_ADMINISTRATION_CHEF) && !$this->user->isScalrAdmin() ||
-               $this->request->getScope() == ChefServer::SCOPE_SCALR && $this->user->isScalrAdmin());
+        return ($this->request->getScope() == ChefServer::SCOPE_ENVIRONMENT && $this->request->isAllowed(Acl::RESOURCE_SERVICES_CHEF_ENVIRONMENT) && !$this->user->isScalrAdmin() ||
+            $this->request->getScope() == ChefServer::SCOPE_ACCOUNT && $this->request->isAllowed(Acl::RESOURCE_SERVICES_CHEF_ACCOUNT) && !$this->user->isScalrAdmin() ||
+            $this->request->getScope() == ChefServer::SCOPE_SCALR && $this->user->isScalrAdmin());
     }
 
     /**
+     * Full access
+     *
      * @param ChefServer $server
+     * @return bool
      */
-    private function canEditServer($server)
+    private function canManageServers($server)
     {
         return $this->request->getScope() == $server->getScope() &&
-               ($server->getScope() == ChefServer::SCOPE_SCALR ||
-                $server->getScope() == ChefServer::SCOPE_ACCOUNT && $server->accountId == $this->user->getAccountId() ||
-                $server->getScope() == ChefServer::SCOPE_ENVIRONMENT && $server->envId == $this->getEnvironmentId() && $server->accountId == $this->user->getAccountId());
+            ($server->getScope() == ChefServer::SCOPE_SCALR ||
+
+            $server->getScope() == ChefServer::SCOPE_ACCOUNT && $server->accountId == $this->user->getAccountId() &&
+                $this->request->isAllowed(Acl::RESOURCE_SERVICES_CHEF_ACCOUNT, Acl::PERM_SERVICES_CHEF_ACCOUNT_MANAGE) ||
+
+            $server->getScope() == ChefServer::SCOPE_ENVIRONMENT && $server->envId == $this->getEnvironmentId(true) && $server->accountId == $this->user->getAccountId() &&
+                $this->request->isAllowed(Acl::RESOURCE_SERVICES_CHEF_ENVIRONMENT, Acl::PERM_SERVICES_CHEF_ENVIRONMENT_MANAGE));
     }
 
     public function defaultAction()
@@ -37,7 +49,7 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        if (!$this->canManageServers()) {
+        if (!$this->canViewServers()) {
             throw new Scalr_Exception_InsufficientPermissions();
         }
 
@@ -48,7 +60,7 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 
     public function xListAction()
     {
-        if (!$this->canManageServers()) {
+        if (!$this->canViewServers()) {
             throw new Scalr_Exception_InsufficientPermissions();
         }
 
@@ -60,11 +72,15 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
     //with governance
     public function xListServersAction()
     {
+        $limits = null;
+
         if (!$this->user->isAdmin()) {
-            $governance = new Scalr_Governance($this->getEnvironmentId());
+            $governance = new Scalr_Governance($this->getEnvironmentId(true));
             $limits = $governance->getValue(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_CHEF, null);
         }
+
         $list = [];
+
         foreach ($this->getList() as $server) {
             if (!$limits || isset($limits['servers'][(string)$server['id']])) {
                 $list[] = [
@@ -75,6 +91,7 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
                 ];
             }
         }
+
         $this->response->data([
             'data' => $list
         ]);
@@ -86,14 +103,10 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
      */
     public function xRemoveAction($id)
     {
-        if (!$this->canManageServers()) {
-            throw new Scalr_Exception_InsufficientPermissions();
-        }
-
         $server = ChefServer::findPk($id);
-
-        if (!$this->canEditServer($server)) {
-            throw new Scalr_Exception_Core('Insufficient permissions to remove chef server.');
+        /* @var $server ChefServer */
+        if (!$this->canManageServers($server)) {
+            throw new Scalr_Exception_InsufficientPermissions();
         }
 
         if ($server->isInUse()) {
@@ -115,17 +128,14 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
      */
     public function xSaveAction($id, $url, $username, $authKey, $vUsername, $vAuthKey)
     {
-        if (!$this->canManageServers()) {
-            throw new Scalr_Exception_InsufficientPermissions();
-        }
-
         if (!$id) {
             $server = new ChefServer();
             $server->setScope($this->request->getScope(), $this->user->getAccountId(), $this->getEnvironmentId(true));
         } else {
             $server = ChefServer::findPk($id);
-            if (!$this->canEditServer($server)) {
-                throw new Scalr_Exception_Core('Insufficient permissions to edit chef server at this scope');
+            /* @var $server ChefServer */
+            if (!$this->canManageServers($server)) {
+                throw new Scalr_Exception_InsufficientPermissions();
             }
         }
 
@@ -194,16 +204,14 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
      */
     public function xGroupActionHandlerAction(JsonData $serverIds)
     {
-        if (!$this->canManageServers()) {
-            throw new Scalr_Exception_InsufficientPermissions();
-        }
+        $processed = [];
+        $errors = [];
 
-        $processed = array();
-        $errors = array();
         if (!empty($serverIds)) {
             $servers = ChefServer::find([['id' => ['$in' => $serverIds]]]);
             foreach($servers as $server) {
-                if (!$this->canEditServer($server)) {
+                /* @var $server ChefServer */
+                if (!$this->canManageServers($server)) {
                     $errors[] = 'Insufficient permissions to remove chef server';
                 } elseif ($server->isInUse()) {
                     $errors[] = 'Chef server is in use and can\'t be removed.';
@@ -230,6 +238,7 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
     {
         $list = ChefServer::getList($this->user->getAccountId(), $this->getEnvironmentId(true), $this->request->getScope());
         $data = [];
+
         foreach ($list as $entity) {
             $data[] = $this->getServerData($entity);
         }
@@ -239,6 +248,7 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
 
     /**
      * @param ChefServer $server
+     * @return array
      */
     private function getServerData($server)
     {

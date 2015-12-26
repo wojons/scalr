@@ -2,6 +2,8 @@
 
 use Scalr\Exception\FileNotFoundException;
 use Scalr\UI\Request\ObjectInitializingInterface;
+use Scalr\DataType\AccessPermissionsInterface;
+use Scalr\Model\Entity\Account\User;
 use Scalr\Util\CryptoTool;
 
 class Scalr_UI_Controller
@@ -45,12 +47,14 @@ class Scalr_UI_Controller
      */
     private $container;
 
-    protected $sortParams = array();
+    protected $sortParams = [];
 
     /**
      * @var string
      */
     public $uiCacheKeyPattern;
+
+    public $unusedPathChunks = [];
 
     public function __construct()
     {
@@ -71,7 +75,7 @@ class Scalr_UI_Controller
      */
     protected function getCrypto()
     {
-        if (! $this->crypto) {
+        if (!$this->crypto) {
             $this->crypto = \Scalr::getContainer()->crypto;
         }
 
@@ -79,21 +83,43 @@ class Scalr_UI_Controller
     }
 
     /**
-     * @param bool $silent optional On false throw Exception
-     * @return mixed
-     * @throws Scalr_Exception_Core
+     * AuditLogger wrapper
+     *
+     * @param  string  $event      Event name, aka tag
+     * @param  mixed   $extra      optional Array of additionally provided information
+     * @param  mixed   $extra,...  optional
+     * @return boolean Whether operation was successful
+     */
+    public function auditLog($event, ...$extra)
+    {
+        return $this->getContainer()->auditlogger->auditLog($event, ...$extra);
+    }
+
+    /**
+     * Returns identifier of the current Environment which is selected by the User.
+     *
+     * If environment hasn't been set it will throw an exception unless silent is turned on.
+     *
+     * @param   bool    $silent optional On false throw Exception
+     * @return  int     Returns identifier of the Environment
+     * @throws  Scalr_Exception_Core
      */
     public function getEnvironmentId($silent = false)
     {
         if ($this->environment) {
             return $this->environment->id;
         } else if ($silent) {
-            return NULL;
+            return null;
         } else {
-            throw new Scalr_Exception_Core("No environment defined for current session");
+            throw new Scalr_Exception_Core("No environment defined for current session.");
         }
     }
 
+    /**
+     * Gets current environment
+     *
+     * @return  Scalr_Environment
+     */
     public function getEnvironment()
     {
         return $this->environment;
@@ -101,7 +127,7 @@ class Scalr_UI_Controller
 
     /**
      * @deprecated
-     * @param $key
+     * @param string $key
      * @param bool $rawValue if true returns rawValue (not stripped) only once, don't save in cache
      * @return mixed
      */
@@ -128,6 +154,73 @@ class Scalr_UI_Controller
             return false;
     }
 
+    /**
+     * Restricts access based on mnemonic constants
+     * Method interprets $resourceMnemonic as RESOURCE_$resourceMnemonic_$scope,
+     * $permissionMnemonic as PERM_$resourceMnemonic_$scope_$permissionMnemonic
+     * For example, call(ROLES, MANAGE) on account scope will check RESOURCE_ROLES_ACCOUNT, PERM_ROLES_ACCOUNT_MANAGE
+     *
+     * @param   string  $resourceMnemonic               Name of resource
+     * @param   string  $permissionMnemonic optional    Name of permission
+     * @throws  Scalr_Exception_InsufficientPermissions
+     * @throws  Scalr_Exception_Core
+     */
+    public function restrictAccess($resourceMnemonic, $permissionMnemonic = null)
+    {
+        if ($this->user->isScalrAdmin()) {
+            // we don't have permissions on scalr scope
+            return;
+        }
+
+        $resourceConst = 'Scalr\Acl\Acl::RESOURCE_' . strtoupper($resourceMnemonic) . '_' . strtoupper($this->request->getScope());
+        $permissionConst = $permissionMnemonic ? 'Scalr\Acl\Acl::PERM_' . strtoupper($resourceMnemonic). '_' . strtoupper($this->request->getScope()) . '_' . strtoupper($permissionMnemonic) : NULL;
+
+        if (! defined($resourceConst)) {
+            throw new Scalr_Exception_Core("ACL Constant {$resourceConst} was not found for method restrictAccess");
+        }
+
+        if ($permissionConst && !defined($permissionConst)) {
+            throw new Scalr_Exception_Core("ACL Constant {$permissionConst} was not found for method restrictAccess");
+        }
+
+        $resource = constant($resourceConst);
+        $permission = $permissionConst ? constant($permissionConst) : NULL;
+
+        $this->request->restrictAccess($resource, $permission);
+    }
+
+    /**
+     * Check whether the user has access permissions to the specified object
+     *
+     * @param   object     $object
+     * @param   boolean    $modify
+     * @return  bool                Returns TRUE if the authenticated user has access or FALSE otherwise
+     * @throws  Scalr_Exception_Core
+     */
+    public function hasPermissions($object, $modify = null)
+    {
+        if (! ($object instanceof AccessPermissionsInterface)) {
+            throw new Scalr_Exception_Core('Object is not an instance of AccessPermissionsInterface');
+        }
+
+        return $object->hasAccessPermissions(User::findPk($this->user->getId()), $this->getEnvironment(), $modify);
+    }
+
+    /**
+     * Check whether the user has access permissions to the specified object
+     *
+     * @param   object    $object
+     * @param   bool      $modify
+     * @throws  Scalr_Exception_Core
+     * @throws  Scalr_Exception_InsufficientPermissions
+     */
+    public function checkPermissions($object, $modify = null)
+    {
+        if (! $this->hasPermissions($object, $modify)) {
+            throw new Scalr_Exception_InsufficientPermissions('Access denied');
+        }
+    }
+
     protected function sort($item1, $item2)
     {
         foreach ($this->sortParams as $cond) {
@@ -135,7 +228,7 @@ class Scalr_UI_Controller
             if (is_int($item1[$field]) || is_float($item1[$field])) {
                 $result = ($item1[$field] == $item2[$field]) ? 0 : (($item1[$field] < $item2[$field]) ? -1 : 1);
             } else {
-                $result = strcmp($item1[$field], $item2[$field]);
+                $result = strcasecmp($item1[$field], $item2[$field]);
             }
             if ($result != 0)
                 return $cond['direction'] == 'DESC' ? $result : ($result > 0 ? -1: 1);
@@ -144,130 +237,132 @@ class Scalr_UI_Controller
         return 0;
     }
 
-    protected function buildResponseFromData(array $data, $filterFields = array(), $ignoreLimit = false)
+    /**
+     * Parse and validate input parameter sort (json-encoded array), and return as array
+     * [[property, direction], ...]
+     *
+     * @return  array   Array of sort orders [[property => '', direction => '']]
+     * @throws  Scalr_Exception_Core
+     */
+    protected function getSortOrder()
     {
-        $this->request->defineParams(array(
-            'start' => array('type' => 'int', 'default' => 0),
-            'limit' => array('type' => 'int', 'default' => 20)
-        ));
+        $sort = $this->request->getRequestParam('sort');
+        $sort = json_decode($sort, true);
+        $result = [];
 
-        if ($this->getParam('query') && count($filterFields) > 0) {
-            $query = trim($this->getParam('query'));
-            foreach ($data as $k => $v) {
-                $found = false;
-                foreach ($filterFields as $field)
-                {
-                    if (stristr($v[$field], $query)) {
-                        $found = true;
-                        break;
+        if (is_array($sort)) {
+            foreach ($sort as $s) {
+                if (preg_match('/^[a-z\d_]+$/i', $s['property'])) {
+                    $result[] = [
+                        'property'  => $s['property'],
+                        'direction' => strtoupper($s['direction']) == 'DESC' ? 'DESC' : 'ASC'
+                    ];
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    protected function buildResponseFromData(array $data, $filterFields = [], $ignoreLimit = false)
+    {
+        $this->request->defineParams([
+            "start" => ["type" => "int", "default" => 0],
+            "limit" => ["type" => "int", "default" => 20]
+        ]);
+
+        if ($this->getParam("query") && count($filterFields) > 0) {
+            $query = trim($this->getParam("query"));
+            $data = array_filter($data, function ($value) use ($filterFields, $query) {
+                foreach (array_intersect(array_keys($value), $filterFields) as $field) {
+                    if (stristr($value[$field], $query)) {
+                        return true;
                     }
                 }
-
-                if (!$found)
-                    unset($data[$k]);
-            }
+                return false;
+            });
         }
 
-        $response['total'] = count($data);
+        $response["total"] = count($data);
 
-        $s = $this->getParam('sort');
-        if (! is_array($s)) {
-            $s = json_decode($this->getParam('sort'), true);
-        }
-
-        $sortParams = array();
-        if (is_array($s)) {
-            if (count($s) && isset($s[0]) && !is_array($s[0]))
-                $s = array($s);
-
-            foreach ($s as $param) {
-                if (is_array($param)) {
-                    $sort = preg_replace("/[^A-Za-z0-9_]+/", "", $param['property']);
-                    $dir = (in_array(strtolower($param['direction']), array('asc', 'desc'))) ? $param['direction'] : 'ASC';
-
-                    $sortParams[] = array('property' => $sort, 'direction' => $dir);
-                }
-            }
-        } else if ($this->getParam('sort')) {
-            $sort = preg_replace("/[^A-Za-z0-9_]+/", "", $this->getParam('sort'));
-            $dir = (in_array(strtolower($this->getParam('dir')), array('asc', 'desc'))) ? $this->getParam('dir') : 'ASC';
-
-            $sortParams[] = array('property' => $sort, 'direction' => $dir);
-        }
-
+        $sortParams = $this->getSortOrder();
         if (count($sortParams)) {
             $this->sortParams = $sortParams;
-            usort($data, array($this, 'sort'));
+            @usort($data, [$this, "sort"]);
         }
 
-        $data = (count($data) > $this->getParam('limit')) && !$ignoreLimit ? array_slice($data, $this->getParam('start'), $this->getParam('limit')) : $data;
+        if (!$ignoreLimit) {
+            $data = array_slice($data, $response["total"] > $this->getParam("start") ? $this->getParam("start") : 0, $this->getParam("limit"));
+        }
 
+        $response["data"] = array_values($data);
         $response["success"] = true;
-        $response['data'] = array_values($data);
 
         return $response;
     }
 
-    protected function buildResponseFromSql2($sql, $sortFields = array(), $filterFields = array(), $args = array(), $noLimit = false)
+    protected function buildResponseFromSql2($sql, $sortFields = [], $filterFields = [], $args = [], $noLimit = false)
     {
-        if ($this->getParam('query') && count($filterFields) > 0) {
+        if ($this->getParam('query') && ! empty($filterFields)) {
             $filter = $this->db->qstr('%' . trim($this->getParam('query')) . '%');
-            foreach($filterFields as $field) {
+            foreach ($filterFields as &$field) {
                 $fs = explode('.', $field);
-                foreach($fs as &$f) {
+                foreach ($fs as &$f) {
                     $f = "`{$f}`";
                 }
-                $field = implode('.', $fs);
-                $likes[] = "{$field} LIKE {$filter}";
+                $field = implode('.', $fs) . " LIKE " . $filter;
             }
-            $sql = str_replace(':FILTER:', '(' . implode(' OR ', $likes) . ')', $sql);
+            $sql = str_replace(':FILTER:', '(' . implode(' OR ', $filterFields) . ')', $sql);
         } else {
-            $sql = str_replace(':FILTER:', 'true', $sql);
+            $sql = str_replace(':FILTER:', '1=1', $sql);
         }
 
         if (!$noLimit) {
             $response['total'] = $this->db->GetOne('SELECT COUNT(*) FROM (' . $sql. ') c_sub', $args);
         }
 
-        $sort = $this->getParam('sort');
-        if ($sort && !is_array($sort)) {
-            $sort = json_decode($sort, true);
-        }
-
-        if (is_array($sort)) {
-            $sortSql = array();
-            if (count($sort) && (!isset($sort[0]) || !is_array($sort[0])))
-                $sort = array($sort);
-
-            foreach ($sort as $param) {
-                $property = preg_replace('/[^A-Za-z0-9_]+/', '', $param['property']);
-                $direction = (in_array(strtolower($param['direction']), array('asc', 'desc'))) ? $param['direction'] : 'asc';
-
-                if (in_array($property, $sortFields))
-                    $sortSql[] = "`{$property}` {$direction}";
+        $sortParams = $this->getSortOrder();
+        if (count($sortParams)) {
+            $sortSql = [];
+            foreach ($sortParams as $param) {
+                if (in_array($param['property'], $sortFields)) {
+                    $sortSql[] = "`{$param['property']}` {$param['direction']}";
+                }
             }
 
-            if (count($sortSql))
-                $sql .= ' ORDER BY ' . implode($sortSql, ',');
+            if (!empty($sortSql)) {
+                $sql .= " ORDER BY " . implode(',', $sortSql);
+            }
         }
 
         if (! $noLimit) {
             $start = intval($this->getParam('start'));
-            if ($start > $response["total"] || $start < 0)
+            if ($start > $response["total"] || $start < 0) {
                 $start = 0;
+            }
 
             $limit = intval($this->getParam('limit'));
-            if ($limit < 1 || $limit > 100)
+            if ($limit < 1 || $limit > 100) {
                 $limit = 100;
+            }
             $sql .= " LIMIT $start, $limit";
         }
 
-        $response['success'] = true;
         $response['data'] = $this->db->GetAll($sql, $args);
+        $response['success'] = true;
 
         return $response;
     }
 
+    /**
+     * @deprecated
+     * @param string $sql
+     * @param array  $filterFields
+     * @param string $groupSQL
+     * @param bool|true $simpleQuery
+     * @param bool|false $noLimit
+     * @return mixed
+     */
     protected function buildResponseFromSql($sql, $filterFields = array(), $groupSQL = "", $simpleQuery = true, $noLimit = false)
     {
         $this->request->defineParams(array(
@@ -365,6 +460,7 @@ class Scalr_UI_Controller
             if (!$permissionFlag)
                 throw new Scalr_Exception_InsufficientPermissions();
 
+            $this->unusedPathChunks = $pathChunks;
             $this->callActionMethod($action);
 
         } else if (count($pathChunks) > 0) {
@@ -433,7 +529,7 @@ class Scalr_UI_Controller
                 if ($className) {
                     if (is_subclass_of($className, 'Scalr\UI\Request\ObjectInitializingInterface')) {
                         /* @var $className ObjectInitializingInterface */
-                        $params[] = $className::initFromRequest($className == 'Scalr\UI\Request\FileUploadData' ? $this->request->getFileName($parameter->name) : $value);
+                        $params[] = $className::initFromRequest($className == 'Scalr\UI\Request\FileUploadData' ? $this->request->getFileName($parameter->name) : $value, $parameter->name);
                     } else {
                         throw new Scalr\Exception\Http\BadRequestException(sprintf('%s is invalid class in argument', $className));
                     }
@@ -543,6 +639,22 @@ class Scalr_UI_Controller
         }
 
         Scalr_UI_Response::getInstance()->setHeader("X-Scalr-ActionTime", microtime(true) - $startTime);
+    }
+
+    /**
+     * Create controller object from current class
+     *
+     * @param   bool    $checkPermissions
+     * @return  Scalr_UI_Controller
+     */
+    static public function controller($checkPermissions = false)
+    {
+        $class = get_called_class();
+        $classSplitted = explode('_', $class);
+        $controller = array_pop($classSplitted);
+        $prefix = implode('_', $classSplitted);
+
+        return self::loadController($controller, $prefix, $checkPermissions);
     }
 
     /**

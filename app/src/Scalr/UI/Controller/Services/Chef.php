@@ -19,7 +19,7 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
         $chefClient = $this->getChefClient($servId);
 
         $recipes = [];
-        
+
         /*
         $response = (array)$chefClient->listCookbooks($chefEnv || $chefEnv == '_default' ? '' : $chefEnv);
 
@@ -53,7 +53,7 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
                 ];
             }
         }
-        
+
         sort($recipes);
 
         $this->response->data(array(
@@ -92,7 +92,7 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
     public function xListEnvironmentsAction($servId)
     {
         $chefClient = $this->getChefClient($servId);
-        
+
         $environments = [];
         $response = $chefClient->listEnvironments();
         if ($response instanceof stdClass) {
@@ -119,7 +119,7 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
             $criteria[] = ['level' => ChefServer::LEVEL_SCALR];
         } else {
             $criteria[] = ['$or' => [
-                ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => $this->getEnvironmentId()], ['level' => ChefServer::LEVEL_ENVIRONMENT]]],
+                ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => $this->getEnvironmentId(true)], ['level' => ChefServer::LEVEL_ENVIRONMENT]]],
                 ['$and' => [['accountId' => $this->user->getAccountId()], ['envId' => null], ['level' => ChefServer::LEVEL_ACCOUNT]]],
                 ['$and' => [['accountId' => null], ['envId' => null], ['level' => ChefServer::LEVEL_SCALR]]]
             ]];

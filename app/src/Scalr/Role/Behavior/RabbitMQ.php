@@ -1,5 +1,11 @@
 <?php
-    class Scalr_Role_Behavior_RabbitMQ extends Scalr_Role_Behavior implements Scalr_Role_iBehavior
+
+use Scalr\Exception\InvalidEntityConfigurationException;
+use Scalr\Model\Entity\FarmRole;
+use Scalr\Model\Entity\FarmRoleSetting;
+use Scalr\Model\Entity;
+
+class Scalr_Role_Behavior_RabbitMQ extends Scalr_Role_Behavior implements Scalr_Role_iBehavior
     {
         /** DBFarmRole settings **/
         const ROLE_DATA_STORAGE_ENGINE 	= 'rabbitmq.data_storage.engine';
@@ -33,7 +39,7 @@
             if (!$dbFarmRole->GetSetting(self::ROLE_COOKIE_NAME))
             {
                 $cookie = substr(sha1(microtime(true).rand(0,100000)), 0, 20);
-                $dbFarmRole->SetSetting(self::ROLE_COOKIE_NAME, $cookie, DBFarmRole::TYPE_LCL);
+                $dbFarmRole->SetSetting(self::ROLE_COOKIE_NAME, $cookie, Entity\FarmRoleSetting::TYPE_LCL);
             }
         }
 
@@ -108,10 +114,10 @@
                     else
                         throw new Exception("Received hostUp message from RabbitMQ server without volumeConfig");
 
-                    $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_PASSWORD, $message->rabbitmq->password, DBFarmRole::TYPE_LCL);
+                    $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_PASSWORD, $message->rabbitmq->password, Entity\FarmRoleSetting::TYPE_LCL);
 
                     if ($message->rabbitmq->masterPassword)
-                        $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_MASTER_PASSWORD, $message->rabbitmq->masterPassword, DBFarmRole::TYPE_LCL);
+                        $dbServer->GetFarmRoleObject()->SetSetting(self::ROLE_MASTER_PASSWORD, $message->rabbitmq->masterPassword, Entity\FarmRoleSetting::TYPE_LCL);
 
                     break;
             }
@@ -164,9 +170,6 @@
             $currentRatio = ($totalServers != 0) ? $diskServers / $totalServers * 100 : 0;
             $sRatio = (int)trim($dbFarmRole->GetSetting(self::ROLE_NODES_RATIO), "%");
 
-
-            //$this->logger->error(new FarmLogMessage($dbFarmRole->FarmID, "Total: {$totalServers}, Disk: {$diskServers}, Ram: {$ramServers}, Ratio: {$currentRatio}, sRatio: {$sRatio}"));
-
             if ($currentRatio <= $sRatio)
                 return self::NODE_TYPE_DISK;
             else
@@ -214,9 +217,12 @@
                     else
                         throw $e;
                 }
-            }
-            catch(Exception $e) {
-                $this->logger->error(new FarmLogMessage($dbFarmRole->FarmID, "Cannot save storage volume: {$e->getMessage()}"));
+            } catch (Exception $e) {
+                $this->logger->error(new FarmLogMessage(
+                    $dbFarmRole->FarmID,
+                    "Cannot save storage volume: {$e->getMessage()}",
+                    !empty($dbServer->serverId) ? $dbServer->serverId : null
+                ));
             }
         }
 
@@ -287,5 +293,24 @@
             }
 
             return $volumeConfig;
+        }
+
+        /**
+         * {@inheritdoc}
+         * @see Scalr_Role_Behavior::setupBehavior()
+         */
+        public static function setupBehavior(FarmRole $farmRole)
+        {
+            $farmRole->settings[FarmRoleSetting::SCALING_MAX_INSTANCES] = $farmRole->settings[FarmRoleSetting::SCALING_MIN_INSTANCES];
+
+            $farmRole->settings[static::ROLE_NODES_RATIO] = (int) $farmRole->settings[static::ROLE_NODES_RATIO];
+            if ($farmRole->settings[static::ROLE_NODES_RATIO] < 1 || $farmRole->settings[static::ROLE_NODES_RATIO] > 100) {
+                throw new InvalidEntityConfigurationException("Nodes ratio for RabbitMq role should be between 1 and 100");
+            }
+
+            if (empty($farmRole->settings[static::ROLE_COOKIE_NAME])) {
+                $cookie = substr(sha1(microtime(true).rand(0,100000)), 0, 20);
+                $farmRole->settings[self::ROLE_COOKIE_NAME] = (new FarmRoleSetting())->setValue($cookie)->setType(Entity\FarmRoleSetting::TYPE_LCL);
+            }
         }
     }

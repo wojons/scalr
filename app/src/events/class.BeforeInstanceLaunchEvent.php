@@ -1,6 +1,6 @@
 <?php
 
-class BeforeInstanceLaunchEvent extends Event
+class BeforeInstanceLaunchEvent extends AbstractServerEvent
 {
     /**
      *

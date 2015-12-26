@@ -200,12 +200,13 @@ Ext.define('Scalr.ui.RolesLibrary', {
                     }
                 } else {
                     var searchField = this.down('#search'),
-                        keyword = (searchField.getValue() || '').replace(/[\[\]]/img, '');
+                        keyword = Ext.String.trim(searchField.getValue() || '');
+                    if (!searchField.isValid()) return;
                     if (keyword) {
                         var res = tabs.query('[keyword="'+keyword+'"]');
                         if (res.length === 0) {
                             (tabs.addCategoryBtn({
-                                name: 'Search "<span class="x-semibold" title="' + Ext.htmlEncode(keyword) + '">' + Ext.String.ellipsis(keyword, 12) + '</span>"',
+                                name: 'Search "<span class="x-semibold" title="' + Ext.htmlEncode(keyword) + '" style="text-transform:none">' + Ext.htmlEncode(Ext.String.ellipsis(keyword, 12)) + '</span>"',
                                 catId: 'search',
                                 keyword: keyword,
                                 cls: 'x-roleslibrary-search-result-btn'
@@ -241,6 +242,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                                 });
                             }
                             view = me.add(me.sharedRolesViewConfig);
+                            view.tpl.ownerView = view;
                             view.store.loadData(data ? data['software'] : []);
                         }
                         me.fillOsFilter(view.store);
@@ -310,6 +312,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                     mode = rl.mode,
                     view = this.down(mode === 'shared' ? '#sharedroles' : '#customroles'),
                     store;
+                this.deselectCurrent();
                 if (view) {
                     store = view.store;
                     store.clearFilter(true);
@@ -435,11 +438,6 @@ Ext.define('Scalr.ui.RolesLibrary', {
                                     res = true;
                                 }
                             }
-                            if (vpcRegion && res === true) {
-                                if (images['ec2'] && (Ext.Object.getSize(images) === 1 || platform === 'ec2') && images['ec2'][vpcRegion] === undefined) {
-                                    res = false;
-                                }
-                            }
                             if (res) break;
                         }
                     } else {
@@ -457,11 +455,6 @@ Ext.define('Scalr.ui.RolesLibrary', {
                                 res = images[platform] !== undefined;
                             } else {
                                 res = true;
-                            }
-                            if (vpcRegion && res === true) {
-                                if (images['ec2'] && (Ext.Object.getSize(images) === 1 || platform === 'ec2') && images['ec2'][vpcRegion] === undefined) {
-                                    res = false;
-                                }
                             }
                         }
                     } else {
@@ -493,15 +486,36 @@ Ext.define('Scalr.ui.RolesLibrary', {
                 },
                 tpl  : new Ext.XTemplate(
                     '<tpl for=".">',
-                        '<div class="x-item">',
+                        '<div {[this.isItemDisabled(values) ? \'class="x-item x-item-disabled" data-qtip="Category doesn\\\'t contain images in current VPC region"\' : \'class="x-item"\']}>',
                             '<div class="x-item-inner">',
-                                '<div class="x-icon-behavior-large x-icon-behavior-large-{name}"></div>',
+                                '<div class="x-icon x-icon-behavior-large x-icon-behavior-large-{name}"></div>',
                                 '<div class="name" style="margin-top:6px">',
                                     '{[Scalr.utils.beautifySoftware(values.name)]}',
                                 '</div>',
                             '</div>',
                         '</div>',
-                    '</tpl>'
+                    '</tpl>',
+                    {
+                        getVpcRegion: function() {
+                            var vpc = this.ownerView.up('roleslibrary').vpc;
+                            return vpc ? vpc.region : '';
+                        },
+                        isItemDisabled: function(values) {
+                            var vpc = this.ownerView.up('roleslibrary').vpc,
+                                images,
+                                disabled = false;
+                            if (vpc && vpc.region) {
+                                for (var i=0, len=values.roles.length; i<len; i++) {
+                                    images = values.roles[i].images;
+                                    disabled = images['ec2'] && Ext.Object.getSize(images) === 1 && images['ec2'][vpc.region] === undefined;
+                                    if (!disabled) {
+                                        break;
+                                    }
+                                }
+                            }
+                            return disabled;
+                        }
+                    }
                 ),
                 listeners: {
                     beforecontainerclick: function(comp, e){//prevent deselect on container click
@@ -516,6 +530,9 @@ Ext.define('Scalr.ui.RolesLibrary', {
                             }
                         }
                         return result;
+                    },
+                    beforeitemclick: function(view, record, item) {
+                        return !Ext.get(item).hasCls('x-item-disabled');
                     },
                     selectionchange: function(comp, selection){
                         var roleslibrary = this.up('roleslibrary'),
@@ -542,7 +559,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                 }],
                 store: {
                     fields: [
-                        { name: 'role_id', type: 'int' }, 'cat_id', 'name', 'images', 'behaviors', 'osId', 'roles', 'variables', 'shared', 'description'
+                        { name: 'role_id', type: 'int' }, 'cat_id', 'name', 'images', 'behaviors', 'osId', 'roles', 'variables', 'shared', 'description', 'isQuickStart', 'isDeprecated', 'scope'
                     ],
                     proxy: 'object',
                     filterOnLoad: true,
@@ -556,16 +573,67 @@ Ext.define('Scalr.ui.RolesLibrary', {
                     }]
                 },
                 viewConfig: {
-                    selectedRecordFocusCls: ''
+                    selectedRecordFocusCls: '',
+                    getRowClass: function (record, index, rowParams) {
+                        var vpc = this.up('roleslibrary').vpc,
+                            images = record.get('images'),
+                            cls = [];
+                        if (vpc && vpc.region) {
+                            if (images['ec2'] && Ext.Object.getSize(images) === 1 && images['ec2'][vpc.region] === undefined) {
+                                cls.push('x-grid-row-disabled');
+                            }
+                        }
+                        if (cls.length === 0 && record.get('isQuickStart') == 1) {
+                            cls.push('x-grid-row-green-text');
+                        }
+                        return cls.join(',');
+                    },
+                    listeners: {
+                        viewready: function(){
+                            var me = this;
+                            Ext.create('Ext.tip.ToolTip', {
+                                target: me.el,
+                                delegate: '.x-grid-row',
+                                trackMouse: true,
+                                renderTo: Ext.getBody(),
+                                hideDelay: 0,
+                                listeners: {
+                                    beforeshow: function (tip) {
+                                        var trigger = Ext.fly(tip.triggerElement),
+                                            record = me.getRecord(trigger),
+                                            text;
+                                        if (record) {
+                                            if (trigger.hasCls('x-grid-row-disabled')) {
+                                                text = 'Role doesn\'t contain images in current VPC region';
+                                            } else if (record.get('isQuickStart') == 1) {
+                                                text = 'This Role is being featured as a QuickStart Role';
+                                            }
+
+                                        }
+                                        if (text) {
+                                            tip.update(text);
+                                        } else {
+                                            return false;
+                                        }
+                                    }
+                                }
+                            });
+                        },
+                        beforeselect: function(view, record) {
+                            var el = Ext.get(this.getNode(record));
+                            return el ? !el.down('tr').hasCls('x-grid-row-disabled') : true;
+                        }
+
+                    }
+
                 },
                 columns: [{
                     xtype: 'templatecolumn',
                     width: 22,
-                    tpl: new Ext.XTemplate('&nbsp;&nbsp;{[this.getScope(values.shared)]}',
+                    tpl: new Ext.XTemplate('&nbsp;&nbsp;{[this.getScope(values.scope)]}',
                         {
-                            getScope: function(shared){
-                                var scope = shared ? 'scalr' : 'environment';
-                                return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qtip="This Role is defined in the '+Ext.String.capitalize(scope)+' Scope"/>';
+                            getScope: function(scope){
+                                return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qalign="bl-tr" data-qtip="This Role is defined in the '+Ext.String.capitalize(scope)+' Scope"/>';
                             }
                         }
                     )
@@ -575,8 +643,17 @@ Ext.define('Scalr.ui.RolesLibrary', {
                     align: 'center',
                     tpl  : '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-role-small x-icon-role-small-{[Scalr.utils.getRoleCls(values)]}"/>'
                 },{
+                    xtype: 'templatecolumn',
                     dataIndex: 'name',
-                    flex: 1
+                    flex: 1,
+                    tpl: new Ext.XTemplate('<span {[this.getNameStyle(values)]}>{name}</span>', {
+                        getNameStyle: function(values) {
+                            //return 'style="color: green;' + (values.isDeprecated == 1 ? 'text-decoration: line-through;' : '') + '" data-qtip="This Role is being featured as a QuickStart Role."';
+                            if (values.isDeprecated == 1) {
+                                return 'style="text-decoration: line-through;" data-qtip="This Role is being deprecated, and cannot be added to any Farm."';
+                            }
+                        }
+                    })
                 },{
                     xtype: 'templatecolumn',
                     width: 100,
@@ -623,7 +700,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                     iconCls: 'x-icon-osfamily-small'
                 });
                 Ext.Object.each(Scalr.platforms, function(key, platform) {
-                    if (!platform['enabled'] || key === 'rds') return;
+                    if (!platform['enabled']) return;
                     platformFilter.add({
                         text: '&nbsp;' +  platform.name,
                         value: key,
@@ -733,10 +810,21 @@ Ext.define('Scalr.ui.RolesLibrary', {
                             this.up('#leftcol').createSearch();
                         }
                     },
+                    validator: function(value) {
+                        if (value) {
+                            value = Ext.String.trim(value);
+                            if (!(/^[A-Za-z0-9\-\_]+$/).test(value)) {
+                                return 'Keyword must contain only letters, numbers and dashes.';
+                            }
+                        }
+                        return true;
+                    },
                     listeners: {
                         change: {
                             fn: function(comp, value) {
-                                this.up('#leftcol').refreshStoreFilter();
+                                if (comp.isValid()) {
+                                    this.up('#leftcol').refreshStoreFilter();
+                                }
                             },
                             buffer: 300
                         }
@@ -925,7 +1013,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                                 xtype: 'textfield',
                                 name: 'alias',
                                 fieldLabel: 'Alias'
-                            },{
+                            }, {
                                 xtype: 'combo',
                                 name: 'roleid',
                                 editable: false,
@@ -940,14 +1028,13 @@ Ext.define('Scalr.ui.RolesLibrary', {
                                 plugins: {
                                     ptype: 'fieldicons',
                                     position: 'outer',
-                                    icons: {id: 'warning', tooltip: 'There are two or more roles match current selection.<br/><i>Note: This field is visible only to developers in debugging purposes</i>', hidden: false}
+                                    icons: {id: 'info', tooltip: 'There are two or more roles that match the current selection.', hidden: false}
                                 },
                                 listeners: {
                                     change: function(comp, value) {
                                         this.up('form').fireEvent('selectroleid', value);
                                     }
                                 }
-
                             }]
                         },{
                             xtype: 'container',
@@ -1062,8 +1149,18 @@ Ext.define('Scalr.ui.RolesLibrary', {
                                 name: 'display_architecture'
                             },{
                                 xtype: 'displayfield',
+                                name: 'behaviors',
                                 fieldLabel: 'Automation',
-                                name: 'display_behaviors'
+                                renderer: function (value) {
+                                    var html = [];
+                                    Ext.Array.each(value, function (value) {
+                                        if (value !== 'base') {
+                                            html.push('<img style="float:left;margin:0 8px 8px 0" class="x-icon-role-small x-icon-role-small-' + value + '" src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="' + Ext.htmlEncode(Scalr.utils.beautifyBehavior(value, true)) + '" />');
+                                        }
+                                    });
+                                    return html.length > 0 ? html.join(' ') : '&ndash;';
+                                }
+
                             }]
                         }]
                     }]
@@ -1131,12 +1228,8 @@ Ext.define('Scalr.ui.RolesLibrary', {
                             values.platform = form.findField('platform').getValue();
                             values.cloud_location = cloudLocation;
                             values.alias = form.findField('alias').getValue();
-                            if (values.platform === 'ecs' && !values.cloud_location) {
-                                Scalr.message.InfoTip('Cloud location is required field', form.findField('cloud_location').inputEl, {anchor: 'bottom'});
-                                return;
-                            }
 
-                            if ((values.platform==='ec2' || values.platform==='eucalyptus') && formPanel.up('roleslibrary').vpc === false) {
+                            if ((values.platform==='ec2') && formPanel.up('roleslibrary').vpc === false) {
                                 value = form.findField('availabilityZone').getValue();
                                 if (Ext.isObject(value)) {
                                     if (value.items) {
@@ -1147,7 +1240,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                                         }
                                     }
                                 }
-                                values.settings[(values.platform === 'ec2' ? 'aws' : 'euca') + '.availability_zone'] = value;
+                                values.settings['aws.availability_zone'] = value;
                             } else if (Scalr.isOpenstack(values.platform)) {
                                 field = form.findField('availabilityZone');
                                 if (field.isVisible()) {
@@ -1202,7 +1295,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                             }
 
 
-                            image = role.images[values.platform][values.platform === 'gce' || values.platform === 'ecs' ? '' : values.cloud_location];
+                            image = role.images[values.platform][values.platform === 'gce' || values.platform === 'azure' ? '' : values.cloud_location];
                             if (formPanel.mode === 'shared') {
                                 Ext.apply(values, {
                                     behaviors: role.behaviors,
@@ -1262,14 +1355,10 @@ Ext.define('Scalr.ui.RolesLibrary', {
                         }
                     }
 
-                    if (removeEc2) {
-                        Ext.Array.remove(platforms, 'ec2');
-                    }
-
                     var platformsSorted = [];
                     Ext.Object.each(Scalr.platforms, function(key, platform){
                         if (Ext.Array.contains(platforms, key) && platform['enabled']) {
-                            platformsSorted.push(key);
+                            platformsSorted.push({id: key, disabled: removeEc2 && key === 'ec2' ? true : false});
                         }
                     });
                     return platformsSorted;
@@ -1345,13 +1434,14 @@ Ext.define('Scalr.ui.RolesLibrary', {
 
                 setupInstanceTypeField: function(data, status, record, callback, scope) {
                     var me = this,
-                        instaTypeName = record.getInstanceTypeParamName(),
                         field = me.getForm().findField('instanceType'),
-                        limits = Scalr.getGovernance(record.get('platform'), instaTypeName),
-                        instanceType = record.getInstanceType(data, limits, me.up('#farmDesigner').getVpcSettings()),
-                        instanceTypeList = instanceType['list'] || [];
+                        limits = record.getInstanceTypeLimits(),
+                        instanceType,
+                        instanceTypeList;
 
-                    //field.setDisabled(!status);
+                    instanceType = record.getInstanceType(data, me.up('#farmDesigner').getVpcSettings() !== false);
+                    instanceTypeList = instanceType['list'] || [];
+
                     field.store.load({ data: instanceTypeList });
                     field.setValue(instanceType['value']);
                     field.setReadOnly(instanceTypeList.length < 2);
@@ -1367,7 +1457,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                     var me = this,
                         form = me.getForm(),
                         availZoneField;
-                    if (me.state.platform === 'ec2' || me.state.platform === 'eucalyptus') {
+                    if (me.state.platform === 'ec2') {
                         form.findField('availabilityZoneGce').hide();
                         availZoneField = form.findField('availabilityZone');
                         availZoneField.show();
@@ -1378,7 +1468,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                                     params: {cloudLocation: me.state.location}
                                 },
                                 function(data, status){
-                                    var items = [{zoneId: '', name: (me.state.platform == 'ec2' ? 'AWS' : 'Euca') + '-chosen'}];
+                                    var items = [{zoneId: '', name: 'AWS-chosen'}];
 
                                     if (status) {
                                         items = [{
@@ -1386,7 +1476,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                                             name: 'Distribute equally'
                                         },{
                                             zoneId: '',
-                                            name: (me.state.platform == 'ec2' ? 'AWS' : 'Euca') + '-chosen'
+                                            name: 'AWS-chosen'
                                         },{
                                             zoneId: 'x-scalr-custom',
                                             name: 'Selected by me',
@@ -1506,7 +1596,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                 listeners: {
                     beforerender: function() {
                         var me = this,
-                            ext = ['vpc', 'openstack', 'cloudstack', 'mongodb', 'dbmsr', 'haproxy', 'proxy', 'chef'];
+                            ext = ['vpc', 'openstack', 'cloudstack', 'azure', 'mongodb', 'dbmsr', 'haproxy', 'proxy', 'chef'];
                         me.extraSettings = [];
                         Ext.Array.each(ext, function(name){
                             me.extraSettings.push(me.add(Scalr.cache['Scalr.ui.farms.builder.addrole.' + name]()));
@@ -1555,24 +1645,26 @@ Ext.define('Scalr.ui.RolesLibrary', {
                                     cb(locations, defaultLocation || '');
                                 }
                             );
-                        } else if (value === 'ecs') {
-                            Scalr.cachedRequest.load(
+                        } else if (value === 'azure') {
+                            Scalr.CachedRequestManager.get('farmDesigner').load(
                                 {
-                                    url: '/platforms/openstack/xGetCloudLocations',
-                                    params: {
-                                        platform: value
-                                    }
+                                    url: '/platforms/azure/xGetResourceGroups'
                                 },
                                 function(data, status){
-                                    if (!Ext.isEmpty(data.locations)) {
-                                        Ext.Object.each(data.locations, function(key, value) {
-                                            defaultLocation = defaultLocation || key;
-                                            locations.push({id: key, name: value});
+                                    if (!Ext.isEmpty(data.cloudLocations)) {
+                                        var cloudLocationGrovernance = Scalr.getGovernance('azure', 'azure.cloud_location');
+                                        if (cloudLocationGrovernance && cloudLocationGrovernance['default']) {
+                                            defaultLocation = cloudLocationGrovernance['default'];
+                                        }
+                                        Ext.Object.each(data.cloudLocations, function(key, value) {
+                                            if (cloudLocationGrovernance === undefined || Ext.Array.contains(cloudLocationGrovernance.value, key)) {
+                                                locations.push({id: key, name: value});
+                                            }
                                         });
                                     } else {
 
                                     }
-                                    cb(locations, defaultLocation || '');
+                                    cb(locations, defaultLocation || 'eastus');
                                 }
                             );
                         } else {
@@ -1626,7 +1718,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
 
                         me.suspendLayouts();
                         me.state.location = value;
-                        imagesLocation = me.state.platform === 'ecs' || me.state.platform === 'gce' ? '' : me.state.location;
+                        imagesLocation = me.state.platform === 'gce' || me.state.platform === 'azure' ? '' : me.state.location;
 
                         form.findField('cloud_location').store.data.each(function(record){locations.push(record.get('id'))});
 
@@ -1683,7 +1775,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                             osNameField,
                             osNames,
                             selectedRole,
-                            imagesLocation = me.state.platform === 'ecs' || me.state.platform === 'gce' ? '' : me.state.location;
+                            imagesLocation = me.state.platform === 'gce' || me.state.platform === 'azure' ? '' : me.state.location;
                         this.suspendLayouts();
                         me.state.osfamily = value;
 
@@ -1721,7 +1813,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                             archField = form.findField('arch'),
                             archs = {},
                             defaultArch,
-                            imagesLocation = me.state.platform === 'ecs' || me.state.platform === 'gce' ? '' : me.state.location;
+                            imagesLocation = me.state.platform === 'gce' || me.state.platform === 'azure' ? '' : me.state.location;
                         this.suspendLayouts();
                         me.state.osname = value;
 
@@ -1739,7 +1831,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                                 }
                             });
                         } else {
-                            defaultArch = me.currentRole.get('images')[me.state.platform][me.state.platform === 'ecs' || me.state.platform === 'gce' ? '' : me.state.location]['architecture'] || 'x86_64';
+                            defaultArch = me.currentRole.get('images')[me.state.platform][me.state.platform === 'gce' || me.state.platform === 'azure' ? '' : me.state.location]['architecture'] || 'x86_64';
                             archs[defaultArch] = 1;
                         }
                         archField.reset();
@@ -1762,7 +1854,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                             form = me.getForm(),
                             hvmField = form.findField('hvm'),
                             hvms = {},
-                            imagesLocation = me.state.platform === 'ecs' || me.state.platform === 'gce' ? '' : me.state.location;
+                            imagesLocation = me.state.platform === 'gce' || me.state.platform === 'azure' ? '' : me.state.location;
                         this.suspendLayouts();
                         me.state.arch = value;
 
@@ -1795,7 +1887,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                     selecthvm: function(value) {
                         var me = this,
                             form = me.getForm(),
-                            imagesLocation = me.state.platform === 'ecs' || me.state.platform === 'gce' ? '' : me.state.location;
+                            imagesLocation = me.state.platform === 'gce' || me.state.platform === 'azure' ? '' : me.state.location;
 
                         if (form.getRecord().store) return;//buttonfield doesn't work like normal form field - here is workaround
 
@@ -1825,7 +1917,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                         roleField.store.loadData(roles);
                         roleField.setValue(defaultRole);
 
-                        roleField.setVisible(Scalr.flags['betaMode'] && roles.length > 1);
+                        roleField.setVisible(roles.length > 1);
                         this.resumeLayouts(true);
                     },
 
@@ -1833,20 +1925,12 @@ Ext.define('Scalr.ui.RolesLibrary', {
                         if (value === null || value === undefined) return;
                         var me = this,
                             imageoptions = me.down('#imageoptions'),
-                            behaviorsNames = me.up('#farmDesigner').moduleParams.behaviors,
                             role,
                             behaviors = [];
                         this.suspendLayouts();
                         me.state.roleid = value;
 
                         role = me.getCurrentRole();
-                        if (role.behaviors) {
-                            Ext.Array.each(role.behaviors, function(b) {
-                               behaviors.push(behaviorsNames[b] || b);
-                            });
-                        }
-                        imageoptions.down('[name="display_behaviors"]').setValue(behaviors.join(', '));
-
                         this.fireEvent('roleimagechange');
                         this.resumeLayouts(true);
                     },
@@ -1856,7 +1940,7 @@ Ext.define('Scalr.ui.RolesLibrary', {
                             form = me.getForm(),
                             record = form.getRecord(),
                             role = me.getCurrentRole(),
-                            image = role.images[me.state.platform][me.state.platform === 'ecs' || me.state.platform === 'gce' ? '' : me.state.location],
+                            image = role.images[me.state.platform][me.state.platform === 'gce' || me.state.platform === 'azure' ? '' : me.state.location],
                             values = {
                                 platform: me.state.platform,
                                 cloud_location: me.state.location,
@@ -1898,7 +1982,8 @@ Ext.define('Scalr.ui.RolesLibrary', {
                         me.up('roleslibrary').fireEvent('beforesetalias', role.name, beforeSetAliasResult);
 
                         var extraValues = {
-                            alias: beforeSetAliasResult.alias
+                            alias: beforeSetAliasResult.alias,
+                            behaviors: Ext.clone(role.behaviors)
                         };
                         if (me.mode === 'custom') {
                             var arch = record.get('image', true)['architecture'];
@@ -1940,10 +2025,10 @@ Ext.define('Scalr.ui.RolesLibrary', {
                         platformField.removeAll();
                         for (var i=0, len=rolePlatforms.length; i<len; i++) {
                             platformField.add({
-                                value: rolePlatforms[i],
-                                cls: 'x-btn-simple-medium x-icon-platform x-icon-platform-' + rolePlatforms[i],
-                                tooltip: Scalr.platforms[rolePlatforms[i]] ? Scalr.platforms[rolePlatforms[i]].name : rolePlatforms[i],
-                                tooltipType: 'title'
+                                value: rolePlatforms[i]['id'],
+                                cls: 'x-btn-simple-medium x-icon-platform x-icon-platform-' + rolePlatforms[i]['id'],
+                                tooltip: rolePlatforms[i]['disabled'] ? 'No images available in current VPC region' : Scalr.platforms[rolePlatforms[i]['id']] ? Scalr.platforms[rolePlatforms[i]['id']].name : rolePlatforms[i]['id'],
+                                disabled: rolePlatforms[i]['disabled']
                             });
                         }
 
@@ -1980,8 +2065,6 @@ Ext.define('Scalr.ui.RolesLibrary', {
                         var form = this.getForm(),
                             roleslibrary = this.up('roleslibrary'),
                             rolePlatforms = this.getAvailablePlatforms(),
-                            behaviorsNames = this.up('#farmDesigner').moduleParams.behaviors,
-                            behaviors = [],
                             platform,
                             leftcol = roleslibrary.down('#leftcol'),
                             platformFilterValue = leftcol.getFilterValue('platform'),
@@ -1993,23 +2076,26 @@ Ext.define('Scalr.ui.RolesLibrary', {
 
                         if (platformFilterValue) {
                             platform = platformFilterValue;
-                        } else if (this.state.platform && Ext.Array.contains(rolePlatforms, this.state.platform)) {
+                        } else if (this.state.platform && Ext.Array.some(rolePlatforms, function(item){return !item.disabled && item.id == this.state.platform;}, this)) {
                             platform = this.state.platform;
-                        } else if (rolePlatforms[0]) {
-                            platform = rolePlatforms[0];
+                        } else {
+                            Ext.Array.each(rolePlatforms, function(item){
+                                if (!item.disabled) {
+                                    platform = item['id'];
+                                    return false;
+                                }
+                            });
+                            if (!platform) {
+                                platform = rolePlatforms[0]['id'];
+                            }
                         }
 
                         form.findField('platform').setValue(platform);
 
-                        Ext.Array.each(record.get('behaviors'), function(b) {
-                           behaviors.push(behaviorsNames[b] || b);
-                        });
-
                         if (this.mode === 'custom') {
                             this.down('#imageoptions').setFieldValues({
-                                'display_behaviors': behaviors.join(', '),
-                                'display_platform': '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-platform-small x-icon-platform-small-' + rolePlatforms[0] + '"/>&nbsp;' + (Scalr.platforms[rolePlatforms[0]] ? Scalr.platforms[rolePlatforms[0]].name : rolePlatforms[0]),
-                                'display_location': Ext.Object.getKeys(this.currentRole.get('images')[rolePlatforms[0]]).join(', ')
+                                'display_platform': '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-platform-small x-icon-platform-small-' + rolePlatforms[0]['id'] + '"/>&nbsp;' + (Scalr.platforms[rolePlatforms[0]['id']] ? Scalr.platforms[rolePlatforms[0]['id']].name : rolePlatforms[0]['id']),
+                                'display_location': Ext.Object.getKeys(this.currentRole.get('images')[rolePlatforms[0]['id']]).join(', ')
                             });
                         }
 

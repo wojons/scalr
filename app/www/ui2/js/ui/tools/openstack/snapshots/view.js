@@ -44,6 +44,7 @@ Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, m
 			{ header: "Created at", flex: 1, dataIndex: 'createdAt', sortable: true },
 			{
 				xtype: 'optionscolumn',
+                hidden: !Scalr.isAllowed('OPENSTACK_SNAPSHOTS', 'manage'),
 				menu: [{
 					text: 'Create new volume based on this snapshot',
 					iconCls: 'x-menu-icon-create',
@@ -62,7 +63,7 @@ Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, m
 			}
 		],
 
-        selModel: 'selectedmodel',
+        selModel: Scalr.isAllowed('OPENSTACK_SNAPSHOTS', 'manage') ? 'selectedmodel' : null,
 		listeners: {
 			selectionchange: function(selModel, selections) {
 				this.down('scalrpagingtoolbar').down('#delete').setDisabled(!selections.length);
@@ -79,6 +80,7 @@ Scalr.regPage('Scalr.ui.tools.openstack.snapshots.view', function (loadParams, m
                 cls: 'x-btn-red',
 				tooltip: 'Select one or more snapshots to delete them',
 				disabled: true,
+                hidden: !Scalr.isAllowed('OPENSTACK_SNAPSHOTS', 'manage'),
 				handler: function() {
 					var request = {
 						confirmBox: {

@@ -19,12 +19,14 @@ import sys
 import pwd
 import grp
 import time
+import types
 import psutil
 import gevent
 import ctypes
 import logging
 import smtplib
 import datetime
+import functools
 import traceback
 import threading
 import subprocess
@@ -32,13 +34,16 @@ import gevent.pool
 import email.charset
 import multiprocessing
 import logging.handlers
+import greenlet as greenlet_mod
+import uuid
+import pymysql.err
 
 from textwrap import dedent
 from email.mime.text import MIMEText
 from ctypes.util import find_library
 
-from scalrpy import __version__
 from scalrpy import LOG
+from scalrpy import exceptions
 
 
 email.charset.add_charset('utf-8', email.charset.QP, email.charset.QP)
@@ -68,21 +73,16 @@ log_level_map = {
 
 
 def configure_log(log_level=logging.INFO, log_file=None, log_size=1024 * 10):
+    LOG.setLevel(log_level)
     if log_file:
         if not os.path.exists(os.path.dirname(log_file)):
             os.makedirs(os.path.dirname(log_file), mode=0o755)
-        prompt = dedent(
-            "[%(asctime)15s][%(module)20s][{version}][%(process)d] %(levelname)10s %(message)s"
-        ).format(version=__version__)
+        prompt = dedent("[%(asctime)15s][%(module)20s][%(process)6d] %(levelname)10s %(message)s")
         file_frmtr = logging.Formatter(prompt, datefmt='%d/%b/%Y %H:%M:%S')
-        file_hndlr = logging.handlers.RotatingFileHandler(
-            log_file,
-            mode='a',
-            maxBytes=log_size)
+        file_hndlr = logging.handlers.RotatingFileHandler(log_file, maxBytes=log_size, backupCount=1)
         file_hndlr.setFormatter(file_frmtr)
         file_hndlr.setLevel(log_level)
         LOG.addHandler(file_hndlr)
-    LOG.setLevel(log_level)
 
 
 def check_pid(pid_file):
@@ -109,7 +109,7 @@ def kill_children(pid):
         child.kill()
 
 
-def exc_info(where=True):
+def exc_info(where=False):
     exc_type, exc_obj, exc_tb = sys.exc_info()
     file_name, line_num, func_name, text = traceback.extract_tb(exc_tb)[-1]
     if where:
@@ -195,8 +195,8 @@ class Pool(object):
             if timeout and time.time() >= time_until:
                 msg = "Pool get timeout, used: {used}, free: {free}".format(
                     used=len(self._used), free=len(self._free))
-                raise Exception(msg)
-            time.sleep(0.2)
+                raise exceptions.TimeoutError(msg)
+            time.sleep(0.1)
 
     def put(self, o):
         with self._lock:
@@ -255,6 +255,7 @@ def thread(daemon=False, name=None):
 
 
 def greenlet(f):
+    @functools.wraps(f)
     def wrapper(*args, **kwds):
         g = gevent.spawn(f, *args, **kwds)
         gevent.sleep(0)
@@ -303,7 +304,7 @@ def delete_file(file_path):
         try:
             os.remove(file_path)
         except:
-            LOG.warning(exc_info())
+            handle_error()
 
 
 def daemonize(stdin='/dev/null', stdout='/dev/null', stderr='/dev/null'):
@@ -446,8 +447,7 @@ class Color(object):
 class StdOutStreamHandler(logging.StreamHandler):
 
     def __init__(self):
-        #super(StdOutStreamHandler, self).__init__(stream=sys.stdout)
-        logging.StreamHandler.__init__(self, sys.stdout)
+        super(StdOutStreamHandler, self).__init__(stream=sys.stdout)
         self.setLevel(logging.DEBUG)
 
     def emit(self, record):
@@ -459,8 +459,7 @@ class StdOutStreamHandler(logging.StreamHandler):
 class StdErrStreamHandler(logging.StreamHandler):
 
     def __init__(self):
-        #super(StdErrStreamHandler, self).__init__(stream=sys.stderr)
-        logging.StreamHandler.__init__(self, sys.stderr)
+        super(StdErrStreamHandler, self).__init__(stream=sys.stderr)
         self.setLevel(logging.WARNING)
 
     def emit(self, record):
@@ -504,7 +503,7 @@ class GPool(gevent.pool.Group):
 
     def wait(self):
         while self.pool_size and len(self) >= self.pool_size:
-            gevent.sleep(0.1)
+            gevent.sleep(0.05)
 
 
 import ssl
@@ -548,3 +547,157 @@ def pkg_type_by_name(name):
     if name.lower() in ('fedora', 'oracle', 'oel', 'centos', 'redhat'):
         return 'rpm'
     return None
+
+
+def get_free_space(path):
+    s = os.statvfs(path)
+    return (s.f_bavail * s.f_frsize)
+
+
+def get_scalr_meta(tags):
+    keys_map = {'v1': ['env_id', 'farm_id', 'farm_role_id', 'server_id']}
+    types_map = {'env_id': int, 'farm_id': int, 'farm_role_id': int, 'server_id': str}
+    data = tags.split(':')
+    version = data[0]
+    assert version in keys_map, 'Unsupported scalr-meta version {0}'.format(version)
+    meta = dict(zip(keys_map[version], data[1:]))
+    for k, v in meta.items():
+        if v:
+            meta[k] = types_map[k](v)
+    if meta['server_id']:
+        try:
+            uuid.UUID(meta['server_id'])
+        except:
+            handle_error(message='Invalid scalr-meta: {}'.format(tags))
+    return meta
+
+
+class PeriodicalTask(object):
+
+    def __init__(self, task, period=None, timeout=None, before=None, after=None, on_error=None):
+        self.task = task
+        if isinstance(self.task, types.FunctionType):
+            self.task_name = self.task.__name__
+        else:
+            self.task_name = self.task.__class__
+        self.period = period
+        self.timeout = timeout
+        self.before = before
+        self.after = after
+        self.on_error = on_error
+        self._stop = False
+        self.start_time = None
+        self.end_time = None
+
+    def stop(self):
+        self._stop = True
+
+    @greenlet
+    def __call__(self):
+        self._stop = False
+        while not self._stop:
+            g = None
+            try:
+                self.start_time = time.time()
+                LOG.debug('Start periodical task ({})'.format(self.task_name))
+                self.task.task_info = {
+                        'period': self.period,
+                        'timeout': self.timeout,
+                        'start_time': self.start_time,
+                }
+                if callable(self.before):
+                    msg = 'Periodical task ({}) call before ({})'
+                    msg = msg.format(self.task_name, self.before.__name__)
+                    LOG.debug(msg)
+                    self.before(self)
+                g = gevent.spawn(self.task)
+                g.get(timeout=self.timeout)
+            except:
+                if g and not g.ready():
+                    g.kill()
+                try:
+                    if callable(self.on_error):
+                        self.on_error(self)
+                except:
+                    msg = 'Periodical task ({}) on error ({}) failed'
+                    msg = msg.format(self.task_name, self.on_error.__name__)
+                    handle_error(message=msg)
+                msg = 'Periodical task ({}) error: {}'
+                msg = msg.format(self.task_name, exc_info(where=False))
+                handle_error(message=msg)
+            finally:
+                try:
+                    if callable(self.after):
+                        try:
+                            msg = 'Periodical task ({}) call after ({})'
+                            msg = msg.format(self.task_name, self.after.__name__)
+                            LOG.debug(msg)
+                            self.after(self)
+                        except:
+                            msg = 'After ({0}) failed'.format(self.after.__name__)
+                            handle_error(message=msg)
+                    self.end_time = time.time()
+                    task_time = self.end_time - self.start_time
+                    msg = 'End task ({0}): {1:.1f} seconds'
+                    msg = msg.format(self.task_name, task_time)
+                    LOG.info(msg)
+                    if self.period:
+                        next_time = self.start_time + self.period
+                        while time.time() < next_time and not self._stop:
+                            time.sleep(0.5)
+                except:
+                    msg = 'Task ({}) finally failed'.format(self.task_name)
+                    handle_error(message=msg)
+
+
+def log_exception(f):
+    def wrapper(*args, **kwds):
+        try:
+            return f(*args, **kwds)
+        except:
+            LOG.exception('Exception')
+            raise
+    return wrapper
+
+
+def timeit(f):
+    def wrapper(*args, **kwds):
+        start_time = time.time()
+        try:
+            return f(*args, **kwds)
+        finally:
+            end_time = time.time()
+            msg = 'TIMEIT %s.%s: %s' % (f.__module__, f.__name__, end_time - start_time)
+            LOG.debug(msg)
+    return wrapper
+
+
+def handle_error(message=None, level='exception'):
+    c, e, t = sys.exc_info()
+    if message:
+        message = message.rstrip().rstrip('.') + '. Reason: {}'.format(exc_info())
+    else:
+        message = exc_info()
+    if isinstance(e, (
+                      KeyboardInterrupt,
+                      GeneratorExit,
+                      greenlet_mod.GreenletExit,
+                      gevent.Timeout,
+                     )
+                  ):
+        LOG.debug(message)
+        raise
+    if isinstance(e, SystemExit) and sys.exc_info()[1].args[0] == 0:
+        raise
+    logging_map = {
+        'debug': LOG.debug,
+        'info': LOG.info,
+        'warning': LOG.warning,
+        'error': LOG.error,
+        'critical': LOG.critical,
+        'exception': LOG.exception,
+    }
+    if isinstance(e, pymysql.err.Error):
+        logging_map[min(level, 'error')](message)
+    else:
+        logging_map[level](message)

@@ -1,0 +1,91 @@
+# `RoleDetailResponse` #
+
+
+
+
+
+
+
+## Properties ##
+
+### `data` (optional) ###
+
+
+
+
+An object of type [`Role`](./../definitions/Role.mkd).
+
+
+
+### `warnings` (read-only) ###
+
+
+
+
+An array of 
+objects of type [`ApiMessage`](./../definitions/ApiMessage.mkd).
+
+
+### `meta` (read-only) ###
+
+
+
+
+An object of type [`ApiMetaContainer`](./../definitions/ApiMetaContainer.mkd).
+
+
+
+### `errors` (read-only) ###
+
+
+
+
+An array of 
+objects of type [`ApiMessage`](./../definitions/ApiMessage.mkd).
+
+
+
+
+## Used in ##
+
+  + [`/roles/`](./../rest/api/v1beta0/account/roles/)
+  + [`/roles/{roleId}/`](./../rest/api/v1beta0/account/roles/{roleId}/)
+  + [`/{envId}/roles/`](./../rest/api/v1beta0/user/{envId}/roles/)
+  + [`/{envId}/roles/{roleId}/`](./../rest/api/v1beta0/user/{envId}/roles/{roleId}/)
+
+## Swagger Definition ##
+
+    {
+      "x-usedIn": [
+        "/roles/{roleId}/", 
+        "/roles/", 
+        "/{envId}/roles/{roleId}/", 
+        "/{envId}/roles/"
+      ], 
+      "properties": {
+        "meta": {
+          "readOnly": true, 
+          "$ref": "#/definitions/ApiMetaContainer"
+        }, 
+        "data": {
+          "$ref": "#/definitions/Role"
+        }, 
+        "errors": {
+          "items": {
+            "$ref": "#/definitions/ApiMessage"
+          }, 
+          "readOnly": true, 
+          "type": "array"
+        }, 
+        "warnings": {
+          "items": {
+            "$ref": "#/definitions/ApiMessage"
+          }, 
+          "readOnly": true, 
+          "type": "array"
+        }
+      }, 
+      "x-derived": {
+        "$ref": "#/definitions/Role"
+      }
+    }

@@ -23,7 +23,7 @@ class Scalr_System_Ipc_ShmArray implements ArrayAccess, Countable, Iterator
      * @key string [key]
      */
     function __construct ($config) {
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
         $this->shm = new Scalr_System_Ipc_Shm($config);
 
         sem_acquire($this->sem());

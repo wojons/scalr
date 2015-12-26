@@ -2,7 +2,7 @@ SERVICES_APACHE:
 - [/services/apache/vhosts, null, all]
 - /farms/vhosts
 
-SERVICES_ENVADMINISTRATION_CHEF:
+SERVICES_CHEF_ENVIRONMENT:
 - /services/chef/servers/default
 - /services/chef/servers/view
 - /services/chef/servers/xList

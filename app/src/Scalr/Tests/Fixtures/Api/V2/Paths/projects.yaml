@@ -1,0 +1,26 @@
+paths:
+  - uri: /{envId}/projects/
+    operations:
+      - {method: get,  response: 200}
+      - {method: post, response: 201, body: "&{0,1}ProjectsData"}
+      - {method: post, response: 400, body: "&{2}ProjectsData"}
+  - uri: /{envId}/projects/{projectId}
+    operations:
+     - {method: get,  response: 200, params: "&{3,4}ProjectsData"}
+
+#test data for api
+ProjectsData:
+  - {name: foo , billingCode: foo, leadEmail: foobar@example.com, description: foo bar, costCenter.id: "&CostCenters.id"    }
+  - {name: foo1, billingCode: foo, leadEmail: foobar@example.com, description: foo bar, costCenter.id: "&CostCenters.id"    }
+  - {name:     , billingCode: foo, leadEmail: foobar@example.com, description: foo bar, costCenter.id: "&{1}CostCenters.id" }
+  - {projectId:  "&{0}Projects.projectId", billingCode: "&{0}Projects.billingCode"}
+  - {projectId:  "&{0}Projects.projectId", name: "&{0}Projects.name"}
+
+#test data Created Entities
+Projects:
+  - {name: foo, billingCode: foo, leadEmail: foobar@example.com, description: foo bar, ccId: "&CostCenters.id", archived: true}
+CostCenters:
+  - {name: fooo1, billingCode: foo}
+  - {name: foo211, billingCode: foo}
+
+

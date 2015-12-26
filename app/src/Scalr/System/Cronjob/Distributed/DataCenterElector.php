@@ -11,7 +11,7 @@ class Scalr_System_Cronjob_Distributed_DataCenterElector
 
     function __construct ($nodeName, $jobConfig) {
         parent::__construct($nodeName, $jobConfig);
-        $this->logger = Logger::getLogger(__CLASS__);
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
 
         if (!key_exists("datacenter", $jobConfig)) {
             throw new Scalr_System_Cronjob_Exception("Configuration array must have a key for 'datacenter'");

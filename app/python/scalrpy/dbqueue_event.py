@@ -35,10 +35,10 @@ import requests.packages.urllib3.exceptions
 from scalrpy.util import helper
 from scalrpy.util import dbmanager
 from scalrpy.util import cryptotool
-from scalrpy.util import exceptions
 from scalrpy.util import application
 
 from scalrpy import LOG
+from scalrpy import exceptions
 
 
 helper.patch_gevent()
@@ -48,6 +48,8 @@ app = None
 
 
 class DBQueueEvent(application.ScalrIterationApplication):
+
+    nothing_todo_sleep = 5
 
     def __init__(self, argv=None):
         self.description = "Scalr queue event application"
@@ -190,7 +192,8 @@ class DBQueueEvent(application.ScalrIterationApplication):
                 webhooks_to_post.append(webhook)
 
         if not webhooks_to_post:
-            raise exceptions.NothingToDoError()
+            time.sleep(self.nothing_todo_sleep)
+            return
 
         for webhook in webhooks_to_post:
             webhook['handle_attempts'] += 1

@@ -1,5 +1,6 @@
 <?php
 
+use Scalr\Acl\Acl;
 use Scalr\Service\Aws\DataType\MarkerType;
 use Scalr\Service\Aws\Route53\DataType\ChangeRecordSetList;
 use Scalr\Service\Aws\Route53\DataType\ChangeRecordSetsRequestData;
@@ -71,10 +72,12 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
     /**
      * @param string $cloudLocation
      * @param string $domainName
-     * @param string $description optional
+     * @param string $description   optional
      */
     public function xCreateAction($cloudLocation, $domainName, $description = null)
     {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_ROUTE53, Acl::PERM_AWS_ROUTE53_MANAGE);
+
         $config = new ZoneData($domainName);
         $zoneConfig = new ZoneConfigData($description);
         $config->setZoneConfig($zoneConfig);
@@ -106,11 +109,13 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
     }
 
     /**
-     * @param JsonData $zoneId JSON encoded structure
-     * @param string $cloudLocation
+     * @param JsonData $zoneId        JSON encoded structure
+     * @param string   $cloudLocation
      */
     public function xDeleteAction(JsonData $zoneId, $cloudLocation)
     {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_ROUTE53, Acl::PERM_AWS_ROUTE53_MANAGE);
+
         $aws = $this->environment->aws($cloudLocation);
 
         foreach ($zoneId as $id) {
@@ -146,11 +151,13 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
 
     /**
      * @param JsonData|array $customRecordSets
-     * @param string $zoneId
-     * @param string $cloudLocation
+     * @param string         $zoneId
+     * @param string         $cloudLocation
      */
     public function deleteCustomRecordsets($customRecordSets, $zoneId, $cloudLocation)
     {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_ROUTE53, Acl::PERM_AWS_ROUTE53_MANAGE);
+
         $rrsRequest = new ChangeRecordSetsRequestData();
         $rrsCnahgeList = new ChangeRecordSetList();
 

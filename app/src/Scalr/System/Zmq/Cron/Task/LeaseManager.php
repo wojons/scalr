@@ -1,4 +1,5 @@
 <?php
+
 namespace Scalr\System\Zmq\Cron\Task;
 
 use ArrayObject, Exception, DateTime, DateTimeZone, DateInterval, stdClass;
@@ -10,6 +11,7 @@ use \Scalr_Account_User;
 use \DBFarm;
 use \FARM_STATUS;
 use Scalr\Model\Entity\SettingEntity;
+use Scalr\Model\Entity;
 
 /**
  * LeaseManager
@@ -58,7 +60,7 @@ class LeaseManager extends AbstractTask
                     JOIN farms f ON f.id = fs.farmid
                     WHERE fs.name = ? AND f.status = ? AND f.env_id = ? AND fs.value < ? AND fs.value != ''
                 ", [
-                    DBFarm::SETTING_LEASE_TERMINATE_DATE,
+                    Entity\FarmSetting::LEASE_TERMINATE_DATE,
                     FARM_STATUS::RUNNING,
                     $env['env_id'],
                     $dt->format('Y-m-d H:i:s')
@@ -100,24 +102,36 @@ class LeaseManager extends AbstractTask
             $dbFarm = DBFarm::LoadByID($request->farmId);
 
             $curDate = new DateTime();
-            $tdValue = $dbFarm->GetSetting(DBFarm::SETTING_LEASE_TERMINATE_DATE);
+            $tdValue = $dbFarm->GetSetting(Entity\FarmSetting::LEASE_TERMINATE_DATE);
 
             if ($tdValue) {
                 $td = new DateTime($tdValue);
 
                 if ($td < $curDate) {
                     //Terminates farm
-                    $event = new FarmTerminatedEvent(0, 1, false, 1);
-
                     SettingEntity::increase(SettingEntity::LEASE_TERMINATE_FARM);
-                    \Scalr::FireEvent($request->farmId, $event);
+
+                    //Ajdusts both account & environment for the audit log
+                    \Scalr::getContainer()->auditlogger
+                        ->setAccountId($dbFarm->ClientID)
+                        ->setEnvironmentId($dbFarm->EnvID)
+                    ;
+
+                    \Scalr::FireEvent($request->farmId, new FarmTerminatedEvent(
+                        0, // do not remove Zone
+                        1, // Keep Elastic IPs
+                        false, // do not terminate on sync fail
+                        1, // Keep EBS
+                        true, // Force terminate
+                        null // System user
+                    ));
 
                     $this->log('INFO', sprintf('Farm: %s [ID: %d] was terminated by lease manager', $dbFarm->Name, $dbFarm->ID));
                 } else {
                     // only inform user
                     $days = $td->diff($curDate)->days;
 
-                    $notifications = json_decode($dbFarm->GetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND), true);
+                    $notifications = json_decode($dbFarm->GetSetting(Entity\FarmSetting::LEASE_NOTIFICATION_SEND), true);
 
                     $governance = new Scalr_Governance($dbFarm->EnvID);
 
@@ -127,7 +141,7 @@ class LeaseManager extends AbstractTask
                         foreach ($settings as $n) {
                             if (!$notifications[$n['key']] && $n['period'] >= $days) {
                                 $mailer = \Scalr::getContainer()->mailer;
-                                $tdHuman = Scalr_Util_DateTime::convertDateTime($td, $dbFarm->GetSetting(DBFarm::SETTING_TIMEZONE), 'M j, Y');
+                                $tdHuman = Scalr_Util_DateTime::convertDateTime($td, $dbFarm->GetSetting(Entity\FarmSetting::TIMEZONE), 'M j, Y');
 
                                 if ($n['to'] == 'owner') {
                                     $user = new Scalr_Account_User();
@@ -158,7 +172,7 @@ class LeaseManager extends AbstractTask
 
                                 $notifications[$n['key']] = 1;
 
-                                $dbFarm->SetSetting(DBFarm::SETTING_LEASE_NOTIFICATION_SEND, json_encode($notifications));
+                                $dbFarm->SetSetting(Entity\FarmSetting::LEASE_NOTIFICATION_SEND, json_encode($notifications));
 
                                 $this->log('INFO',
                                     "Notification was sent by key: %s about farm: %s [ID: %d] by lease manager",

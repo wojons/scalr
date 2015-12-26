@@ -265,6 +265,19 @@ class Response
     }
 
     /**
+     * Gets specified header
+     *
+     * @param    string   $name  The name of the HTTP Header
+     * @return   string   Returns the value of the specified HTTP Header
+     */
+    public function getHeader($name)
+    {
+        $name = strtolower($name);
+
+        return isset($this->headers[$name]) ? $this->headers[$name] : null;
+    }
+
+    /**
      * Removes specified header
      *
      * @param   string    $name  A header name

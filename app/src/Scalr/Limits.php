@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * Class Scalr_Limits
+ *
+ * @deprecated
+ * @see Scalr\Model\Entity\Limit
+ */
 class Scalr_Limits extends Scalr_Model
 {
     const ACCOUNT_FARMS = 'account.farms';

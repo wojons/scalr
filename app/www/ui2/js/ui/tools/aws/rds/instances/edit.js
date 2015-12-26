@@ -2,26 +2,26 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
 
     var cloudLocation = loadParams.cloudLocation;
     var instance = moduleParams.instance;
+    var isAurora = instance['Engine'] === 'aurora';
     var requestsCount = 0;
 
-    var securityGroupsPolicy = function (params) {
+    var securityGroupsPolicy = function (params, isAurora) {
 
         var policy = {
-            enabled: !Ext.isEmpty(params)
+            enabled: !Ext.isEmpty(params) && !isAurora
         };
 
         if (policy.enabled) {
 
-            policy.defaultGroups = params.value.split(',');
+            policy.defaultGroups = params.value ? params.value.split(',') : [];
 
             policy.defaultGroupsList = '<b>' + policy.defaultGroups.join('</b>, <b>') + '</b>';
 
             policy.allowAddingGroups = !!params['allow_additional_sec_groups'];
-
+            policy.additionalGroupsList = params['additional_sec_groups_list'] ? params['additional_sec_groups_list'].split(',') : [];
             policy.message =
-                'A Security Group Policy is active in this Environment, ' +
-                'and requires that you attach the following Security Groups to your DB instance: ' +
-                policy.defaultGroupsList + '.' +
+                'A Security Group Policy is active in this Environment' +
+                (!Ext.isEmpty(policy.defaultGroups) ? ', and requires that you attach the following Security Groups to your DB instance: ' + policy.defaultGroupsList : '') + '.' +
                 (!policy.allowAddingGroups ? '\nYou are not allowed to attach additional Security Groups.' : '');
 
             policy.tip =
@@ -33,13 +33,21 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
 
         return policy;
 
-    }( Scalr.getGovernance('ec2', 'aws.additional_security_groups') );
+    }( Scalr.getGovernance('ec2', 'aws.rds_additional_security_groups'), isAurora );
 
     var form = Ext.create('Ext.form.Panel', {
 
         title: 'Tools &raquo; Amazon Web Services &raquo; RDS &raquo; DB Instances &raquo; Modify',
         width: 700,
         preserveScrollPosition: true,
+
+        getFirstInvalidField: function () {
+            return this.down('field{isValid()===false}');
+        },
+
+        scrollToField: function (field) {
+            field.inputEl.scrollIntoView(this.body.el, false, false);
+        },
 
         showPolicyInfo: function (visible) {
             var me = this;
@@ -71,7 +79,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
             var me = this,
                 baseForm = me.getForm();
 
-            me.prepareMaintenanceParams();
+            if (!isAurora) {
+                me.prepareMaintenanceParams();
+            }
 
             var securityGroups = me.down('[name=VpcSecurityGroups]');
 
@@ -87,9 +97,17 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                     invalidField.focus();
                 }
 
-                securityGroups.enable();
+                if (!isAurora) {
+                    securityGroups.enable();
+                }
 
                 return false;
+            }
+
+            var vpcId = instance['VpcId'];
+            
+            if (!Ext.isEmpty(vpcId)) {
+                params['VpcId'] = vpcId;
             }
 
             Scalr.Request({
@@ -100,11 +118,14 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                 url: '/tools/aws/rds/instances/xModifyInstance',
                 form: baseForm,
                 params: params,
-                success: function() {
+                success: function (responseData) {
+                    Scalr.event.fireEvent('update', '/tools/aws/rds/instances', 'modify', responseData.instance, responseData.cloudLocation);
                     Scalr.event.fireEvent('close');
                 },
                 failure: function() {
-                    securityGroups.enable();
+                    if (!isAurora) {
+                        securityGroups.enable();
+                    }
                 }
             });
 
@@ -125,7 +146,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                     url: '/platforms/ec2/xGetDefaultVpcSegurityGroups',
                     params: {
                         cloudLocation: cloudLocation,
-                        vpcId: instance['VpcId']
+                        vpcId: instance['VpcId'],
+                        serviceName: 'rds'
                     },
                     success: function (response) {
                         var securityGrops = Ext.Array.map(response.data, function (securityGroup) {
@@ -143,6 +165,68 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
 
                 return true;
             }
+        },
+
+        filterInstancesTypes: function (engine) {
+            var me = this;
+
+            var instanceClassField = me.down('[name=DBInstanceClass]');
+            var instanceClassStore = instanceClassField.getStore();
+            instanceClassStore.clearFilter();
+
+            var allowedTypes = {
+                aurora: [ 'r3' ],
+                mariadb: [ 't2', 'm3', 'r3' ]
+            };
+
+            var engineAllowedTypes = allowedTypes[engine];
+            var hasRestrictions = Ext.isDefined(engineAllowedTypes);
+
+            if (hasRestrictions) {
+                instanceClassStore.filterBy(function (record) {
+                    var instanceType = record.get('field1');
+
+                    return Ext.Array.some(engineAllowedTypes, function (type) {
+                        return instanceType.indexOf('.' + type) !== -1;
+                    });
+                });
+            }
+
+            instanceClassField.setValue(!hasRestrictions
+                ? 'db.m1.small'
+                : instanceClassStore.first()
+            );
+
+            return me;
+        },
+
+        selectAuroraEngine: function (isSelected) {
+            var me = this;
+
+            var engineVersionField = me.down('[name=EngineVersion]');
+            var engineVersion = engineVersionField.getValue();
+
+            if (isSelected && !Ext.isEmpty(engineVersion)) {
+                engineVersionField.setRawValue('compatible with MySQL ' + engineVersion);
+            }
+
+            engineVersionField.setDisabled(isSelected);
+
+
+            me.down('[name=StorageType]')
+                .setValue(!isSelected ? 'gp2' : 'grover')
+                .setVisible(!isSelected);
+
+
+            me.down('[name=AllocatedStorage]')
+                .setDisabled(isSelected)
+                .setVisible(!isSelected);
+
+            me.down('[name=MultiAZ]')
+                .setDisabled(isSelected)
+                .setVisible(!isSelected);
+
+            return me;
         },
 
         dockedItems: [{
@@ -173,7 +257,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                 text: 'Modify',
                 hidden: true,
                 handler: function () {
-                    form.modifyDbInstance();
+                    form.modifyDbInstance({});
                 },
                 menu: [{
                     text: 'Modify and automatically comply with Security Groups Policy',
@@ -271,7 +355,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
             }]
         }, {
             xtype: 'fieldset',
-            title: 'Database Instance and Storage',
+            title: !isAurora ? 'Database Instance and Storage' : 'Database Instance',
             name: 'instanceSettings',
             defaults: {
                 labelWidth: 200,
@@ -417,6 +501,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                 fieldLabel: 'Security Groups',
                 layout: 'hbox',
                 width: 595,
+                hidden: isAurora,
+                disabled: isAurora,
                 /*
                 plugins: [{
                     ptype: 'fieldicons',
@@ -437,7 +523,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                     me.setFieldLabel('Security Groups' + (!visible
                         ? ''
                         : '&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL +
-                            '" class="x-icon-governance" data-qtip="' +
+                            '" class="x-icon-governance" style="margin-top:-4px" data-qtip="' +
                             securityGroupsPolicy.message +
                             '" />'
                     ));
@@ -812,7 +898,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
             itemId: 'associateFarmId',
             collapsible: true,
             collapsed: true,
-            checkboxToggle:  true,
+            checkboxToggle: true,
             defaults: {
                 labelWidth: 200,
                 width: 500
@@ -859,7 +945,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                     ['sqlserver-se', 'Microsoft SQL Server SE'],
                     ['sqlserver-ex', 'Microsoft SQL Server EX'],
                     ['sqlserver-web', 'Microsoft SQL Server WEB'],
-                    ['postgres', 'PostgreSQL']
+                    ['postgres', 'PostgreSQL'],
+                    ['aurora', 'Amazon Aurora'],
+                    ['mariadb', 'MariaDB']
                 ],
                 storageValues: {
                     'mysql': { minValue: 5, maxValue: 3072 },
@@ -870,7 +958,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                     'sqlserver-se': { minValue: 200, maxValue: 1024 },
                     'sqlserver-ex': { minValue: 20, maxValue: 1024 },
                     'sqlserver-web': { minValue: 20, maxValue: 1024 },
-                    'postgres': { minValue: 5, maxValue: 3072 }
+                    'postgres': { minValue: 5, maxValue: 3072 },
+                    'aurora': { minValue: 100, maxValue: 3072 },
+                    'mariadb': { minValue: 5, maxValue: 6144 }
                 },
                 licenseModels: {
                     'mysql': [{ licenseModel: 'general-public-license' }],
@@ -887,12 +977,17 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                     ],
                     'sqlserver-ex': [{ licenseModel: 'license-included' }],
                     'sqlserver-web': [{ licenseModel: 'license-included' }],
-                    'postgres': [{ licenseModel: 'postgresql-license' }]
+                    'postgres': [{ licenseModel: 'postgresql-license' }],
+                    'aurora': [{ licenseModel: 'general-public-license' }],
+                    'mariadb': [{ licenseModel: 'general-public-license' }]
                 },
                 queryMode: 'local',
                 editable: false,
                 readOnly: true,
                 submitValue: false,
+                isAurora: function (engine) {
+                    return engine === 'aurora';
+                },
                 listeners: {
                     change: function (me, value) {
                         setMultiAzStatus(value);
@@ -901,6 +996,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                             form.down('[name=cloudLocation]').getValue(),
                             value
                         );
+
+                        form.filterInstancesTypes(value);
 
                         Scalr.Request({
                             processBox: {
@@ -928,6 +1025,10 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
 
                                 var allocatedStorageField = form.down('[name=AllocatedStorage]');
                                 Ext.apply(allocatedStorageField, me.storageValues[value]);
+
+                                if (me.isAurora(value)) {
+                                    form.selectAuroraEngine(true);
+                                }
                             }
                         });
                     }
@@ -1045,7 +1146,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                 valueField: 'licenseModel',
                 displayField: 'licenseModel',
                 value: 'general-public-license',
-                readOnly: true
+                readOnly: true,
+                hidden: isAurora,
+                disabled: isAurora
             }, {
                 xtype: 'combo',
                 name: 'DBParameterGroup',
@@ -1069,7 +1172,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                 queryMode: 'local',
                 valueField: 'optionGroupName',
                 displayField: 'optionGroupName',
-                editable: false
+                editable: false,
+                hidden: isAurora,
+                disabled: isAurora
             }, {
                 xtype: 'textfield',
                 name: 'Port',
@@ -1082,6 +1187,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
             xtype: 'fieldset',
             title: 'Database',
             name: 'databaseSettings',
+            hidden: isAurora,
+            disabled: isAurora,
             defaults: {
                 labelWidth: 200,
                 width: 500
@@ -1097,32 +1204,45 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                 xtype: 'textfield',
                 name: 'MasterUserPassword',
                 fieldLabel: 'Master Password',
-                emptyText: '******'
+                emptyText: '******',
+                regex: /^[a-z0-9!#$%&'()*+,.:;<=>?\[\]\\^_`{|}~-]*$/i,
+                invalidText: 'Master Password can be any printable ASCII character except "/", """, or "@"',
+                minLength: 8,
+                minLengthText: 'Master Password must be a minimum of 8 characters'
             }]
         }, {
             xtype: 'fieldset',
-            title: 'Maintenance Windows and Backups',
+            title: !isAurora ? 'Maintenance Windows and Backups' : '',
             name: 'maintenanceWindowSettings',
+            fieldDefaults: {
+                submitValue: false
+            },
             items: [{
                 xtype: 'hiddenfield',
-                name: 'PreferredMaintenanceWindow'
+                name: 'PreferredMaintenanceWindow',
+                submitValue: true,
+                disabled: isAurora
             }, {
                 xtype: 'hiddenfield',
-                name: 'PreferredBackupWindow'
+                name: 'PreferredBackupWindow',
+                submitValue: true,
+                disabled: isAurora
             }, {
                 labelWidth: 200,
                 xtype: 'checkboxfield',
                 fieldLabel: 'Apply Immediately',
                 name: 'ApplyImmediately',
                 inputValue: true,
-                uncheckedValue: false
+                uncheckedValue: false,
+                submitValue: true
             }, {
                 labelWidth: 200,
                 xtype: 'checkboxfield',
                 fieldLabel: 'Auto Minor Version Upgrade',
                 name: 'AutoMinorVersionUpgrade',
                 inputValue: true,
-                uncheckedValue: false
+                uncheckedValue: false,
+                submitValue: true
             }, {
                 xtype: 'fieldcontainer',
                 layout: {
@@ -1131,6 +1251,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                 defaults: {
                     margin: '0 3 0 0'
                 },
+                hidden: isAurora,
+                disabled: isAurora,
                 items: [{
                     labelWidth: 200,
                     width: 270,
@@ -1213,6 +1335,11 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                 layout: {
                     type: 'hbox'
                 },
+                defaults: {
+                    isFormFields: false
+                },
+                hidden: isAurora,
+                disabled: isAurora,
                 items: [{
                     labelWidth: 200,
                     width: 240,
@@ -1267,6 +1394,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
             }, {
                 xtype: 'fieldcontainer',
                 layout: 'hbox',
+                hidden: isAurora,
+                disabled: isAurora,
                 items: [{
                     labelWidth: 200,
                     width: 280,
@@ -1275,7 +1404,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
                     fieldLabel: 'Backup Retention Period',
                     value: 1,
                     minValue: 0,
-                    maxValue: 35
+                    maxValue: 35,
+                    submitValue: true
                 }, {
                     xtype: 'displayfield',
                     margin: '0 0 0 9',
@@ -1322,24 +1452,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
         if (isMultiAzDeprecated) {
             multiAzField.setValue(false);
         }
-
-        return true;
-    };
-
-    var applySecurityGroups = function (groups) {
-        var securityGroupNames = [];
-
-        Ext.Array.each(groups, function (securityGroup) {
-            securityGroupNames.push(
-                securityGroup
-            );
-        });
-
-        var field = form.down('[name=DBSecurityGroups]');
-        field.reset();
-        field.setValue(
-            securityGroupNames.join(', ')
-        );
 
         return true;
     };
@@ -1403,7 +1515,8 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
         var filter = isVpcDefined
             ? Ext.encode({
                 vpcId: vpcId,
-                considerGovernance: securityGroupsPolicy.enabled
+                considerGovernance: securityGroupsPolicy.enabled,
+                serviceName: 'rds'
               })
             : null;
 
@@ -1415,14 +1528,15 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
             },
             form: [{
                 xtype: 'rdssgmultiselect',
-                title: 'Add security groups to farm role',
-                limit: 10,
+                title: 'Add Security Groups to DB Instance',
+                limit: isVpcDefined ? 5 : 25,
                 minHeight: 200,
                 selection: selected,
                 defaultVpcGroups: excludeGroups,
                 governanceWarning: isVpcDefined && securityGroupsPolicy.enabled && !securityGroupsPolicy.allowAddingGroups
                     ? securityGroupsPolicy.message
                     : null,
+                disableAddButton: securityGroupsPolicy.enabled && (!securityGroupsPolicy.allowAddingGroups || !Ext.isEmpty(securityGroupsPolicy.additionalGroupsList)),
                 storeExtraParams: {
                     platform: !isVpcDefined ? 'rds' : 'ec2',
                     cloudLocation: cloudLocation,
@@ -1454,6 +1568,15 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
     form.down('[name=cloudLocation]').
         setValue(cloudLocation);
 
+    var fieldsetAssociateFarmId = form.down('#associateFarmId');
+    if (instance['farmName']) {
+        fieldsetAssociateFarmId.expand();
+        fieldsetAssociateFarmId.checkboxCmp.setDisabled(true);
+    } else {
+        fieldsetAssociateFarmId.hide();
+        form.down('#noFarmIdInfo').show();
+    }
+
     if (instance['VpcId']) {
         updateSecurityGroups(
             instance['VpcSecurityGroups'],
@@ -1473,19 +1596,13 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.edit', function (loadParams, mod
         return form;
     }
 
-    applySecurityGroups(
-        instance['DBSecurityGroups']
-    );
-
-    var fieldsetAssociateFarmId = form.down('#associateFarmId');
-    if (instance['farmName']) {
-        fieldsetAssociateFarmId.expand();
-        fieldsetAssociateFarmId.checkboxCmp.setDisabled(true);
-    } else {
-        fieldsetAssociateFarmId.hide();
-        form.down('#noFarmIdInfo').show();
-    }
-
+    form.down('[name=DBSecurityGroups]')
+        .on('afterrender', function (field) {
+            field.reset();
+            field.setValue(
+                instance['DBSecurityGroups'].join(', ')
+            );
+        });
 
     return form;
 

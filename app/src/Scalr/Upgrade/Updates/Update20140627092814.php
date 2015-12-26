@@ -31,12 +31,12 @@ class Update20140627092814 extends AbstractUpdate implements SequenceInterface
 
     protected function isApplied1($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION') && $this->db->GetOne("
+        return defined('Scalr\\Acl\\Acl::RESOURCE_ORCHESTRATION_ACCOUNT') && $this->db->GetOne("
             SELECT `granted` FROM `acl_role_resources`
             WHERE `resource_id` = ? AND `role_id` = ?
             LIMIT 1
         ", array(
-            Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION,
+            Acl::RESOURCE_ORCHESTRATION_ACCOUNT,
             Acl::ROLE_ID_FULL_ACCESS,
         )) == 1;
     }
@@ -48,21 +48,21 @@ class Update20140627092814 extends AbstractUpdate implements SequenceInterface
             WHERE `resource_id` = ? AND `granted` = ?
             LIMIT 1
         ", array(
-            Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION,
+            Acl::RESOURCE_ORCHESTRATION_ACCOUNT,
             0,
         )) == 1;
     }
 
     protected function validateBefore1($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION') &&
-        Definition::has(Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION);
+        return defined('Scalr\\Acl\\Acl::RESOURCE_ORCHESTRATION_ACCOUNT') &&
+        Definition::has(Acl::RESOURCE_ORCHESTRATION_ACCOUNT);
     }
 
     protected function validateBefore2($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION') &&
-        Definition::has(Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION);
+        return defined('Scalr\\Acl\\Acl::RESOURCE_ORCHESTRATION_ACCOUNT') &&
+        Definition::has(Acl::RESOURCE_ORCHESTRATION_ACCOUNT);
     }
 
     protected function run1($stage)
@@ -73,7 +73,7 @@ class Update20140627092814 extends AbstractUpdate implements SequenceInterface
             VALUES (?, ?, 1)
         ", array(
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION
+            Acl::RESOURCE_ORCHESTRATION_ACCOUNT
         ));
     }
 
@@ -87,7 +87,7 @@ class Update20140627092814 extends AbstractUpdate implements SequenceInterface
             WHERE `role_id` = ?
             AND `is_automatic` = 1
         ", array(
-            Acl::RESOURCE_ADMINISTRATION_ORCHESTRATION,
+            Acl::RESOURCE_ORCHESTRATION_ACCOUNT,
             Acl::ROLE_ID_FULL_ACCESS
         ));
     }

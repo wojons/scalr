@@ -1,0 +1,29 @@
+paths:
+  - uri: /{envId}/projects/
+    operations:
+      - method: get
+        response: 200
+#      - method: post
+#        response: 201
+#        parameters:
+#          - name: projectObject
+#            dataType: Project
+#            paramType: body
+#  - path: /{envId}/projects/{projectId}
+#    operations:
+#      - method: get
+#        response: 200
+#        parameters:
+#          - name: projectId
+#            paramType: query
+#models:
+#  Project:
+#    name: project
+#    properties:
+#      leadEmail: a.pecnhuk@scalr.net
+#      costCenter:
+#        functions: testCostCenter
+#      leadEmail: test@example.com
+#      description: test
+
+

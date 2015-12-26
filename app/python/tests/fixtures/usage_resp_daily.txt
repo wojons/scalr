@@ -1,0 +1,41 @@
+{
+    "value": [    
+        { 
+            "properties": {
+                "meterId": "0a6c7eb6-0290-4e92-a112-4de73442b6ae",
+                "usageStartTime": "2015-04-29T00:00:00+00:00",
+                "usageEndTime": "2015-04-30T00:00:00+00:00",
+                "meterSubCategory": "BASIC.A1 VM (Non-Windows)",
+                "meterCategory": "Virtual Machines",
+                "meterName": "Compute Hours",
+                "meterRegion": "US East",
+                "infoFields": {},
+                "subscriptionId": "subscription_id",
+                "instanceData": "{\"Microsoft.Resources\":{\"resourceUri\":\"/subscriptions/6276d188-6b35-4b44-be1d-12633d236ed8/resourceGroups/test-resource-group-c6c3f990/providers/Microsoft.Compute/virtualMachines/10000000-0000-0000-0000-000000000001\",\"location\":\"eastus\",\"tags\":{\"scalr-meta\":\"v1:1:1:1:10000000-0000-0000-0000-000000000001\"},\"additionalInfo\":{\"ImageType\":\"Canonical\",\"ServiceType\":\"Basic_A0\",\"UsageType\":\"ComputeHR\"}}}",
+                "unit": "Hours",
+                "quantity": 0.06389
+            },
+            "type": "Microsoft.Commerce/UsageAggregate",
+            "id": "/subscriptions/subscription_id/providers/Microsoft.Commerce/UsageAggregates/Daily_BRSDT_20150430_0000",
+            "name": "Daily_BRSDT_20150430_0000"
+        },
+        {
+            "properties": {
+                "meterId": "d23a5753-ff85-4ddf-af28-8cc5cf2d3882",
+                "usageStartTime": "2015-04-29T00:00:00+00:00",
+                "usageEndTime": "2015-04-30T00:00:00+00:00",
+                "meterSubCategory": "Locally Redundant",
+                "meterCategory": "Storage",
+                "meterName": "Standard IO - Page Blob/Disk (GB)",
+                "infoFields": {},
+                "subscriptionId": "subscription_id",
+                "instanceData": "{\"Microsoft.Resources\":{\"resourceUri\":\"/subscriptions/subscription_id/resourceGroups/test-resource-group-2f06c910/providers/Microsoft.Storage/storageAccounts/teststorage32f06c910\",\"location\":\"East US\",\"tags\":{\"scalr-meta\":\"v1:1:1:1:10000000-0000-0000-0000-000000000001\"}}}",
+                "unit":"GB",
+                "quantity": 500.0
+            },
+            "type": "Microsoft.Commerce/UsageAggregate",
+            "id": "/subscriptions/subscription_id/providers/Microsoft.Commerce/UsageAggregates/Hourly_BRSDT_20150430_0000",
+            "name": "Hourly_BRSDT_20150430_0000"
+        }
+    ]
+}
