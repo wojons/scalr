@@ -538,7 +538,7 @@ class Extension implements IteratorAggregate
 
                 ->sub('system', false)
                     ->sub('api', false)
-                        ->node('enabled', false)
+                        ->node('enabled', true)
                         ->sub('logger', false)
                             ->node('enabled', false)
                             ->node('backend', 'fluentd')

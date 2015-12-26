@@ -257,6 +257,9 @@ scalr:
 #        workers: 4
 
   system:
+    api:
+      # Whether Scalr APIv2 is enabled. Default: yes
+      enabled: yes
     default_disable_firewall_management: no
     instances_connection_timeout: 4
 #    # server terminate timeout in graceful mode. Default: "+3 minutes"
