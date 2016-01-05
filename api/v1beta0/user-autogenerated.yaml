@@ -109,9 +109,9 @@ definitions:
   AwsClassicPlacementConfiguration:
     properties:
       availabilityZones:
-        description: "The list of available zones. If it's empty array \u2014 will\
-          \ be distributed equally, if availabilityZone property is not present or\
-          \ it's NULL \u2014 means will be chosen by AWS"
+        description: The list of available zones. If it's empty array - will be distributed
+          equally, if availabilityZone property is not present or it's NULL - means
+          will be chosen by AWS.
         items:
           type: string
         type: array
