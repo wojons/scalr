@@ -2035,7 +2035,7 @@ definitions:
       - $ref: "#/definitions/PlacementConfiguration"
       - properties:
           availabilityZones:
-            description: The list of available zones. If it's empty array — will be distributed equally, if availabilityZone property is not present or it's NULL — means will be chosen by AWS
+            description: "The list of available zones. If it's empty array - will be distributed equally, if availabilityZone property is not present or it's NULL - means will be chosen by AWS."
             type: array
             items:
               type: string
