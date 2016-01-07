@@ -303,7 +303,7 @@ class AWSBilling(Billing):
         try:
             record['cost'] = float(row['Cost'])
         except KeyError:
-            record['cost'] = float(row['BlendedCost'])
+            record['cost'] = float(row['UnBlendedCost'])
         record['cost'] = round(record['cost'], 9)
 
         cost_distr_type = 4
