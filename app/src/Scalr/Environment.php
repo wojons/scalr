@@ -524,9 +524,7 @@ class Scalr_Environment extends Scalr_Model
 
         return array_values(array_intersect($cloudsList, array_keys($this->cloudCredentialsList(
             $cloudsList,
-            [[
-                'status' => ['$in' => Entity\CloudCredentials::getEnabledStatuses()]
-            ]],
+            [[ 'status' => ['$in' => Entity\CloudCredentials::getEnabledStatuses()] ]],
             [],
             $cacheResult
         ))));

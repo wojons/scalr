@@ -6,7 +6,7 @@ use Scalr\Upgrade\AbstractUpdate;
 use Scalr\Model\Entity\Image;
 use SERVER_PLATFORMS;
 
-class Update20150602130712 extends AbstractUpdate implements SequenceInterface
+class Update20151215000000 extends AbstractUpdate implements SequenceInterface
 {
 
     protected $uuid = '90297f49-0a22-442b-87ac-6ea91ee393d1';

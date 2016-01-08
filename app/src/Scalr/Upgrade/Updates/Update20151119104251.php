@@ -20,6 +20,15 @@ class Update20151119104251 extends AbstractUpdate implements SequenceInterface
 
     /**
      * {@inheritdoc}
+     * @see \Scalr\Upgrade\AbstractUpdate::isRefused()
+     */
+    public function isRefused()
+    {
+        return !$this->container->analytics->enabled ? "Cost analytics is turned off" : false;
+    }
+
+    /**
+     * {@inheritdoc}
      * @see Scalr\Upgrade.SequenceInterface::getNumberStages()
      */
     public function getNumberStages()
