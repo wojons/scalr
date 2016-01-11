@@ -197,7 +197,7 @@ class Scalr_UI_Controller_Admin_Analytics_Pricing extends Scalr_UI_Controller
         }
 
         if (empty($pmlocations)) {
-            foreach (CloudLocation::find([['platform' => $platform],['url' => $url]], ['updated' => false]) as $clEntity) {
+            foreach (CloudLocation::find([['platform' => $platform],['url' => $url]], null, ['updated' => false]) as $clEntity) {
                 /* @var $clEntity CloudLocation */
                 $pmlocations[$clEntity->cloudLocation] = $clEntity->cloudLocation;
             }
@@ -246,7 +246,7 @@ class Scalr_UI_Controller_Admin_Analytics_Pricing extends Scalr_UI_Controller
 
             //TODO: use cloudsCredentials service
             $rs = $this->db->Execute("
-                SELECT DISTINCT ce.`env_id`, cecc.`cloud_credentials_id`
+                SELECT DISTINCT ce.`id`, cecc.`cloud_credentials_id`
                 FROM client_environments ce
                 JOIN clients c ON c.id = ce.client_id
                 JOIN environment_cloud_credentials cecc ON ce.`id` = cecc.`env_id`
@@ -261,7 +261,7 @@ class Scalr_UI_Controller_Admin_Analytics_Pricing extends Scalr_UI_Controller
 
             while ($rec = $rs->FetchRow()) {
                 $cloudCredsId = $rec['cloud_credentials_id'];
-                $envs[$cloudCredsId] = $rec['env_id'];
+                $envs[$cloudCredsId] = $rec['id'];
                 $cloudCredsIds[] = $cloudCredsId;
             }
 
@@ -270,13 +270,7 @@ class Scalr_UI_Controller_Admin_Analytics_Pricing extends Scalr_UI_Controller
 
             foreach (array_chunk($cloudCredsIds, 128) as $chunk) {
                 /* @var $cloudCredentials Entity\CloudCredentials */
-                foreach (Entity\CloudCredentials::find([[
-                    'id' => [
-                        '$in' => array_map(function ($entry) use ($cloudCredentialsEntity, $idFieldType) {
-                            return $cloudCredentialsEntity->qstr('id', $idFieldType->toDb($entry));
-                        }, $chunk)
-                    ]
-                ]]) as $cloudCredentials) {
+                foreach (Entity\CloudCredentials::find([['id' => ['$in' => $chunk]]]) as $cloudCredentials) {
                     $url = $this->getContainer()->analytics->prices->normalizeUrl($cloudCredentials->properties[$key]);
 
                     if (!array_key_exists($url, $endpoints)) {
