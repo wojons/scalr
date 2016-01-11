@@ -244,16 +244,15 @@ class Scalr_UI_Controller_Admin_Analytics_Pricing extends Scalr_UI_Controller
         if (isset($key)) {
             $pm = PlatformFactory::NewPlatform($platform);
 
-            //TODO: use cloudsCredentials service
             $rs = $this->db->Execute("
                 SELECT DISTINCT ce.`id`, cecc.`cloud_credentials_id`
                 FROM client_environments ce
                 JOIN clients c ON c.id = ce.client_id
-                JOIN environment_cloud_credentials cecc ON ce.`id` = cecc.`env_id`
+                JOIN environment_cloud_credentials cecc ON ce.`id` = cecc.`env_id` AND cecc.`cloud` = ?
                 JOIN cloud_credentials_properties ccp ON cecc.`cloud_credentials_id` = ccp.`cloud_credentials_id`
                 WHERE c.status = ? AND ccp.name = ? AND ce.status = ?
                 GROUP BY value
-            ", [Scalr_Account::STATUS_ACTIVE, $key, Scalr_Environment::STATUS_ACTIVE]);
+            ", [$platform, Scalr_Account::STATUS_ACTIVE, $key, Scalr_Environment::STATUS_ACTIVE]);
 
             $endpoints = [];
             $cloudCredsIds = [];
