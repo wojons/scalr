@@ -400,7 +400,7 @@ class AWSBilling(Billing):
                                                             minute=0,
                                                             second=0,
                                                             microsecond=0)
-            if utcnow.day < 11:
+            if utcnow.day < 15:
                 dtime_from = helper.previous_month(dtime_from)
         dtime_to = self.config['dtime_to'] or datetime.datetime.utcnow().replace(microsecond=999999)
         return dtime_from, dtime_to
@@ -497,7 +497,6 @@ class AWSBilling(Billing):
             aws_accounts_ids = self.analytics.load_aws_accounts_ids()
             for chunk in helper.chunks(aws_accounts_ids, 100):
                 envs = self.analytics.load_aws_accounts_ids_envs(chunk)
-                envs = [env for env in envs if env.get('ec2.is_enabled', '0') == '1']
                 self.analytics.load_env_credentials(envs, platform='ec2')
                 envs = [env for env in envs if
                         env.get('ec2.detailed_billing.enabled', '0') == '1' and
@@ -510,7 +509,6 @@ class AWSBilling(Billing):
             aws_payers_accounts = self.analytics.load_aws_payers_accounts()
             for chunk in helper.chunks(aws_payers_accounts, 100):
                 envs = self.analytics.load_aws_payers_accounts_envs(chunk)
-                envs = [env for env in envs if env.get('ec2.is_enabled', '0') == '1']
                 self.analytics.load_env_credentials(envs, platform='ec2')
                 envs = [env for env in envs if
                         env.get('ec2.detailed_billing.enabled', '0') == '1']
@@ -1050,7 +1048,6 @@ class AzureBilling(Billing):
             azure_subscriptions_ids = self.analytics.load_azure_subscriptions_ids()
             for chunk in helper.chunks(azure_subscriptions_ids, 100):
                 envs = self.analytics.load_azure_subscriptions_ids_envs(chunk)
-                envs = [env for env in envs if env.get('azure.is_enabled', '0') == '1']
                 self.analytics.load_env_credentials(envs, platform='azure')
                 if not envs:
                     continue

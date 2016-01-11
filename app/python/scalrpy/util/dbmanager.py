@@ -93,6 +93,7 @@ class DB(object):
                 self._local.connection.autocommit(self._autocommit)
                 self._local.cursor = self._connection.cursor()
                 start_time = time.time()
+                LOG.debug('Execute query: %s...' % query[:500])
                 try:
                     self._local.cursor.execute(query)
                     results = self._local.cursor.fetchall()
@@ -108,7 +109,7 @@ class DB(object):
                         msg = 'MySQL finalize connection error'
                         helper.handle_error(message=msg, level='error')
                 if end_time - start_time > 5:
-                    LOG.debug('Query too slow: %s\n%s...' % (end_time - start_time, query[:150]))
+                    LOG.debug('Query too slow: %s\n%s...' % (end_time - start_time, query[:250]))
                 if results is not None:
                     results = tuple(results)
                 else:

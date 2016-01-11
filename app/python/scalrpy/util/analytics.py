@@ -86,8 +86,8 @@ class Credentials(dict):
         'azure': ['tenant_name', 'subscription_id'],
     }
 
-    def __init__(self, env_id, platform, data):
-        self._env_id = env_id
+    def __init__(self, envs_ids, platform, data):
+        self._envs_ids = envs_ids
         self._platform = platform
         for name in self.scheme[platform]:
             if name in data:
@@ -106,8 +106,8 @@ class Credentials(dict):
         return self == other
 
     @property
-    def env_id(self):
-        return self._env_id
+    def envs_ids(self):
+        return self._envs_ids
 
     @property
     def platform(self):
@@ -119,7 +119,7 @@ class Credentials(dict):
             unique_key = self['account_id']
         else:
             unique_key = '; '.join([str(self[k]) for k in self.scheme[self.platform] if k in self])
-        assert unique_key, 'unique_key'
+        assert unique_key
         return unique_key
 
     @classmethod
@@ -164,24 +164,27 @@ class Analytics(object):
         instances_ids = map(str, instances_ids)
         if not instances_ids:
             return tuple()
-        query = (
-            "SELECT sh.server_id, sh.cloud_server_id instance_id, sh.env_id "
-            "FROM servers_history sh "
-        )
         if url:
-            query += "JOIN client_environment_properties cep ON sh.env_id=cep.env_id "
-        query += (
-            "WHERE sh.platform='{platform}' "
-            "AND sh.cloud_server_id IN ({instances_ids}) "
-        )
-        if url:
-            query += (
-                "AND cep.name='{platform}.{url_key}' "
-                "AND cep.value='{url}' "
+            query = (
+                "SELECT sh.server_id, sh.cloud_server_id instance_id, sh.env_id "
+                "FROM servers_history sh "
+                "JOIN environment_cloud_credentials ecc "
+                "ON sh.env_id=ecc.env_id AND sh.platform=ecc.cloud "
+                "JOIN cloud_credentials_properties ccp ON ccp.cloud_credentials_id=ecc.cloud_credentials_id "
+                "WHERE sh.platform='{platform}' "
+                "AND sh.cloud_server_id IN ({instances_ids}) "
+                "AND ccp.name='{url_key}' "
+                "AND ccp.value='{url}' "
+            )
+        else:
+            query = (
+                "SELECT sh.server_id, sh.cloud_server_id instance_id, sh.env_id "
+                "FROM servers_history sh "
+                "WHERE sh.platform='{platform}' "
+                "AND sh.cloud_server_id IN ({instances_ids}) "
             )
         if cloud_location:
             query += "AND sh.cloud_location='{cloud_location}' "
-
         kwds = {
             'platform': platform,
             'cloud_location': cloud_location,
@@ -232,18 +235,30 @@ class Analytics(object):
         """
         :returns: generator
         """
-        platforms = [platform] if platform else PLATFORMS
-        query = (
-            "SELECT ce.id, ce.client_id "
-            "FROM client_environments ce "
-            "JOIN clients c ON ce.client_id=c.id "
-            "WHERE c.status='Active' "
-            "AND ce.status='Active' "
-            "ORDER BY ce.id ASC")
-        for envs in self.scalr_db.execute_with_limit(query, limit, retries=1):
-            names = ['%s.is_enabled' % platform for platform in platforms]
-            self.scalr_db.load_client_environment_properties(envs, names)
-            yield envs
+        if platform:
+            query = (
+                "SELECT ce.id, ce.client_id "
+                "FROM client_environments ce "
+                "JOIN clients c ON ce.client_id=c.id "
+                "JOIN environment_cloud_credentials ecc ON ce.id=ecc.env_id "
+                "AND ecc.cloud='{platform}' "
+                "WHERE c.status='Active' "
+                "AND ce.status='Active' "
+                "GROUP BY ce.id, ce.client_id "
+                "ORDER BY ce.id ASC"
+            ).format(platform=platform)
+        else:
+            query = (
+                "SELECT ce.id, ce.client_id "
+                "FROM client_environments ce "
+                "JOIN clients c ON ce.client_id=c.id "
+                "JOIN environment_cloud_credentials ecc ON ce.id=ecc.env_id "
+                "WHERE c.status='Active' "
+                "AND ce.status='Active' "
+                "GROUP BY ce.id, ce.client_id "
+                "ORDER BY ce.id ASC"
+            )
+        return self.scalr_db.execute_with_limit(query, limit, retries=1)
 
     def load_env_credentials(self, envs, platform=None):
         envs_ids = list(set(int(env['id']) for env in envs))
@@ -320,12 +335,7 @@ class Analytics(object):
         envs = {}
         for result in results:
             envs.setdefault(result['id'], {'id': result['id'], 'client_id': result['client_id']})
-        envs = envs.values()
-        names = [
-            'ec2.is_enabled',
-        ]
-        self.scalr_db.load_client_environment_properties(envs, names)
-        return envs
+        return envs.values()
 
     def load_aws_payers_accounts_envs(self, payers_accounts):
         query = (
@@ -346,12 +356,7 @@ class Analytics(object):
         envs = {}
         for result in results:
             envs.setdefault(result['id'], {'id': result['id'], 'client_id': result['client_id']})
-        envs = envs.values()
-        names = [
-            'ec2.is_enabled',
-        ]
-        self.scalr_db.load_client_environment_properties(envs, names)
-        return envs
+        return envs.values()
 
     def load_azure_subscriptions_ids(self):
         query = (
@@ -382,27 +387,30 @@ class Analytics(object):
         envs = {}
         for result in results:
             envs.setdefault(result['id'], {'id': result['id'], 'client_id': result['client_id']})
-        envs = envs.values()
-        names = [
-            'azure.is_enabled',
-        ]
-        self.scalr_db.load_client_environment_properties(envs, names)
-        return envs
+        return envs.values()
 
     def get_credentials(self, envs, platforms=None):
         platforms = platforms or Credentials.scheme.keys()
         credentials = []
         for env in envs:
             for platform in Credentials.scheme:
-                key = '%s.%s' % (platform, 'is_enabled')
-                if key not in env or env[key] == '0':
+                if platform == 'azure':
                     continue
                 data = {}
                 for name in Credentials.scheme[platform]:
                     key = '%s.%s' % (platform, name)
                     if key in env:
                         data[name] = env[key]
-                credentials.append(Credentials(env['id'], platform, data))
+                cred = Credentials([env['id']], platform, data)
+                try:
+                    Credentials.test(cred, platform)
+                except exceptions.MissingCredentialsError:
+                    continue
+                except exceptions.IncompleteCredentialsError:
+                    msg = "env_id: {}, platform: '{}'".format(env['id'], platform)
+                    helper.handle_error(message=msg, level='error')
+                    continue
+                credentials.append(cred)
         return credentials
 
     def load_servers_data(self, servers):

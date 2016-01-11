@@ -72,9 +72,9 @@ Feature: Analytics Processing
             | 00000000-0000-0000-0000-000000000002 | 'm1.medium'   | 1  | 2.5  |
 
         Analytics database has quarterly_budget records
-            | subject_type | subject_id                           | quarter | budget | cumulativespend | spentondate           |
-            | 1            | 00000000-0000-0000-0000-00000000000b | 2       | 2      | 0               | NULL                  |
-            | 2            | 00000000-0000-0000-0000-00000000000a | 2       | 10     | 14.5            | '2015-04-10 00:00:00' |
+            | year   | subject_type | subject_id                           | quarter | budget | cumulativespend | spentondate           |
+            | '2015' | 1            | 00000000-0000-0000-0000-00000000000b | 2       | 2      | 0               | NULL                  |
+            | '2015' | 2            | 00000000-0000-0000-0000-00000000000a | 2       | 10     | 14.5            | '2015-04-10 00:00:00' |
 
         White Rabbit starts Analytics Processing script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         White Rabbit waits 20 seconds
@@ -99,9 +99,9 @@ Feature: Analytics Processing
             | '2015-05-01' | 2          |            3 | 00000000-0000-0000-0000-00000000000b | 00000000-0000-0000-0000-00000000000a | 'ec2'    | 'us-west-2'    |      2 |       3 |     111 | 1.500000000 |      0.00 |      1.00 |        1.00 |             1 |
 
         White Rabbit checks quarterly_budget table
-            | subject_type | subject_id                           | quarter | budget | cumulativespend | spentondate           |
-            | 1            | 00000000-0000-0000-0000-00000000000b | 2       | 2      | 7               | '2015-05-01 00:00:00' |
-            | 2            | 00000000-0000-0000-0000-00000000000a | 2       | 10     | 21.5            | '2015-04-10 00:00:00' |
+            | year   | subject_type | subject_id                           | quarter | budget | cumulativespend | spentondate           |
+            | '2015' | 1            | 00000000-0000-0000-0000-00000000000b | 2       | 2      | 7               | '2015-05-01 00:00:00' |
+            | '2015' | 2            | 00000000-0000-0000-0000-00000000000a | 2       | 10     | 21.5            | '2015-04-10 00:00:00' |
 
 
     Scenario Outline: Recalculate poller data
@@ -137,9 +137,9 @@ Feature: Analytics Processing
             | '2015-05-01' |          2 |            3 | 00000000-0000-0000-0000-00000000000b | 00000000-0000-0000-0000-00000000000a | 'ec2'    | 'us-west-2'    |      2 |       3 |     111 | 3.000000000 |      0.00 |      1.00 |        1.00 |             1 |
 
         White Rabbit checks quarterly_budget table
-            | subject_type | subject_id                           | quarter | cumulativespend | spentondate           |
-            | 1            | 00000000-0000-0000-0000-00000000000b | 2       | 14              | '2015-05-01 00:00:00' |
-            | 2            | 00000000-0000-0000-0000-00000000000a | 2       | 14              | '2015-05-01 00:00:00' |
+            | year   | subject_type | subject_id                           | quarter | cumulativespend | spentondate           |
+            | '2015' | 1            | 00000000-0000-0000-0000-00000000000b | 2       | 14              | '2015-05-01 00:00:00' |
+            | '2015' | 2            | 00000000-0000-0000-0000-00000000000a | 2       | 14              | '2015-05-01 00:00:00' |
 
 
     Scenario Outline: Amazon detailed billing

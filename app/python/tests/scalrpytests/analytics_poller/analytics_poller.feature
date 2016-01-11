@@ -34,10 +34,6 @@ Feature: Analytics Poller
             | '111'                | 'account_type'             | 'regular'            |
             | '111'                | 'detailed_billing.enabled' | '0'                  |
 
-         Database has client_environment_properties records
-            | env_id | name              | value                |
-            | 1      | 'ec2.is_enabled'  | '1'                  |
-
         Database has servers records
             | server_id                              | client_id | env_id | platform | cloud_location | os_type   |
             | '00000000-0000-0000-0000-000000000000' | 1         | 1      | 'ec2'    | 'us-east-1'    | 'linux'   |
@@ -104,11 +100,6 @@ Feature: Analytics Poller
             | '111'                | 'account_id'               | '123'                |
             | '111'                | 'account_type'             | 'gov-cloud'          |
             | '111'                | 'detailed_billing.enabled' | '0'                  |
-
-         Database has client_environment_properties records
-            | env_id | name              | value                |
-            | 1      | 'ec2.is_enabled'  | '1'                  |
-            | 2      | 'ec2.is_enabled'  | '1'                  |
 
         Database has servers records
             | server_id                              | client_id | env_id | platform | cloud_location  | os_type   |

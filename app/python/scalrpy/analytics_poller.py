@@ -133,6 +133,10 @@ def _ec2_region(region, cred):
         kwds['proxy_user'] = proxy_settings.get('user', None)
         kwds['proxy_pass'] = proxy_settings.get('pass', None)
 
+        msg = "List nodes for platform: 'ec2', region: '{}', envs_ids: {}"
+        msg = msg.format(region, cred.envs_ids)
+        LOG.debug(msg)
+
         conn = boto.ec2.connect_to_region(region, **kwds)
         cloud_nodes = _ec2_get_only_instances(conn)
         timestamp = int(time.time())
@@ -151,8 +155,8 @@ def _ec2_region(region, cred):
         } if nodes else dict()
     except:
         e = sys.exc_info()[1]
-        msg = 'platform: {platform}, region: {region}, env_id: {env_id}, reason: {error}'
-        msg = msg.format(platform=cred.platform, region=region, env_id=cred.env_id,
+        msg = "platform: '{platform}', region: '{region}', envs_ids: {envs_ids}. Reason: {error}"
+        msg = msg.format(platform=cred.platform, region=region, envs_ids=cred.envs_ids,
                          error=helper.exc_info(where=False))
         _handle_exception(e, msg)
 
@@ -180,7 +184,7 @@ def ec2(cred):
         'cn-cloud': ['cn-north-1'],
     }.get(cred.get('account_type'))
     if not regions:
-        msg = 'Unsupported account type for ec2 platform: {}'.format(cred.get('account_type'))
+        msg = "Unsupported account type for 'ec2' platform: '{}'".format(cred.get('account_type'))
         raise Exception(msg)
 
     app.pool.wait()
@@ -197,8 +201,8 @@ def ec2(cred):
                 result.append(region_nodes)
         except gevent.timeout.Timeout:
             async_result.kill()
-            msg = 'platform: {platform}, region: {region}, env_id: {env_id}. Reason: timeout'
-            msg = msg.format(platform=cred.platform, region=region, env_id=cred.env_id)
+            msg = "platform: '{platform}', region: '{region}', envs_ids: {envs_ids}. Reason: timeout"
+            msg = msg.format(platform=cred.platform, region=region, envs_ids=cred.envs_ids)
             LOG.warning(msg)
     return result
 
@@ -246,8 +250,8 @@ def _cloudstack(cred):
         return result
     except:
         e = sys.exc_info()[1]
-        msg = 'platform: {platform}, env_id: {env_id}, reason: {error}'
-        msg = msg.format(platform=cred.platform, env_id=cred.env_id,
+        msg = "platform: '{platform}', envs_ids: {envs_ids}. Reason: {error}"
+        msg = msg.format(platform=cred.platform, envs_ids=cred.envs_ids,
                          error=helper.exc_info(where=False))
         _handle_exception(e, msg)
 
@@ -266,8 +270,8 @@ def cloudstack(cred):
         result = async_result.get(timeout=app.config['cloud_connection_timeout'])
     except gevent.timeout.Timeout:
         async_result.kill()
-        msg = 'platform: {platform}, env_id: {env_id}. Reason: timeout'
-        msg = msg.format(platform=cred.platform, env_id=cred.env_id)
+        msg = "platform: '{platform}', envs_ids: {envs_ids}. Reason: timeout"
+        msg = msg.format(platform=cred.platform, envs_ids=cred.envs_ids)
         LOG.warning(msg)
     return result
 
@@ -347,8 +351,8 @@ def _gce_zone(zone, key, cred):
         } if nodes else dict()
     except:
         e = sys.exc_info()[1]
-        msg = 'platform: {platform}, zone: {zone}, env_id: {env_id}, reason: {error}'
-        msg = msg.format(platform=cred.platform, zone=zone, env_id=cred.env_id,
+        msg = "platform: '{platform}', zone: '{zone}', envs_ids: {envs_ids}. Reason: {error}"
+        msg = msg.format(platform=cred.platform, zone=zone, envs_ids=cred.envs_ids,
                          error=helper.exc_info(where=False))
         _handle_exception(e, msg)
 
@@ -380,8 +384,8 @@ def gce(cred):
                 result.append(zone_nodes)
         except gevent.timeout.Timeout:
             async_result.kill()
-            msg = 'platform: {platform}, zone: {zone}, env_id: {env_id}. Reason: timeout'
-            msg = msg.format(platform=cred.platform, zone=zone, env_id=cred.env_id)
+            msg = "platform: '{platform}', zone: '{zone}', envs_ids: {envs_ids}. Reason: timeout"
+            msg = msg.format(platform=cred.platform, zone=zone, envs_ids=cred.envs_ids)
             LOG.warning(msg)
     return result
 
@@ -447,11 +451,11 @@ def _openstack_region(provider, service_name, region, cred):
     except:
         e = sys.exc_info()[1]
         msg = (
-            'platform: {platform}, env_id: {env_id}, url: {url}, '
-            'tenant_name: {tenant_name}, service_name={service_name}, '
-            'region: {region}, auth_version: {auth_version}, reason: {error}')
+            "platform: '{platform}', envs_ids: {envs_ids}, url: '{url}', "
+            "tenant_name: '{tenant_name}', service_name='{service_name}', "
+            "region: '{region}', auth_version: {auth_version}. Reason: {error}")
         msg = msg.format(
-            platform=cred.platform, env_id=cred.env_id, url=url, tenant_name=tenant_name,
+            platform=cred.platform, envs_ids=cred.envs_ids, url=url, tenant_name=tenant_name,
             service_name=service_name, region=region, auth_version=auth_version,
             error=helper.exc_info(where=False))
         _handle_exception(e, msg)
@@ -498,11 +502,11 @@ def _openstack(provider, cred):
             except gevent.timeout.Timeout:
                 async_result.kill()
                 msg = (
-                    'platform: {platform}, env_id: {env_id}, url: {url}, '
-                    'tenant_name: {tenant_name}, service_name={service_name}, '
-                    'region: {region}, auth_version: {auth_version}. Reason: timeout')
+                    "platform: '{platform}', envs_ids: {envs_ids}, url: '{url}', "
+                    "tenant_name: '{tenant_name}', service_name='{service_name}', "
+                    "region: '{region}', auth_version: {auth_version}. Reason: timeout")
                 msg = msg.format(
-                    platform=cred.platform, env_id=cred.env_id, url=url, tenant_name=tenant_name,
+                    platform=cred.platform, envs_ids=cred.envs_ids, url=url, tenant_name=tenant_name,
                     service_name=service_name, region=region, auth_version=auth_version)
                 LOG.warning(msg)
     return result
@@ -595,19 +599,22 @@ def sort_nodes(cloud_data, cred, envs_ids):
     # gce
     if platform == 'gce':
         query = (
-            "SELECT EXISTS "
-            "(SELECT 1 FROM servers s "
-            "JOIN servers_history h "
-            "ON s.server_id=h.server_id "
-            "WHERE s.server_id='{server_id}') AS value"
+            "SELECT server_id "
+            "FROM servers_history "
+            "WHERE server_id IN ({})"
         )
         for region_data in cloud_data:
             region_data['managed'] = list()
             region_data['not_managed'] = list()
+            servers_ids = [str(node['server_id']) for node in
+                           region_data['nodes'] if node.get('server_id')]
+            if servers_ids:
+                results = [result['server_id'] for result in
+                           app.scalr_db.execute(query.format(str(servers_ids)[1:-1]))]
+            else:
+                results = []
             for node in region_data['nodes']:
-                if node.get('server_id', '') and \
-                        app.scalr_db.execute(query.format(**node))[0]['value'] and \
-                        node['env_id'] in envs_ids:
+                if node.get('server_id') and node['server_id'] in results and node['env_id'] in envs_ids:
                     region_data['managed'].append(node)
                 else:
                     region_data['not_managed'].append(node)
@@ -670,8 +677,21 @@ def db_update(sorted_data, envs_ids, cred):
     platform = cred.platform
 
     for env_id in envs_ids:
+
+        query = (
+            "SELECT client_id "
+            "FROM client_environments "
+            "WHERE id={env_id}"
+        ).format(env_id=env_id)
+        results = app.scalr_db.execute(query, retries=1)
+        account_id = results[0]['client_id']
+
         for region_data in sorted_data:
             try:
+                # skip if managed servers not exist
+                if not region_data['managed']:
+                    continue
+
                 sid = uuid.uuid4()
                 if platform == 'ec2':
                     cloud_account = cred.get('account_id')
@@ -686,14 +706,6 @@ def db_update(sorted_data, envs_ids, cred):
                     url = ''
 
                 query = (
-                    "SELECT client_id "
-                    "FROM client_environments "
-                    "WHERE id={env_id}"
-                ).format(env_id=env_id)
-                results = app.scalr_db.execute(query, retries=1)
-                account_id = results[0]['client_id']
-
-                query = (
                     "INSERT IGNORE INTO poller_sessions "
                     "(sid, account_id, env_id, dtime, platform, url, cloud_location, cloud_account) "
                     "VALUES "
@@ -701,8 +713,7 @@ def db_update(sorted_data, envs_ids, cred):
                     "'{cloud_location}', '{cloud_account}')"
                 ).format(
                     sid=sid.hex, account_id=account_id, env_id=env_id,
-                    dtime=time.strftime(
-                        "%Y-%m-%d %H:%M:%S", time.gmtime(region_data['timestamp'])),
+                    dtime=time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(region_data['timestamp'])),
                     platform=platform, url=url, cloud_location=region_data['region'],
                     cloud_account=cloud_account
                 )
@@ -728,18 +739,23 @@ def db_update(sorted_data, envs_ids, cred):
 
 def process_credential(cred, envs_ids=None):
     if envs_ids is None:
-        envs_ids = [cred.env_id]
+        envs_ids = [cred.envs_ids]
 
     try:
         analytics.Credentials.test(cred, cred.platform)
         cloud_data = eval(cred.platform)(cred)
+
+        msg = "platform: '{}', envs_ids: {}, cloud data: {}"
+        msg = msg.format(cred.platform, envs_ids, cloud_data)
+        LOG.debug(msg)
+
         if cloud_data:
             sorted_data = sort_nodes(cloud_data, cred, envs_ids)
             sorted_data_update(sorted_data)
             db_update(sorted_data, envs_ids, cred)
     except:
         e = sys.exc_info()[1]
-        msg = 'platform: {platform}, environments: {envs}, reason: {error}'
+        msg = "platform: '{platform}', environments: {envs}. Reason: {error}"
         msg = msg.format(platform=cred.platform, envs=envs_ids, error=helper.exc_info(where=False))
         _handle_exception(e, msg)
 
@@ -823,6 +839,8 @@ class AnalyticsPoller(application.ScalrIterationApplication):
 
     def do_iteration(self):
         for envs in self.analytics.load_envs():
+            msg = "Processing environments: {}".format([env['id'] for env in envs])
+            LOG.debug(msg)
             try:
                 self.analytics.load_env_credentials(envs)
                 unique = {}
