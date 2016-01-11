@@ -252,7 +252,7 @@ class Scalr_UI_Controller_Admin_Analytics_Pricing extends Scalr_UI_Controller
                 JOIN cloud_credentials_properties ccp ON cecc.`cloud_credentials_id` = ccp.`cloud_credentials_id`
                 LEFT JOIN client_environment_properties cep ON ce.`id` = cep.`env_id` AND cep.`name` = ?
                 WHERE c.status = ? AND ccp.name = ? AND ce.status = ? AND cep.`value` IS NULL OR cep.`value` = ''
-                GROUP BY value
+                GROUP BY ccp.`value`
             ", [$platform, "{$platform}.suspended", Scalr_Account::STATUS_ACTIVE, $key, Scalr_Environment::STATUS_ACTIVE]);
 
             $endpoints = [];
