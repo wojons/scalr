@@ -209,16 +209,15 @@ class Validator
         }
 
         $sets = [
-            'lowercase' => 'abcdefghjkmnpqrstuvwxyz',
-            'uppercase' => 'ABCDEFGHJKMNPQRSTUVWXYZ',
-            'digit' => '1234567890',
-            'special symbols' => '!@#$%&*?',
+            'lowercase' => '/[a-z]/',
+            'uppercase' => '/[A-Z]/',
+            'digit' => '/[0-9]/',
+            'special symbols' => '/[^a-zA-Z0-9]/',
         ];
         $groups = [];
-        $valueArray = str_split($value);
 
         foreach ($sets as $setName => $set) {
-            if (empty(array_intersect($valueArray, str_split($set)))) {
+            if (!preg_match($set, $value)) {
                 $groups[] = $setName;
             }
         }

@@ -3398,10 +3398,10 @@ Ext.define('Scalr.form.field.Password', {
     //cls: Ext.baseCSSPrefix + 'passwordfield',
 
     defaultSets: {
-        'lowercase': 'abcdefghjkmnpqrstuvwxyz',
-        'uppercase': 'ABCDEFGHJKMNPQRSTUVWXYZ',
-        'digit': '1234567890',
-        'special symbols': '!@#$%&*?'
+        'lowercase': '[a-z]',
+        'uppercase': '[A-Z]',
+        'digit': '[0-9]',
+        'special symbols': '[^a-zA-Z0-9]'
     },
 
     strengthLevelNames: [ 'invalid', 'weak', 'fair', 'good', 'strong' ],
@@ -3423,12 +3423,8 @@ Ext.define('Scalr.form.field.Password', {
         if (Ext.isEmpty(value) || value == '******') {
             //me.setStrengthLevelCls();
         } else {
-            Ext.Object.each(me.defaultSets, function (key, set) {
-                var verified = Ext.Array.some(set.split(''), function (symbol) {
-                    return value.indexOf(symbol) !== -1;
-                });
-
-                if (!verified) {
+            Ext.Object.each(me.defaultSets, function (key, regSet) {
+                if (!value.match(regSet)) {
                     groups.push(key);
                 }
             });
