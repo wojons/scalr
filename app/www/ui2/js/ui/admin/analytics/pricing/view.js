@@ -122,7 +122,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.pricing.view', function (loadParams, mod
                     msg: 'Gathering records...'
                 });
             },
-            load: function (me, records, successful, e) {
+            load: function (me, records, successful, operation) {
                 me.processBox.destroy();
 
                 if (successful && records.length) {
@@ -479,14 +479,14 @@ Scalr.regPage('Scalr.ui.admin.analytics.pricing.view', function (loadParams, mod
 
             me.clearEndpoints().clearLocations().clearPrices();
 
+            Ext.apply(endpointsStore.proxy.extraParams, {
+                platform: platform || me.platform
+            });
+
             if (me.isEndpointsCached(platform)) {
                 me.applyCachedEndpoints(platform);
                 return me;
             }
-
-            Ext.apply(endpointsStore.proxy.extraParams, {
-                platform: platform || me.platform
-            });
 
             endpointsStore.load();
 
@@ -498,16 +498,16 @@ Scalr.regPage('Scalr.ui.admin.analytics.pricing.view', function (loadParams, mod
 
             me.clearLocations().clearPrices();
 
-            if (me.isLocationsCached(envId)) {
-                me.applyCachedLocations(envId);
-                return me;
-            }
-
             Ext.apply(locationsStore.proxy.extraParams, {
                 platform: me.platform,
                 envId: envId || me.getEnvId(),
                 url: url || me.getUrl()
             });
+
+            if (me.isLocationsCached(envId)) {
+                me.applyCachedLocations(envId);
+                return me;
+            }
 
             locationsStore.load();
 
@@ -529,17 +529,17 @@ Scalr.regPage('Scalr.ui.admin.analytics.pricing.view', function (loadParams, mod
 
             me.clearPrices();
 
-            if (me.isPricesCached(location)) {
-                me.applyCachedPrices(location);
-                return me;
-            }
-
             Ext.apply(pricesStore.proxy.extraParams, {
                 platform: me.platform,
                 envId: me.getEnvId(),
                 cloudLocation: location || me.getLocation(),
                 effectiveDate: me.getDate()
             });
+
+            if (me.isPricesCached(location)) {
+                me.applyCachedPrices(location);
+                return me;
+            }
 
             pricesStore.load();
 
