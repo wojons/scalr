@@ -6,6 +6,8 @@ use Scalr\Modules\PlatformFactory;
 use Scalr\Upgrade\SequenceInterface;
 use Scalr\Upgrade\AbstractUpdate;
 use Scalr\Model\Entity\Server;
+use Scalr_Environment;
+use SERVER_PLATFORMS;
 
 class Update20150818090745 extends AbstractUpdate implements SequenceInterface
 {
@@ -64,6 +66,32 @@ class Update20150818090745 extends AbstractUpdate implements SequenceInterface
         return true;
     }
 
+    private function getEnabledPlatforms(Scalr_Environment $environment)
+    {
+        $enabled = [];
+
+        foreach (array_keys(SERVER_PLATFORMS::getList()) as $platform) {
+            $value = $this->db->GetOne("
+                SELECT value
+                FROM client_environment_properties
+                WHERE env_id = ? AND `group` = ''
+                AND name = ?
+                LIMIT 1
+            ", [$environment->id, $platform . '.is_enabled']);
+
+            if (!empty($value)) {
+                $enabled[] = $platform;
+            }
+        }
+
+        return $enabled;
+    }
+
+    private function isPlatformEnabled(Scalr_Environment $env, $platform)
+    {
+        return in_array($platform, $this->getEnabledPlatforms($env));
+    }
+
     protected function run2($stage)
     {
         $this->console->out("Populating new properties");
@@ -86,7 +114,7 @@ class Update20150818090745 extends AbstractUpdate implements SequenceInterface
                     $envs[$row["env_id"]] = \Scalr_Environment::init()->loadById($row["env_id"]);
                 }
 
-                if ($envs[$row["env_id"]]->isPlatformEnabled($row["platform"])) {
+                if ($this->isPlatformEnabled($envs[$row["env_id"]], $row["platform"])) {
                     try {
                         $instanceTypeEntity = $platforms[$row["platform"]]->getInstanceType(
                             $row["type"],

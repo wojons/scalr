@@ -5,6 +5,8 @@ use Scalr\Upgrade\SequenceInterface;
 use Scalr\Upgrade\AbstractUpdate;
 use Scalr\Service\OpenStack\Services\Servers\Type\ServersExtension;
 use Scalr\Modules\PlatformFactory;
+use Scalr_Environment;
+use SERVER_PLATFORMS;
 
 class Update20140211014306 extends AbstractUpdate implements SequenceInterface
 {
@@ -60,6 +62,32 @@ class Update20140211014306 extends AbstractUpdate implements SequenceInterface
         return $platform . "." . constant("Scalr\\Model\\Entity\\CloudCredentialsProperty::OPENSTACK_{$name}");
     }
 
+    private function getEnabledPlatforms(Scalr_Environment $environment)
+    {
+        $enabled = [];
+
+        foreach (array_keys(SERVER_PLATFORMS::getList()) as $platform) {
+            $value = $this->db->GetOne("
+                SELECT value
+                FROM client_environment_properties
+                WHERE env_id = ? AND `group` = ''
+                AND name = ?
+                LIMIT 1
+            ", [$environment->id, $platform . '.is_enabled']);
+
+            if (!empty($value)) {
+                $enabled[] = $platform;
+            }
+        }
+
+        return $enabled;
+    }
+
+    private function isPlatformEnabled(Scalr_Environment $env, $platform)
+    {
+        return in_array($platform, $this->getEnabledPlatforms($env));
+    }
+
     /**
      * Performs upgrade literally for the stage ONE.
      *
@@ -82,7 +110,7 @@ class Update20140211014306 extends AbstractUpdate implements SequenceInterface
                     continue;
 
                 try {
-                    if ($environment->isPlatformEnabled($platform)) {
+                    if ($this->isPlatformEnabled($environment, $platform)) {
                         $os = $environment->openstack($platform);
                         //It throws an exception on failure
                         $zones = $os->listZones();
