@@ -68,6 +68,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.pricing.view', function (loadParams, mod
         proxy: {
             type: 'ajax',
             url: '/admin/analytics/pricing/xGetPlatformLocations',
+            timeout: 60000,
             reader: {
                 type: 'json',
                 rootProperty: 'data'
@@ -107,6 +108,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.pricing.view', function (loadParams, mod
         proxy: {
             type: 'ajax',
             url: '/admin/analytics/pricing/xGetPlatformInstanceTypes',
+            timeout: 60000,
             reader: {
                 type: 'json',
                 rootProperty: 'data.prices'
