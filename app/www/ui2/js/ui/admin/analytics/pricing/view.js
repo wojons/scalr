@@ -75,6 +75,9 @@ Scalr.regPage('Scalr.ui.admin.analytics.pricing.view', function (loadParams, mod
             }
         },
         autoLoad: false,
+        sorters: [{
+            property: 'cloudLocation'
+        }],
         listeners: {
             beforeload: function (me) {
                 me.processBox = Scalr.utils.CreateProcessBox({
