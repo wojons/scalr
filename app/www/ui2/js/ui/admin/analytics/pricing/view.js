@@ -134,12 +134,6 @@ Scalr.regPage('Scalr.ui.admin.analytics.pricing.view', function (loadParams, mod
                     me.formatPrices(records);
                     pricingPanel.toggleGrid(true).cachePrices(records);
                 }
-
-                if (isEditable) {
-                    var pricingGrid = pricingPanel.down('[name=pricingGrid]');
-                    pricingGrid.subscribeToPriceInputs();
-                    pricingGrid.on('afterlayout', pricingGrid.subscribeToPriceInputs);
-                }
             },
             clear: function () {
                 pricingPanel.toggleGrid(false).
@@ -158,18 +152,6 @@ Scalr.regPage('Scalr.ui.admin.analytics.pricing.view', function (loadParams, mod
             Ext.Array.each(me.data.items, function (record) {
                 record.reject();
             });
-
-            return me;
-        },
-
-        changePrice: function (input, newPrice, instanceType, priceType) {
-            var me = this;
-
-            var record = me.findRecord('type', instanceType);
-            record.set(priceType, null);
-            record.set(priceType, newPrice);
-
-            input.value = newPrice;
 
             return me;
         },
@@ -456,11 +438,6 @@ Scalr.regPage('Scalr.ui.admin.analytics.pricing.view', function (loadParams, mod
 
         applyCachedPrices: function (location) {
             var me = this;
-
-            if (isEditable) {
-                var pricingGrid = pricingPanel.down('[name=pricingGrid]');
-                pricingGrid.on('afterlayout', pricingGrid.subscribeToPriceInputs);
-            }
 
             pricesStore.loadData(
                 me.cache.prices[me.platform][me.getEnvId()][location || me.getLocation()][me.getDate()]
@@ -1115,59 +1092,51 @@ Scalr.regPage('Scalr.ui.admin.analytics.pricing.view', function (loadParams, mod
                 loadMask: false
             },
 
-            subscribeToPriceInputs: function () {
-                var me = this;
+            plugins: {
+                ptype: 'cellediting',
+                clicksToEdit: 1,
+                listeners: {
+                    beforeedit: function () {
+                        return isEditable;
+                    },
+                    validateedit: function (editor, context) {
+                        var value = context.value;
 
-                Ext.Array.each(me.getEl().query('input'), function (input) {
-                    Ext.get(input).on('change', function (event, input) {
-                        pricesStore.changePrice(
-                            input,
-                            pricingPanel.formatPriceValue(input.value),
-                            input.getAttribute('data-instanceType'),
-                            input.getAttribute('data-priceType')
-                        );
+                        return Ext.isNumeric(value) && value !== context.originalValue;
+                    },
+                    edit: function (editor, context) {
+                        context.record.set(context.field, pricingPanel.formatPriceValue(context.value));
 
-                        pricingPanel.setAutomaticUpdateState(false).
-                            toggleSaveButton(false).toggleCancelButton(false);
-                    });
-                });
-
-                me.un('afterlayout', me.subscribeToPriceInputs);
-
-                return me;
+                        pricingPanel
+                            .setAutomaticUpdateState(false)
+                            .toggleSaveButton(false)
+                            .toggleCancelButton(false);
+                    }
+                }
             },
 
-            /*
-             listeners: {
-             el: {
-             delegate: 'input',
-             change: function (event, input) {
-             pricesStore.changePrice(
-             pricingPanel.formatPriceValue(input.value),
-             input.getAttribute('data-instanceType'),
-             input.getAttribute('data-priceType')
-             );
-
-             pricingPanel.setAutomaticUpdateState(false).
-             toggleSaveButton(false).toggleCancelButton(false);
-             }
-             }
-             },
-             */
-
-            columns: [
-                { text: 'Instance type', dataIndex: 'name', flex: 1 },
-                { text: 'Linux price ($ / hour)', flex: 1, xtype: 'templatecolumn', dataIndex: 'priceLinux',
-                    tpl: new Ext.XTemplate(!isEditable ? '{priceLinux}' :
-                            '<input class="x-form-text scalr-ui-analytics-pricing-pricefield" value="{priceLinux}" data-instanceType="{type}" data-priceType="priceLinux" />'
-                    )
-                },
-                { text: 'Windows price ($ / hour)', flex: 1, xtype: 'templatecolumn', dataIndex: 'priceWindows',
-                    tpl: new Ext.XTemplate(!isEditable ? '{priceWindows}' :
-                            '<input class="x-form-text scalr-ui-analytics-pricing-pricefield" value="{priceWindows}" data-instanceType="{type}" data-priceType="priceWindows" />'
-                    )
+            columns: [{
+                text: 'Instance type',
+                dataIndex: 'name',
+                flex: 1
+            }, {
+                text: 'Linux price ($ / hour)',
+                flex: 1,
+                dataIndex: 'priceLinux',
+                cls: 'x-grid-item-focused',
+                editor: {
+                    xtype: 'textfield',
+                    emptyText: '0'
                 }
-            ]
+            }, {
+                text: 'Windows price ($ / hour)',
+                flex: 1,
+                dataIndex: 'priceWindows',
+                editor: {
+                    xtype: 'textfield',
+                    emptyText: '0'
+                }
+            }]
         }]
     });
 
