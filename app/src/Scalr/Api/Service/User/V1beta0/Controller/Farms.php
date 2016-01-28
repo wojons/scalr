@@ -72,6 +72,11 @@ class Farms extends ApiController
             throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Requested Farm either does not exist or is not owned by your environment.");
         }
 
+        if (!$this->hasPermissions($farm)) {
+            //Checks entity level write access permissions
+            throw new ApiErrorException(403, ErrorMessage::ERR_PERMISSION_VIOLATION, "Insufficient permissions");
+        }
+
         $this->checkPermissions($farm, $permission);
 
         return $farm;
