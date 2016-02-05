@@ -454,7 +454,7 @@ class LdapClient
                     $this->log(sprintf("Query result DN: %s", $this->dn));
 
                     //Now this should either succeed or fail properly
-                    $ret = $this->bindRdn($this->dn, $this->password);
+                    $ret = $this->bindRdn(self::escape($this->dn), $this->password);
                 } else {
                     $ret = false;
                 }
@@ -612,7 +612,7 @@ class LdapClient
         } else {
             $filter = "(&" . $this->config->groupFilter . "(" . $this->getConfig()->groupMemberAttribute . ""
                 . ($this->config->groupNesting ? ":1.2.840.113556.1.4.1941:" : "")
-                . "=" . self::escape($this->dn) . "))";
+                . "=" . ldap_escape($this->dn, null, LDAP_ESCAPE_FILTER) . "))";
         }
 
         $search = @ldap_search(
