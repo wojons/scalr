@@ -359,6 +359,12 @@ class Roles extends ApiController
 
         $role = $this->getRole($roleId, true);
 
+        if ($role->isUsed()) {
+            throw new ApiErrorException(409, ErrorMessage::ERR_OBJECT_IN_USE,
+                "It's strictly forbidden to remove a Role currently in use as the Farms become broken."
+            );
+        }
+
         $role->delete();
 
         return $this->result(null);
