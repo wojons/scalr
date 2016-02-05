@@ -390,7 +390,7 @@ class Scalr_UI_Controller_Admin_Analytics_Pricing extends Scalr_UI_Controller
                 }
 
                 if (empty($url)) {
-                    $url = $env->cloudCredentials($platform)->properties[$key];
+                    $url = $env->keychain($platform)->properties[$key];
                 }
             } else if ($platform == SERVER_PLATFORMS::EC2 || $platform == SERVER_PLATFORMS::GCE) {
                 $gcenvid = $this->getPlatformEnvId($platform);
@@ -647,3 +647,4 @@ class Scalr_UI_Controller_Admin_Analytics_Pricing extends Scalr_UI_Controller
     }
 
 }
+
