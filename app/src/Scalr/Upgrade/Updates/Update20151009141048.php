@@ -266,12 +266,6 @@ class Update20151009141048 extends AbstractUpdate implements SequenceInterface
                 SERVER_PLATFORMS::IDCF . ".shared_ip_info"    => Entity\CloudCredentialsProperty::CLOUDSTACK_SHARED_IP_INFO,
                 SERVER_PLATFORMS::IDCF . ".szr_port_counter"  => Entity\CloudCredentialsProperty::CLOUDSTACK_SZR_PORT_COUNTER,
             ],
-
-            SERVER_PLATFORMS::RACKSPACE => [
-                "rackspace.username"    => Entity\CloudCredentialsProperty::RACKSPACE_USERNAME,
-                "rackspace.api_key"     => Entity\CloudCredentialsProperty::RACKSPACE_API_KEY,
-                "rackspace.is_managed"  => Entity\CloudCredentialsProperty::RACKSPACE_IS_MANAGED,
-            ],
         ];
     }
 
@@ -313,30 +307,6 @@ class Update20151009141048 extends AbstractUpdate implements SequenceInterface
             foreach($platforms as $platform) {
                 try {
                     switch ($platform) {
-                        case SERVER_PLATFORMS::RACKSPACE:
-                            foreach (['rs-ORD1', 'rs-LONx'] as $location) {
-                                $cloudCredentials = new Entity\CloudCredentials();
-                                $cloudCredentials->accountId = $environment->getAccountId();
-                                $cloudCredentials->envId = $environment->id;
-                                $cloudCredentials->cloud = "{$location}.{$platform}";
-                                $cloudCredentials->name = "{$environment->id}-{$environment->getAccountId()}-{$cloudCredentials->cloud}-" . \Scalr::GenerateUID(true);
-
-                                foreach ($platformVariables[$platform] as $name => $newName) {
-                                    $value = $environment->getPlatformConfigValue($name, true, $location);
-
-                                    if ($value === null) {
-                                        $value = false;
-                                    }
-
-                                    $cloudCredentials->properties[$newName] = $value;
-                                }
-
-                                $cloudCredentials->save();
-
-                                $cloudCredentials->bindToEnvironment($environment);
-                            }
-                            break;
-
                         default:
                             $cloudCredentials = new Entity\CloudCredentials();
                             $cloudCredentials->accountId = $environment->getAccountId();

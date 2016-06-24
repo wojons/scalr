@@ -2,35 +2,47 @@
 
 class Scalr_Net_Scalarizr_Services_System extends Scalr_Net_Scalarizr_Client
 {
-    public function __construct(DBServer $dbServer, $port = 8010) {
+    public function __construct(DBServer $dbServer, $port = 8010) 
+    {
         $this->namespace = "system";
         parent::__construct($dbServer, $port);
     }
 
-    public function getHostname() {
+    public function forceResume() 
+    {
+        return $this->request("force_resume")->result;
+    }
+    
+    public function getHostname() 
+    {
         return $this->request("get_hostname")->result;
     }
 
-    public function setHostname($hostname) {
+    public function setHostname($hostname) 
+    {
         $params = new stdClass();
         $params->hostname = $hostname;
 
         return $this->request("set_hostname", $params)->result;
     }
 
-    public function callAuthShutdownHook() {
+    public function callAuthShutdownHook() 
+    {
         return $this->request("call_auth_shutdown_hook")->result;
     }
 
-    public function scalingMetrics() {
+    public function scalingMetrics() 
+    {
         return $this->request("scaling_metrics")->result;
     }
 
-    public function blockDevices() {
+    public function blockDevices() 
+    {
         return $this->request("block_devices")->result;
     }
 
-    public function statvfs(array $mountpoints) {
+    public function statvfs(array $mountpoints) 
+    {
         $params = new stdClass();
         $params->mpoints = $mountpoints;
 

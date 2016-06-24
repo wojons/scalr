@@ -10,7 +10,7 @@
 
 ### `id` (required, create-only, filterable) ###
 
-The name of this custom event
+The name of this custom event.
 
 
 Property of type: `string`.
@@ -43,6 +43,7 @@ The following are valid values for the `scope` property:
   + `environment`
   + `farm`
   + `farmrole`
+  + `role`
   + `server`
 
 To filter on this field, use: `scope=...`.
@@ -60,41 +61,43 @@ To filter on this field, use: `scope=...`.
 ## Swagger Definition ##
 
     {
-      "required": [
-        "id"
-      ], 
-      "x-usedIn": [
-        "/events/", 
-        "/events/{eventId}/", 
-        "/{envId}/events/", 
-        "/{envId}/events/{eventId}/"
-      ], 
       "properties": {
+        "description": {
+          "type": "string"
+        }, 
+        "id": {
+          "description": "The name of this custom event.", 
+          "pattern": "[A-Za-z0-9]+", 
+          "type": "string"
+        }, 
         "scope": {
-          "readOnly": true, 
           "enum": [
             "scalr", 
             "account", 
             "environment", 
             "farm", 
             "farmrole", 
+            "role", 
             "server"
           ], 
+          "readOnly": true, 
           "type": "string"
-        }, 
-        "description": {
-          "type": "string"
-        }, 
-        "id": {
-          "type": "string", 
-          "description": "The name of this custom event"
         }
       }, 
+      "required": [
+        "id"
+      ], 
+      "x-createOnly": [
+        "id"
+      ], 
       "x-filterable": [
         "id", 
         "scope"
       ], 
-      "x-createOnly": [
-        "id"
+      "x-usedIn": [
+        "/events/", 
+        "/events/{eventId}/", 
+        "/{envId}/events/", 
+        "/{envId}/events/{eventId}/"
       ]
     }

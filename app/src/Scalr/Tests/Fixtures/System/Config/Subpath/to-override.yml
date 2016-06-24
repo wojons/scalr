@@ -3,7 +3,7 @@ imports:
 
 scalr:
   phpunit:
-    skip_functional_tests: true
+    functional_tests: false
     test_userid: 100001
     test_envid: 200002
 

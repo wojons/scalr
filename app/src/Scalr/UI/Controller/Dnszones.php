@@ -11,7 +11,7 @@ class Scalr_UI_Controller_Dnszones extends Scalr_UI_Controller
      */
     public function hasAccess()
     {
-        return $this->request->isAllowed(Acl::RESOURCE_DNS_ZONES);
+        return \Scalr::config('scalr.dns.global.enabled') && $this->request->isAllowed(Acl::RESOURCE_DNS_ZONES);
     }
 
     public function defaultAction()

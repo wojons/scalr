@@ -2,6 +2,7 @@
 
 namespace Scalr\Model;
 
+use Iterator;
 use ADORecordSet_mysqli;
 use InvalidArgumentException;
 use Scalr\Exception\ModelException;
@@ -329,7 +330,7 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
      *
      * @param    array        $criteria     optional The search criteria.
      * @param    array        $group        optional The group by looks like [property1, ...]
-     * @param    array        $order        optional The results order looks like [[property1 => true|false], ...]
+     * @param    array        $order        optional The results order looks like [property1 => true|false, ... ]
      * @param    int          $limit        optional The records limit
      * @param    int          $offset       optional The offset
      * @param    bool         $countRecords optional True to calculate total number of the records without limit
@@ -568,9 +569,10 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
         ];
 
         $func = [
-            '$in'   => 'IN(%)',
-            '$nin'  => 'NOT IN(%)',
-            '$like' => 'LIKE(%)',
+            '$in'       => 'IN(%)',
+            '$nin'      => 'NOT IN(%)',
+            '$like'     => 'LIKE(%)',
+            '$regex'    => 'REGEXP(%)'
         ];
 
         foreach ($criteria as $k => $v) {
@@ -719,6 +721,95 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
     }
 
     /**
+     * Updates only specified properties to database ingoring all others
+     *
+     * It also stores field's values in the object itself.
+     *
+     * @param array|Iterator $fieldValues The list of the fields with its values looks like [fieldName1 => $value1, filedName2 ...]
+     *        If it is provided with the field name in the value place with numerical index it will update the record
+     *        with the value taken from the entity itself.
+     */
+    public function update($fieldValues)
+    {
+        $it = $this->getIterator();
+
+        $pk = $it->getPrimaryKey();
+
+        if (empty($pk)) {
+            throw new ModelException(sprintf("Primary key has not been defined with @Id tag for %s", get_class($this)));
+        }
+
+        $stmtFields = $stmtWhere = '';
+        $arguments = $argumentsPk = [];
+
+        foreach ($pk as $name) {
+            $field = $it->getField($name);
+
+            if (!isset($this->$name)) {
+                throw new ModelException(sprintf('Field "%s" is not initialized inside the %s.', $name, get_class($this)));
+            } else {
+                $stmtWhere .= ' AND ' . $field->getColumnName() . ' = ' . $field->type->wh();
+                $argumentsPk[] = $field->type->toDb($this->$name);
+            }
+        }
+
+        if ($stmtWhere != '') {
+            $stmtWhere = substr($stmtWhere, 5);
+        }
+
+        foreach ($fieldValues as $fieldName => $value) {
+            if (is_numeric($fieldName)) {
+                $fieldName = $value;
+                $itselfValue = true;
+            } else {
+                $itselfValue = false;
+            }
+
+            $field = $it->getField($fieldName);
+
+            if ($field === null) {
+                throw new ModelException(sprintf('Field "%s" does not exist in %s.', $fieldName, get_class($this)));
+            }
+
+            if (isset($field->id)) {
+                if (!$itselfValue && $value != $this->$fieldName) {
+                    throw new ModelException(sprintf(
+                        'It is forbidden to change PK value from the update() method. '
+                      . 'Field "%s" of the %s is the part of the Primary Key.',
+                        $fieldName, get_class($this)
+                    ));
+                }
+
+                continue;
+            }
+
+            if (!$itselfValue) {
+                $this->$fieldName = $value;
+            }
+
+            if (!isset($this->$fieldName) && $field->column->nullable) {
+                $stmtFields .= ', ' . $field->getColumnName() . ' = NULL';
+            } else {
+                $stmtFields .= ', ' . $field->getColumnName() . ' = ' . $field->type->wh();
+                $arguments[] = $field->type->toDb($this->$fieldName);
+            }
+        }
+
+        if (!empty($stmtFields)) {
+            $stmtFields = substr($stmtFields, 2);
+
+            //Saves record making insert or update
+            $this->db()->Execute(
+                "UPDATE "
+              . $this->table() . " "
+              . "SET " . $stmtFields . " "
+              . "WHERE " . $stmtWhere . " LIMIT 1",
+                array_merge($arguments, $argumentsPk)
+            );
+        }
+    }
+
+    /**
      * Saves current entity to database
      *
      * @throws  ModelException
@@ -814,9 +905,9 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
             //Saves record making insert or update
             $this->db()->Execute(
                 ($exists ? "UPDATE" : "INSERT") . " "
-                . $this->table() . " "
-                . "SET " . $stmtFields . " "
-                . ($exists ? "WHERE " . $stmtPk . " LIMIT 1" : ""),
+              . $this->table() . " "
+              . "SET " . $stmtFields . " "
+              . ($exists ? "WHERE " . $stmtPk . " LIMIT 1" : ""),
                 ($exists ? array_merge($arguments1, $argumentsPk) : $arguments1)
             );
         } else {
@@ -915,6 +1006,7 @@ abstract class AbstractEntity extends AbstractGetter implements IteratorAggregat
     {
         $columns = '';
 
+        /* @var $field Field */
         foreach ($this->getIterator()->fields() as $field) {
             $columns .= $field->getColumnName(
                 $tableAlias,

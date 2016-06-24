@@ -211,7 +211,6 @@ Scalr.regPage('Scalr.ui.scripts.execute', function (loadParams, moduleParams) {
             title: 'Additional settings',
             itemId: 'additional',
             labelWidth: 100,
-            layout: 'hbox',
             items: [{
                 xtype: 'checkbox',
                 boxLabel: 'Add a shortcut in Options menu for roles.',

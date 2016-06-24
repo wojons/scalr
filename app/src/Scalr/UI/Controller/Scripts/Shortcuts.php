@@ -21,13 +21,10 @@ class Scalr_UI_Controller_Scripts_Shortcuts extends Scalr_UI_Controller
         $this->viewAction();
     }
 
-    // TODO: move to higher scope, may be model Farm (static method)
     public function getAllowedFarmId()
     {
-        $sql = 'SELECT id FROM farms WHERE env_id = ?';
+        $sql = "SELECT id FROM farms f WHERE env_id = ? AND " . $this->request->getFarmSqlQuery();
         $args = [$this->getEnvironmentId()];
-
-        list($sql, $args) = $this->request->prepareFarmSqlQuery($sql, $args);
 
         return $this->db->GetCol($sql, $args);
     }

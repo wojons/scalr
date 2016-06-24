@@ -14,6 +14,14 @@ use Scalr\Service\Azure\DataType\AbstractDataType;
 class VersionData extends AbstractDataType
 {
     /**
+     * List of the public properties
+     * which is managed by magic getter and setters internally.
+     *
+     * @var  array
+     */
+    protected $_properties = ['plan'];
+    
+    /**
      * @var string
      */
     public $name;
@@ -27,5 +35,19 @@ class VersionData extends AbstractDataType
      * @var string
      */
     public $location;
-
+    
+    /**
+     * Sets plan
+     *
+     * @param   array|PlanProperties $plan Required for marketplace images
+     * @return  VersionData
+     */
+    public function setPlan($plan = null)
+    {
+        if (!($plan instanceof PlanProperties)) {
+            $plan = PlanProperties::initArray($plan);
+        }
+    
+        return $this->__call(__FUNCTION__, [$plan]);
+    }
 }

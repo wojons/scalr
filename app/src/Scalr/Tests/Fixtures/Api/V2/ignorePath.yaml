@@ -1,4 +1,27 @@
-# ignore path in ApiV2Test::testGetEndpoint
-# example
+# ignore path in ApiV2Test
 paths:
-# - ^/os/$
+# - ^/({envId}/)?os
+# - /images/
+# - /roles/
+#ingnore fixtures file
+files:
+  account:
+#   - costCenter
+#   - environment
+#   - role
+#   - roleCategory
+#   - team
+  user:
+#   - costCenter
+#   - event
+#   - farm
+#   - farmRole
+#   - globalVariable
+#   - os
+#   - project
+#   - roleCategory
+#   - scalingMetric
+#   - scalingRule
+#   - scriptVersion
+#   - role
+#   - server

@@ -104,35 +104,69 @@ class WebhookEndpoint extends AbstractEntity implements ScopeInterface
     {
         if (!$this->isValid && $this->endpointId) {
             $q = new Request($this->url, "GET");
-            $q->addHeaders(array(
+
+            $q->addHeaders([
                 'X-Scalr-Webhook-Enpoint-Id' => $this->endpointId,
                 'Content-Type' => 'application/x-www-form-urlencoded; charset=UTF-8',
                 'Date'         => gmdate('r'),
-            ));
-            $q->setOptions(array(
+            ]);
+
+            $q->setOptions([
                 'redirect'       => 10,
-                'verifypeer'     => false,
-                'verifyhost'     => false,
                 'timeout'        => 10,
                 'connecttimeout' => 10,
-            ));
+            ]);
+
+            $q->setSslOptions([
+                'verifypeer' => false,
+                'verifyhost' => false
+            ]);
+
+            $config = \Scalr::getContainer()->config;
+
+            if ($config('scalr.system.webhooks.use_proxy') && in_array($config('scalr.connections.proxy.use_on'), ['both', 'scalr']) ) {
+                $proxySettings = $config('scalr.connections.proxy');
+
+                $q->setOptions([
+                    'proxyhost' => $proxySettings['host'],
+                    'proxyport' => $proxySettings['port'],
+                    'proxytype' => $proxySettings['type']
+                ]);
+
+                if ($proxySettings['user']) {
+                    $q->setOptions([
+                        'proxyauth'     => "{$proxySettings['user']}:{$proxySettings['pass']}",
+                        'proxyauthtype' => $proxySettings['authtype']
+                    ]);
+                }
+            }
+
             try {
                 $response = \Scalr::getContainer()->http->sendRequest($q);
+
                 if ($response->getResponseCode() == 200) {
                     $code = trim($response->getBody()->toString());
+
                     $h = $response->getHeader('X-Validation-Token');
+
                     $this->isValid = ($code == $this->validationToken) || ($h == $this->validationToken);
+
                     if ($this->isValid) {
                         $this->save();
                     }
 
-                } else
-                    throw new ScalrException(sprintf("Validation failed. Endpoint '%s' returned http code %s", strip_tags($this->url), $response->getResponseCode()));
+                } else {
+                    throw new ScalrException(sprintf(
+                        "Validation failed. Endpoint '%s' returned http code %s",
+                        strip_tags($this->url), $response->getResponseCode()
+                    ));
+                }
 
             } catch (\http\Exception $e) {
                 throw new ScalrException(sprintf("Validation failed. Cannot connect to '%s'.", strip_tags($this->url)));
             }
         }
+
         return $this->isValid;
     }
 

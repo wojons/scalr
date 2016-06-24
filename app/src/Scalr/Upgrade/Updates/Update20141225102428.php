@@ -9,6 +9,8 @@ use Scalr\Upgrade\AbstractUpdate;
 class Update20141225102428 extends AbstractUpdate implements SequenceInterface
 {
 
+    const PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS = 'manage-projects';
+
     protected $uuid = 'f00c516d-6c7e-4211-8b05-427b4fe97938';
 
     protected $depends = [];
@@ -39,7 +41,7 @@ class Update20141225102428 extends AbstractUpdate implements SequenceInterface
                     ", array(
                     Acl::RESOURCE_ANALYTICS_ACCOUNT,
                     Acl::ROLE_ID_FULL_ACCESS,
-                    Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS
+                    static::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS
                 )) == 1;
     }
 
@@ -67,7 +69,7 @@ class Update20141225102428 extends AbstractUpdate implements SequenceInterface
         ", array(
             Acl::ROLE_ID_FULL_ACCESS,
             Acl::RESOURCE_ANALYTICS_ACCOUNT,
-            Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS
+            static::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS
         ));
     }
 
@@ -82,7 +84,7 @@ class Update20141225102428 extends AbstractUpdate implements SequenceInterface
                     ", array(
             Acl::RESOURCE_ANALYTICS_ACCOUNT,
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::PERM_ANALYTICS_ACCOUNT_ALLOCATE_BUDGET
+            Acl::PERM_ANALYTICS_PROJECTS_ALLOCATE_BUDGET
         )) == 1;
     }
 
@@ -110,7 +112,7 @@ class Update20141225102428 extends AbstractUpdate implements SequenceInterface
         ", array(
             Acl::ROLE_ID_FULL_ACCESS,
             Acl::RESOURCE_ANALYTICS_ACCOUNT,
-            Acl::PERM_ANALYTICS_ACCOUNT_ALLOCATE_BUDGET
+            Acl::PERM_ANALYTICS_PROJECTS_ALLOCATE_BUDGET
         ));
     }
 

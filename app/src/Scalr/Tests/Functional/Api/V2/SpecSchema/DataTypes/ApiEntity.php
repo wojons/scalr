@@ -4,12 +4,28 @@ namespace Scalr\Tests\Functional\Api\V2\SpecSchema\DataTypes;
 
 /**
  * @author Andrii Penchuk <a.penchuk@scalr.com>
- * @since 5.6.14 (03.12.2015)
+ * @since 5.11 (03.12.2015)
  */
 class ApiEntity extends AbstractSpecObject
 {
     /**
+     * The list of the paths where uses this object
+     *
      * @var array
+     */
+    public $usedIn = [];
+
+    /**
+     * The list of the readOnly properties
+     *
+     * @var array
+     */
+    public $readOnly = [];
+
+    /**
+     * The list of object properties
+     *
+     * @var Property[]
      */
     protected $properties = [];
 
@@ -43,8 +59,11 @@ class ApiEntity extends AbstractSpecObject
     public function __set($name, $value)
     {
         $name = ltrim($name, 'x-');
-        if (!property_exists($this, $name)) {
+        if ($value instanceof Property) {
             $this->properties[$name] = $value;
+            if ($value->readOnly) {
+                $this->readOnly[] = $name;
+            }
         } else {
             parent::__set($name, $value);
         }

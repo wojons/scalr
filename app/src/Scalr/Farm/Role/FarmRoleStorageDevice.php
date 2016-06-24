@@ -32,7 +32,7 @@ class FarmRoleStorageDevice
      * @param $configId
      * @return Scalr\Farm\Role\FarmRoleStorageDevice[]
      */
-    static public function getByConfigId($configId)
+    public static function getByConfigId($configId)
     {
         $db = \Scalr::getDb();
 
@@ -56,7 +56,7 @@ class FarmRoleStorageDevice
      * @param $serverIndex
      * @return bool|Scalr\Farm\Role\FarmRoleStorageDevice
      */
-    static public function getByConfigIdAndIndex($configId, $serverIndex)
+    public static function getByConfigIdAndIndex($configId, $serverIndex)
     {
         $db = \Scalr::getDb();
 
@@ -73,16 +73,19 @@ class FarmRoleStorageDevice
     /**
      * @return Scalr\Farm\Role\FarmRoleStorageDevice
      */
-    public function loadById($id) {
-        $info = $this->db->GetRow("SELECT * FROM farm_role_storage_devices WHERE storage_id = ? LIMIT 1", array($id));
-        if (!$info)
+    public function loadById($id)
+    {
+        $info = $this->db->GetRow("SELECT * FROM farm_role_storage_devices WHERE storage_id = ? LIMIT 1", [$id]);
+
+        if (!$info) {
             return false;
+        }
 
         $this->farmRoleId = $info['farm_role_id'];
         $this->serverIndex = $info['server_index'];
         $this->storageConfigId = $info['storage_config_id'];
         $this->envId = $info['env_id'];
-        $this->cloudLocation = $info['cloudLocation'];
+        $this->cloudLocation = $info['cloud_location'];
         $this->config = @json_decode($info['config']);
         $this->storageId = $info['storage_id'];
         $this->status = $info['status'];

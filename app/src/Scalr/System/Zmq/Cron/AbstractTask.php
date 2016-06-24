@@ -1,16 +1,19 @@
 <?php
+
 namespace Scalr\System\Zmq\Cron;
 
 use Exception;
 use ArrayObject;
-use ZMQException;
+use Scalr\LogCollector\AuditLogger;
+use Scalr\LogCollector\AuditLoggerConfiguration;
+use Scalr\LogCollector\AuditLoggerRetrieveConfigurationInterface;
+use Scalr\Model\Entity\ScalrService;
 use Scalr\System\Zmq\Exception\TaskException;
 use Scalr\System\Zmq\Mdp\AsynClient;
 use Scalr\System\Zmq\Zmsg;
 use Scalr\System\Zmq\Mdp\Client;
 use Scalr\Util\Cron\CronExpression;
 use Scalr\LoggerAwareTrait;
-use Scalr\AuditLogger;
 
 /**
  * AbstractTask class
@@ -20,7 +23,7 @@ use Scalr\AuditLogger;
  * @author Vitaliy Demidov <vitaliy@scalr.com>
  * @since  5.0.1 (10.09.2014)
  */
-abstract class AbstractTask implements TaskInterface
+abstract class AbstractTask implements AuditLoggerRetrieveConfigurationInterface, TaskInterface
 {
     use LoggerAwareTrait;
 
@@ -81,6 +84,13 @@ abstract class AbstractTask implements TaskInterface
     private $lastMemoryUsageTime = 0;
 
     /**
+     * Scalr service
+     *
+     * @var ScalrService
+     */
+    private $scalrService;
+
+    /**
      * Constructor
      */
     public function __construct()
@@ -100,9 +110,9 @@ abstract class AbstractTask implements TaskInterface
         }
 
         $container = \Scalr::getContainer();
-        $container->release('auditlogger');
-        $container->setShared('auditlogger', function ($cont) {
-            return new AuditLogger(null, null, null, null, AuditLogger::REQUEST_TYPE_SYSTEM, $this->getName());
+
+        $container->set('auditlogger.request', function () {
+            return $this;
         });
     }
 
@@ -150,6 +160,7 @@ abstract class AbstractTask implements TaskInterface
 
         //Preparing task queue
         $this->queue = $this->enqueue();
+        $this->getScalrService()->numTasks = count($this->queue);
 
         //Checking whether queue returns negotiated object type
         if (!($this->queue instanceof ArrayObject)) {
@@ -157,6 +168,8 @@ abstract class AbstractTask implements TaskInterface
         }
 
         if (!$config->daemon && $config->workers <= 1) {
+            $this->getScalrService()->update(['numTasks']);
+
             //As the number of workers is one, we may process task queue in the same process
             foreach ($this->queue as $request) {
                 /* @var $payload \Scalr\System\Zmq\Cron\AbstractPayload */
@@ -175,21 +188,29 @@ abstract class AbstractTask implements TaskInterface
             }
 
             $this->onCompleted();
-
-            return;
         } else {
             //Processing task queue with ZMQ MDP
 
             //If queue is empty nothing to do
             if (!$config->daemon && $this->queue->count() == 0) {
+                $this->getScalrService()->update(['numTasks']);
+
                 return;
             }
 
             try {
+                $numberWorkers = $this->launchWorkers();
+
+                $this->getScalrService()->update([
+                    'numTasks',
+                    'numWorkers' => $numberWorkers
+                ]);
+
                 $this->launchClient();
             } catch (Exception $e) {
-                //Kill them all
+                // Kills all workers
                 $this->shutdown();
+
                 throw $e;
             }
         }
@@ -313,6 +334,8 @@ abstract class AbstractTask implements TaskInterface
      * It launches pool of workers
      *
      * @param   string   $address  optional An address to override the service name
+     *
+     * @return int The number of launched workers
      */
     protected function launchWorkers($address = null)
     {
@@ -323,6 +346,7 @@ abstract class AbstractTask implements TaskInterface
             return $this->_launchWorkers($address);
         }
 
+        $numberWorkers = 0;
         //It launches different pools of workers according to replication schema defined in the config
         foreach (array_merge((!empty($config->replicate['type']) ? $config->replicate['type'] : []), ['all']) as $type) {
             //It is possible to provide the number of the workers for each service
@@ -340,12 +364,14 @@ abstract class AbstractTask implements TaskInterface
                         $pool2 = $pool2 ?: intval($pool2);
                     }
 
-                    $this->_launchWorkers($this->name . '.' . $type . '.' . $acc, max($pool, $pool2));
+                    $numberWorkers += $this->_launchWorkers($this->name . '.' . $type . '.' . $acc, max($pool, $pool2));
                 }
             }
 
-            $this->_launchWorkers($this->name . '.' . $type . '.all', $pool);
+            $numberWorkers += $this->_launchWorkers($this->name . '.' . $type . '.all', $pool);
         }
+
+        return $numberWorkers;
     }
 
     /**
@@ -395,6 +421,8 @@ abstract class AbstractTask implements TaskInterface
      *
      * @param   string   $address  optional An address to override the service name
      * @param   int      $workers  optional The number of workers
+     *
+     * @return int The number of launched workers
      */
     private function _launchWorkers($address = null, $workers = null)
     {
@@ -421,20 +449,23 @@ abstract class AbstractTask implements TaskInterface
                 $this->pids[$pid] = $pid;
             }
         }
+
+        return max($workers, $availableWorkers);
     }
 
     /**
      * Runs ZMQ MDP Asynchronous Client
      *
+     * @return int The number of launched workers
+     *
      * @throws Exception
      */
     protected function launchClient()
     {
-        $this->launchWorkers();
-
         //We don't even need to start client if queue is empty
         if ($this->queue->count() == 0) {
             $this->log('DEBUG', "It does not need to start major-domo client as queue is empty.");
+
             return;
         }
 
@@ -612,4 +643,41 @@ abstract class AbstractTask implements TaskInterface
 
         return true;
     }
+
+    /**
+     * Gets Scalr service
+     *
+     * @return ScalrService Returns ScalrService instance for the current task
+     */
+    public function getScalrService()
+    {
+        if (!isset($this->scalrService)) {
+            $this->scalrService = ScalrService::findPk($this->getName());
+
+            if (!$this->scalrService) {
+                // Initialization performs only once a life
+                $this->scalrService = new ScalrService();
+                $this->scalrService->name = $this->getName();
+                $this->scalrService->numTasks = 0;
+                $this->scalrService->numWorkers = 0;
+                $this->scalrService->save();
+            }
+        }
+
+        return $this->scalrService;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\LogCollector\AuditLoggerRetrieveConfigurationInterface::getAuditLoggerConfig()
+     */
+    public function getAuditLoggerConfig()
+    {
+        $config = new AuditLoggerConfiguration(AuditLogger::REQUEST_TYPE_SYSTEM);
+
+        $config->systemTask = $this->getName();
+
+        return $config;
+    }
+
 }

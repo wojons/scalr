@@ -597,7 +597,7 @@ Scalr.regPage('Scalr.ui.account2.teams.view', function (loadParams, moduleParams
             },
             beforeClose: function() {
                 menuUserRoles.hide();
-                return true;
+                return false;
             }
         },
         stateId: 'grid-account-teams',

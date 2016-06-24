@@ -223,6 +223,9 @@ class ServerStatusManager extends AbstractTask
      */
     public function worker($request)
     {
+        //It must be done for any worker in daemon mode. (Policy engine, PM, etc.. settings shouldn't be cached)
+        \Scalr::getContainer()->warmup();
+
         try {
             $dbServer = DBServer::LoadByID($request->serverId);
 

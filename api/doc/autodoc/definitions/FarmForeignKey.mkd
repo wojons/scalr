@@ -28,12 +28,6 @@ Property of type: `integer`.
 ## Swagger Definition ##
 
     {
-      "x-derived": {
-        "$ref": "#/definitions/Farm"
-      }, 
-      "x-references": {
-        "$ref": "#/definitions/Farm"
-      }, 
       "properties": {
         "id": {
           "type": "integer"
@@ -41,5 +35,11 @@ Property of type: `integer`.
       }, 
       "required": [
         "id"
-      ]
+      ], 
+      "x-derived": {
+        "$ref": "#/definitions/Farm"
+      }, 
+      "x-references": {
+        "$ref": "#/definitions/Farm"
+      }
     }

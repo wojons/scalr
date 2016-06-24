@@ -81,12 +81,34 @@ class QueryClient implements ClientInterface, CallbackInterface
     protected function createHttpRequest()
     {
         $req = new Request();
-        $req->setOptions(array(
-            'redirect'   => 10,
-            'verifypeer' => false,
-            'verifyhost' => false,
+
+        $req->setOptions([
+            'redirect'      => 10,
             'cookiesession' => true
-        ));
+        ]);
+
+        $req->setSslOptions([
+            'verifypeer' => false,
+            'verifyhost' => false
+        ]);
+
+        $proxySettings = $this->cloudstack->getProxy();
+
+        if ($proxySettings !== false) {
+            $req->setOptions([
+                'proxyhost' => $proxySettings['host'],
+                'proxyport' => $proxySettings['port'],
+                'proxytype' => $proxySettings['type']
+            ]);
+
+            if ($proxySettings['user']) {
+                $req->setOptions([
+                    'proxyauth'     => "{$proxySettings['user']}:{$proxySettings['pass']}",
+                    'proxyauthtype' => $proxySettings['authtype']
+                ]);
+            }
+        }
+
         return $req;
     }
 

@@ -1,5 +1,6 @@
 <?php
 
+use Scalr\Acl\Acl;
 use Scalr\Model\Entity\ChefServer;
 
 class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
@@ -7,57 +8,50 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
 
     public function hasAccess()
     {
-        return true;
+        return $this->request->isFarmDesignerAllowed() || //farmdesigner
+               $this->request->isAllowed('ROLES', 'MANAGE') || //roleeditor
+               $this->request->isAllowed(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_BUILD) || //rolebuilder
+               $this->request->isAllowed(Acl::RESOURCE_GOVERNANCE_ENVIRONMENT);//governance
     }
 
     /**
+     * Returns list of roles and recipes
+     * 
      * @param int $servId
      * @param string $chefEnv
      */
-    public function xListAllRecipesAction($servId, $chefEnv)
+    public function xListRolesRecipesAction($servId, $chefEnv)
     {
         $chefClient = $this->getChefClient($servId);
 
-        $recipes = [];
+        $result = [];
 
-        /*
-        $response = (array)$chefClient->listCookbooks($chefEnv || $chefEnv == '_default' ? '' : $chefEnv);
-
-        foreach ($response as $key => $value) {
-            $recipeList = (array)$chefClient->listRecipes($key, '_latest');
-
-            foreach ($recipeList as $name => $recipeValue) {
-                if ($name == 'recipes') {
-                    foreach ($recipeValue as $recipe) {
-                        $recipes[] = [
-                            'cookbook' => $key,
-                            'name' => substr($recipe->name, 0, (strlen($recipe->name)-3))
-                        ];
-                    }
-                }
-            }
-        }
-        */
         $response = (array)$chefClient->listEnvironmentRecipes($chefEnv);
         foreach ($response as $recipe) {
             $chunks = explode("::", $recipe);
             if (count($chunks) == 1) {
-                $recipes[] = [
-                    'cookbook' => $chunks[0],
-                    'name' => "default"
+                $result[] = [
+                    'id' => $chunks[0] . '::default',
+                    'type' => 'recipe'
                 ];
             } else {
-                $recipes[] = [
-                    'cookbook' => $chunks[0],
-                    'name' => $chunks[1]
+                $result[] = [
+                    'id' => $chunks[0] . '::' . $chunks[1],
+                    'type' => 'recipe'
                 ];
             }
         }
 
-        sort($recipes);
+        $response = (array)$chefClient->listRoles();
+        foreach ($response as $key => $value) {
+            $result[] = [
+                'id' => $key,
+                'type' => 'role'
+            ];
+        }
 
         $this->response->data(array(
-            'data' => $recipes
+            'data' => $result
         ));
     }
 
@@ -72,8 +66,8 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
         $response = (array)$chefClient->listRoles();
 
         foreach ($response as $key => $value) {
-            //$role = $chefClient->getRole($key);
             $roles[] = [
+                'id' => $key,
                 'name' => $key,
                 'chef_type' => 'role'
             ];
@@ -132,5 +126,35 @@ class Scalr_UI_Controller_Services_Chef extends Scalr_UI_Controller
         return Scalr_Service_Chef_Client::getChef($server->url, $server->username, $this->getCrypto()->decrypt($server->authKey));
     }
 
+    /**
+     * Returns list of chef servers applying governance
+     *
+     * @return array
+     */
+    public function xListServersAction()
+    {
+        $limits = null;
 
+        if (!$this->user->isAdmin()) {
+            $governance = new Scalr_Governance($this->getEnvironmentId(true));
+            $limits = $governance->getValue(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_CHEF, null);
+        }
+
+        $list = [];
+
+        foreach (ChefServer::getList($this->user->getAccountId(), $this->getEnvironmentId(true), $this->request->getScope()) as $server) {
+            if (!$limits || isset($limits['servers'][(string)$server->id])) {
+                $list[] = [
+                    'id'       => (string)$server->id,
+                    'url'      => $server->url,
+                    'username' => $server->username,
+                    'scope'    => $server->getScope()
+                ];
+            }
+        }
+
+        $this->response->data([
+            'data' => $list
+        ]);
+    }
 }

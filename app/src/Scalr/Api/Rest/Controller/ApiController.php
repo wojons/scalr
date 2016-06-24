@@ -118,10 +118,12 @@ class ApiController extends AbstractController
      */
     final public function params($name = null, $default = null)
     {
+        $params = $this->getCommonQueryParams();
+
         if ($name === null) {
-            return $this->commonQueryParameters + $this->request->get();
+            return $params + $this->request->get();
         } else {
-            return array_key_exists($name, $this->commonQueryParameters) ? $this->commonQueryParameters[$name] :
+            return array_key_exists($name, $params) ? $params[$name] :
                    $this->request->get($name, $default);
         }
     }
@@ -133,6 +135,10 @@ class ApiController extends AbstractController
      */
     public function getCommonQueryParams()
     {
+        if (empty($this->commonQueryParameters)) {
+            $this->processCommonQueryParameters();
+        }
+
         return $this->commonQueryParameters;
     }
 
@@ -143,7 +149,7 @@ class ApiController extends AbstractController
      */
     public function getMaxResults()
     {
-        return $this->commonQueryParameters[self::QUERY_PARAM_MAX_RESULTS];
+        return $this->getCommonQueryParams()[self::QUERY_PARAM_MAX_RESULTS];
     }
 
     /**
@@ -153,7 +159,7 @@ class ApiController extends AbstractController
      */
     public function getPageNum()
     {
-        return $this->commonQueryParameters[self::QUERY_PARAM_PAGE_NUM];
+        return $this->getCommonQueryParams()[self::QUERY_PARAM_PAGE_NUM];
     }
 
     /**
@@ -262,13 +268,29 @@ class ApiController extends AbstractController
     /**
      * Gets a new Instance of the adapter
      *
-     * @param    string    $name  The name of the adapter
-     * @return   ApiEntityAdapter Returns the instance of the specified adapter
+     * @param   string    $name             The name of the adapter
+     * @param   string    $scope   optional The scope of the adapter
+     * @param   string    $version optional The version of the adapter
+     *
+     * @return  ApiEntityAdapter Returns the instance of the specified adapter
      */
-    public function adapter($name)
+    public function adapter($name, $scope = null, $version = null)
     {
+        if (empty($scope)) {
+            $scope = '$2';
+        }
+
+        if (empty($version)) {
+            $version = '$3';
+        }
         //The same version Adapter should be used as the version of the controller
-        $adapterClass = preg_replace('/(\\\\V\d+(?:beta\d*)?\\\\)(.+)$/', '\\1Adapter\\' . ucfirst($name) . 'Adapter', get_class($this));
+
+        $adapterClass = preg_replace(
+            '/^(?<namespace>.+?)\\\\(?<scope>[^\\\\]+?)\\\\(?<version>V\d+(?:beta\d*)?)(?<class>\\\\.+)$/',
+            "\$1\\\\" . ucfirst($scope) . "\\\\" . ucfirst($version) . "\\Adapter\\" . ucfirst($name) . 'Adapter',
+            get_class($this)
+        );
+
         return new $adapterClass($this);
     }
 
@@ -322,24 +344,27 @@ class ApiController extends AbstractController
     /**
      * Gets bare id from request object
      *
-     * @param object $object    Request object
-     * @param string $item      Item name (image, role)
-     * @return mixed
+     * @param   object  $object          Request object
+     * @param   string  $item   optional Item name (image, role) or null, if object is target
+     * @return  mixed
      */
-    public static function getBareId($object, $item)
+    public static function getBareId($object, $item = null)
     {
         if (is_array($object)) {
             $object = (object) $object;
         }
 
-        if (!empty($object->{$item}->id)) {
-            return $object->{$item}->id;
-        } else if (!empty($object->{$item})) {
-            $property = $object->{$item};
-            if (is_array($property) && !empty($property['id'])) {
-                return $property['id'];
-            } else if (!(is_array($property) || is_object($property))) {
-                return $object->{$item};
+        if (isset($item) && !empty($object->{$item})) {
+            $object = $object->{$item};
+        }
+
+        if (!empty($object->id)) {
+            return $object->id;
+        } else if (!empty($object)) {
+            if (is_array($object) && !empty($object['id'])) {
+                return $object['id'];
+            } else if (!(is_array($object) || is_object($object))) {
+                return $object;
             }
         }
 
@@ -444,6 +469,6 @@ class ApiController extends AbstractController
      */
     public function auditLog($event, ...$extra)
     {
-        return $this->getContainer()->auditlogger->auditLog($event, ...$extra);
+        return $this->getContainer()->auditlogger->log($event, ...$extra);
     }
 }

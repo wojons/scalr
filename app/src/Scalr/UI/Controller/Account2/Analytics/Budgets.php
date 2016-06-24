@@ -16,7 +16,7 @@ class Scalr_UI_Controller_Account2_Analytics_Budgets extends Scalr_UI_Controller
 
     public function hasAccess()
     {
-        return $this->request->isAllowed(Acl::RESOURCE_ANALYTICS_ACCOUNT, Acl::PERM_ANALYTICS_ACCOUNT_ALLOCATE_BUDGET);
+        return $this->request->isAllowed(Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT, Acl::PERM_ANALYTICS_PROJECTS_ALLOCATE_BUDGET);
     }
 
     public function defaultAction()

@@ -1189,6 +1189,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpends', {
                 xtype: 'button',
                 iconCls: 'x-btn-icon-download',
                 tooltip: 'Download CSV',
+                hidden: true,
                 margin: '0 0 0 20',
                 listeners: {
                     mouseout: function() {
@@ -3110,6 +3111,11 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                     var periodField = this.down('costanalyticsperiod');
                     this.currentRecord = record;
                     var idField = me.subject==='costcenters'?'ccId':'projectId';
+                    if (me.subject==='costcenters') {
+                        this.down('#itemMoveProjects').show().setHref('#/admin/analytics/' + me.subject + '/moveProjects?' + idField + '='+record.get(idField));
+                    } else {
+                        this.down('#itemMoveProjects').hide();
+                    }
                     this.down('#itemEdit').modalUrl = '#/admin/analytics/' + me.subject + '/edit?' + idField + '='+record.get(idField);
                     this.down('#itemNotifications').setHref('#/admin/analytics/' + me.subject + '/notifications?' + idField + '='+record.get(idField));
                     periodField.restorePreservedValue('month', !!periodField.getValue());
@@ -3151,15 +3157,25 @@ Ext.define('Scalr.ui.CostAnalyticsListPanel', {
                         xtype: 'tbfill'
                     },{
                         xtype: 'button',
+                        iconCls: 'x-btn-icon-move',
+                        itemId: 'itemMoveProjects',
+                        hrefTarget: '_self',
+                        tooltip: 'Move Projects to another Cost Center',
+                        href: '#'
+                    },{
+                        xtype: 'button',
                         iconCls: 'x-btn-icon-notifications',
                         itemId: 'itemNotifications',
+                        margin: '0 0 0 12',
                         hrefTarget: '_self',
+                        tooltip: 'Notifications',
                         href: '#'
                     },{
                         xtype: 'button',
                         iconCls: 'x-btn-icon-settings',
                         itemId: 'itemEdit',
                         margin: '0 0 0 12',
+                        tooltip: 'Edit settings',
                         handler: function() {
                             Scalr.event.fireEvent('modal', this.modalUrl);
                         }
@@ -4233,7 +4249,7 @@ Ext.define('Scalr.ui.CostAnalyticsSpendsFarms', {
                     resizable: false,
                     sortable: false,
                     width: 48,
-                    tpl: '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-grid-icon x-grid-icon-details scalr-ui-analytics-link" style="cursor:pointer" title="View farm role details" />'
+                    tpl: '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-grid-icon x-grid-icon-analyticsdetail scalr-ui-analytics-link" style="cursor:pointer" title="View farm role details" />'
                 }]
             });
         } else {
@@ -4798,7 +4814,7 @@ Ext.define('Scalr.ui.AnalyticsBoxesEnvProject', {
             noBudgetCt.down('#finalSpent').setVisible(!!totals['budget']['closed']).update({budgetFinalSpent: totals['budget']['budgetFinalSpent']});
             var btn = noBudgetCt.down('#button');
             btn.setVisible(!totals['budget']['closed']);
-            if (Scalr.isAllowed('ANALYTICS_ACCOUNT', 'allocate-budget')) {
+            if (Scalr.isAllowed('ANALYTICS_PROJECTS_ACCOUNT', 'allocate-budget')) {
                 btn.enable().setTooltip('');
             } else {
                 btn.disable().setTooltip('Insufficient permissions to define a budget');

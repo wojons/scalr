@@ -85,7 +85,6 @@ class RolesTest extends WebTestCase
                     'osId'  => $this->logicalNot($this->isEmpty()),
                     'images',
                     'variables',
-                    'shared'    => $this->isType('bool'),
                     'description'
                 ],
                 $content,

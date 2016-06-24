@@ -128,8 +128,8 @@ use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\EntityManager;
 use Scalr\Service\Aws\Client\ClientInterface;
-use \DateTimeZone;
-use \DateTime;
+use DateTimeZone;
+use DateTime;
 use Scalr\Service\Aws\Ec2\DataType\RegionInfoList;
 
 /**

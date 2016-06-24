@@ -251,7 +251,7 @@ Scalr.regPage('Scalr.ui.account2.analytics.projects.view', function (loadParams,
                         handler: function() {
                             Scalr.event.fireEvent('modal', '#/account/analytics/projects/add');
                         },
-                        hidden: !Scalr.isAllowed('ANALYTICS_ACCOUNT', 'manage-projects')
+                        hidden: !Scalr.isAllowed('ANALYTICS_PROJECTS_ACCOUNT', 'create')
                     },{
                         itemId: 'refresh',
                         iconCls: 'x-btn-icon-refresh',
@@ -305,6 +305,7 @@ Scalr.regPage('Scalr.ui.account2.analytics.projects.view', function (loadParams,
                     var periodField = this.down('costanalyticsperiod');
                     this.currentRecord = record;
                     this.down('#itemEdit').modalUrl = '#/account/analytics/projects/edit?projectId='+record.get('projectId');
+                    this.down('#itemNotifications').setHref('#/account/analytics/projects/notifications?projectId='+record.get('projectId'));
                     periodField.restorePreservedValue('month', !!periodField.getValue());
                 },
                 items: [{
@@ -341,10 +342,18 @@ Scalr.regPage('Scalr.ui.account2.analytics.projects.view', function (loadParams,
                         xtype: 'tbfill'
                     },{
                         xtype: 'button',
+                        iconCls: 'x-btn-icon-notifications',
+                        itemId: 'itemNotifications',
+                        margin: '0 0 0 12',
+                        hrefTarget: '_self',
+                        tooltip: 'Notifications',
+                        href: '#'
+                    },{
+                        xtype: 'button',
                         itemId: 'itemEdit',
                         iconCls: 'x-btn-icon-settings',
                         margin: '0 0 0 12',
-                        hidden: !Scalr.isAllowed('ANALYTICS_ACCOUNT', 'manage-projects'),
+                        hidden: !Scalr.isAllowed('ANALYTICS_PROJECTS_ACCOUNT', 'update'),
                         handler: function() {
                             Scalr.event.fireEvent('modal', this.modalUrl);
                         }

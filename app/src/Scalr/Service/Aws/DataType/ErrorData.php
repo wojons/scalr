@@ -241,6 +241,16 @@ class ErrorData
     const ERR_DB_INSTANCE_NOT_FOUND = 'DBInstanceNotFound';
 
     /**
+     * DBParameterGroupName does not refer to an existing DB Parameter Group.
+     */
+    const ERR_DB_PARAMETER_GROUP_NOT_FOUND = 'DBParameterGroupNotFound';
+
+    /**
+     * DBSubnetGroupName does not refer to an existing DB subnet Group.
+     */
+    const ERR_DB_SUBNET_GROUP_NOT_FOUND = 'DBSubnetGroupNotFound';
+
+    /**
      * DBClusterIdentifier does not refer to an existing DB Instance.
      */
     const ERR_DB_CLUSTER_NOT_FOUND = 'DBClusterNotFound';

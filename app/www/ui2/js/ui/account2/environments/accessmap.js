@@ -10,23 +10,23 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
         groupField: 'groupOrder'
     });
 
-	var form = Ext.create('Ext.form.Panel', {
-		scalrOptions: {
-			'modal': true
-		},
-		width: 900,
+    var form = Ext.create('Ext.form.Panel', {
+        scalrOptions: {
+            'modal': true
+        },
+        width: 900,
         cls: 'scalr-ui-panel-account-roles',
         bodyCls: 'x-container-fieldset',
-		title: 'Environments &raquo; ' + moduleParams['env']['name'] + '&raquo; User permissions summary',
-		fieldDefaults: {
-			anchor: '100%',
-			labelWidth: 130
-		},
+        title: 'Environments &raquo; ' + moduleParams['env']['name'] + '&raquo; User permissions summary',
+        fieldDefaults: {
+            anchor: '100%',
+            labelWidth: 130
+        },
         layout: {
             type: 'vbox',
             align: 'stretch'
         },
-		items: [{
+        items: [{
             xtype: 'combo',
             emptyText: 'Select user to review permissions summary',
             valueField: 'id',
@@ -59,45 +59,47 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
                 }
             }
         },{
-            xtype: 'grid',
-            padding: '0 0 12',
-            hidden: true,
-            margin: '18 0 0',
-            itemId: 'resources',
-            cls: 'x-grid-with-formfields',
-            trackMouseOver: false,
-            disableSelection: true,
+            xtype: 'panel',//extra panel added in v5.1.0: collapsing/expanding groups resets scroll position(view.preserveScrollOnRefresh has no effect but our custom container.preserveScrollPosition does work)
             flex: 1,
-            hideHeaders: true,
-            store: storeUserResources,
+            preserveScrollPosition: true,
             scrollable: 'y',
-            features: [{
-                id:'grouping',
-                ftype:'grouping',
-                groupHeaderTpl: Ext.create('Ext.XTemplate',
-                    '{children:this.getGroupName}',
-                    {
-                        getGroupName: function(children) {
-                            if (children.length > 0) {
-                                return children[0].get('group');
+            hidden: true,
+            itemId: 'resources',
+            items: {
+                xtype: 'grid',
+                cls: 'x-grid-with-formfields',
+                trackMouseOver: false,
+                disableSelection: true,
+                flex: 1,
+                hideHeaders: true,
+                store: storeUserResources,
+                features: [{
+                    id:'grouping',
+                    ftype:'grouping',
+                    groupHeaderTpl: Ext.create('Ext.XTemplate',
+                        '{children:this.getGroupName}',
+                        {
+                            getGroupName: function(children) {
+                                if (children.length > 0) {
+                                    return children[0].get('group');
+                                }
                             }
                         }
+                    )
+                }],
+                viewConfig: {
+                    plugins: {
+                        ptype: 'dynemptytext',
+                        emptyText: '<div class="title">No permissions were found to match your search.</div>Try modifying your search criteria.'
                     }
-                )
-            }],
-            viewConfig: {
-                preserveScrollOnRefresh: true,
-                plugins: {
-                    ptype: 'dynemptytext',
-                    emptyText: '<div class="title">No permissions were found to match your search.</div>Try modifying your search criteria.'
-                }
+                },
+                columns: [{
+                    xtype: 'aclresourcecolumn',
+                    flex: 1,
+                    readOnly: true,
+                    definitions: moduleParams['definitions']
+                }],
             },
-            columns: [{
-                xtype: 'aclresourcecolumn',
-                flex: 1,
-                readOnly: true,
-                definitions: moduleParams['definitions']
-            }],
             dockedItems: [{
                 xtype: 'toolbar',
                 dock: 'top',
@@ -116,7 +118,6 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
                     excludeForm: true
                 },{
                     xtype: 'buttongroupfield',
-                    cls: 'scalr-ui-panel-account-roles-btngroup',
                     itemId: 'grantedfilter',
                     margin: '0 0 0 18',
                     maxWidth: 600,
@@ -132,19 +133,19 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
                         value: 'all'
                     },{
                         text: 'Full access',
-                        cls: 'scalr-ui-panel-account-roles-btn-full',
+                        cls: 'x-full-access',
                         value: 1
                     },{
                         text: 'Limited',
-                        cls: 'scalr-ui-panel-account-roles-btn-limited',
+                        cls: 'x-limited-access',
                         value: 2
                     },{
                         text: 'Read only',
-                        cls: 'scalr-ui-panel-account-roles-btn-readonly',
+                        cls: 'x-readonly-access',
                         value: 3
                     },{
                         text: 'No access',
-                        cls: 'scalr-ui-panel-account-roles-btn-no',
+                        cls: 'x-no-access',
                         value: 0
                     }],
                     listeners: {
@@ -221,13 +222,13 @@ Scalr.regPage('Scalr.ui.account2.environments.accessmap', function (loadParams, 
                 }]
             }]
         }],
-		tools: [{
-			type: 'close',
-			handler: function () {
-				Scalr.event.fireEvent('close');
-			}
-		}]
-	});
+        tools: [{
+            type: 'close',
+            handler: function () {
+                Scalr.event.fireEvent('close');
+            }
+        }]
+    });
 
-	return form;
+    return form;
 });

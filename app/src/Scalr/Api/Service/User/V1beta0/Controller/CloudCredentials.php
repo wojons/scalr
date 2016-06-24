@@ -5,6 +5,7 @@ namespace Scalr\Api\Service\User\V1beta0\Controller;
 use Scalr\Acl\Acl;
 use Scalr\Api\DataType\ApiEntityAdapter;
 use Scalr\Api\DataType\ErrorMessage;
+use Scalr\Api\DataType\ListResultEnvelope;
 use Scalr\Api\Rest\Controller\ApiController;
 use Scalr\Api\Rest\Exception\ApiErrorException;
 use Scalr\Api\Rest\Http\Request;
@@ -16,12 +17,18 @@ use Scalr\Modules\PlatformFactory;
 use SERVER_PLATFORMS;
 
 /**
- * User/Version-1beta0/CloudCredentials API Controller
+ * User/CloudCredentials API Controller
  *
  * @author N.V.
  */
 class CloudCredentials extends ApiController
 {
+
+    /**
+     * Internal alias for rackspacengus rackspacenguk platforms.
+     * It's used to assign appropriate adapter class.
+     */
+    const PLATFORM_CLASS_RACKSPACE = 'rackspace';
 
     /**
      * The name of data field in charge of inheritance
@@ -50,7 +57,7 @@ class CloudCredentials extends ApiController
         SERVER_PLATFORMS::AZURE             => 'AzureCloudCredentials',
         SERVER_PLATFORMS::CLOUDSTACK        => 'CloudstackCloudCredentials',
         SERVER_PLATFORMS::OPENSTACK         => 'OpenstackCloudCredentials',
-        SERVER_PLATFORMS::RACKSPACE         => 'RackspaceCloudCredentials',
+        self::PLATFORM_CLASS_RACKSPACE      => 'RackspaceCloudCredentials',
     ];
 
     protected $entityClass = 'Scalr\Model\Entity\CloudCredentials';
@@ -58,16 +65,18 @@ class CloudCredentials extends ApiController
     /**
      * Gets a new Instance of the adapter
      *
-     * @param   string|CloudCredentials|object  $name   The name of the adapter, or CloudCredentials entity, or cloud credentials data
+     * @param   string|CloudCredentials|object  $name                The name of the adapter, or CloudCredentials entity, or cloud credentials data
+     * @param   string                          $scope      optional The scope of the adapter
+     * @param   string                          $version    optional The version of the adapter
+     * @param   array                           $transform  optional The transformation rules for the type of the cloud credentials
      *
      * @return  ApiEntityAdapter    Returns the instance of cloud credentials adapter
      *
      * @throws  ApiErrorException
      */
-    public function adapter($name, array $transform = null)
+    public function adapter($name, $scope = null, $version = null, array $transform = null)
     {
         if (is_object($name)) {
-            //
             $property = $name instanceof $this->entityClass
                 ? static::$entityDescriminator
                 : static::$objectDiscriminator;
@@ -84,7 +93,7 @@ class CloudCredentials extends ApiController
                     break;
 
                 case PlatformFactory::isRackspace($value):
-                    $value = SERVER_PLATFORMS::RACKSPACE;
+                    $value = self::PLATFORM_CLASS_RACKSPACE;
                     break;
             }
 
@@ -92,26 +101,32 @@ class CloudCredentials extends ApiController
                 throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Unknown cloud '{$value}'");
             }
 
-            $class = empty(static::$inheritanceMap)
-                ? $value
-                : static::$inheritanceMap[$value];
+            $class = empty(static::$inheritanceMap) ? $value : static::$inheritanceMap[$value];
 
             $name = empty(static::$inheritedNamespace) ? $class : (static::$inheritedNamespace . "\\{$class}");
         }
 
-        return parent::adapter($name);
+        return parent::adapter($name, $scope, $version);
     }
 
+    /**
+     * Gets default search criteria according request scope
+     *
+     * @return array Returns array of the search criteria
+     */
     public function getDefaultCriteria()
     {
         return $this->getScopeCriteria();
     }
 
     /**
-     * @param string $cloudCredentialsId
-     * @param bool $modify
+     * Gets CloudCredentials entity
+     *
+     * @param   string  $cloudCredentialsId Unique identifier of the CloudCredentials
+     * @param   bool    $modify             Obtaining CloudCredentials in modification purposes
      *
      * @return Entity\CloudCredentials
+     *
      * @throws ApiErrorException
      */
     public function getCloudCredentials($cloudCredentialsId, $modify = false)
@@ -125,6 +140,11 @@ class CloudCredentials extends ApiController
         return $cloudCredentials;
     }
 
+    /**
+     * Retrieves the list of the cloud credentials
+     *
+     * @return  ListResultEnvelope   Returns describe result
+     */
     public function describeAction()
     {
         $this->checkPermissions(Acl::RESOURCE_ENV_CLOUDS_ENVIRONMENT);
@@ -147,8 +167,12 @@ class CloudCredentials extends ApiController
 
         $object = $this->request->getJsonBody();
 
+        if (!is_object($object)) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Invalid body");
+        }
+
         /* @var $adapter CloudCredentialsAdapter */
-        $adapter = $this->adapter($object, array_flip(static::$inheritanceMap));
+        $adapter = $this->adapter($object, null, null, array_flip(static::$inheritanceMap));
 
         //Pre validates the request object
         $adapter->validateObject($object, Request::METHOD_POST);

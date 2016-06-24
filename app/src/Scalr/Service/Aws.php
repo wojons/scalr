@@ -73,6 +73,11 @@ class Aws
     const REGION_AP_NORTHEAST_1 = 'ap-northeast-1';
 
     /**
+     * Asia Pacific Northeast (Seoul) Region.
+     */
+    const REGION_AP_NORTHEAST_2 = 'ap-northeast-2';
+
+    /**
      * South America (Sao Paulo) Region.
      */
     const REGION_SA_EAST_1 = 'sa-east-1';
@@ -126,6 +131,11 @@ class Aws
      * Asia Pacific Northeast (Tokyo) Region Hosted Zone Id.
      */
     const ZONE_ID_AP_NORTHEAST_1 = 'Z2M4EHUR26P7ZW';
+
+    /**
+     * Asia Pacific Northeast (Seoul) Region Hosted Zone Id.
+     */
+    const ZONE_ID_AP_NORTHEAST_2 = 'Z3W03O7B5YMIYP';
 
     /**
      * South America (Sao Paulo) Region Hosted Zone Id.
@@ -314,6 +324,13 @@ class Aws
     private $proxyType;
 
     /**
+     * The auth type of the proxy
+     *
+     * @var int
+     */
+    private $authType;
+
+    /**
      * Constructor
      *
      * @param   string     $accessKeyId      AWS access key id
@@ -335,30 +352,39 @@ class Aws
 
     /**
      * Set proxy configuration to connect to AWS services
-     * @param string $host
+     *
+     * @param string  $host
      * @param integer $port
-     * @param string $user
-     * @param string $pass
-     * @param string $type Allowed values 4 - SOCKS4, 5 - SOCKS5, 0 - HTTP
+     * @param string  $user
+     * @param string  $pass
+     * @param int     $type      Allowed values 4 - SOCKS4, 5 - SOCKS5, 0 - HTTP
+     * @param int     $authType  Allowed authtypes: 1 - Basic, Digest - 2, GSSNeg - 4, NTLM - 8, any - -1
      */
-    public function setProxy($host, $port = 3128, $user = null, $pass = null, $type = 0)
+    public function setProxy($host, $port = 3128, $user = null, $pass = null, $type = 0, $authType = 1)
     {
         $this->proxyHost = $host;
         $this->proxyPort = $port;
         $this->proxyUser = $user;
         $this->proxyPass = $pass;
         $this->proxyType = $type;
+        $this->authType  = $authType;
     }
 
+    /**
+     * Gets proxy configuration
+     *
+     * @return array|bool
+     */
     public function getProxy()
     {
-        return ($this->proxyHost) ? array(
-            'host' => $this->proxyHost,
-            'port' => $this->proxyPort,
-            'user' => $this->proxyUser,
-            'pass' => $this->proxyPass,
-            'type' => $this->proxyType
-        ) : false;
+        return ($this->proxyHost) ? [
+            'host'      => $this->proxyHost,
+            'port'      => $this->proxyPort,
+            'user'      => $this->proxyUser,
+            'pass'      => $this->proxyPass,
+            'type'      => $this->proxyType,
+            'authtype'  => $this->authType
+        ] : false;
     }
 
     /**
@@ -477,6 +503,7 @@ class Aws
     {
         return [
             self::REGION_AP_NORTHEAST_1,
+            self::REGION_AP_NORTHEAST_2,
             self::REGION_AP_SOUTHEAST_1,
             self::REGION_AP_SOUTHEAST_2,
             self::REGION_EU_WEST_1,
@@ -499,6 +526,7 @@ class Aws
     {
         return [
             self::REGION_AP_NORTHEAST_1 => self::ZONE_ID_AP_NORTHEAST_1,
+            self::REGION_AP_NORTHEAST_2 => self::ZONE_ID_AP_NORTHEAST_2,
             self::REGION_AP_SOUTHEAST_1 => self::ZONE_ID_AP_SOUTHEAST_1,
             self::REGION_AP_SOUTHEAST_2 => self::ZONE_ID_AP_SOUTHEAST_2,
             self::REGION_EU_WEST_1      => self::ZONE_ID_EU_WEST_1,
@@ -545,7 +573,7 @@ class Aws
      *
      * @return \ReflectionClass  Returns reflection class of Aws
      */
-    static public function getReflectionClass()
+    public static function getReflectionClass()
     {
         if (!isset(self::$reflection)) {
             self::$reflection = new \ReflectionClass(__CLASS__);

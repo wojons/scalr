@@ -6,8 +6,6 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.openstack', function () {
 
         cls: 'x-container-fieldset x-fieldset-separator-bottom',
 
-        instanceTypeFieldName: 'openstack.flavor-id',
-         
         layout: 'fit',
         defaults: {
             maxWidth: 760

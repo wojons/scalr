@@ -70,14 +70,9 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
             readonly = me.isTabReadonly(record),
             platform = record.get('platform'),
             errors = record.get('errors', true) || {},
-            invalidIndex,
             grid,
-            form,
-            field, disableStrategy;
-
-        if (Ext.isObject(errors) && Ext.isObject(errors['scaling'])) {
-            invalidIndex = errors['scaling'].invalidIndex;
-        }
+            field, disableStrategy,
+            isScalarized = record.get('isScalarized') == 1;
 
         me.suspendLayouts();
 
@@ -96,7 +91,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
 
         disableStrategy = platform !== 'ec2' && platform !== 'gce' && platform !== 'cloudstack'  && !Scalr.isOpenstack(platform);
         field = me.down('[name="base.terminate_strategy"]');
-        field.reset()
+        field.reset();
         field.setValue(disableStrategy ? 'terminate' : settings['base.terminate_strategy'] || 'terminate');
         field.updateIconTooltip('question', 'This setting is not supported by ' + Scalr.utils.getPlatformName(platform)+ ' cloud');
         field.setDisabled(disableStrategy);
@@ -130,39 +125,46 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
 
         me.down('[name="scaling.exclude_dbmsr_master"]').setVisible(record.isDbMsr(true));
 
-        me.down('[name="scaling_algo"]').store.load({ data: metrics });
+        field = me.down('[name="scaling_algo"]');
+        field.store.load({ data: metrics });
+        field.setReadOnly(!isScalarized);
 
-        var dataToLoad = [];
+        me.down('[name="scaling.safe_shutdown"]').setReadOnly(!isScalarized);
+
+
+        //load grid, select invalid record if any
+        var dataToLoad = [], failedId = false, dateTimeMetricIsUsed = false;
+        errors = errors['scaling'] || {};
         Ext.Object.each(scaling, function(id, settings){
+            var metric = metrics[id],
+                error = errors[id] || null;
+
+            if (error && !failedId) {
+                failedId = id;
+            }
+
+            dateTimeMetricIsUsed = dateTimeMetricIsUsed || id == 5;//DateTime metric
+
             dataToLoad.push({
                 id: id,
                 settings: settings,
-                name: metrics[id].name,
-                alias: metrics[id].alias
+                name: metric.name,
+                alias: metric.alias,
+                isInvert: metric.isInvert,
+                validationErrors: error
             });
         });
         grid = me.down('grid');
         grid.store.loadData(dataToLoad);
-        if (invalidIndex) {
-            form = me.down('#scalingform');
-            grid.store.getUnfiltered().each(function(item){
-                if (item.get('id') == invalidIndex) {
-                    cb = function() {
-                        grid.setSelectedRecord(item);
-                        form.isValid();
-                    };
-                    if (form.rendered) {
-                        cb();
-                    } else {
-                        form.on('afterrender', cb);
-                    }
-                    return false;
-                }
-            });
 
+        if (platform === 'ec2') {
+            this.refreshIgnoreFullHour(dateTimeMetricIsUsed);
+        }
+        if (failedId) {
+            grid.setSelectedRecord(grid.store.findRecord('id', failedId, 0, false, true, true));
         }
 
-        me.down('#timezone').setText('Time zone: <span style="color:#666">' + me.up('#farmDesigner').down('#farmSettings').down('#timezone').getValue() +
+        me.down('#timezone').setText('Time zone: <span style="color:#666">' + me.up('#farmDesigner').down('#farmSettings #timezone').getValue() +
             '</span> <a href="#">Change</a>', false);
 
         me.resumeLayouts(true);
@@ -178,16 +180,46 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
         this.suspendOnRoleUpdate++;
         record.set('scaling', scaling);
         this.suspendOnRoleUpdate--;
+        if (record.get('platform') === 'ec2') {
+            this.refreshIgnoreFullHour(scaling[5]!==undefined);//DateTime metric
+        }
     },
 
+    refreshIgnoreFullHour: function(dateTimeMetricIsUsed) {
+        var field = this.down('[name="scaling.ignore_full_hour"]');
+        if (dateTimeMetricIsUsed) {
+            if (!field.readOnly) {
+                field.setValue(true);
+                field.setReadOnly(true);
+            }
+        } else {
+            field.setReadOnly(false);
+        }
+    },
     hideTab: function (record) {
         var settings = record.get('settings'),
             scaling = {},
             grid = this.down('grid'),
-            store = grid.getStore();
+            store = grid.getStore(),
+            customCleaned = 0,
+            needToClean = function (alias, errors) {
+                return errors && 'time' !== alias && (!customCleaned || 'custom' !== alias);
+            },
+            toCleanSelectors = [];
 
         grid.clearSelectedRecord();
         store.getUnfiltered().each(function(item){
+            var alias = item.get('alias'),
+                errors = item.get('validationErrors');
+
+            if (needToClean(alias, errors)) {
+                if ('custom' === alias) {
+                    customCleaned++;
+                }
+                alias = '#' + alias + ' [name=';
+                toCleanSelectors.push(alias + Ext.Object.getKeys(errors).join('],' + alias) + ']');
+            }
+
             scaling[item.get('id')] = item.get('settings');
         });
 
@@ -222,8 +254,72 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
             delete settings['scaling.downscale.timeout'];
         }
         this.down('[name="scaling.enabled"]').reset();
-        record.set('settings', settings);
-        record.set('scaling', scaling);
+        record.set({
+            settings: settings,
+            scaling: scaling
+        });
+
+        if (toCleanSelectors.length) {
+            this.suspendEvents(false);
+            Ext.Array.forEach(this.down('#scalingform').query(toCleanSelectors.join(',')), function(field) {
+                field.isFormField && field.clearInvalid();
+            });
+            this.resumeEvents(true);
+        }
+    },
+
+    //<staged 2016-02-05 &lt;s.honcharov@scalr.com&gt; for future refactoring>
+    //clearErrors: function (settingName, metricId, fieldName) {
+    //    var me = this, errors;
+    //
+    //    if (!me.currentRole || !(errors = me.currentRole.get('errors', true))) {
+    //        return;
+    //    }
+    //
+    //    var tabSettings = me.getSettingsList();
+    //    if (tabSettings !== undefined) {
+    //        Ext.Object.each(errors, function(name, error){
+    //            if (!(name in tabSettings) || (settingName && settingName != name)) {
+    //                return;
+    //            }
+    //
+    //            if (name === 'scaling') {
+    //                if (metricId && error[metricId]) {
+    //                    if (fieldName) {
+    //                        delete error[metricId][fieldName];
+    //                        if (Ext.Object.isEmpty(error[metricId])) {
+    //                            delete error[metricId];
+    //                        }
+    //                    } else {
+    //                        delete error[metricId];
+    //                    }
+    //
+    //                    if (Ext.Object.getSize(error) === 1) { // field `message`
+    //                        delete errors[name];
+    //                    }
+    //                }
+    //            } else {
+    //                delete errors[name];
+    //            }
+    //        });
+    //    }
+    //    if (Ext.Object.getSize(errors) === 0) {
+    //        me.currentRole.set('errors', null);
+    //    }
+    //},
+    //</staged>
+
+    getErrorTipConfig: function (metric, error) {
+        if (error) {
+            var size = Ext.Object.getSize(error);
+
+            return {
+                title: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-error"> '+ size +' validation error'+ (size > 1 ? 's' : '') +' in <em>'+ metric.name + '</em> metric:',
+                msg: '- ' + Ext.Object.getValues(error).join('<br />- ') + '<br />'
+            }
+        }
+
+        return null;
     },
 
     __items: [{
@@ -329,7 +425,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
             items: [{
                 xtype: 'grid',
                 itemId: 'scalinggrid',
-                cls: 'x-grid-role-scaling-rules x-fieldset-separator-bottom',
+                cls: 'x-fieldset-separator-bottom',
                 multiSelect: true,
                 enableColumnResize: false,
                 padding: '0 12 12',
@@ -351,9 +447,28 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                     getForm: function() {
                         return this.grid.up('#scaling').down('form');
                     }
+                },{
+                    ptype: 'rowtooltip',
+                    pluginId: 'rowtooltip',
+                    cls: 'x-tip-form-invalid',
+                    anchor: 'top',
+                    minWidth: 330,
+                    beforeShow: function (tooltip) {
+                        var record = tooltip.owner.view.getRecord(tooltip.triggerElement), errors, cfg;
+
+                        if (record && (errors = record.get('validationErrors'))) {
+                            cfg = tooltip.owner.up('#scaling').getErrorTipConfig({name: record.get('name')}, errors);
+                            tooltip.setTitle(cfg.title);
+                            tooltip.update(cfg.msg);
+
+                            return true;
+                        }
+
+                        return false;
+                    }
                 }],
                 store: {
-                    model: Scalr.getModel({fields: ['id', 'name', 'alias', 'min', 'max', 'settings', 'isInvert']})
+                    model: Scalr.getModel({fields: [{name: 'id', type: 'int'}, 'name', 'alias', 'min', 'max', 'settings', 'isInvert', 'validationErrors']})
                 },
                 columns: [{
                     text: 'Scale based on',
@@ -367,18 +482,12 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                     flex: 1,
                     xtype: 'templatecolumn',
                     tpl: [
-                        '<tpl if="alias===\'ram\'">',
-                            '<tpl if="settings.min">',
+                        '<tpl if="isInvert">',
+                            '<tpl if="!(settings.min == null || settings.min === \'\')">',
                                 '< {settings.min:htmlEncode}',
                             '</tpl>',
-                        '<tpl else>',
-                            '<tpl if="settings.max">',
-                                '<tpl if="!values.isInvert">',
-                                    '> {settings.max:htmlEncode}',
-                                '<tpl else>',
-                                    '< {settings.max:htmlEncode}',
-                                '</tpl>',
-                            '</tpl>',
+                        '<tpl elseif="!(settings.max == null || settings.max === \'\')">',
+                            '> {settings.max:htmlEncode}',
                         '</tpl>'
                     ]
                 },{
@@ -388,18 +497,12 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                     flex: 1,
                     xtype: 'templatecolumn',
                     tpl: [
-                        '<tpl if="alias===\'ram\'">',
-                            '<tpl if="settings.max">',
+                        '<tpl if="isInvert">',
+                            '<tpl if="!(settings.max == null || settings.max === \'\')">',
                                 '> {settings.max:htmlEncode}',
                             '</tpl>',
-                        '<tpl else>',
-                            '<tpl if="settings.min">',
-                                '<tpl if="!values.isInvert">',
-                                    '< {settings.min:htmlEncode}',
-                                '<tpl else>',
-                                    '> {settings.min:htmlEncode}',
-                                '</tpl>',
-                            '</tpl>',
+                        '<tpl elseif="!(settings.min == null || settings.min === \'\')">',
+                            '< {settings.min:htmlEncode}',
                         '</tpl>'
                     ]
                 }, {
@@ -411,14 +514,16 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                     align:'left'
                 }],
                 viewConfig: {
-                    overItemCls: '',
                     overflowY: 'auto',
-                    overflowX: 'hidden'
+                    overflowX: 'hidden',
+                    getRowClass: function (record) {
+                        return record.get('validationErrors') ? 'x-grid-row-color-red' : '';
+                    }
                 },
                 refreshEmptyText: function(minInstances) {
                     var view = this.getView();
-                    minInstances = Ext.isEmpty(minInstances) || !Ext.isNumeric(minInstances) ? '?' : minInstances
-                    view.emptyText = '<div class="' + this.emptyCls + '">No auto-scaling rules defined. Scalr will maintain ' + minInstances + ' running instance(s).</div>'
+                    minInstances = Ext.isEmpty(minInstances) || !Ext.isNumeric(minInstances) ? '?' : minInstances;
+                    view.emptyText = '<div class="' + this.emptyCls + '">No auto-scaling rules defined. Scalr will maintain ' + minInstances + ' running instance(s).</div>';
                     if (this.store.getCount() === 0) {
                         view.refresh();
                     }
@@ -460,12 +565,50 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                 },
                 setReadOnly: function(readonly) {
                     this.getView().findFeature('addbutton').setDisabled(!!readonly);
+                },
+
+                clearFailed: function (id, name) {
+                    var record;
+
+                    if (id) {
+                        record = this.store.findRecord('id', id, 0, false, true, true);
+                        if (!record) {
+                            return;
+                        }
+
+                        //<staged 2016-02-05 &lt;s.honcharov@scalr.com&gt; for future refactoring>
+                        //var tab = this.up('#scaling');
+                        //tab.clearErrors.call(tab, 'scaling', id, name);
+                        //</staged>
+                    }
+
+                    function clearRecordError(record, name){
+                        var errors = null;
+                        if (name && (errors = record.get('validationErrors'))) {
+                            delete errors[name];
+                            if (Ext.Object.isEmpty(errors)) {
+                                errors = null;
+                            }
+                        }
+                        record.set('validationErrors', errors);
+                    }
+
+                    this.suspendLayouts();
+                    if (record) {
+                        clearRecordError(record, name);
+                    } else {
+                        this.store.getUnfiltered().each(function(record){
+                            clearRecordError(record, name);
+                        });
+                    }
+                    this.resumeLayouts();
                 }
             }, {
                 xtype: 'container',
                 itemId: 'scalingsettings',
                 flex: 1,
                 overflowY: 'auto',
+                preserveScrollPosition: true,
                 items: [{
                     xtype: 'fieldset',
                     title: 'Scaling decision settings',
@@ -607,7 +750,17 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                     },{
                         xtype: 'checkbox',
                         name: 'scaling.ignore_full_hour',
-                        boxLabel: 'Skip waiting full billing period when scaling down'
+                        boxLabel: 'Skip waiting full billing period when scaling down',
+                        plugins: [{
+                            ptype: 'fieldicons',
+                            position: 'outer',
+                            icons: [{id: 'question', tooltip: 'This setting is forced with DateTime scaling metric'}]
+                        }],
+                        listeners: {
+                            writeablechange: function(comp, readOnly) {
+                                this.toggleIcon('question', readOnly);
+                            }
+                        }
                     },{
                         xtype: 'checkbox',
                         name: 'scaling.safe_shutdown',
@@ -618,7 +771,17 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                                 id: 'info',
                                 tooltip: 'Scalr will terminate an instance ONLY IF the script &#39;/usr/local/scalarizr/hooks/auth-shutdown&#39; returns 1. ' +
                                          'If this script is not found or returns any other value, Scalr WILL NOT terminate that server.'
+                            }, {
+                                id: 'question',
+                                hidden: true,
+                                tooltip: 'Safe shutdown is not available for agentless roles'
                             }]
+                        },
+                        listeners: {
+                            writeablechange: function(comp, readOnly) {
+                                this.toggleIcon('question', readOnly);
+                                this.toggleIcon('info', !readOnly);
+                            }
                         }
                     }]
                 }]
@@ -646,11 +809,16 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                     emptyText: 'Please select scaling metric',
                     queryMode: 'local',
                     store: {
-                        fields: [ 'id', 'name', 'alias', 'scope', 'isInverted' ],
+                        fields: [ {name: 'id', type: 'int'}, 'name', 'alias', 'scope', 'isInvert' ],
                         proxy: 'object'
                     },
                     valueField: 'id',
                     displayField: 'name',
+                    plugins: [{
+                        ptype: 'fieldicons',
+                        align: 'right',
+                        icons: [{id: 'question', tooltip: 'Scalarizr automation is required to use other Scaling metrics'}]
+                    }],
                     listConfig: {
                         getInnerTpl: function () {
                             return '<img src="' + Ext.BLANK_IMAGE_URL +
@@ -660,66 +828,47 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                     listeners: {
                         change: function(comp, value, oldValue) {
                             var formPanel = this.up('form'),
-                                record = formPanel.getForm().getRecord(),
+                                record = formPanel.getRecord(),
                                 algos = formPanel.down('#algos'),
-                                error;
+                                error, store;
 
                             if (value) {
-                                var fieldRecord = comp.findRecordByValue(value);
-                                var alias = fieldRecord.get('alias');
+                                var fieldRecord = comp.findRecordByValue(value),
+                                    alias = fieldRecord.get('alias'),
+                                    isInverted = fieldRecord.get('isInvert');
 
                                 if (!formPanel.isRecordLoading && formPanel.grid) {
-                                    var forbidChange = false;
-                                    if (formPanel.grid.store.find('id', value) !== -1) {
+                                    store = formPanel.grid.store;
+                                    error = false;
+
+                                    if (store.findExact('id', value) !== -1) {
                                         error = 'This scaling metric already added.';
-                                        forbidChange = true;
                                     } else if (
-                                        !record.store && (formPanel.grid.store.find('alias', 'time') !== -1 || alias === 'time' && formPanel.grid.store.getCount() > 0) ||
-                                            record.store && alias === 'time' && formPanel.grid.store.getCount() > 1
+                                        !record.store && (store.findExact('alias', 'time') !== -1 || alias === 'time' && store.getCount() > 0) ||
+                                            record.store && alias === 'time' && store.getCount() > 1
                                         ){
-                                        error = 'DateAndTime metric cannot be used with others';
-                                        forbidChange = true;
+                                        error = 'DateAndTime metric cannot be used with others.';
                                     }
-                                    if (forbidChange) {
+
+                                    if (error) {
                                         Scalr.message.InfoTip(error, comp.getEl());
                                         this.suspendEvents(false);
                                         this.setValue(oldValue);
                                         this.resumeEvents(false);
+
                                         return;
                                     }
                                 }
 
-                                var isInverted = fieldRecord.get('isInvert');
-
-                                var customMetricsFieldSet = algos.down('#custom');
-                                customMetricsFieldSet.invertFieldsLabels(isInverted);
-
-                                var isPreviousMetricInverted = false;
-                                var previosRecord = !Ext.isEmpty(oldValue)
-                                    ? comp.findRecordByValue(oldValue)
-                                    : null;
-
-                                if (!Ext.isEmpty(previosRecord)) {
-                                    isPreviousMetricInverted = previosRecord.get('isInvert');
-                                }
-
-                                var doInvertFieldsValues = (isInverted && !isPreviousMetricInverted)
-                                    || (!isInverted && isPreviousMetricInverted);
-
-                                if (doInvertFieldsValues) {
-                                    customMetricsFieldSet.invertFieldsValues();
+                                if (alias === 'custom') {
+                                    algos.down('#custom').swapFields(isInverted);
                                 }
 
                                 formPanel.updateRecordSuspended++;
                                 algos.layout.setActiveItem(alias);
                                 formPanel.showStat(alias);
                                 formPanel.updateRecordSuspended--;
-                                formPanel.updateRecord(
-                                    null,
-                                    null,
-                                    isInverted,
-                                    isInverted && isPreviousMetricInverted ? true : doInvertFieldsValues
-                                );
+                                formPanel.updateRecord(null, null, isInverted);
                             } else if (algos.layout.activeItem) {
                                 algos.layout.setActiveItem('blank');
                                 formPanel.hideStat();
@@ -732,6 +881,41 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                 layout: 'card',
                 itemId: 'algos',
                 activeItem: 'blank',
+
+                validateHelper: {
+                        max: {pair: '[name=min]', isMax: true},
+                        min: {pair: '[name=max]'},
+                        msgTpl: 'Scale up value must be {0} than Scale down value'
+                },
+                validateBounds: function(field) {
+                    var helper = this.validateHelper,
+                        hlp = helper[field.name],
+                        isMax = !!hlp['isMax'],
+                        pairField = field.up('fieldset').down(hlp['pair']),
+                        value = field.isValid() && +field.getValue(),
+                        pairValue = pairField.isValid() && +pairField.getValue();
+
+                    if (value !== false && pairValue !== false) {
+                        var record = this.up('form').getRecord(),
+                            inverted = !!record.get('isInvert'),
+                            err = record.get('validationErrors') || {},
+                            msg;
+
+                        if (value == pairValue || isMax == (value < pairValue)) {
+                            msg = Ext.String.format(helper.msgTpl, inverted ? 'less' : 'greater');
+                            err[inverted ? 'min' : 'max'] = msg;
+                            (isMax !== inverted ? field : pairField).markInvalid(msg);
+
+                        } else {
+                            delete err[inverted ? 'min' : 'max'];
+                            if (Ext.Object.isEmpty(err)) {
+                                err = null;
+                            }
+                            (isMax !== inverted ? field : pairField).clearInvalid();
+                        }
+                        record.set('validationErrors', err);
+                    }
+                },
                 defaults: {
                     listeners: {
                         beforeactivate: function() {
@@ -748,23 +932,22 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                             }
                         },
                         afterrender: function() {
-                            var me = this,
-                                formPanel = me.up('form'),
-                                onFieldChange = function(comp, value){
-                                    var metricField = formPanel.down('[name=scaling_algo]');
-                                    var record = metricField
-                                            .findRecordByValue(metricField.getValue());
-
-                                    formPanel.updateRecord(
-                                        comp.name,
-                                        value,
-                                        !Ext.isEmpty(record) ? record.get('isInvert') : false
-                                    );
-                                };
+                            var me = this;
                             if (me.defaultValues) {
-                                Ext.Object.each(me.defaultValues, function(name, value){
-                                    var field = me.down('[name="' + name + '"]');
+                                var helper = me.up().validateHelper,
+                                    onFieldChange = function(comp, value){
+                                        me.up('form').updateRecord(comp.name, value);
+                                    },
+                                    onFieldBlur = me.up().validateBounds;
+
+                                Ext.Object.each(me.defaultValues, function(name){
+                                    var field = me.down('[name="' + name + '"]'),
+                                        hlp;
                                     field.on('change', onFieldChange, field);
+
+                                    if (!me.bypassBoundsValidation && (hlp = helper[name]) && hlp['pair']) {
+                                        field.on('blur', onFieldBlur, me.up());
+                                    }
                                 });
                             }
 
@@ -819,10 +1002,10 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                         items: [{
                             xtype: 'label',
                             flex: 1,
-                            text: 'Scale down when LA goes under'
+                            text: 'Scale up when LA goes over'
                         }, {
                             xtype: 'textfield',
-                            name: 'min',
+                            name: 'max',
                             vtype: 'float',
                             allowBlank: false,
                             margin: '0 0 0 8',
@@ -837,10 +1020,10 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                         items: [{
                             xtype: 'label',
                             flex: 1,
-                            text: 'Scale up when LA goes over'
+                            text: 'Scale down when LA goes under'
                         }, {
                             xtype: 'textfield',
-                            name: 'max',
+                            name: 'min',
                             vtype: 'float',
                             allowBlank: false,
                             margin: '0 0 0 8',
@@ -990,6 +1173,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                     xtype: 'fieldset',
                     itemId: 'sqs',
                     title: 'Downscaling and upscaling thresholds',
+                    bypassBoundsValidation: true,
                     defaultValues: {
                         queue_name: '',
                         min: '',
@@ -1123,53 +1307,52 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                     defaults: {
                         maxWidth: 340
                     },
-                    invertFieldName: function (fieldName) {
-                        return fieldName === 'max' ? 'min' : 'max';
+
+                    /**
+                     * Current container's state
+                     * false: `max` field is upper, label: `scale up when metric goes over`
+                     *        `min` field is lower, label: `scale down when metric goes under`
+                     * true:  `min` field is upper, label: `scale up when metric goes under`
+                     *        `max` field is lower, label: `scale down when metric goes over`
+                     */
+                    inverted: false,
+                    swapHelper: {
+                        labelX: {0: 'over', 1: 'under'},
+                        nameS: {min: 'max', max: 'min'}
                     },
-                    invertFieldsLabels: function (isInverted) {
-                        var me = this;
 
-                        me.down('#maxLabel').setText(!isInverted
-                            ? 'Scale up when metric value goes over'
-                            : 'Scale up when metric value goes under'
-                        );
+                    /**
+                     * Swap names between `max` and `min` fields, change their labels
+                     * when custom metric is loading into form
+                     *
+                     * @param inverted {bool} loading metric is inverted
+                     */
+                    swapFields: function (inverted) {
+                        if (inverted != this.inverted) {
+                            var helper = this.swapHelper,
+                                form = this.up('form');
 
-                        me.down('#minLabel').setText(!isInverted
-                            ? 'Scale down when metric value goes under'
-                            : 'Scale down when metric value goes over'
-                        );
+                            form.suspendLayouts();
+                            Ext.Array.forEach(this.query('#scaleUp, #scaleDown'), function (fieldset) {
+                                var label = fieldset.down('label'),
+                                    labelId = label.itemId,
+                                    text = fieldset.down('textfield'),
+                                    name = text.name;
 
-                        return me;
+                                label.setData({x: helper.labelX[ (labelId == 'maxLabel') == inverted ? 1 : 0 ]});
+                                text.name = helper.nameS[name];
+                            });
+                            form.updateLayout();
+
+                            this.inverted = inverted;
+                        }
+
+                        return this;
                     },
-                    invertFieldsValues: function () {
-                        var me = this;
 
-                        var maxField = me.down('[name=max]');
-                        var maxValue = maxField.getValue();
-                        var minField = me.down('[name=min]');
-
-                        maxField.setValue(minField.getValue());
-                        minField.setValue(maxValue);
-
-                        return me;
-                    },
-                    getInvertedFieldValues: function (invertValues) {
-                        var me = this;
-
-                        var values = {};
-
-                        Ext.Array.each(me.query('[isFormField]'), function (field) {
-                            var fieldName = !invertValues
-                                ? field.getName()
-                                : me.invertFieldName(field.getName());
-
-                            values[fieldName] = field.getValue();
-                        });
-
-                        return values;
-                    },
                     items: [{
                         xtype: 'fieldcontainer',
+                        itemId: 'scaleUp',
                         layout: {
                             type: 'hbox',
                             align: 'middle'
@@ -1178,7 +1361,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                             xtype: 'label',
                             itemId: 'maxLabel',
                             flex: 1,
-                            text: 'Scale up when metric value goes over'
+                            tpl: 'Scale up when metric value goes {x}',
+                            data: {x: 'over'}
                         }, {
                             xtype: 'textfield',
                             name: 'max',
@@ -1188,6 +1372,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                         }]
                     }, {
                         xtype: 'fieldcontainer',
+                        itemId: 'scaleDown',
                         layout: {
                             type: 'hbox',
                             align: 'middle'
@@ -1196,7 +1381,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                             xtype: 'label',
                             itemId: 'minLabel',
                             flex: 1,
-                            text: 'Scale down when metric value goes under'
+                            tpl: 'Scale down when metric value goes {x}',
+                            data: {x: 'under'}
                         }, {
                             xtype: 'textfield',
                             name: 'min',
@@ -1444,7 +1630,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                                         me.el.on('click', function(e){
                                             var el = me.el.query('a');
                                             if (el.length && e.within(el[0])) {
-                                                me.up('#farmDesigner').showFarmSettings();
+                                                me.up('#farmDesigner').showFarmSettings('general');
                                                 e.preventDefault();
                                             }
                                         });
@@ -1493,50 +1679,71 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
             }],
             listeners: {
                 afterrender: function() {
-                    this.grid = this.up('#scaling').down('#leftcol').down('grid');
+                    this.grid = this.up('#scaling').down('#leftcol grid');
                 },
                 beforeloadrecord: function(record) {
-                    this.down('#algos').down('#time').down('grid').store.loadData({});
+                    this.down('#algos #time grid').store.loadData({});
                 },
 
                 loadrecord: function(record) {
                     var form = this.getForm(),
-                        alias = record.get('alias');
+                        id = record.get('id'),
+                        alias = record.get('alias'),
+                        settings = record.get('settings') || {},
+                        errors = record.get('validationErrors') || {};
 
                     form.clearInvalid();
                     if (record.store) {
-                        form.findField('scaling_algo').setValue(record.get('id'));
+                        form.findField('scaling_algo').setValue(id);
                     }
 
                     if (alias) {
                         if (alias === 'time') {
-                            this.down('#algos').down('#'+record.get('alias')).down('grid').store.loadData(record.get('settings') || {});
+                            this.down('#algos #'+alias+' grid').store.loadData(settings);
                         } else {
-                            this.down('#algos').down('#'+record.get('alias')).setFieldValues(record.get('settings') || {});
+                            this.down('#algos #'+alias).setFieldValues(settings);
+
+                            Ext.Object.each(errors, function (name, message) {
+                                var cmp = this.down('#'+ alias + ' [name='+ name +']');
+                                if (cmp && cmp.isFormField) {
+                                    cmp.markInvalid(message);
+
+                                    cmp.on('blur', function () {
+                                        this.grid.clearFailed(id, name);
+                                    }, this, {single: true});
+                                }
+                            }, this);
+
                         }
                     }
                     if (!this.isVisible()) {
                         this.setVisible(true);
                         this.ownerCt.updateLayout();//recalculate form dimensions after container size was changed, while form was hidden
                     }
+                },
+
+                afterloadrecord: function(record) {
+                    var isScalarized = this.up('#scaling').currentRole.get('isScalarized') == 1,
+                        field = this.getForm().findField('scaling_algo');
+                    if (!record.store) {
+                        if (!isScalarized) field.setValue(5);//DateTime metric
+                    }
+                    field.toggleIcon('question', !isScalarized);
                 }
             },
 
             updateRecordSuspended: 0,
 
-            updateRecord: function (fieldName, fieldValue, isInverted, preventFieldsInverting) {
+            updateRecord: function (fieldName, fieldValue, isInverted) {
                 var record = this.getRecord();
 
                 if (this.isRecordLoading || this.updateRecordSuspended || !record) {
                     return;
                 }
 
-                var form = this.getForm(),
-                    data = {
+                var data = {
                         settings: record.get('settings') || {}
-                    },
-                    algoId = form.findField('scaling_algo').getValue(),
-                    fieldsContainer = this.down('#algos').layout.getActiveItem();
+                    };
 
                 if (fieldName) {
                     if (fieldName == 'settings') {
@@ -1545,20 +1752,20 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
                         data['settings'][fieldName] = fieldValue;
                     }
                 } else {
-                    var algoData = this.up('#farmDesigner').moduleParams.tabParams['metrics'][algoId];
+                    var algoId = this.getForm().findField('scaling_algo').getValue(),
+                        fieldsContainer = this.down('#algos').layout.getActiveItem(),
+                        algoData = this.up('#farmDesigner').moduleParams.tabParams['metrics'][algoId];
+
                     data['id'] = algoId;
                     data['name'] = algoData.name;
                     data['alias'] = algoData.alias;
-                    data['settings'] = (fieldsContainer.getItemId() !== 'custom' || preventFieldsInverting)
-                        ? fieldsContainer.getFieldValues()
-                        : fieldsContainer.getInvertedFieldValues(isInverted);
+                    data['settings'] = fieldsContainer.getFieldValues();
+                    data['isInvert'] = isInverted || false;
                 }
                 if (fieldName !== 'settings') {
                     data.min = data['settings'].min || undefined;
                     data.max = data['settings'].max || undefined;
                 }
-
-                data.isInvert = isInverted;
 
                 this.grid.suspendLayouts();
                 record.set(data);
@@ -1613,4 +1820,3 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
         }
     }]
 });
-

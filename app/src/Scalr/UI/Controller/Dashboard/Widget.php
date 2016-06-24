@@ -29,4 +29,9 @@ class Scalr_UI_Controller_Dashboard_Widget extends Scalr_UI_Controller
     {
 
     }
+
+    public function hasAccess()
+    {
+        return  $this->getUser() !== null;
+    }
 }

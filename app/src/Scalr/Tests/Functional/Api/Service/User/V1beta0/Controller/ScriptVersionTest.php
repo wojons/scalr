@@ -322,7 +322,7 @@ class ScriptVersionTest extends ScriptsTestCase
             }
 
             if ($version->getScope() !== ScopeInterface::SCOPE_ENVIRONMENT) {
-                $response = $this->postVersion($version->scriptId, ['body' => $this->getTestName()]);
+                $response = $this->postVersion($version->scriptId, ['body' => '#!/bin/sh' . $this->getTestName()]);
                 $this->assertErrorMessageContains($response, 403, ErrorMessage::ERR_PERMISSION_VIOLATION);
             }
         }

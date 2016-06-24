@@ -2,7 +2,7 @@
 namespace Scalr\Service\Aws\Route53\DataType;
 
 use Scalr\Service\Aws\Route53\AbstractRoute53DataType;
-use \DateTime;
+use DateTime;
 /**
  * ZoneChangeInfoData
  *

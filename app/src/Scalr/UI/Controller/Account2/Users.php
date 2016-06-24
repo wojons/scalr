@@ -1,7 +1,10 @@
 <?php
 
 use Scalr\UI\Request\Validator;
+use Scalr\UI\Request\JsonData;
 use Scalr\Model\Entity\Account\User;
+use Scalr\Model\Entity\Farm;
+use Scalr\Model\Entity\FarmSetting;
 
 class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
 {
@@ -27,29 +30,55 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
         );
     }
 
-    public function xGroupActionHandlerAction()
+    /**
+     * @param   JsonData    $ids
+     * @param   string      $action
+     * @param   int         $ownerId
+     */
+    public function xGroupActionHandlerAction(JsonData $ids, $action, $ownerId = null)
     {
-        $this->request->defineParams(array(
-            'ids' => array('type' => 'json'), 'action'
-        ));
-
         $processed = array();
         $errors = array();
+        $needUpdateFarmOwner = false;
         $actionMsg = '';
+        $ids = (array) $ids;
 
-        foreach($this->getParam('ids') as $userId) {
+        if ($ownerId && !User::findOne([['id' => $ownerId], ['accountId' => $this->user->getAccountId()]])) {
+            $ownerId = null;
+        }
+
+        foreach ($ids as $userId) {
             try {
                 $user = Scalr_Account_User::init();
                 $user->loadById($userId);
 
-                switch($this->getParam('action')) {
+                switch ($action) {
                     case 'delete':
                         $actionMsg = 'removed';
                         if ($this->user->canRemoveUser($user)) {
+                            $ownedFarms = Farm::findByOwnerId($user->id);
+                            if ($ownedFarms->count() > 0) {
+                                if ($ownerId) {
+                                    /* @var $newOwner User */
+                                    $newOwner = User::findPk($ownerId);
+                                    /* @var $u User */
+                                    $u = User::findPk($this->user->getId());
+                                    foreach ($ownedFarms as $farm) {
+                                        /* @var $farm Farm */
+                                        FarmSetting::addOwnerHistory($farm, $newOwner, $u);
+                                        $farm->ownerId = $ownerId;
+                                        $farm->save();
+                                    }
+                                } else {
+                                    $needUpdateFarmOwner = true;
+                                    throw new Exception("You can't delete owner of the Farm");
+                                }
+                            }
+
                             $user->delete();
                             $processed[] = $user->getId();
                         } else {
-                            throw new Scalr_Exception_Core('Insufficient permissions to remove user');
+                            throw new Exception('Insufficient permissions to remove user');
                         }
                         break;
 
@@ -89,16 +118,32 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
             }
         }
 
-        $num = count($this->getParam('ids'));
+        $num = count($ids);
 
         if (count($processed) == $num) {
             $this->response->success("Selected user(s) successfully {$actionMsg}");
         } else {
-            array_walk($errors, function(&$item) { $item = '- ' . $item; });
+            array_walk($errors, function (&$item) {
+                $item = '- ' . $item;
+            });
             $this->response->warning(sprintf("Successfully {$actionMsg} only %d from %d users. \nFollowing errors occurred:\n%s", count($processed), $num, join(array_unique($errors), "\n")));
         }
 
-        $this->response->data(array('processed' => $processed));
+        $this->response->data(['processed' => $processed]);
+
+        if ($needUpdateFarmOwner) {
+            $users = [];
+            foreach (User::findByAccountId($this->user->getAccountId()) as $user) {
+                /* @var $user User */
+                if (in_array($user->id, $ids)) {
+                    continue;
+                }
+                $users[] = ['id' => $user->id, 'email' => $user->email];
+            }
+
+            $this->response->data(['needUpdateFarmOwner' => $needUpdateFarmOwner, 'usersList' => $users]);
+        }
+
     }
 
     public function xSaveAction()
@@ -109,7 +154,7 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
             'currentPassword' => array('type' => 'string', 'rawValue' => true)
         ));
 
-        $newUser = $existingPasswordChanged = $sendResetLink = false;
+        $newUser = $existingPasswordChanged = $sendResetLink = $existingEmailChanged = false;
 
         $user = Scalr_Account_User::init();
         $validator = new Validator();
@@ -167,6 +212,10 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
             if ($id) {
                 if (!$this->user->canEditUser($user)) {
                     throw new Scalr_Exception_InsufficientPermissions();
+                }
+
+                if ($email != $user->getEmail()) {
+                    $existingEmailChanged = true;
                 }
 
                 $user->updateEmail($email);
@@ -284,7 +333,9 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
 
         $userTeams = array();
         $troles = $this->getContainer()->acl->getUserRoleIdsByTeam(
-            $user->id, array_map(create_function('$v', 'return $v["id"];'), $user->getTeams()), $user->getAccountId()
+            $user->id, array_map(function ($v) {
+            return $v['id'];
+        }, $user->getTeams()), $user->getAccountId()
         );
         foreach ($troles as $teamId => $roles) {
             $userTeams[$teamId] = array(
@@ -293,12 +344,15 @@ class Scalr_UI_Controller_Account2_Users extends Scalr_UI_Controller
         }
 
         $data = ['user' => $user->getUserInfo(), 'teams' => $userTeams];
-        if ($existingPasswordChanged && $user->getId() == $this->user->getId()) {
+        if (($existingPasswordChanged || $existingEmailChanged) && $user->getId() == $this->user->getId()) {
             Scalr_Session::create($this->user->getId());
             $data['specialToken'] = Scalr_Session::getInstance()->getToken();
         }
         $this->response->data($data);
-        $this->response->success('User successfully saved');
+        $this->response->success($newUser ?
+            'User successfully added and invite sent' :
+            'User successfully saved'
+        );
     }
 
     public function xRemoveAction()

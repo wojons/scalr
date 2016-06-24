@@ -9,7 +9,7 @@ class Scalr_Service_Gearman_Jobs_MessagesSender
         $rows = $db->GetAll("
             SELECT messageid, server_id FROM messages
             WHERE `type`='out' AND status=?
-            AND UNIX_TIMESTAMP(dtlasthandleattempt)+handle_attempts*120 < UNIX_TIMESTAMP(NOW())
+            AND dtlasthandleattempt < DATE_SUB(UTC_TIMESTAMP(), INTERVAL handle_attempts * 120 SECOND)
             ORDER BY dtadded DESC
             LIMIT 0,3000
         ", array(

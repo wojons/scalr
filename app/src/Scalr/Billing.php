@@ -238,10 +238,13 @@ class Scalr_Billing
 
     public static function getSCUByInstanceType($serverType, $platform)
     {
+        $scu = [];
+
         $scu[SERVER_PLATFORMS::EC2] = array(
             // EC2
             't1.micro'	=> 0.25,
 
+            't2.nano'  => 0.1,
             't2.micro'  => 0.25,
             't2.small'  => 0.5,
             't2.medium'  => 0.75,
@@ -318,23 +321,23 @@ class Scalr_Billing
             '5'	=> 6,
             '6'	=> 12,
             '7'	=> 15,
-            
+
             'general1-1' => 0.25,
             'general1-2' => 0.5,
             'general1-4' => 1,
             'general1-8' => 2,
-            
+
             'io1-15' => 3,
             'io1-30' => 6,
             'io1-60' => 12,
             'io1-90' => 24,
             'io1-120' => 48,
-            
+
             'performance1-1' => 0.5,
             'performance1-2' => 1,
             'performance1-4' => 2,
             'performance1-8' => 4,
-            
+
             'performance2-15' => 8,
             'performance2-30' => 16,
             'performance2-60' => 32,
@@ -355,18 +358,18 @@ class Scalr_Billing
                 'general1-2' => 0.5,
                 'general1-4' => 1,
                 'general1-8' => 2,
-                
+
                 'io1-15' => 3,
                 'io1-30' => 6,
                 'io1-60' => 12,
                 'io1-90' => 24,
                 'io1-120' => 48,
-                
+
                 'performance1-1' => 0.5,
                 'performance1-2' => 1,
                 'performance1-4' => 2,
                 'performance1-8' => 4,
-                
+
                 'performance2-15' => 8,
                 'performance2-30' => 16,
                 'performance2-60' => 32,
@@ -405,7 +408,16 @@ class Scalr_Billing
             'g1-small' => 0.5
         );
 
-        return $scu[$platform][$serverType] ? $scu[$platform][$serverType] : 0;
+        if (!isset($scu[$platform][$serverType])) {
+            if (isset($scu[$platform])) {
+                // Check SCU only for defined clouds for private clouds, we don't care
+                trigger_error(sprintf('SCU has not been defined for instance type: "%s" on "%s" platform.', $serverType, $platform), E_USER_WARNING);
+            }
+
+            return 0;
+        }
+
+        return $scu[$platform][$serverType];
     }
 
     public function getInfo()
@@ -414,6 +426,7 @@ class Scalr_Billing
         {
             $subscription = $this->chargify->getSubscription($this->subscriptionId);
 
+            $trialsDaysLeft = null;
             if ($subscription['subscription']['trial_ended_at']) {
                 $trialsDaysLeft = round((strtotime($subscription['subscription']['trial_ended_at']) - time()) / 86400);
             }

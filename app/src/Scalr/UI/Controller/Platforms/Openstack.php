@@ -1,6 +1,6 @@
 <?php
 
-use \Scalr\Service\OpenStack\Services\Servers\Type\ServersExtension;
+use Scalr\Service\OpenStack\Services\Servers\Type\ServersExtension;
 use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
@@ -189,7 +189,7 @@ class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
             }
 
             $servers = $dbFarmRole->GetServersByFilter();
-            for ($i = 0; $i < count($servers); $i++) {
+            for ($i = 0, $c = count($servers); $i < $c; $i++) {
                 if ($servers[$i]->status != SERVER_STATUS::TERMINATED && $servers[$i]->index) {
                     $map[$servers[$i]->index - 1]['serverIndex'] = $servers[$i]->index;
                     $map[$servers[$i]->index - 1]['serverId'] = $servers[$i]->serverId;
@@ -199,7 +199,7 @@ class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
             }
 
             $ips = $this->db->GetAll('SELECT ipaddress, instance_index FROM elastic_ips WHERE farm_roleid = ?', array($dbFarmRole->ID));
-            for ($i = 0; $i < count($ips); $i++) {
+            for ($i = 0, $c = count($ips); $i < $c; $i++) {
                 $map[$ips[$i]['instance_index'] - 1]['elasticIp'] = $ips[$i]['ipaddress'];
             }
         }
@@ -222,7 +222,7 @@ class Scalr_UI_Controller_Platforms_Openstack extends Scalr_UI_Controller
                     if ($info['server_id'] && $itm['instanceId']) {
                         $dbServer = DBServer::LoadByID($info['server_id']);
                         if ($dbServer->GetProperty(OPENSTACK_SERVER_PROPERTIES::SERVER_ID) != $itm['instanceId']) {
-                            for ($i = 0; $i < count($map); $i++) {
+                            for ($i = 0, $c = count($map); $i < $c; $i++) {
                                 if ($map[$i]['elasticIp'] == $itm['ipAddress'])
                                     $map[$i]['warningInstanceIdDoesntMatch'] = true;
                             }

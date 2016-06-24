@@ -1,5 +1,9 @@
 <?php
 
+use Scalr\Model\AbstractEntity;
+use Scalr\Model\Collections\EntityIterator;
+use Scalr\Model\Entity;
+
 class Client
 {
     public $ID;
@@ -139,6 +143,65 @@ class Client
             "DELETE FROM client_settings WHERE `key` LIKE '{$filter}' AND clientid = ?",
             array($this->ID)
         );
+    }
+
+    /**
+     * Gets cloud credentials for listed clouds
+     *
+     * @param   string[]    $clouds             optional Clouds list
+     * @param   array       $credentialsFilter  optional Criteria to filter by CloudCredentials properties
+     * @param   array       $propertiesFilter   optional Criteria to filter by CloudCredentialsProperties
+     *
+     * @return  EntityIterator|Entity\CloudCredentials[]
+     */
+    public function cloudCredentialsList(array $clouds = null, array $credentialsFilter = [], array $propertiesFilter = [])
+    {
+        if (!is_array($clouds)) {
+            $clouds = (array) $clouds;
+        }
+
+        $cloudCredentials = new Entity\CloudCredentials();
+        $cloudCredProps = new Entity\CloudCredentialsProperty();
+
+        $criteria = $credentialsFilter;
+        $from[] = empty($criteria[AbstractEntity::STMT_FROM]) ? " {$cloudCredentials->table()} " : $criteria[AbstractEntity::STMT_FROM];
+        $where = empty($criteria[AbstractEntity::STMT_WHERE]) ? [] : [$criteria[AbstractEntity::STMT_WHERE]];
+
+        $criteria[] = ['accountId' => $this->ID];
+
+        if (!empty($clouds)) {
+            $clouds = implode(", ", array_map(function ($cloud) use ($cloudCredentials) {
+                return $cloudCredentials->qstr('cloud', $cloud);
+            }, $clouds));
+
+            $where[] = "{$cloudCredentials->columnCloud()} IN ({$clouds})";
+        }
+
+        if (!empty($propertiesFilter)) {
+            foreach ($propertiesFilter as $property => $propCriteria) {
+                $alias = "ccp_" . trim($cloudCredentials->db()->qstr($property), "'");
+
+                $from[] = "
+                    LEFT JOIN {$cloudCredProps->table($alias)} ON
+                        {$cloudCredentials->columnId()} = {$cloudCredProps->columnCloudCredentialsId($alias)} AND
+                        {$cloudCredProps->columnName($alias)} = {$cloudCredProps->qstr('name', $property)}
+                ";
+
+                $built = $cloudCredProps->_buildQuery($propCriteria, 'AND', $alias);
+
+                if (!empty($built['where'])) {
+                    $where[] = $built['where'];
+                }
+            }
+        }
+
+        $criteria[AbstractEntity::STMT_FROM] = implode("\n", $from);
+
+        if (!empty($where)) {
+            $criteria[AbstractEntity::STMT_WHERE] = "(" . implode(") AND (", $where) . ")";
+        }
+
+        return Entity\CloudCredentials::find($criteria);
     }
 }
 

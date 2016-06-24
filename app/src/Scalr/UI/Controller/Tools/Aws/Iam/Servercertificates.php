@@ -2,7 +2,7 @@
 
 use Scalr\Acl\Acl;
 use Scalr\Model\Entity;
-use \Scalr\Service\Aws;
+use Scalr\Service\Aws;
 
 class Scalr_UI_Controller_Tools_Aws_Iam_ServerCertificates extends Scalr_UI_Controller
 {

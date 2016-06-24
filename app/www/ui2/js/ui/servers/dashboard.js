@@ -11,7 +11,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
         imageArchitecture = Ext.isString(imageArchitecture) ? imageArchitecture : '';
 
         Scalr.utils.loadInstanceTypes(platform, cloudLocation, function (instancesTypes) {
-            var limites = Scalr.getGovernance('ec2', 'aws.instance_type');
+            var limites = Scalr.getGovernance('ec2', 'instance_type');
             var isPolicyEnabled = !Ext.isEmpty(limites);
 
             var instanceTypeRestrictions = {
@@ -63,10 +63,12 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                             }, {
                                 id: 'awsRestrictionsFilter',
                                 filterFn: function (record) {
-                                    var allowed = true;
-                                    var restrictions = record.get('restrictions');
-
-                                    if (!Ext.isEmpty(restrictions)) {
+                                    var allowed = true,
+                                        restrictions = record.get('restrictions'),
+                                        encryptionRequired = (Scalr.getGovernance('ec2', 'aws.storage') || {})['require_encryption'];
+                                    allowed = !encryptionRequired || record.get('ebsencryption')
+                                    
+                                    if (allowed && !Ext.isEmpty(restrictions)) {
                                         Ext.Object.each(instanceTypeRestrictions, function (type, isAllowed) {
                                             if (Ext.isDefined(restrictions[type]) && restrictions[type] !== isAllowed) {
                                                 allowed = false;
@@ -140,21 +142,23 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
             text: 'Actions',
             style: 'position:absolute;right:32px;top:21px;z-index:2',
             menuAlign: 'tr-br',
-            hidden: !(Scalr.isAllowed('FARMS', 'servers') ||
-                    moduleParams['general']['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
-                    moduleParams['general']['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')),
+            listeners: {
+                added: {
+                    fn: function() {
+                        this.menu.doAutoRender();
+                        this.menu.setData(moduleParams['general']);
+                        if (!this.menu.visibleItemsCount) {
+                            this.hide();
+                        }
+                    },
+                    single: true
+                }
+            },
             menu: {
                 xtype: 'servermenu',
                 hideOptionInfo: true,
                 moduleParams: moduleParams,
                 listeners: {
-                    beforeshow: {
-                        fn: function() {
-                            this.doAutoRender();
-                            this.setData(moduleParams['general']);
-                        },
-                        single: true
-                    },
                     actioncomplete: function() {
                         Scalr.event.fireEvent('refresh');
                     }
@@ -175,13 +179,13 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                 defaults: {
                     xtype: 'container',
                     layout: 'anchor',
-                    flex: 1,
-                    defaults: {
-                        xtype: 'displayfield',
-                        labelWidth: 130
-                    }
+                    flex: 1
                 },
                 items: [{
+                    defaults: {
+                        xtype: 'displayfield',
+                        labelWidth: 145
+                    },
                     items: [{
                         name: 'server_id',
                         fieldLabel: 'Server ID'
@@ -217,19 +221,28 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                         }
                     },{
                         name: 'behaviors',
-                        fieldLabel: 'Automation',
+                        fieldLabel: 'Built-in automation',
                         renderer: function(value, comp) {
                             var html = [];
-                            Ext.Array.each(value, function(behavior) {
-                                html.push(Scalr.utils.beautifyBehavior(behavior));
+                            if (moduleParams['general']['isScalarized'] == 1) {
+                                html.push('<img style="float:left;margin:0 8px 8px 0" class="x-icon-scalr-small" src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="Scalarizr (Scalr agent)" />');
+                            }
+                            Ext.Array.each(value, function (value) {
+                                if (!Ext.isEmpty(value) && value !== 'base') {
+                                    html.push('<img style="float:left;margin:0 8px 8px 0" class="x-icon-role-small x-icon-role-small-' + value + '" src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="' + Ext.htmlEncode(Scalr.utils.beautifyBehavior(value, true)) + '" />');
+                                }
                             });
-                            return html.join(', ');
+                            return html.length > 0 ? html.join(' ') : '&mdash;';
                         }
                     },{
                         name: 'addedDate',
                         fieldLabel: 'Added on'
                     }]
                 },{
+                    defaults: {
+                        xtype: 'displayfield',
+                        labelWidth: 160
+                    },
                     padding: '0 0 0 32',
                     items: [{
                         name: 'status',
@@ -255,7 +268,6 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                     },{
                         xtype: 'fieldcontainer',
                         fieldLabel: 'Instance type',
-                        labelWidth: 130,
                         layout: 'hbox',
                         items: [{
                             xtype: 'displayfield',
@@ -290,6 +302,42 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                                 );
                             }
                         }]
+                    },{
+                        xtype: 'fieldcontainer',
+                        fieldLabel: 'Enhanced networking',
+                        layout: 'hbox',
+                        hidden: platform !== 'ec2',
+                        items: [{
+                            xtype: 'displayfield',
+                            name: 'enhancedNetworking',
+                            value: '&mdash;'
+                        }, {
+                            xtype: 'button',
+                            text: 'Enable',
+                            margin: '0 0 0 15',
+                            itemId: 'enableEnhancedNetworking',
+                            hidden: true,
+                            disabled: serverStatus !== 'Suspended',
+                            tooltip: serverStatus !== 'Suspended' ? 'Available only on suspended servers.' : '',
+                            handler: function (button) {
+                                Scalr.Request({
+                                    confirmBox: {
+                                        type: 'action',
+                                        msg: 'Are you sure want to enable Enhanced Networking?'
+                                    },
+                                    processBox: {
+                                        type: 'action',
+                                        progressBar: true
+                                    },
+                                    url: '/servers/xEnableEnhancedNetworking/',
+                                    params: {serverId: loadParams['serverId']},
+                                    success: function () {
+                                        button.hide();
+                                        button.prev('[name="enhancedNetworking"]').setValue('Enabled');
+                                    }
+                                });
+                            }
+                        }]
                     }, {
                         name: 'imageId',
                         fieldLabel: 'Cloud Image ID',
@@ -319,14 +367,14 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                 anchor: '100%',
                 fieldLabel: 'Security groups',
                 cls: 'x-display-field-highlight',
-                labelWidth: 130
+                labelWidth: 145
             },{
                 xtype: 'displayfield',
                 name: 'blockStorage',
                 anchor: '100%',
                 fieldLabel: 'Block storage',
                 cls: 'x-display-field-highlight',
-                labelWidth: 130
+                labelWidth: 145
             }]
         },{
             xtype: 'container',
@@ -648,7 +696,7 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                 flex: 1,
                 defaults: {
                     xtype: 'displayfield',
-                    labelWidth: 130,
+                    labelWidth: 145,
                     anchor: '100%'
                 }
             },
@@ -810,6 +858,9 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                     params: {
                         serverId: serverId
                     },
+                    headers: {
+                        'Scalr-Autoload-Request': 1
+                    },
                     success: function (res) {
                         if (me.isDestroyed) return;
                         me.suspendLayouts();
@@ -848,13 +899,47 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
                 });
             }
         },
+        loadEnhancedNetworkingStatus: function() {
+            var me = this,
+                serverId = moduleParams['general']['server_id'];
+            if (platform === 'ec2' && serverId) {
+                Scalr.Request({
+                    url: '/servers/xGetEnhancedNetworkingStatus',
+                    params: {
+                        serverId: serverId
+                    },
+                    success: function (data) {
+                        var enhancedNetworking;
+                        if (me.isDestroyed) return;
+                        if (data.isAvailable) {
+                            if (data.isEnabled) {
+                                enhancedNetworking = 'Enabled';
+                            } else {
+                                enhancedNetworking = 'Disabled';
+                                if (Scalr.isAllowed('FARMS', 'servers') ||
+                                    moduleParams['general']['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
+                                    moduleParams['general']['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers'))
+                                {
+                                    me.down('#enableEnhancedNetworking').show();
+                                }
+                            }
+                            me.down('[name="enhancedNetworking"]').setValue(enhancedNetworking);
+                        }
+                    },
+                    failure: function() {
+                        if (me.isDestroyed) return;
+                    }
+                });
+            }
+        },
 
         listeners: {
             afterrender: function() {
-                if (showInstanceHealth) {
+                if (showInstanceHealth && moduleParams['general']['isScalarized'] == 1) {
                     this.loadGeneralMetrics();
                     this.loadChartsData();
                 }
+                this.loadEnhancedNetworkingStatus();
             },
             beforedestroy: function() {
                 if (this.lgmDelayed) {
@@ -936,6 +1021,9 @@ Scalr.regPage('Scalr.ui.servers.dashboard', function (loadParams, moduleParams) 
     if (moduleParams['internalProperties'] !== undefined) {
         var items = [];
         Ext.Object.each(moduleParams['internalProperties'], function(key, value){
+            if (moduleParams['general']['isScalarized'] == 0 && key && key.indexOf('scalarizr') === 0) {
+                return true;
+            }
             items.push({
                 xtype: 'displayfield',
                 fieldLabel: key,

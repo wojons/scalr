@@ -145,7 +145,7 @@ class TableTest extends TestCase
         $this->assertSame($getFlightsRoute, $route);
 
         //Two different routes on the same path with different requirements and handlers
-        $getFlightsRoute2 = (new Route('/api/users/v:apiversion/flights', function(){},['apiversion' => '[\w]+']))->setMethods([Request::METHOD_GET]);
+        $getFlightsRoute2 = (new Route('/api/users/v:apiversion/flights', function () {},['apiversion' => '[\w]+']))->setMethods([Request::METHOD_GET]);
         $table->appendRoute($getFlightsRoute2);
 
         //It matches the first
@@ -159,7 +159,7 @@ class TableTest extends TestCase
         $this->assertSame($getFlightsRoute2, $res[0]);
 
         //Two different routes on the same path with the same requirements, same methods but with different handlers
-        $getFlightsRoute3 = (new Route('/api/users/v:apiversion/flights', function(){/* handler 2 */},['apiversion' => '[\w]+']))->setMethods([Request::METHOD_GET]);
+        $getFlightsRoute3 = (new Route('/api/users/v:apiversion/flights', function () {/* handler 2 */},['apiversion' => '[\w]+']))->setMethods([Request::METHOD_GET]);
         $table->appendRoute($getFlightsRoute3);
 
         $res = $table->getMatchedRoutes(Request::METHOD_GET, '/api/users/version2/flights');

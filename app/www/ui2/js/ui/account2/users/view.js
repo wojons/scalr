@@ -41,6 +41,118 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
         firstReconfigure = false;
     };
 
+    var actionHandler = function(action, singleRecord) {
+        var actionMessages = {
+                'delete': ['Delete selected user(s): %s ?', 'Deleting selected users(s) ...'],
+                activate: ['Activate selected user(s): %s ?', 'Activating selected users(s) ...'],
+                deactivate: ['Deactivate selected user(s): %s ?', 'Deactivating selected users(s) ...']
+            },
+            selModel = grid.getSelectionModel(),
+            ids = [],
+            emails = [],
+            request = {},
+            successFn;
+        for (var i=0, records = singleRecord ? [singleRecord] : selModel.getSelection(), len=records.length; i<len; i++) {
+            ids.push(records[i].get('id'));
+            emails.push(records[i].get('email'));
+        }
+
+        successFn = function (data) {
+            if (data.processed && data.processed.length) {
+                switch (action) {
+                    case 'activate':
+                    case 'deactivate':
+                        for (var i = 0, len = data.processed.length; i < len; i++) {
+                            var record = store.getById(data.processed[i]);
+                            record.set('status', action == 'deactivate' ? 'Inactive' : 'Active');
+                            selModel.deselect(record);
+                        }
+                        break;
+                    case 'delete':
+                        var recordsToDelete = [];
+                        for (var i = 0, len = data.processed.length; i < len; i++) {
+                            recordsToDelete.push(store.getById(data.processed[i]));
+                            selModel.deselect(recordsToDelete[i]);
+                        }
+                        store.remove(recordsToDelete);
+                        grid.view.refresh();
+                        break;
+                }
+            }
+
+            if (data.needUpdateFarmOwner) {
+                ids = [];
+                emails = [];
+
+                for (var i = 0, records = singleRecord ? [singleRecord] : selModel.getSelection(), len = records.length; i < len; i++) {
+                    ids.push(records[i].get('id'));
+                    emails.push(records[i].get('email'));
+                }
+
+                Scalr.Request({
+                    confirmBox: {
+                        msg: actionMessages[action][0],
+                        type: action,
+                        objects: emails,
+                        formWidth: 500,
+                        formValidate: true,
+                        form: {
+                            xtype: 'fieldset',
+                            items: [{
+                                xtype: 'displayfield',
+                                cls: 'x-form-field-warning',
+                                value: 'You try to remove owner of the farms. Please select new owner to replace.'
+                            }, {
+                                xtype: 'combo',
+                                fieldLabel: 'New Farm owner',
+                                forceSelection: true,
+                                anyMatch: true,
+                                queryMode: 'local',
+                                anchor: '100%',
+                                labelWidth: 120,
+                                store: {
+                                    fields: ['id', 'email'],
+                                    reader: 'json',
+                                    data: data.usersList
+                                },
+                                displayField: 'email',
+                                allowBlank: false,
+                                valueField: 'id',
+                                name: 'ownerId'
+                            }]
+                        }
+
+                    },
+                    processBox: {
+                        msg: actionMessages[action][1],
+                        type: action
+                    },
+                    success: successFn,
+                    params: {ids: Ext.encode(ids), action: action},
+                    url: '/account/users/xGroupActionHandler'
+                });
+            }
+        };
+
+        request = {
+            confirmBox: {
+                msg: actionMessages[action][0],
+                type: action,
+                objects: emails
+            },
+            processBox: {
+                msg: actionMessages[action][1],
+                type: action
+            },
+            params: {ids: ids, action: action},
+            success: successFn
+        };
+        request.url = '/account/users/xGroupActionHandler';
+        request.params.ids = Ext.encode(ids);
+
+        Scalr.Request(request);
+    };
+
     var store = Ext.create('Ext.data.ChainedStore', {
         source: storeUsers,
         filterOnLoad: true,
@@ -209,60 +321,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
             defaults: {
                 margin: '0 0 0 12',
                 handler: function() {
-                    var action = this.getItemId(),
-                        actionMessages = {
-                            'delete': ['Delete selected user(s): %s ?', 'Deleting selected users(s) ...'],
-                            activate: ['Activate selected user(s): %s ?', 'Activating selected users(s) ...'],
-                            deactivate: ['Deactivate selected user(s): %s ?', 'Deactivating selected users(s) ...']
-                        },
-                        selModel = grid.getSelectionModel(),
-                        ids = [],
-                        emails = [],
-                        request = {};
-                    for (var i=0, records = selModel.getSelection(), len=records.length; i<len; i++) {
-                        ids.push(records[i].get('id'));
-                        emails.push(records[i].get('email'));
-                    }
-
-                    request = {
-                        confirmBox: {
-                            msg: actionMessages[action][0],
-                            type: action,
-                            objects: emails
-                        },
-                        processBox: {
-                            msg: actionMessages[action][1],
-                            type: action
-                        },
-                        params: {ids: ids, action: action},
-                        success: function (data) {
-                            if (data.processed && data.processed.length) {
-                                switch (action) {
-                                    case 'activate':
-                                    case 'deactivate':
-                                        for (var i=0,len=data.processed.length; i<len; i++) {
-                                            var record = store.getById(data.processed[i]);
-                                            record.set('status', action=='deactivate'?'Inactive':'Active');
-                                            selModel.deselect(record);
-                                        }
-                                    break;
-                                    case 'delete':
-                                        var recordsToDelete = [];
-                                        for (var i=0,len=data.processed.length; i<len; i++) {
-                                            recordsToDelete.push(store.getById(data.processed[i]));
-                                            selModel.deselect(recordsToDelete[i]);
-                                        }
-                                        store.remove(recordsToDelete);
-                                        grid.view.refresh();
-                                    break;
-                                }
-                            }
-                        }
-                    };
-                    request.url = '/account/users/xGroupActionHandler';
-                    request.params.ids = Ext.encode(ids);
-
-                    Scalr.Request(request);
+                    actionHandler(this.getItemId());
                 }
             },
             items: [{
@@ -817,24 +876,7 @@ Scalr.regPage('Scalr.ui.account2.users.view', function (loadParams, moduleParams
                 cls: 'x-btn-red',
                 text: 'Delete',
                 handler: function() {
-                    var record = form.getForm().getRecord();
-                    Scalr.Request({
-                        confirmBox: {
-                            msg: 'Delete user ' + record.get('email') + ' ?',
-                            type: 'delete'
-                        },
-                        processBox: {
-                            msg: 'Deleting...',
-                            type: 'delete'
-                        },
-                        scope: this,
-                        url: '/account/users/xRemove',
-                        params: {userId: record.get('id')},
-                        success: function (data) {
-                            store.remove(record);
-                            grid.view.refresh();
-                        }
-                    });
+                    actionHandler('delete', form.getForm().getRecord());
                 }
             }]
         }]

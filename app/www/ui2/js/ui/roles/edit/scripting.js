@@ -45,9 +45,9 @@ Ext.define('Scalr.ui.RoleDesignerTabScripting', {
                     rolescripting.chefSettings = params['role']['chef'] || {};
                     rolescripting.setCurrentRoleOptions({
                         osFamily: roleOsFamily,
-                        chefAvailable: Ext.Array.contains(params['role']['behaviors'], 'chef')
+                        chefAvailable: Ext.Array.contains(params['role']['behaviors'], 'chef'),
+                        isScalarized: params['role']['isScalarized']
                     });
-                    rolescripting.roleOs = roleOsFamily;
 
                     if (params['role']['scripts'].length) {
                         scripts.push.apply(scripts, params['role']['scripts']);

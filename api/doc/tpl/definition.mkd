@@ -91,5 +91,5 @@ To filter on this field, use: `{{ prop_name }}=...`.
 
 ## Swagger Definition ##
 
-    {{ json.dumps(definition, indent=2).replace("\n", "\n    ") }}
+    {{ json.dumps(definition, sort_keys=True, indent=2).replace("\n", "\n    ") }}
 

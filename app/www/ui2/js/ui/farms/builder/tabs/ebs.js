@@ -141,7 +141,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Ebs', {
             width: 600,
             items: [{
                 xtype: 'combo',
-                store: Scalr.constants.ebsTypes,
+                store: Scalr.utils.getEbsTypes(),
                 valueField: 'id',
                 displayField: 'name',
                 editable: false,

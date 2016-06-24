@@ -2,7 +2,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
     var platforms = moduleParams.platforms || {},
         vpcLimits = Scalr.getGovernance('ec2', 'aws.vpc'),
         rootDeviceTypeFilterEnabled = true,
-        chefFieldsetEnabled = true,//Scalr.flags['betaMode'],
+        chefFieldsetEnabled = true,
         advancedFieldsetEnabled = Scalr.flags['betaMode'],
         result = {},
         behaviors,
@@ -13,30 +13,17 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
         };
 
     behaviors = [
-        {name: 'mysql2', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona', 'mariadb'], os:[{family: 'centos', version: /^7/i}]}},
-        {name: 'mariadb', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona','mysql2']}},
-        {name: 'postgresql', disable: {platform: ['gce'], behavior: ['redis', 'mongodb', 'percona', 'mysql2', 'mariadb']}},
-        {name: 'percona', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'mysql2', 'mariadb']}},
+        {name: 'mysql2', disable: {behavior: ['postgresql', 'redis', 'percona', 'mariadb'], os:[{family: 'centos', version: /^7/i}]}},
+        {name: 'mariadb', disable: {behavior: ['postgresql', 'redis', 'percona','mysql2']}},
+        {name: 'postgresql', disable: {platform: ['gce'], behavior: ['redis', 'percona', 'mysql2', 'mariadb']}},
+        {name: 'percona', disable: {behavior: ['postgresql', 'redis', 'mysql2', 'mariadb']}},
         {name: 'app', disable: {behavior:['www', 'tomcat']}},
         {name: 'tomcat', disable: {behavior:['app'], os:['oel', {family: 'ubuntu', version: ['10.04']}]}},
         {name: 'haproxy', disable: {behavior:['www']}},
         {name: 'www', disable: {behavior:['app', 'haproxy']}},
         {name: 'memcached'},
-        {name: 'redis', disable: {behavior: ['postgresql', 'mongodb', 'percona', 'mysql2', 'mariadb']}},
+        {name: 'redis', disable: {behavior: ['postgresql', 'percona', 'mysql2', 'mariadb']}},
         {name: 'rabbitmq', disable: {os: ['rhel', 'oel', 'redhat']}},
-        {name: 'mongodb', disable: {
-            platform: ['gce', 'rackspacengus', 'rackspacenguk'],
-            behavior: ['postgresql', 'redis', 'percona', 'mysql2', 'mariadb'],
-            os: [
-                {family: 'debian', version: /^8/i},
-                {family: 'ubuntu', version: ['15.04']},
-                {family: 'centos', version: /^7/i},
-                {family: 'rhel', version: /^7/i},
-                {family: 'redhat', version: /^7/i},
-                {family: 'amazon', version: /^2015/i}
-            ]
-        }},
-        //{name: 'mysqlproxy', addon: true, disable: {os: ['centos', 'oel', 'rhel']}},//{family: 'ubuntu', version: ['10.04']}
         {name: 'chef', addon: true, button: {pressed: true, toggle: Ext.emptyFn}}
     ];
 
@@ -947,7 +934,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                                     xtype: 'component',
                                     style: 'text-align: center',
                                     margin: '36 0 0',
-                                    html: '<span class="x-fieldset-subheader x-fieldset-subheader-no-text-transform">Are you sure want to cancel role creation?</span>'
+                                    html: '<span class="x-fieldset-subheader x-fieldset-subheader-no-text-transform">Are you sure want to cancel ' + moduleParams['server']['object'] + ' creation?</span>'
                                 },
                                 success: function() {
                                     Scalr.Request({
@@ -1284,6 +1271,9 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                     }
                     if (result.platform == 'ec2' && result.root_device_type == 'ebs' && image.hvm) {
                         state.hvm = 1;
+                        state.hvmOnly = Ext.isDefined(state.hvmOnly) ? state.hvmOnly : 1;
+                    } else {
+                        state.hvmOnly = 0;
                     }
                 }
             }
@@ -1309,13 +1299,19 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
         updateFiltersState: function() {
             var me = this,
                 state = this.getFiltersValues(),
-                compImages = panel.down('#images');
-
-            if (state.hvm) {
-                panel.down('#hvm').enable();
+                compImages = panel.down('#images'),
+                hvmButton = panel.down('#hvm');
+            
+            if (state.hvm && !state.hvmOnly) {
+                hvmButton.enable();
             } else {
-                panel.down('#hvm').toggle(false);
-                panel.down('#hvm').disable();
+                if (hvmButton.pressed != (state.hvmOnly ? true : false)) {
+                    hvmButton.toggle(state.hvmOnly ? true : false);
+                    hvmButton.disable();
+                    return;
+                } else {
+                    hvmButton.disable();
+                }
             }
 
             compImages.items.each(function() {
@@ -1339,7 +1335,7 @@ Scalr.regPage('Scalr.ui.roles.builder', function (loadParams, moduleParams) {
                                 this.toggle(false);
                                 var that = this;
                                 comp.items.each(function(){
-                                    if (this !== that && !this.disabled) {
+                                    if (this !== that) {
                                         this.toggle(true);
                                     }
                                 });

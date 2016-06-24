@@ -3,7 +3,7 @@ namespace Scalr\Service\Aws\CloudFront\DataType;
 
 use Scalr\Service\Aws\CloudFrontException;
 use Scalr\Service\Aws\CloudFront\AbstractCloudFrontDataType;
-use \DateTime;
+use DateTime;
 
 /**
  * DistributionData

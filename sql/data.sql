@@ -98,4 +98,4 @@ INSERT INTO `scaling_metrics` (`id`, `account_id`, `env_id`, `name`, `file_path`
 (3, NULL, NULL, 'URLResponseTime', NULL, NULL, NULL, 'Sensor', 'http', 0),
 (4, NULL, NULL, 'SQSQueueSize', NULL, NULL, NULL, 'Sensor', 'sqs', 0),
 (5, NULL, NULL, 'DateAndTime', NULL, NULL, NULL, 'DateTime', 'time', 0),
-(6, NULL, NULL, 'BandWidth', NULL, NULL, NULL, 'Sensor', 'bw', 0);
+(6, NULL, NULL, 'BandWidth', NULL, NULL, 'avg', 'Sensor', 'bw', 0);

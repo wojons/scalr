@@ -17,6 +17,11 @@ class Scalr_UI_Controller_Admin extends Scalr_UI_Controller
         self::loadController('Scripts')->defaultAction();
     }
 
+    public function aboutAction()
+    {
+        self::loadController('Core')->aboutAction();
+    }
+
     public function eventsAction()
     {
         self::loadController('Events', 'Scalr_UI_Controller_Scripts')->defaultAction();

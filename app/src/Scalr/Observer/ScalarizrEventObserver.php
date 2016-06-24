@@ -5,6 +5,8 @@ use Scalr\Model\Entity;
 
 class ScalarizrEventObserver extends AbstractEventObserver
 {
+    public $isScalarizrRequired = true;
+
     public function OnBeforeHostUp(\BeforeHostUpEvent $event)
     {
         try {

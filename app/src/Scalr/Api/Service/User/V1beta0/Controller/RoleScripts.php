@@ -14,7 +14,7 @@ use Scalr\Api\Service\User\V1beta0\Adapter\OrchestrationRules\RoleScriptAdapter;
 use Exception;
 
 /**
- * User/Version-1beta0/RoleScripts API Controller
+ * User/RoleScripts API Controller
  *
  * @author N.V.
  */

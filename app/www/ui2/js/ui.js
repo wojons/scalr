@@ -29,11 +29,15 @@ Ext.define('Ext.layout.container.Scalr', {
                     reload: true, // close window before show other one
                     modal: false, // mask prev window and show new one (false - don't mask, true - mask previous)
                     maximize: '' // maximize which sides (all, (max-height - default))
-                    // beforeClose: handler(callback) // return true if we can close form or false if we should engage user attention before close.
+                    // beforeClose: handler(callback, leavePageFlag) // return false if we can close form or true (or message) if we should engage user attention before close.
                 });
 
-                if (o.scalrOptions.modal)
+                if (o.scalrOptions.modal) {
                     o.addCls('x-panel-shadow');
+                    Ext.applyIf(o.scalrOptions, {
+                        closeOnEsc: true
+                    });
+                }
 
                 o.scalrDestroy = function () {
                     this.destroy();
@@ -78,6 +82,8 @@ Ext.define('Ext.layout.container.Scalr', {
                     };
                     o.on(listeners);
                 }
+                o.defaultFocusOrdered = o.defaultFocus || ['[isFormField]:focusable', 'button', 'component'];
+
             }, this);
         }
     },
@@ -296,7 +302,7 @@ Ext.define('Ext.layout.container.Scalr', {
 
             if (this.activeItem.scalrOptions.modal)
                 this.activeItem.el.setStyle({ 'z-index': this.zIndex });
-
+            this.activeItem.focus();
             return true;
         }
     },
@@ -481,10 +487,17 @@ Scalr.application.applyContext = function(context, onlyVars) {
         delete Scalr.user.uiStorage;
     }
 
+    if (Scalr.user.envId) {
+        Scalr.storage.set('system-environment-id', Scalr.user.envId, true);
+        Scalr.storage.set('system-environment-id', Scalr.user.envId); // also duplicate in localStorage
+    }
+
     this.suspendLayouts();
     this.getDockedComponent('globalWarning').hide();
     if (Scalr.user.userId) {
         this.createMenu(context['scope']);
+
+        this.initAnnouncements(Scalr.user.userId);
 
         if (Scalr.user.envId && Scalr.getPlatformConfigValue('ec2', 'autoDisabled')) {
             // TODO: rewrite, add component by call
@@ -494,6 +507,17 @@ Scalr.application.applyContext = function(context, onlyVars) {
     this.resumeLayouts(true);
 
     if (! onlyVars) {
+        if (Scalr.scope == 'environment') {
+            var url = Scalr.storage.get('system-environment-last-url', true);
+            if (url) {
+                history.replaceState(
+                    null, null, url
+                );
+                Scalr.state.redirectDashboardIfLoadFailed = true;
+                Scalr.storage.clear('system-environment-last-url', true);
+            }
+        }
+
         window.onhashchange(true);
     }
 
@@ -509,8 +533,6 @@ Scalr.application.changeScope = function(scope, envId) {
     if (scope == 'environment') {
         envId = envId || Scalr.storage.get('system-environment-id', true);
         headers['X-Scalr-Envid'] = envId;
-        Scalr.storage.set('system-environment-id', envId, true);
-        Scalr.storage.set('system-environment-id', envId); // also duplicate in localStorage
     }
 
     Scalr.scope = scope;
@@ -685,14 +707,23 @@ Scalr.application.createMenu = function(scope) {
         [ 'Users', 'members', '#/account/users', ['account'], !Scalr.utils.canManageAcl()],
         [ 'ACL', 'acl', '#/account/acl', ['account'], !Scalr.utils.canManageAcl()],
         '-',
-        [ 'Farms', 'farms', '#/farms', ['environment'], !(Scalr.isAllowed('FARMS') || Scalr.isAllowed('OWN_FARMS') || Scalr.isAllowed('TEAM_FARMS')), { addLinkHref: '#/farms/designer', menuCls: 'x-topmenu-farms' }, farms ],
-        [ 'Roles', 'roles', '#/admin/roles', ['scalr'], false, { addLinkHref: '#/admin/roles/edit' }],
-        [ 'Roles', 'roles', '#/account/roles', ['account'], !Scalr.isAllowed('ROLES_ACCOUNT'), Scalr.isAllowed('ROLES_ACCOUNT', 'manage') ? { addLinkHref: '#/account/roles/edit' } : null],
+        [ 'Farms', 'farms', '#/farms', ['environment'], !(Scalr.isAllowed('FARMS') || Scalr.isAllowed('OWN_FARMS') || Scalr.isAllowed('TEAM_FARMS')), { addLinkHref: Scalr.isAllowed('OWN_FARMS', 'create') ? '#/farms/designer' : null, menuCls: 'x-topmenu-farms' }, farms ],
+        [ 'Roles', 'roles', '#/admin/roles', ['scalr'], false, { addLinkHref: '#/admin/roles/edit' },[
+            [ 'Roles Library', 'library', '#/admin/roles', ['scalr']],
+            [ 'New Role', 'new', '#/admin/roles/edit', ['scalr']],
+            [ 'Role Categories', 'roles', '#/admin/roles/categories', ['scalr']],
+        ]],
+        [ 'Roles', 'roles', '#/account/roles', ['account'], !Scalr.isAllowed('ROLES_ACCOUNT'), Scalr.isAllowed('ROLES_ACCOUNT', 'manage') ? { addLinkHref: '#/account/roles/edit' } : null, [
+            [ 'Roles Library', 'library', '#/account/roles', ['account']],
+            [ 'New Role', 'new', '#/account/roles/edit', ['account'], !Scalr.isAllowed('ROLES_ENVIRONMENT', 'manage')],
+            [ 'Role Categories', 'roles', '#/account/roles/categories', ['account']],
+        ]],
         [ 'Roles', 'roles', '#/roles', ['environment'], !Scalr.isAllowed('ROLES_ENVIRONMENT'), Scalr.isAllowed('ROLES_ENVIRONMENT', 'manage') ? { addLinkHref: environmentNewRoleButtonHref } : null, [
             [ 'Roles Library', 'library', '#/roles', ['environment']],
             [ 'New Role', 'new', '#/roles/edit', ['environment'], !Scalr.isAllowed('ROLES_ENVIRONMENT', 'manage')],
             [ 'Role Builder', 'manage', '#/roles/builder', ['environment'], !(Scalr.isAllowed('ROLES_ENVIRONMENT', 'manage') && Scalr.isAllowed('IMAGES_ENVIRONMENT', 'build'))],
-            [ 'Create Role from non-Scalr Server', 'import', '#/roles/import', ['environment'], !(Scalr.isAllowed('ROLES_ENVIRONMENT', 'manage') && Scalr.isAllowed('IMAGES_ENVIRONMENT', 'import'))]
+            [ 'Create Role from non-Scalr Server', 'import', '#/roles/import', ['environment'], !(Scalr.isAllowed('ROLES_ENVIRONMENT', 'manage') && Scalr.isAllowed('IMAGES_ENVIRONMENT', 'import'))],
+            [ 'Role Categories', 'roles', '#/roles/categories', ['environment']],
         ]],
         [ 'Images', 'images', '#/admin/images', ['scalr'], false, { addLinkHref: '#/admin/images/register' }],
         [ 'Images', 'images', '#/account/images', ['account'], !Scalr.isAllowed('IMAGES_ACCOUNT'), Scalr.isAllowed('IMAGES_ACCOUNT', 'manage') ? { addLinkHref: '#/account/images/register' } : null],
@@ -707,17 +738,20 @@ Scalr.application.createMenu = function(scope) {
         [ 'Scripts', 'scripts', '#/scripts', ['environment'], !Scalr.isAllowed('SCRIPTS_ENVIRONMENT'), { addLinkHref: '#/scripts?new=true' }],
         [ 'Scripts', 'scripts', '#/admin/scripts', ['scalr'], false, { addLinkHref: '#/admin/scripts?new=true' }],
         [ 'Scripts', 'scripts', '#/account/scripts', ['account'], !Scalr.isAllowed('SCRIPTS_ACCOUNT'), { addLinkHref: '#/account/scripts?new=true' }],
-        [ 'Logs', 'logs', '', ['environment'], !(Scalr.isAllowed('LOGS_EVENT_LOGS') || Scalr.isAllowed('LOGS_SYSTEM_LOGS') || Scalr.isAllowed('LOGS_API_LOGS') || Scalr.isAllowed('LOGS_SCRIPTING_LOGS')), {}, [
+        [ 'Logs', 'logs', '', ['environment'], !(Scalr.isAllowed('LOGS_EVENT_LOGS') || Scalr.isAllowed('LOGS_SYSTEM_LOGS') || Scalr.isAllowed('LOGS_API_LOGS') || Scalr.isAllowed('LOGS_ORCHESTRATION_LOGS')), {}, [
             [ 'Event log', 'events', '#/logs/events', ['environment'], !Scalr.isAllowed('LOGS_EVENT_LOGS')],
             [ 'System log', 'logs', '#/logs/system', ['environment'], !Scalr.isAllowed('LOGS_SYSTEM_LOGS')],
-            [ 'Scripting log', 'logs', '#/logs/scripting', ['environment'], !Scalr.isAllowed('LOGS_SCRIPTING_LOGS')],
+            [ 'Orchestration log', 'logs', '#/logs/orchestration', ['environment'], !Scalr.isAllowed('LOGS_ORCHESTRATION_LOGS')],
             [ 'API Log', 'logs', '#/logs/api', ['environment'], !Scalr.isAllowed('LOGS_API_LOGS')]
         ]],
         [ 'SSH Keys', 'sshkeys', '#/sshkeys', ['environment'], !Scalr.isAllowed('SECURITY_SSH_KEYS')],
         '-',
-        [ 'DNS Zones', 'dnszones', '#/dnszones', ['environment'], !Scalr.isAllowed('DNS_ZONES'), { addLinkHref: '#/dnszones/create' }],
-        [ 'Default DNS Records', 'dnszones', '#/dnszones/defaultRecords', ['scalr']],
+        [ 'DNS Zones', 'dnszones', '#/dnszones', ['environment'], !Scalr.isAllowed('DNS_ZONES') || !Scalr.flags['dnsGlobalEnabled'], { addLinkHref: '#/dnszones/create' }],
+        [ 'Default DNS Records', 'dnszones', '#/dnszones/defaultRecords', ['scalr'], !Scalr.flags['dnsGlobalEnabled']],
         [ 'Governance', 'governance', '#/core/governance', ['environment'], !Scalr.isAllowed('GOVERNANCE_ENVIRONMENT')],
+        [ 'Discovery manager', 'discoverymanager', '', ['environment'], false, {}, [
+            [ 'Servers', 'orphanedservers', '#/discoverymanager/servers', ['environment'], !Scalr.isAllowed('DISCOVERY_SERVERS') ]
+        ]],
         [ 'Cost Analytics', 'analytics', '#/analytics/dashboard', ['environment'], !Scalr.flags['analyticsEnabled'] || !Scalr.isAllowed('ANALYTICS_ENVIRONMENT')],
         [ 'Cost Analytics', 'analytics', '#/account/analytics/environments', ['account'], !Scalr.flags['analyticsEnabled'] || !Scalr.isAllowed('ANALYTICS_ACCOUNT')],
         [ 'Cost Analytics', 'analytics', '#/admin/analytics/dashboard', ['scalr'], !Scalr.flags['analyticsEnabled']],
@@ -737,6 +771,9 @@ Scalr.application.createMenu = function(scope) {
         [ 'Chef servers', 'chef', '#/admin/services/chef/servers', ['scalr'] ],
         [ 'Chef servers', 'chef', '#/services/chef/servers', ['environment'], !Scalr.isAllowed('SERVICES_CHEF_ENVIRONMENT') ],
         [ 'Chef servers', 'chef', '#/account/services/chef/servers', ['account'], !Scalr.isAllowed('SERVICES_CHEF_ACCOUNT') ],
+        '-',
+        [ 'Announcements', 'announcements', '#/admin/announcements', ['scalr'], false ],
+        [ 'Announcements', 'announcements', '#/account/announcements', ['account'], !Scalr.isAllowed('ANNOUNCEMENTS') ],
         '-'
     ];
 
@@ -744,7 +781,6 @@ Scalr.application.createMenu = function(scope) {
         definitions.push(
             '-',
             [ 'AWS', 'aws', '', ['environment'], false, {}, [
-                [ 'Orphaned servers', 'orphanedservers', '#/servers/orphaned?platform=ec2', ['environment'], !Scalr.isAllowed('ORPHANED_SERVERS') ],
                 [ 'S3 & Cloudfront', 's3', '#/tools/aws/s3/manageBuckets', ['environment'], !Scalr.isAllowed('AWS_S3') ],
                 [ 'IAM SSL Certificates', 'sslcertificates', '#/tools/aws/iam/servercertificates', ['environment'], !Scalr.isAllowed('AWS_IAM') ],
                 [ 'Security groups', 'security', '#/security/groups?platform=ec2', ['environment'], !Scalr.isAllowed('SECURITY_SECURITY_GROUPS') ],
@@ -798,15 +834,6 @@ Scalr.application.createMenu = function(scope) {
         }
     });
 
-    if (Scalr.isPlatformEnabled('rackspace')) {
-        definitions.push(
-            '-',
-            [ 'Rackspace', 'rackspace', '', ['environment'], false, {}, [
-                [ 'Limits status', 'limits', '#/tools/rackspace/limits', ['environment'] ]
-            ]]
-        );
-    }
-
     if (Scalr.isPlatformEnabled('gce')) {
         definitions.push(
             '-',
@@ -826,18 +853,6 @@ Scalr.application.createMenu = function(scope) {
         [ 'Apache Virtual Hosts', 'apachevhosts', '#/services/apache/vhosts', ['environment'], !Scalr.isAllowed('SERVICES_APACHE'), Scalr.isAllowed('SERVICES_APACHE', 'manage') ? { addLinkHref: '#/services/apache/vhosts/create' } : null],
         [ 'DB Backups', 'dbbackups', '#/db/backups', ['environment'], !Scalr.isAllowed('DB_BACKUPS')]
     );
-
-    if (Scalr.flags['showDeprecatedFeatures']) {
-        definitions.push(
-            '-',
-            [ 'Deployments', 'deployments', '', ['environment'], !(Scalr.isAllowed('DEPLOYMENTS_APPLICATIONS') || Scalr.isAllowed('DEPLOYMENTS_SOURCES') || Scalr.isAllowed('DEPLOYMENTS_TASKS')), {}, [
-                [ 'Deployments', 'deployments', '#/dm/tasks/view', ['environment'], !Scalr.isAllowed('DEPLOYMENTS_TASKS')],
-                [ 'Sources', 'dmsources', '#/dm/sources/view', ['environment'], !Scalr.isAllowed('DEPLOYMENTS_SOURCES')],
-                [ 'Applications', 'dmapplications', '#/dm/applications/view', ['environment'], !Scalr.isAllowed('DEPLOYMENTS_APPLICATIONS')]
-            ]],
-            [ 'Server Config Presets', 'presets', '#/services/configurations/presets', ['environment'], !Scalr.isAllowed('DB_SERVICE_CONFIGURATION')]
-        );
-    }
 
     mainMenu = convertDefinition(definitions, scope);
     mainMenu.unshift({
@@ -963,6 +978,14 @@ Scalr.application.createMenu = function(scope) {
         if (item['stateId'] == 'grid-account-roles' && item['href'] == '#/account/roles' && item['text'] == 'ACL') {
             item['href'] = '#/account/acl';
             item['stateId'] = 'grid-account-acl';
+        }
+
+        // we moved /logs/scripting to /logs/orchestration in 5.11.12 on 14 Mar 2016
+        // remove this code after 6 months
+        if (item['stateId'] == 'grid-logs-scripting-view' && item['href'] == '#/logs/scripting' && item['text'] == 'Scripting Log') {
+            item['href'] = '#/logs/orchestration';
+            item['stateId'] = 'grid-logs-orchestration-view';
+            item['text'] = 'Orchestration Log';
         }
 
         favorites.push({
@@ -1339,115 +1362,38 @@ Scalr.application.createMenu = function(scope) {
         listeners: {
             afterrender: function() {
                 var me = this;
+
                 me.newsCounter = Ext.DomHelper.append(me.el, {tag: 'div', cls: 'x-menu-changelog-news-counter', hidden: true}, true);
-                me.getChangelog();
             }
         },
 
         handler: function () {
-            var me = this;
-
-            me.showChangelog();
-            me.resetNewsCounter();
+            this.showChangelog();
         },
 
         updateNewsCounter: function(newsCount) {
-            var me = this;
-            me.newsCounter.update(newsCount);
-            me.newsCounter.setVisible(!! newsCount);
-        },
+            var counter = this.newsCounter;
 
-        resetNewsCounter: function () {
-            var me = this;
-
-            Scalr.Request({
-                url: '/core/xGetChangeLog?resetCounter=true',
-                success: function () {
-                    Scalr.state.changelogData['countNew'] = 0;
-                    me.updateNewsCounter(0);
-                }
-            });
-        },
-
-        getChangelog: function () {
-            var me = this;
-
-            if (Scalr.state.changelogData && ((Date.now() - Scalr.state.changelogData['tm']) > 3600)) {
-                me.updateNewsCounter(Scalr.state.changelogData['countNew']);
-            } else {
-                Scalr.Request({
-                    method: 'GET',
-                    url: '/core/xGetChangeLog',
-                    success: function (data) {
-                        // fill required min 5 values
-                        for (var i = 0, len = 5 - data['data'].length; i < len; i++) {
-                            data['data'].push({});
-                        }
-
-                        Scalr.state.changelogData = data;
-                        me.updateNewsCounter(data['countNew']);
-                    }
-                });
-            }
+            counter.update(newsCount);
+            counter.setVisible(!! newsCount);
         },
 
         showChangelog: function () {
-            var me = this;
+            var view = Ext.create('Scalr.ui.AnnouncementsView', {client: 'popup'});
 
             Scalr.utils.Window({
-                title: 'What\'s new in Scalr <div style="text-transform: none; font: normal 14px/20px OpenSansRegular,Arial,sans-serif;">' +
-                    '<a href="http://www.scalr.com/scalr-product-blog" target="_blank">Sign up</a>' +
-                    '<span> for email notifications from the Product Blog.</span>' +
-                    '</div>',
+                title: 'What\'s new in Scalr',
                 width: 800,
                 closable: true,
-                //plugins: ['bgiframe'],
-                layout: {
-                    type: 'vbox',
-                    align: 'stretch'
-                },
-
-                items: [{
-                    xtype: 'dataview',
-                    scrollable: 'vertical',
-                    cls: 'x-menu-changelog-grid',
-                    flex: 1,
-                    disableSelection: true,
-                    store: {
-                        fields: ['text', 'url', 'time', 'timestamp', 'new'],
-                        proxy: 'object',
-                        data: Scalr.state.changelogData['data']
-                    },
-                    itemSelector: 'x-menu-changelog-div',
-                    tpl: [
-                        '<tpl for=".">',
-                            '<div class="x-menu-changelog-div">',
-                                '<div class="x-menu-changelog-desc">{time}</div>',
-                                '<div>' +
-                                    '<a href="{url}" target="_blank"><span class="x-menu-changelog-message-slim">{text}</span></a>' +
-                                    '<tpl if="new"><span style="margin-left: 5px; cursor: pointer;" class="x-menu-changelog-info">New</span></tpl>' +
-                                '</div>',
-                            '</div>',
-                        '</tpl>'
-                    ],
-                    listeners: {
-                        itemclick: function (view, record, item, index, e) {
-                            var target = e.getTarget();
-
-                            if (target.className === 'x-menu-changelog-message-slim') {
-                                if (typeof _gaq !== 'undefined') {
-                                    _gaq.push(['_trackEvent', 'ProductBlog', 'Open', target.innerHTML]);
-                                }
-                            }
-                        }
-                    }
-                }],
+                layout: 'fit',
+                items: [view],
 
                 listeners: {
                     destroy: function () {
-                        Ext.each(Scalr.state.changelogData['data'], function (record) {
-                            record['new'] = false;
-                        });
+                        var util = Scalr.utils.announcement;
+
+                        util.setCounter = true;
+                        util.resetNew();
                     }
                 }
             });
@@ -1464,15 +1410,17 @@ Scalr.application.createMenu = function(scope) {
                     text: 'Wiki',
                     href: Scalr.flags['wikiUrl'],
                     iconCls: 'x-topmenu-icon-wiki',
-                    hrefTarget: '_blank'
+                    hrefTarget: '_blank',
+                    hidden: !Scalr.flags['wikiUrl']
                 }, {
                     text: 'Support',
                     href: Scalr.flags['supportUrl'],
                     iconCls: 'x-topmenu-icon-support',
-                    hrefTarget: '_blank'
+                    hrefTarget: '_blank',
+                    hidden: !Scalr.flags['supportUrl']
                 }, {
                     text: 'About Scalr',
-                    href: '#/core/about',
+                    href: '#' + (Scalr.utils.getUrlPrefix() || '/core')  + '/about',
                     iconCls: 'x-topmenu-icon-info'
                 }]
             }
@@ -1553,6 +1501,19 @@ Scalr.application.createMenu = function(scope) {
     ct.show();
 };
 
+Scalr.application.initAnnouncements = function (userId) {
+    var util = Scalr.utils.announcement;
+
+    if (userId) {
+        if (util.userId != userId) {
+            util.clear();
+        }
+        util.init(userId).start(325000);
+    } else {
+        util.clear().stop();
+    }
+};
+
 Ext.getWin().on('click', function(e) {
     if (e.target && e.target.tagName == 'A') {
         Scalr.state.pageHrefWasClicked = true;
@@ -1589,7 +1550,7 @@ window.onhashchange = function (e) {
         if (Scalr.application.layout.firstRun) {
             Scalr.application.layout.setActiveItem(Scalr.application.getComponent('blank'));
         }
-        Scalr.utils.authWindow.show();
+        Scalr.utils.authWindow.showIfHidden();
         return;
     }
 
@@ -1624,7 +1585,7 @@ window.onhashchange = function (e) {
             param = Ext.urlDecode(h[1]);
 
         if (link == '' || link == '/' || link == '/guest/login') {
-            document.location.href = Scalr.flags.needEnvConfig ? '#/account/dashboard' : '#/dashboard';
+            document.location.href = Scalr.scope === 'scalr' ? '#/admin/dashboard' : Scalr.flags.needEnvConfig ? '#/account/dashboard' : '#/dashboard';
             return;
         }
     }
@@ -1654,13 +1615,12 @@ window.onhashchange = function (e) {
         return;
     }
 
-    // check beforeClose
     if (!Scalr.state.pageOpenModalWindow && Scalr.application.layout.activeItem && Scalr.application.layout.activeItem.scalrOptions && Ext.isFunction(Scalr.application.layout.activeItem.scalrOptions.beforeClose)) {
         var comp = Scalr.application.layout.activeItem, callback = function() {
             Scalr.event.fireEvent('close');
         };
 
-        if (!comp.scalrOptions.beforeClose.call(comp, callback)) {
+        if (comp.scalrOptions.beforeClose.call(comp, callback)) {
             if (e && e.oldURL) {
                 returnToOldUrl(e.oldURL);
             }
@@ -1672,9 +1632,16 @@ window.onhashchange = function (e) {
     // we are ready to move, let's check scope before
     var linkScopeAccount = link.substring(0, 9) == '/account/';
     if (Scalr.scope == 'environment' && linkScopeAccount) {
+        if (e.oldURL && e.oldURL.indexOf('#') != -1) {
+            Scalr.storage.set('system-environment-last-url', e.oldURL.substring(e.oldURL.indexOf('#')), true);
+        }
+
         Scalr.application.changeScope('account');
         return;
     } else if (Scalr.scope == 'account' && !linkScopeAccount || environmentId) {
+        if (environmentId && Scalr.scope == 'environment' && e.oldURL && e.oldURL.indexOf('#') != -1) {
+            Scalr.storage.set('system-environment-last-url', e.oldURL.substring(e.oldURL.indexOf('#')), true);
+        }
         Scalr.application.changeScope('environment', environmentId);
         return;
     }
@@ -1756,6 +1723,9 @@ window.onhashchange = function (e) {
             width: 500,
             cls: 'x-panel-shadow x-panel-confirm',
             loadingErrorWindow: true,
+            onEsc: function() {
+                this.down('#back').handler();
+            },
             items: [{
                 xtype: 'component',
                 cls: 'x-panel-confirm-message x-panel-confirm-message-multiline',
@@ -1794,6 +1764,7 @@ window.onhashchange = function (e) {
                     }
                 }, {
                     xtype: 'button',
+                    itemId: 'back',
                     text: 'Back',
                     height: 32,
                     width: 130,
@@ -1820,6 +1791,7 @@ window.onhashchange = function (e) {
         params: param,
         success: function (data, response, options) {
             Scalr.state.pageChangeInProgressRequest = false;
+            Scalr.state.redirectDashboardIfLoadFailed = false;
             Scalr.state.pageOpenModalWindow = '';
 
             try {
@@ -1942,19 +1914,11 @@ window.onhashchange = function (e) {
                         }
                     }
 
-                    if (data.moduleRequiresMain.length) {
-                        Ext.Loader.loadScalrScriptList(data.moduleRequiresMain, function() {
-                            if (data.moduleRequires.length) {
-                                Ext.Loader.loadScalrScriptList(data.moduleRequires, function() {
-                                    loadModuleData(c, param, data);
-                                });
-                            } else {
-                                loadModuleData(c, param, data);
-                            }
+                    Ext.Loader.loadScalrScriptList(data.moduleRequiresMain, function() {
+                        Ext.Loader.loadScalrScriptList(data.moduleRequires, function() {
+                            loadModuleData(c, param, data);
                         });
-                    } else {
-                        loadModuleData(c, param, data);
-                    }
+                    });
                 } else {
                     loadModuleData(c, param, data);
                 }
@@ -1972,10 +1936,19 @@ window.onhashchange = function (e) {
 
             if (data && data.errorMessage) {
                 message = data.errorMessage;
+                if (Scalr.state.redirectDashboardIfLoadFailed) {
+                    Scalr.state.redirectDashboardIfLoadFailed = false;
+                    finishChange();
+                    history.replaceState(
+                        null, null, '#/dashboard'
+                    );
+                    window.onhashchange(true);
+                    return;
+                }
             } else if (response.status == 403) {
                 Scalr.state.userNeedLogin = true;
                 Scalr.state.userNeedRefreshPageAfter = true;
-                Scalr.utils.authWindow.show();
+                Scalr.utils.authWindow.showIfHidden();
             } else if (response.status == 404) {
                 message = 'Page not found.';
             } else if (response.timedout == true) {
@@ -2020,12 +1993,27 @@ Scalr.Init = function (context) {
 
     new Ext.util.KeyMap(Ext.getBody(), [{
         key: Ext.event.Event.ESC,
-        fn: function () {
-            if (Scalr.state['pageSuspend'] == false && Scalr.application.layout.activeItem.scalrOptions.modal == true) {
-                // ESC event cancel XMLHTTPRequest, but we don't want to cancel ESC event, so just make some timeout before close page
-                Ext.Function.defer(function() {
-                    Scalr.event.fireEvent('close');
-                }, 50);
+        fn: function (key, e) {
+            var boxOnTop = false;
+            Ext.WindowMgr.eachTopDown(function(win) {
+                if (win.itemId === 'proccessBox') {
+                    e.preventDefault();//submitting form with file input extjs creates hidden form and pressing ESC may abort the request
+                    boxOnTop = true;
+                    return false;
+                } else if (win.itemId === 'box') {
+                    win.onEsc();
+                    boxOnTop = true;
+                    return false;
+                }
+            });
+            if (Scalr.state['pageSuspend'] == false && Scalr.application.layout.activeItem) {
+                var scalrOptions = Scalr.application.layout.activeItem.scalrOptions;
+                if (scalrOptions.modal == true && scalrOptions.closeOnEsc && !boxOnTop) {
+                    // ESC event cancel XMLHTTPRequest, but we don't want to cancel ESC event, so just make some timeout before close page
+                    Ext.Function.defer(function() {
+                        Scalr.event.fireEvent('close');
+                    }, 50);
+                }
             }
         }
     }]);
@@ -2046,15 +2034,25 @@ Scalr.Init = function (context) {
         });
     };
 
-    /*window.onbeforeunload = function (e) {
-        var message = "Where are you gone?";
-        e = e || window.event;
+    window.onbeforeunload = function (e) {
+        var comp = Scalr.application.layout.activeItem, result;
 
-        if (e)
-            e.returnValue = message;
+        if (comp && comp.scalrOptions && Ext.isFunction(comp.scalrOptions.beforeClose)) {
+            result = comp.scalrOptions.beforeClose.call(comp, Ext.emptyFn, true);
 
-        return message;
-    };*/
+            if (result === false) {
+                return;
+            }
+
+            e = e || window.event;
+
+            if (e) {
+                e.returnValue = result;
+            }
+
+            return result;
+        }
+    };
 
     window.onerror = function (message, file, lineno, column, err) {
         if (Ext.isDefined(err)) {

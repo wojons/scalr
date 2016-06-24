@@ -1028,12 +1028,7 @@ Ext.define('Scalr.ui.ProxySettingsBackend', {
                     width: 100,
                     margin: '0 6 0 28',
                     value: '',
-                    store: [['','Auto'],['public','Public'],['private','Private']],
-                    plugins: {
-                        ptype: 'fieldicons',
-                        position: 'outer',
-                        icons: [{id: 'szrversion', tooltipData: {version: '2.11.6'}}]
-                    }
+                    store: [['','Auto'],['public','Public'],['private','Private']]
                 },{
                     xtype: 'label',
                     text: 'upstream IPs'

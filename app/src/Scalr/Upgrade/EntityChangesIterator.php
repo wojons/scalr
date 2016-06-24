@@ -2,7 +2,7 @@
 
 namespace Scalr\Upgrade;
 
-use \FilterIterator;
+use FilterIterator;
 
 /**
  * EntityChangesIterator

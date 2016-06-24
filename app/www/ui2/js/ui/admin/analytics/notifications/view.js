@@ -305,6 +305,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.notifications.view', function (loadParam
                 },{
                     xtype: 'statuscolumn',
                     text: 'Status',
+                    dataIndex: 'status',
                     statustype: 'costanalyticsnotification',
                     resizable: false,
                     width: 90,
@@ -570,6 +571,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.notifications.view', function (loadParam
                 },{
                     xtype: 'statuscolumn',
                     text: 'Status',
+                    dataIndex: 'status',
                     statustype: 'costanalyticsnotification',
                     resizable: false,
                     width: 90,

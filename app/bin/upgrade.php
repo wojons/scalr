@@ -91,3 +91,20 @@ $upgrade = new UpgradeHandler($options);
 if (!$upgrade->run()) {
     exit (1);
 }
+
+$scalrInfo = Scalr::getContainer()->version();
+
+try {
+    Scalr::getDb()->Execute("
+        REPLACE `scalr_hosts`
+        SET `host` = ?, `version` = ?, `edition` = ?, `git_commit` = ?, `git_commit_added` = ?
+    ",[
+        php_uname("n"),
+        $scalrInfo['version'],
+        $scalrInfo['edition'],
+        empty($scalrInfo['gitRevision']) ? null : $scalrInfo['gitRevision'],
+        empty($scalrInfo['gitDate']) || ($gts = strtotime($scalrInfo['gitDate'])) === false ?  null : date("Y-m-d H:i:s", $gts)
+    ]);
+} catch (Exception $e) {
+    Scalr::logException($e);
+}

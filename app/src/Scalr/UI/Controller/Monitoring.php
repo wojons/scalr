@@ -10,7 +10,7 @@ class Scalr_UI_Controller_Monitoring extends Scalr_UI_Controller
      */
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isFarmAllowed(null, Acl::PERM_FARMS_STATISTICS);
+        return parent::hasAccess() && $this->request->isAllowed([Acl::RESOURCE_FARMS, Acl::RESOURCE_TEAM_FARMS, Acl::RESOURCE_OWN_FARMS], Acl::PERM_FARMS_STATISTICS);
     }
 
     public function defaultAction()
@@ -20,44 +20,51 @@ class Scalr_UI_Controller_Monitoring extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        $sql = "SELECT `id`, `name`, `hash` FROM farms WHERE env_id = ? AND status = ?";
+        $sql = "SELECT `id`, `name`, `hash` FROM farms f WHERE env_id = ? AND status = ? AND " . $this->request->getFarmSqlQuery(Acl::PERM_FARMS_STATISTICS);
         $args = [$this->getEnvironmentId(), FARM_STATUS::RUNNING];
-        list($sql, $args) = $this->request->prepareFarmSqlQuery($sql, $args, '', Acl::PERM_FARMS_STATISTICS);
         $farms = $this->db->GetAll($sql, $args);
 
         $conf = $this->getContainer()->config->get('scalr.load_statistics.connections.plotter');
 
         $children = array();
         foreach ($farms as $farm) {
-            $farm['roles'] = $this->db->GetAll("SELECT `id`, `alias` AS `name` FROM `farm_roles` WHERE farmid = ?", [$farm['id']]);
+            $farm['roles'] = $this->db->GetAll("
+                SELECT fr.`id`, fr.`alias` AS `name`, r.`is_scalarized` AS isScalarized
+                FROM `farm_roles` fr
+                INNER JOIN `roles` r ON fr.`role_id` = r.`id`
+                WHERE fr.`farmid` = ?
+            ", [$farm['id']]);
 
             $childrenRoles = array();
             foreach ($farm['roles'] as $role) {
-                $role['servers'] = $this->db->GetAll("SELECT `index`, `remote_ip`, `local_ip` FROM `servers` WHERE farm_roleid = ?", $role['id']);
-
                 $servers = array();
-                foreach ($role['servers'] as $serv) {
-                    $servers[] = array(
-                        'text' => '#' . $serv['index'] . ' (' . ($serv['remote_ip'] ? $serv['remote_ip'] : $serv['local_ip']) . ')',
-                        'leaf' => true,
-                        'checked' => false,
-                        'params' => array(
-                            'farmId' => $farm['id'],
-                            'farmName' => $farm['name'],
-                            'farmRoleId' => $role['id'],
-                            'farmRoleName' => $role['name'],
-                            'index' => $serv['index'],
-                            'hash' => $farm['hash']
-                        ),
-                        'value' => '#' . $serv['index'],
-                        'icon' => '/ui2/images/space.gif'
-                    );
+                if ($role['isScalarized'] == 1) {
+                    $role['servers'] = $this->db->GetAll("SELECT `index`, `remote_ip`, `local_ip` FROM `servers` WHERE farm_roleid = ?", $role['id']);
+
+                    foreach ($role['servers'] as $serv) {
+                        $servers[] = array(
+                            'text' => '#' . $serv['index'] . ' (' . ($serv['remote_ip'] ? $serv['remote_ip'] : $serv['local_ip']) . ')',
+                            'leaf' => true,
+                            'checked' => false,
+                            'params' => array(
+                                'farmId' => $farm['id'],
+                                'farmName' => $farm['name'],
+                                'farmRoleId' => $role['id'],
+                                'farmRoleName' => $role['name'],
+                                'index' => $serv['index'],
+                                'hash' => $farm['hash']
+                            ),
+                            'value' => '#' . $serv['index'],
+                            'icon' => '/ui2/images/space.gif'
+                        );
+                    }
                 }
 
                 $ritem = array(
                     'text' => $role['name'],
                     'leaf' => true,
                     'checked' => false,
+                    'isScalarized' => $role['isScalarized'],
                     'params' => array(
                         'farmId' => $farm['id'],
                         'farmName' => $farm['name'],

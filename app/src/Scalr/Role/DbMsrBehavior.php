@@ -43,12 +43,17 @@ class Scalr_Role_DbMsrBehavior extends Scalr_Role_Behavior
         if ($storageGeneration == 2) {
             if (in_array($this->behavior, array(ROLE_BEHAVIORS::PERCONA, ROLE_BEHAVIORS::MYSQL2, ROLE_BEHAVIORS::MARIADB)) &&
                 $master && $dbFarmRole->GetSetting(self::ROLE_NO_DATA_BUNDLE_FOR_SLAVES)) {
+                $farm = $dbFarmRole->GetFarmObject();
+                $role = $dbFarmRole->GetRoleObject();
                 \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
-                    $dbFarmRole->FarmID,
+                    !empty($dbFarmRole->FarmID) ? $dbFarmRole->FarmID : null,
                     sprintf("No suitable data bundle found for launching slaves on %s -> %s. Please perform data bundle on master to be able to launch slaves.",
-                        $dbFarmRole->GetFarmObject()->Name,
-                        $dbFarmRole->GetRoleObject()->name
-                    )
+                        !empty($farm->Name) ? $farm->Name : null,
+                        !empty($role->name) ? $role->name : null
+                    ),
+                    !empty($master->serverId) ? $master->serverId : null,
+                    !empty($master->envId) ? $master->envId : null,
+                    !empty($master->farmRoleId) ? $master->farmRoleId : null
                 ));
 
                 return Scalr_Scaling_Decision::NOOP;

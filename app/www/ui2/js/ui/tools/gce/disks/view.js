@@ -44,16 +44,19 @@ Scalr.regPage('Scalr.ui.tools.gce.disks.view', function (loadParams, moduleParam
         },
 
         columns: [
-            { header: "Used by", flex: 1, sortable: false, xtype: 'templatecolumn', tpl:
-                '<tpl if="farmId">' +
-                    '<a href="#/farms?farmId={farmId}" title="Farm {farmName}">{farmName}</a>' +
-                    '<tpl if="roleName">' +
-                        '&nbsp;&rarr;&nbsp;<a href="#/farms/{farmId}/roles/{farmRoleId}/view" title="Role {roleName}">' +
-                        '{roleName}</a> #<a href="#/servers?serverId={serverId}">{serverIndex}</a>' +
-                    '</tpl>' +
-                '</tpl>' +
-                '<tpl if="!farmId">&mdash;</tpl>'
-            },
+            { header: "Used by", flex: 1, sortable: false, xtype: 'templatecolumn', tpl: [
+                '<tpl if="farmId">',
+                    '<a href="#/farms?farmId={farmId}" title="Farm {farmName}">{farmName}</a>',
+                    '<tpl if="farmRoleName">',
+                        '&nbsp;&rarr;&nbsp;<a href="#/farms/{farmId}/roles/{farmRoleId}/view" title="Role {farmRoleName}">',
+                        '{farmRoleName}</a> #<a href="#/servers?serverId={serverId}">{serverIndex}</a>',
+                    '</tpl>',
+                '<tpl elseif="cloudServerId">',
+                    '<span style="color: gray">{cloudServerId}</span>',
+                '<tpl else>',
+                    '&mdash;',
+                '</tpl>'
+            ]},
             { header: "Persistent disk", flex: 1, dataIndex: 'id', sortable: true },
             { header: "Description", flex: 1, dataIndex: 'description', sortable: true },
             { header: "Date", width: 170, dataIndex: 'createdAt', sortable: true },

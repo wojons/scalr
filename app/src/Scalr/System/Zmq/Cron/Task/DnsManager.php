@@ -3,10 +3,10 @@ namespace Scalr\System\Zmq\Cron\Task;
 
 use ArrayObject, stdClass, DateTime, DateTimeZone, Exception;
 use Scalr\System\Zmq\Cron\AbstractTask;
-use \DNS_ZONE_STATUS;
-use \DBDNSZone;
-use \Scalr_Net_Dns_Bind_RemoteBind;
-use \Scalr_Net_Dns_Bind_Transports_LocalFs;
+use DNS_ZONE_STATUS;
+use DBDNSZone;
+use Scalr_Net_Dns_Bind_RemoteBind;
+use Scalr_Net_Dns_Bind_Transports_LocalFs;
 
 /**
  * DnsManager service

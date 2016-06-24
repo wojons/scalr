@@ -58,13 +58,13 @@ class VerizonObserver extends AbstractEventObserver
             }
 
         } catch (\Exception $e) {
-            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(
-                new \FarmLogMessage($event->DBServer->farmId, sprintf(
-                    _("Scalr was unable to open ports for server '%s': %s"),
-                    $event->DBServer->serverId,
+            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(new \FarmLogMessage(
+                $event->DBServer,
+                sprintf(_("Scalr was unable to open ports for server '%s': %s"),
+                    !empty($event->DBServer->serverId) ? $event->DBServer->serverId : null,
                     $e->getMessage()
-                ), $event->DBServer->serverId)
-            );
+                )
+            ));
         }
     }
 }

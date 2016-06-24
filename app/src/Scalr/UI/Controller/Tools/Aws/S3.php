@@ -149,7 +149,19 @@ class Scalr_UI_Controller_Tools_Aws_S3 extends Scalr_UI_Controller
         // It is important to sign request with the same location as the bucket
         $aws = $this->environment->aws($location);
 
-        $aws->s3->bucket->create($bucketName, $location);
+        try {
+            $aws->s3->bucket->create($bucketName, $location);
+        } catch (ClientException $e) {
+            if ($e->getErrorData() && $e->getErrorData()->getCode() == ErrorData::ERR_AUTHORIZATION_HEADER_MALFORMED &&
+                preg_match('/region\s+\'(.+?)\'\s+is\s+wrong.\s+expecting\s+\'(.+?)\'/', $e->getMessage(), $m) &&
+                in_array($m[2], $aws->getCloudLocations())) {
+                //The bucket already exists in another cloud location or even account.
+                //If it is another account correct error will be displayed.
+                $aws->s3->bucket->create($bucketName, $m[2]);
+            } else {
+                throw $e;
+            }
+        }
 
         $this->response->success('Bucket successfully created');
     }

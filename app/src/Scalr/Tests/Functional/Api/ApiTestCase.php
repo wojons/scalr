@@ -2,13 +2,12 @@
 
 namespace Scalr\Tests\Functional\Api;
 
-use BadMethodCallException;
 use Exception;
+use Scalr\Api\Service\User\V1beta0\Adapter\GlobalVariableAdapter;
 use Scalr\Api\DataType\ApiEntityAdapter;
 use Scalr\Api\Rest\ApiApplication;
 use Scalr\Api\Rest\Controller\ApiController;
 use Scalr\Api\Rest\Http\Request;
-use Scalr\Api\Service\User\V1beta0\Adapter\ScriptAdapter;
 use Scalr\Model\AbstractEntity;
 use Scalr\Model\Entity\Account\Environment;
 use Scalr\Model\Entity\Account\User;
@@ -16,6 +15,9 @@ use Scalr\Model\Entity\Account\User\ApiKeyEntity;
 use Scalr\Model\Entity\Image;
 use Scalr\Tests\TestCase;
 use Scalr_Governance;
+use Scalr\Logger;
+use InvalidArgumentException;
+use Scalr;
 
 /**
  * ApiTestCase
@@ -25,6 +27,8 @@ use Scalr_Governance;
  */
 class ApiTestCase extends TestCase
 {
+
+    const TEST_TYPE = TestCase::TEST_TYPE_API;
 
     /**
      * ID of the user which is used in the functional test
@@ -91,6 +95,14 @@ class ApiTestCase extends TestCase
     protected static $testData = [];
 
     /**
+     * List of logger what we should be excluded from debug output
+     * key is logger name and value is logger level
+     *
+     * @var array
+     */
+    protected static $loggerConfiguration = [];
+
+    /**
      * API version
      *
      * @var string
@@ -99,13 +111,13 @@ class ApiTestCase extends TestCase
 
     const API_NAMESPACE = '\Scalr\Api\Service\User';
 
-    const TEST_REMOTE_ADDR = '192.168.0.1';
+    const TEST_REMOTE_ADDR = '127.0.0.1';
 
     const TEST_SERVER_NAME = 'localhost';
 
     const TEST_SERVER_PORT = '80';
 
-    const TEST_CLIENT_IP = '192.168.0.1';
+    const TEST_CLIENT_IP = '127.0.0.1';
 
     const TEST_HTTP_HOST = 'localhost';
 
@@ -129,8 +141,6 @@ class ApiTestCase extends TestCase
     /**
      * Setups test user, environment and API key
      *
-     * @beforeClass
-     *
      * @throws \Scalr\Exception\ModelException
      */
     public static function setUpBeforeClass()
@@ -140,6 +150,10 @@ class ApiTestCase extends TestCase
 
         static::$testEnvId = \Scalr::config('scalr.phpunit.envid');
         static::$env = Environment::findPk(static::$testEnvId);
+
+        if (empty(static::$user) || empty(static::$env)) {
+            static::markTestIncomplete('Either test environment or user is invalid.');
+        }
 
         $apiKeyName = static::getTestName();
 
@@ -152,39 +166,65 @@ class ApiTestCase extends TestCase
         }
 
         static::$apiKeyEntity = $apiKeyEntity;
+
+        static::changeLoggerConfiguration();
     }
 
     /**
-     * Removes API key generated for test
+     * Change logger level and save current level
+     */
+    protected static function changeLoggerConfiguration()
+    {
+        if (!empty(static::$loggerConfiguration)) {
+            foreach (static::$loggerConfiguration as $logName => $level) {
+                /* @var $logger Logger */
+                $logger =  \Scalr::getContainer()->logger($logName);
+                static::$loggerConfiguration[$logName] = $logger->getLevel();
+                $logger->setLevel($level);
+            }
+        }
+    }
+
+    /**
+     * Removes API key and Entities generated for test
      *
-     * @afterClass
+     * @throws \Scalr\Exception\ModelException
      */
     public static function tearDownAfterClass()
     {
-        ksort(static::$testData, SORT_REGULAR);
-        foreach (static::$testData as $priority => $data) {
-            foreach ($data as $class => $ids) {
-                $ids = array_unique($ids, SORT_REGULAR);
+        foreach (array_reverse(static::$testData) as $rec) {
+            $class = $rec['class'];
+            $entry = $rec['pk'];
+            $initProperties = $rec['initProp'];
 
-                foreach ($ids as $entry) {
-                    if (!empty($entry)) {
-                        $entity = call_user_func_array([$class, 'findPk'], is_object($entry) ? [$entry] : (array) $entry);
+            $entity = new $class;
 
-                        if (!empty($entity)) {
-                            try {
-                                $entity->delete();
-                            } catch (Exception $e) {
-//                                error_log("{$class}:\t" . $e->getMessage() . "\n " . str_replace("\n", "\n ", print_r($entry, true)));
-                            }
-                        }
-                    }
-                }
+            /* @var $entity AbstractEntity */
+            foreach ($entity->getIterator()->getPrimaryKey() as $pos => $prop) {
+                $entity->$prop = $entry[$pos];
+            }
+
+            //we should init properties which will be used in delete action
+            foreach ($initProperties as $prop => $value) {
+                $entity->$prop = $value;
+            }
+
+            try {
+                //deletePk method does not remove related objects
+                $entity->delete();
+            } catch (Exception $e) {
+                //we should remove all created Entities
+                \Scalr::logException($e);
             }
         }
+
+        static::$testData = [];
 
         if (!empty(static::$apiKeyEntity)) {
             static::$apiKeyEntity->delete();
         }
+
+        static::changeLoggerConfiguration();
     }
 
     /**
@@ -213,7 +253,7 @@ class ApiTestCase extends TestCase
 
         $this->governanceConfiguration = $savePrevious ? $governance->getValues() : null;
 
-        if(!empty($governanceConfiguration)) {
+        if (!empty($governanceConfiguration)) {
             foreach ($governanceConfiguration as $categoryName => $category) {
                 foreach ($category as $name => $value) {
                     $governance->setValue($categoryName, $name, $value['enabled'], $value['limits']);
@@ -245,7 +285,7 @@ class ApiTestCase extends TestCase
     {
         parent::setUp();
 
-        if ($this->isSkipFunctionalTests()) {
+        if (static::isSkippedFunctionalTest()) {
             $this->markTestSkipped();
         }
 
@@ -557,25 +597,20 @@ class ApiTestCase extends TestCase
      * Gets User API url
      *
      * @param   string  $uriPart    Part of the api uri
-     * @param   mixed   $envId      Custom environment, if NULL - will use preset test-environment, if FALSE - environment will be omitted
-     *
-     * @return string Returns User API url
+     * @param   int     $envId      optional Identifier of the Environment.
+     *                              If it is not specified method uses default test Environment.
+     * @return  string  Returns User API url
      */
     public static function getUserApiUrl($uriPart, $envId = null)
     {
-        if ($envId === null) {
-            $envId = static::$testEnvId;
-        }
-
-        return '/api/' . static::$apiVersion . '/user/' . ($envId === false ? '' : ($envId . '/')) . ltrim($uriPart, '/');
+        return '/api/' . static::$apiVersion . '/user/' . ($envId === null ? self::$testEnvId : $envId) . '/' . ltrim($uriPart, '/');
     }
 
     /**
      * Gets Account API url
      *
      * @param   string  $uriPart    Part of the api uri
-     *
-     * @return string Returns User API url
+     * @return  string  Returns User API url
      */
     public static function getAccountApiUrl($uriPart)
     {
@@ -587,23 +622,23 @@ class ApiTestCase extends TestCase
      *
      * @param   string          $name                Adapter name
      * @param   ApiController   $controller optional API Controller
-     *
-     * @return ApiEntityAdapter
+     * @return  ApiEntityAdapter
      */
     public function getAdapter($name, ApiController $controller = null)
     {
         $class = static::API_NAMESPACE . '\\' . ucfirst(static::$apiVersion) . '\\Adapter\\' . ucfirst($name) . 'Adapter';
+
         return new $class($controller ?: static::$apiController);
     }
 
     /**
      * Asserts that object equals entity
      *
-     * @param                $object
-     * @param AbstractEntity $entity
+     * @param                      $object
+     * @param AbstractEntity|array $entity
      * @param string         $adapter   optional Entity adapter name
      */
-    public function assertObjectEqualsEntity($object, AbstractEntity $entity, $adapter = null)
+    public function assertObjectEqualsEntity($object, $entity, $adapter = null)
     {
         if (empty($adapter)) {
             $classParts = preg_split('/\\\\/', get_class($entity));
@@ -613,7 +648,11 @@ class ApiTestCase extends TestCase
         }
 
         /* @var $adapter ApiEntityAdapter */
-        $data = $adapter->toData($entity);
+        if ($adapter instanceof  GlobalVariableAdapter) {
+            $data = (object) $adapter->convertData($entity);
+        } else {
+            $data = $adapter->toData($entity);
+        }
 
         foreach ($object as $property => $value) {
             $this->assertObjectHasAttribute($property, $data);
@@ -638,18 +677,34 @@ class ApiTestCase extends TestCase
     /**
      * Creates and save entity to DB, keeps entity to delete after test
      *
-     * @param AbstractEntity $entity
-     * @param array          $data
-     * @param int            $priority
-     *
+     * @param AbstractEntity $entity       Entity instance
+     * @param array          $data         Properties to initialize
+     * @param array          $requiredData The list of names properties which should be save and initialize after delete
      * @return AbstractEntity
      * @throws \Scalr\Exception\ModelException
      */
-    public static function createEntity(AbstractEntity $entity, array $data, $priority = 0)
+    public static function createEntity(AbstractEntity $entity, array $data, array $requiredData = null)
     {
-        foreach ($entity->getIterator() as $property => $_) {
-            if (isset($data[$property])) {
-                $entity->{$property} = $data[$property];
+        if (!empty($data)) {
+            $it = $entity->getIterator();
+
+            foreach ($data as $prop => $value) {
+                if ($it->getField($prop)) {
+                    $entity->$prop = $value;
+                } else {
+                    throw new InvalidArgumentException(sprintf("Field %s does not exist in %s entity.", $prop, get_class($entity)));
+                }
+            }
+        }
+
+        $initProperties = [];
+        if (!empty($requiredData)) {
+            foreach ($requiredData as $prop) {
+                if (isset($data[$prop])) {
+                    $initProperties[$prop] = $data[$prop];
+                } else {
+                    throw new InvalidArgumentException(sprintf("Field %s does not exist in data.", $prop));
+                }
             }
         }
 
@@ -661,21 +716,29 @@ class ApiTestCase extends TestCase
             $key[$position] = $entity->{$property};
         }
 
-        static::toDelete(get_class($entity), $key, $priority);
+        static::toDelete(get_class($entity), $key, $initProperties);
 
         return $entity;
     }
 
     /**
-     * Add specified entity identifier to removal data
+     * Registers specified Entity for removal
      *
-     * @param     $class
-     * @param     $identifier
-     * @param int $priority
+     * @param  string    $class              The name of the class
+     * @param  array     $identifier         The PrimaryKey value of the Entity
+     * @param  array     $initProperties     The properties value what use in delete action
      */
-    public static function toDelete($class, $identifier, $priority = 0)
+    public static function toDelete($class, $identifier, $initProperties = null)
     {
-        static::$testData[$priority][$class][] = $identifier;
+        if (is_null($initProperties)) {
+            $initProperties = [];
+        }
+
+        $rec = ['class' => $class, 'pk' => $identifier, 'initProp' => $initProperties];
+
+        if (!in_array($rec, static::$testData)) {
+            array_push(static::$testData, $rec);
+        }
     }
 
     /**

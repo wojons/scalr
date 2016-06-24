@@ -2,7 +2,7 @@
 namespace Scalr\Service\OpenStack\Services\Servers\Type;
 
 use Scalr\Service\OpenStack\Type\Marker;
-use \DateTime;
+use DateTime;
 
 /**
  * ListImagesFilter

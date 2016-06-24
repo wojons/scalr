@@ -7,7 +7,7 @@ use Scalr\Service\Aws;
 use Scalr\Service\Aws\S3\DataType\ObjectData;
 use Scalr\Service\Aws\S3;
 use Scalr\Tests\Service\AwsTestCase;
-use \SplFileInfo;
+use SplFileInfo;
 
 /**
  * Amazon A3 Test
@@ -47,7 +47,7 @@ class S3Test extends AwsTestCase
     {
         parent::setUp();
 
-        if (!$this->isSkipFunctionalTests()) {
+        if (!static::isSkippedFunctionalTest()) {
             $this->s3 = $this->getEnvironment()->aws(AwsTestCase::REGION)->s3;
             $this->s3->enableEntityManager();
         }

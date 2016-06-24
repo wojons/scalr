@@ -45,7 +45,7 @@ class Update20151110154350 extends AbstractUpdate implements SequenceInterface
                 ON sp.server_id = sh.server_id AND sp.name = ?
             SET sh.instance_type_name = sp.value
             WHERE sh.instance_type_name IS NULL AND sp.value IS NOT NULL AND sp.value <> ''
-        ", [\SERVER_PROPERTIES::INFO_INSTANCE_TYPE_NAME]);
+        ", ['info.instance_type_name']);
 
         $this->db->Execute("
             UPDATE servers_history sh

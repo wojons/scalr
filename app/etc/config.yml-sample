@@ -11,17 +11,21 @@ scalr:
       pass: 'scalr'
 
 #    # Proxy settings that can be used with option scalr.%platform%.use_proxy = yes
-#    # Only aws and openstack-based platforms available
-#    # allowed types: 4 - socks4, 5 - socks5, 0 - http
-#    # allowed authtypes: 1 - Basic, Digest - 2, GSSNeg - 4, NTLM - 8, any - -1
+#    # Only aws, azure, openstack-based and cloudstack-based platforms are available
 #    proxy:
+#      # Proxy host, Default: localhost
 #      host: 'localhost'
+#      # Proxy port, Default: 3128
 #      port: 3128
+#      # Auth user. Default: ''
 #      user: ''
+#      # Auth password. Default: ''
 #      pass: ''
+#      # Proxy type. Allowed: 4 - socks4, 5 - socks5, 0 - http, Default: 0
 #      type: 0
+#      # Auth type. Allowed: 1 - Basic, Digest - 2, GSSNeg - 4, NTLM - 8, any - -1, Default: 1
 #      authtype: 1
-#      # allowed values: scalr, instance, both
+#      # On which side the proxy should be used. Allowed values: scalr, instance, both. Default: both
 #      use_on: both
 
 #    # This section is optional and it is required only when you use ldap for user's authentication (scalr.auth_mode: ldap).
@@ -70,11 +74,171 @@ scalr:
 #      ## Adds additional debug information to HTTP response headers
 #      #debug: no
 
+#    # This section is used as common template for multiple logs
+#    logger: &connections_logger
+#      # Path represents either PATH for local FS or URL for remote. Default is localhost
+#      path: localhost
+#
+#      ## A port to connect. Default: 8888
+#      #port: 8888
+#
+#      ## Data collector type. Default: fluentd
+#      #backend: fluentd
+#
+#      ## Protocol the logger will connect to a backend with. Default: http
+#      ## You may choose either "http" wrapper, or "tcp", or "udp" with respect to your settings
+#      #proto: http
+#
+#      ## The connection will be dropped after N seconds. Default: 1
+#      #timeout: 1
+
+#    # This section is optional and it is required only when you use saml for user's authentication (scalr.auth_mode: saml).
+#    saml:
+#      # Identity Provider settings
+#      idp:
+#        # Identifier of the IdP entity  (must be a URI)
+#        # entityId: https://idp.domain/saml/metadata/777
+#        entityId: ~
+#        # SSO endpoint info of the IdP. (Authentication Request protocol)
+#        singleSignOnService:
+#          # URL Target of the IdP where the Scalr will send the Authentication Request Message
+#          # url: https://your-labs.idp.domain/trust/saml2/http-post/sso/777
+#          url: ~
+#        # SLO endpoint info of the IdP.
+#        singleLogoutService:
+#          # URL Location of the IdP where the Scalr will send the SLO Request
+#          # url: https://your-labs.idp.domain/trust/saml2/http-redirect/slo/777
+#          url: ~
+#        # Instead of use the whole x509cert Scalr requires a fingerprint.
+#        # openssl x509 -noout -fingerprint -sha256 -in "idp.crt" to generate it
+#        # certFingerprint: 'AA:BB:CC:DD:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:00'
+#        certFingerprint: ~
+#        # certFingerprintAlgorithm is required to know which Algorithm was used.
+#        # Possible values: sha256, sha384 or sha512 'sha1' is the default value.
+#        certFingerprintAlgorithm: sha256
+
+#  analytics:
+#    # Whether it is enabled. Optional, default value: no
+#    enabled: yes
+#    connections:
+#      analytics:
+#        <<: *connections_mysql
+#        name: analytics
+#    #  # You may want to restrict access to the scalr database for analytics scripts
+#    #  scalr:
+#    #    <<: *connections_mysql
+#    ## Polls data from the cloud
+#    #poller:
+#    #  # Number of threads in pool Default: 50
+#    #  pool_size: 50
+#    #  # Connection timeout to the cloud provider. Default: 20 seconds
+#    #  cloud_connection_timeout: 20
+#    #  # Log file
+#    #  log_file: '/var/log/scalr.analytics-poller.log'
+#    #  # Pid file
+#    #  pid_file: '/var/run/scalr.analytics-poller.pid'
+#    ## Processes raw data script
+#    #processing:
+#    #  log_file: '/var/log/scalr.analytics-processing.log'
+#    #  pid_file: '/var/run/scalr.analytics-processing.pid'
+
+  # Allowed values: scalr | ldap | saml
+  auth_mode: scalr
+
+  # By default it's allowed all available
+  allowed_clouds:
+  - ec2
+  - gce
+  - azure
+
+  # cloudstack based
+  - cloudstack
+  - idcf
+
+  # openstack based
+  - openstack
+  - ocs
+  - rackspacenguk
+  - rackspacengus
+  - hpcloud
+  - mirantis
+  - vio
+  - cisco
+
+  aws:
+    security_group_name: 'scalr.ip-pool'
+    # For example ['111.22.33.11/28', '222.22.2.12/28']
+    # IP Addresses of servers where scalr installed
+    ip_pool: ['8.8.8.8']
+    # Default value: 'scalr.'
+    security_group_prefix: 'scalr.'
+#    use_proxy: no
+#    # AWS Client plugins is not mandatory part of the Scalr
+#    plugins:
+#      # List of the enabled plug-ins. All plug-ins are disabled by default.
+#      # Possible values [statistics]
+#      enabled: ~
+#      # Statistics plugin allows to collect information about AWS queries and errors.
+#      statistics:
+#        # max_heap_table_size in bytes which is taken into consideration on create table with MEMORY type. Default value: 256Mb
+#        storage_max_size: 268435456
+#    ec2:
+#      limits:
+#        # Maximum number of security groups per EC2 instance. (Default: 10)
+#        security_groups_per_instance: 10
+
+  billing:
+    enabled: no
+    chargify_api_key: ''
+    chargify_domain: ''
+    emergency_phone_number: ''
+
+#  # ScalrPy dbqueue_event script configuration
+#  # This section is optional and it is required only when you need non default parameters
+#  dbqueue_event:
+#    connections:
+#      # if 'mysql' not present then use scalr:connections:mysql
+#      mysql:
+##        host: ~
+##        port: 3306
+##        name: ~
+##        user: ~
+##        pass: ~
+#        # mysql connection pool size
+#        pool_size: 4
+#    # size of the worker pool
+#    pool_size: 100
+#    log_file: '/var/log/scalr.dbqueue-event.log'
+#    pid_file: '/var/run/scalr.dbqueue-event.pid'
+
+  dns:
+    mysql:
+      host: 'localhost'
+      port: ~
+      name: 'scalr'
+      user: 'scalr'
+      pass: 'scalr'
+    static:
+      enabled: no
+      nameservers: ['ns1.example-dns.net', 'ns2.example-dns.net']
+      domain_name: 'example-dns.net'
+    global:
+      enabled: no
+      nameservers: ['ns1.example.net', 'ns2.example.net', 'ns3.example.net', 'ns4.example.net']
+      # base_domain is used for automated generation domain name of the user's servers
+      default_domain_name: 'provide.domain.here.in'
+
   email:
     # Email From address
     address: ~
     # Email From name, Default: null
     name: ~
+
+#  # Miscellaneous cache options
+#  cache:
+#    instance_types:
+#      # Instance types cache lifetime in seconds (Default: 86400)
+#      lifetime: 86400
 
 #  cloudyn:
 #    master_email: ''
@@ -212,7 +376,7 @@ scalr:
 #        keep:
 #          scalr:
 #            logentries: "-10 days"
-#            scripting_log: "-7 days"
+#            orchestration_log: "-7 days"
 #            api_log: "-14 days"
 #            events: "-2 months"
 #            messages: "-10 days"
@@ -256,209 +420,20 @@ scalr:
 #        log: /var/log/scalr/server_terminate.log
 #        workers: 4
 
-  system:
-    api:
-      # Whether Scalr APIv2 is enabled. Default: yes
-      enabled: yes
-    default_disable_firewall_management: no
-    instances_connection_timeout: 4
-#    # server terminate timeout in graceful mode. Default: "+3 minutes"
-#    server_terminate_timeout: "+3 minutes"
-    scripting:
-        # Allowed values: instance | scalr
-        logs_storage: 'instance'
-        # How often we should rotate logs on instances by default (3600 seconds) / Can be overwritten in Farm Designer
-        default_instance_log_rotation_period: 3600
-        # Abort Server initialization when a Blocking BeforeHostUp Scripts fails (non-zero exit code) !! Can be redefined in FarmDesigner on Advanced tab
-        default_abort_init_on_script_fail: 0
-    global_variables:
-      format: ~
-#        SCALR_INSTANCE_INDEX: '%d'
-#    monitoring:
-#      # Path to the file if it should collect access log for an each UI and API request
-#      access_log_path: ~
-
-  security:
-    user:
-      suspension:
-        # It will suspend user account when he has not used Scalr for N days. 0 - to disable.
-        # Default: 0
-        inactivity_days: 0
-        # It will suspend user account just after N failed sign in attempts. 0 - to disable.
-        # Default: 10
-        failed_login_attempts: 10
-
-  ui:
-    support_url: 'https://groups.google.com/d/forum/scalr-discuss'
-    wiki_url: 'http://wiki.scalr.com'
-    show_deprecated_features: true
-    recaptcha:
-      public_key: ''
-      private_key: ''
-    mindterm_enabled: true
-    # allowed values: public, private, hostname, auto
-    server_display_convention: auto
-    pma:
-      key: ''
-      url: ''
-      server_ip: ''
-
-  # Allowed values: scalr | ldap | saml
-  auth_mode: scalr
-
-  # Allowed values: public | local | auto.
-  instances_connection_policy: public
-
-  # By default it's allowed all available
-  allowed_clouds:
-  - ec2
-  - gce
-  - azure
-
-  # cloudstack based
-  - cloudstack
-  - idcf
-
-  # openstack based
-  - openstack
-  - ocs
-  - rackspacenguk
-  - rackspacengus
-  - hpcloud
-  - mirantis
-  - vio
-  - cisco
-
-#  analytics:
-#    # Whether it is enabled. Optional, default value: no
-#    enabled: yes
-#    connections:
-#      analytics:
-#        <<: *connections_mysql
-#        name: analytics
-#    #  # You may want to restrict access to the scalr database for analytics scripts
-#    #  scalr:
-#    #    <<: *connections_mysql
-#    ## Polls data from the cloud
-#    #poller:
-#    #  # Number of threads in pool Default: 50
-#    #  pool_size: 50
-#    #  # Connection timeout to the cloud provider. Default: 20 seconds
-#    #  cloud_connection_timeout: 20
-#    #  # Log file
-#    #  log_file: '/var/log/scalr.analytics-poller.log'
-#    #  # Pid file
-#    #  pid_file: '/var/run/scalr.analytics-poller.pid'
-#    ## Processes raw data script
-#    #processing:
-#    #  log_file: '/var/log/scalr.analytics-processing.log'
-#    #  pid_file: '/var/run/scalr.analytics-processing.pid'
-
-
-#  # Default value: 300 seconds
-#  rss_cache_lifetime: 300
-
-#  # Miscellaneous cache options
-#  cache:
-#    instance_types:
-#      # Instance types cache lifetime in seconds (Default: 86400)
-#      lifetime: 86400
-
   endpoint:
 #    # Devault value: http
 #    scheme: http
     host: 'endpoint url here'
 
-#  openstack:
-#    # How to pass user data to openstack: meta-data | personality | both
-#    user_data_method: 'both'
-#    # Openstack API client options
-#    api_client:
-#      # Default connection timeout for api calls
-#      timeout: 30
+  # Allowed values: public | local | auto.
+  instances_connection_policy: public
 
-#  rackspacengus:
-#    instance_public_ni_name: 'public'
-#    instance_private_ni_name: 'private'
-
-  aws:
-    security_group_name: 'scalr.ip-pool'
-    # For example ['111.22.33.11/28', '222.22.2.12/28']
-    # IP Addresses of servers where scalr installed
-    ip_pool: ['8.8.8.8']
-    # Default value: 'scalr.'
-    security_group_prefix: 'scalr.'
-#    use_proxy: no
-#    # AWS Client plugins is not mandatory part of the Scalr
-#    plugins:
-#      # List of the enabled plug-ins. All plug-ins are disabled by default.
-#      # Possible values [statistics]
-#      enabled: ~
-#      # Statistics plugin allows to collect information about AWS queries and errors.
-#      statistics:
-#        # max_heap_table_size in bytes which is taken into consideration on create table with MEMORY type. Default value: 256Mb
-#        storage_max_size: 268435456
-#    ec2:
-#      limits:
-#        # Maximum number of security groups per EC2 instance. (Default: 10)
-#        security_groups_per_instance: 10
-
-  billing:
-    enabled: no
-    chargify_api_key: ''
-    chargify_domain: ''
-    emergency_phone_number: ''
-
-  dns:
-    mysql:
-      host: 'localhost'
-      port: ~
-      name: 'scalr'
-      user: 'scalr'
-      pass: 'scalr'
-    static:
-      enabled: no
-      nameservers: ['ns1.example-dns.net', 'ns2.example-dns.net']
-      domain_name: 'example-dns.net'
-    global:
-      enabled: no
-      nameservers: ['ns1.example.net', 'ns2.example.net', 'ns3.example.net', 'ns4.example.net']
-      # base_domain is used for automated generation domain name of the user's servers
-      default_domain_name: 'provide.domain.here.in'
-
-#  # ScalrPy msg_sender script configuration
-#  # This section is optional and it is required only when you need non default parameters
-#  msg_sender:
-##    connections:
-##      # if 'mysql' not present then use scalr:connections:mysql
-##      mysql:
-##        host: ~
-##        port: 3306
-##        name: ~
-##        user: ~
-##        pass: ~
-#    # size of the worker pool
-#    pool_size: 100
-#    log_file: '/var/log/scalr.msg-sender.log'
-#    pid_file: '/var/run/scalr.msg-sender.pid'
-
-#  # ScalrPy dbqueue_event script configuration
-#  # This section is optional and it is required only when you need non default parameters
-#  dbqueue_event:
-#    connections:
-#      # if 'mysql' not present then use scalr:connections:mysql
-#      mysql:
-##        host: ~
-##        port: 3306
-##        name: ~
-##        user: ~
-##        pass: ~
-#        # mysql connection pool size
-#        pool_size: 4
-#    # size of the worker pool
-#    pool_size: 100
-#    log_file: '/var/log/scalr.dbqueue-event.log'
-#    pid_file: '/var/run/scalr.dbqueue-event.pid'
+#  # This is only for my.scalr.com (hosted scalr)
+#  hosted:
+#    enabled: no
+#    analytics:
+#      # Lits of the account identifiers which should be able to manage Projects
+#      managed_accounts: []
 
   # ScalrPy load_statistics script configuration
   # This section is required
@@ -516,6 +491,176 @@ scalr:
 #    log_file: '/var/log/scalr.load-statistics.log'
 #    pid_file: '/var/run/scalr.load-statistics.pid'
 
+#  logger:
+#    # Audit log
+#    audit:
+#      <<: *connections_logger
+#      # Disabled by default. Default: no
+#      enabled: no
+#
+#      # A common tag to pass to a backend. Default: audit
+#      #tag: audit
+#
+#    # APIv2 log
+#    api:
+#      <<: *connections_logger
+#      # Disabled by default. Default: no
+#      enabled: no
+#
+#      # A common tag to pass to a backend. Default: api
+#      #tag: api
+#
+#    # User log
+#    user:
+#      <<: *connections_logger
+#      # Disabled by default. Default: no
+#      enabled: no
+#
+#      # A common tag to pass to a backend. Default: user
+#      #tag: user
+
+#  # ScalrPy msg_sender script configuration
+#  # This section is optional and it is required only when you need non default parameters
+#  msg_sender:
+##    connections:
+##      # if 'mysql' not present then use scalr:connections:mysql
+##      mysql:
+##        host: ~
+##        port: 3306
+##        name: ~
+##        user: ~
+##        pass: ~
+#    # size of the worker pool
+#    pool_size: 100
+#    log_file: '/var/log/scalr.msg-sender.log'
+#    pid_file: '/var/run/scalr.msg-sender.pid'
+
+#  openstack:
+#    # Openstack API client options
+#    api_client:
+#      # Default connection timeout for api calls
+#      timeout: 30
+#    use_proxy: no
+#    # How to pass user data to openstack: meta-data | personality | both
+#    user_data_method: 'both'
+
+#  # This section is optional. It's used for php unit testing.
+#  phpunit:
+#    # By default all functionl tests are skipped. Default: false
+#    # It's also possible to enable series of tests (ui, api or cloud-dependent). In this case array should be provided
+#    functional_tests: no
+#    #- ui
+#    #- api
+#    #- cloud-dependent
+#
+#    # Most of the functional tests require user's environment to handle requests.
+#    # value from account_users.id must be provided here
+#    userid: 0
+#    # client_environments.id must be provided here
+#    envid: 0
+#
+#    # APIv2 tests require special environment in order to be passed.
+#    apiv2:
+#      userid: 2
+#      envid: 2
+#      params:
+#        # for check all apiv2 response data you should set max_results false
+#        max_results: 20
+#
+#    openstack:
+#      platforms:
+#      #- [platform, region, imageid]
+#      # Rackspace NewGen US
+#      - [rackspacengus, DFW, 3afe97b2-26dc-49c5-a2cc-a2fc8d80c001]
+#      # Rackspace NewGen UK
+#      - [rackspacenguk, LON, 3afe97b2-26dc-49c5-a2cc-a2fc8d80c001]
+#      # Nebula
+#      - [nebula, RegionOne, 07b26892-9716-453f-9443-9b5e90d2c978]
+#      # Open Cloud System
+#      - [ocs, RegionOne, 7a0d5ff5-efa1-4dae-a18e-0238fe27f287]
+#    cloudstack:
+#      platforms:
+#      #- [platform, zoneid, templateid, serviceid]
+#      # IDCF
+#      - [idcf, jp-east-t1v, 2530, 24]
+
+#  rackspacengus:
+#    instance_public_ni_name: 'public'
+#    instance_private_ni_name: 'private'
+#    use_proxy: no
+
+#  # Default value: 300 seconds
+#  rss_cache_lifetime: 300
+
+  security:
+    user:
+      session:
+        # The value must be valid relative DateTime unit (http://php.net/manual/en/datetime.formats.relative.php)
+        # It will lock session if it hasn't been used for period. Default: +30 minutes
+        timeout: "+30 minutes"
+        # It will destroy session after specified lifetime despite the fact that session is still being used. Default: +8 hours
+        lifetime: "+8 hours"
+        # It allows to restore session using KeepSession cookie for the specified period. Default: +30 days
+        cookie_lifetime: "+30 days"
+      suspension:
+        # It will suspend user account when he has not used Scalr for N days. 0 - to disable.
+        # Default: 0
+        inactivity_days: 0
+        # It will suspend user account just after N failed sign in attempts. 0 - to disable.
+        # Default: 10
+        failed_login_attempts: 10
+
+  system:
+    api:
+      # Whether Scalr APIv2 is enabled. Default: yes
+      enabled: yes
+      # Allows to configure the value of Access-Control-Allow-Origin header for API.
+      # It can take either array of the origins or wildcard '*' to enable access from any domain.
+      # By default API does not send this header. Default: ~
+      allowed_origins: ~
+    global_variables:
+      format: ~
+#        SCALR_INSTANCE_INDEX: '%d'
+
+    default_disable_firewall_management: no
+    instances_connection_timeout: 4
+
+#    monitoring:
+#      # Path to the file in order we need to collect access log for an each UI / API request, Default: ~
+#      access_log_path: ~
+
+#    # server terminate timeout in graceful mode. Default: "+3 minutes"
+#    server_terminate_timeout: "+3 minutes"
+
+    scripting:
+        # Allowed values: instance | scalr
+        logs_storage: 'instance'
+        # How often we should rotate logs on instances by default (3600 seconds) / Can be overwritten in Farm Designer
+        default_instance_log_rotation_period: 3600
+        # Abort Server initialization when a Blocking BeforeHostUp Scripts fails (non-zero exit code) !! Can be redefined in FarmDesigner on Advanced tab
+        default_abort_init_on_script_fail: 0
+
+#    webhooks:
+#      # Whether webhooks should use proxy. Default: no
+#      use_proxy: no
+
+  ui:
+    support_url: 'https://groups.google.com/d/forum/scalr-discuss'
+    wiki_url: 'http://wiki.scalr.com'
+    show_deprecated_features: true
+    recaptcha:
+      public_key: ''
+      private_key: ''
+    mindterm_enabled: true
+    # allowed values: public, private, hostname, auto
+    server_display_convention: auto
+    pma:
+      key: ''
+      url: ''
+      server_ip: ''
+    # HTML text of banner, which will be shown on login page. Default: no
+    login_warning: ''
+
   scalarizr_update:
     # Allowed values client | solo
     mode: 'client'
@@ -543,36 +688,3 @@ scalr:
 #      sync: 180
 #      # Default value: 1200 seconds
 #      async: 1200
-
-#  # This is only for my.scalr.com (hosted scalr)
-#  hosted:
-#    enabled: no
-#    analytics:
-#      # Lits of the account identifiers which should be able to manage Projects
-#      managed_accounts: []
-
-#  # This section is optional. It's used for php unit testing.
-#  phpunit:
-#    # By default all functionl tests are skipped.
-#    skip_functional_tests: true
-#    # Most of the functional tests require user's environment to handle requests.
-#    # value from account_users.id must be provided here
-#    userid: 0
-#    # client_environments.id must be provided here
-#    envid: 0
-#    openstack:
-#      platforms:
-#      #- [platform, region, imageid]
-#      # Rackspace NewGen US
-#      - [rackspacengus, DFW, 3afe97b2-26dc-49c5-a2cc-a2fc8d80c001]
-#      # Rackspace NewGen UK
-#      - [rackspacenguk, LON, 3afe97b2-26dc-49c5-a2cc-a2fc8d80c001]
-#      # Nebula
-#      - [nebula, RegionOne, 07b26892-9716-453f-9443-9b5e90d2c978]
-#      # Open Cloud System
-#      - [ocs, RegionOne, 7a0d5ff5-efa1-4dae-a18e-0238fe27f287]
-#    cloudstack:
-#      platforms:
-#      #- [platform, zoneid, templateid, serviceid]
-#      # IDCF
-#      - [idcf, jp-east-t1v, 2530, 24]

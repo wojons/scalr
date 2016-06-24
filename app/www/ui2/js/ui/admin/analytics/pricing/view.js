@@ -245,10 +245,10 @@ Scalr.regPage('Scalr.ui.admin.analytics.pricing.view', function (loadParams, mod
                         { platform: me.platform },
                         callback
                     );
-                    return false;
+                    return true;
                 }
 
-                return true;
+                return false;
             }
         },
 

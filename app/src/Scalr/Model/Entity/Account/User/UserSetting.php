@@ -26,7 +26,7 @@ class UserSetting extends AbstractSettingEntity
     const NAME_UI_ENVIRONMENT = 'ui.environment';
     const NAME_UI_TIMEZONE = 'ui.timezone';
     const NAME_UI_STORAGE_TIME = 'ui.storage.time';
-    const NAME_UI_CHANGELOG_TIME = 'ui.changelog.time';
+    const NAME_UI_ANNOUNCEMENT_TIME = 'ui.announcement.time';
 
     const NAME_GRAVATAR_EMAIL = 'gravatar.email';
 

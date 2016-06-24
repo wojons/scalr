@@ -151,6 +151,48 @@ class CloudStack
     private $platformName;
 
     /**
+     * Proxy Host
+     *
+     * @var string
+     */
+    private $proxyHost;
+
+    /**
+     * Proxy Port
+     *
+     * @var int
+     */
+    private $proxyPort;
+
+    /**
+     * The username that is used for proxy
+     *
+     * @var string
+     */
+    private $proxyUser;
+
+    /**
+     * Proxy password
+     *
+     * @var string
+     */
+    private $proxyPass;
+
+    /**
+     * The type of the proxy
+     *
+     * @var int
+     */
+    private $proxyType;
+
+    /**
+     * The auth type of the proxy
+     *
+     * @var int
+     */
+    private $authType;
+
+    /**
      * Constructor
      *
      * @param string    $endpoint   Api url
@@ -249,6 +291,43 @@ class CloudStack
     {
         $this->endpoint = substr($endpoint, -1) == "/" ? substr($endpoint, 0, -1) : $endpoint;
         return $this;
+    }
+
+    /**
+     * Set proxy configuration to connect to AWS services
+     *
+     * @param string  $host
+     * @param integer $port
+     * @param string  $user
+     * @param string  $pass
+     * @param int     $type      Allowed values 4 - SOCKS4, 5 - SOCKS5, 0 - HTTP
+     * @param int     $authType  Allowed authtypes: 1 - Basic, Digest - 2, GSSNeg - 4, NTLM - 8, any - -1
+     */
+    public function setProxy($host, $port = 3128, $user = null, $pass = null, $type = 0, $authType = 1)
+    {
+        $this->proxyHost = $host;
+        $this->proxyPort = $port;
+        $this->proxyUser = $user;
+        $this->proxyPass = $pass;
+        $this->proxyType = $type;
+        $this->authType  = $authType;
+    }
+
+    /**
+     * Gets proxy configuration
+     *
+     * @return array|bool
+     */
+    public function getProxy()
+    {
+        return ($this->proxyHost) ? [
+            'host'      => $this->proxyHost,
+            'port'      => $this->proxyPort,
+            'user'      => $this->proxyUser,
+            'pass'      => $this->proxyPass,
+            'type'      => $this->proxyType,
+            'authtype'  => $this->authType
+        ] : false;
     }
 
     /**

@@ -51,29 +51,32 @@ To filter on this field, use: `billingCode=...`.
 ## Swagger Definition ##
 
     {
-      "required": [
-        "name"
-      ], 
-      "x-usedIn": [
-        "/cost-centers/{costCenterId}/", 
-        "/{envId}/cost-centers/{costCenterId}/"
-      ], 
       "properties": {
+        "billingCode": {
+          "readOnly": true, 
+          "type": "string"
+        }, 
         "id": {
+          "maxLength": 36, 
+          "minLength": 36, 
+          "pattern": "[A-Fa-f0-9]{8}-([A-Fa-f0-9]{4}-){3}[A-Fa-f0-9]{12}", 
           "readOnly": true, 
           "type": "string"
         }, 
         "name": {
           "type": "string"
-        }, 
-        "billingCode": {
-          "readOnly": true, 
-          "type": "string"
         }
       }, 
+      "required": [
+        "name"
+      ], 
       "x-filterable": [
+        "billingCode", 
         "id", 
-        "name", 
-        "billingCode"
+        "name"
+      ], 
+      "x-usedIn": [
+        "/cost-centers/{costCenterId}/", 
+        "/{envId}/cost-centers/{costCenterId}/"
       ]
     }

@@ -8,7 +8,7 @@ use Scalr\Api\Rest\Exception\ApiErrorException;
 use Scalr\Api\DataType\ErrorMessage;
 
 /**
- * User/Version-1/Os API Controller
+ * User/Os API Controller
  *
  * @author   Vitaliy Demidov   <vitaliy@scalr.com>
  * @since    5.4.0  (24.02.2015)

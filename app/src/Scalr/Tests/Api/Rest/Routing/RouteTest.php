@@ -192,8 +192,10 @@ class RouteTest extends TestCase
 
         $route->addMiddleware($mdHandleApiVersion);
 
-        $handler1 = function($id) {};
-        $handler2 = function($id) {return 1;};
+        $handler1 = function ($id) {};
+        $handler2 = function ($id) {
+            return 1;
+        };
 
         $this->assertInternalType('callable', $route->getHandler());
 

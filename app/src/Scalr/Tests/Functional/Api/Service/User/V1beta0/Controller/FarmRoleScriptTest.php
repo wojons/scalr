@@ -36,7 +36,7 @@ class FarmRoleScriptTest extends ScriptsTestCase
 
     public function ruleToDelete($ruleId)
     {
-        static::toDelete('Scalr\Model\Entity\FarmRoleScript', $ruleId);
+        static::toDelete(FarmRoleScript::class, [$ruleId]);
     }
 
     /**
@@ -147,7 +147,7 @@ class FarmRoleScriptTest extends ScriptsTestCase
         /* @var $settings SettingsCollection */
         $settings = $farmRole->settings;
         $settings->saveSettings([
-            FarmRoleSetting::AWS_INSTANCE_TYPE => 't1.micro',
+            FarmRoleSetting::INSTANCE_TYPE => 't1.micro',
             FarmRoleSetting::AWS_AVAIL_ZONE => '',
             FarmRoleSetting::SCALING_ENABLED => true,
             FarmRoleSetting::SCALING_MIN_INSTANCES => 1,
@@ -162,23 +162,22 @@ class FarmRoleScriptTest extends ScriptsTestCase
      */
     public function testComplex()
     {
-
-        /* @var Script $script */
+        /* @var $script Script */
         $script = static::generateScripts([['os' => 'linux']])[0];
-        /* @var ScriptVersion $version */
+        /* @var $version ScriptVersion */
         $version = static::generateVersions($script, [['content' => '#!/bin/sh']])[0];
         $adapter = $this->getAdapter('OrchestrationRules\FarmRoleScript');
-        /* @var User $user */
+        /* @var $user User */
         $user = $this->getUser();
         $environment = $this->getEnvironment();
         /* @var $farm Farm */
         $farm = static::createEntity(new Farm(), [
             'changedById' => $user->getId(),
             'name' => "{$this->uuid}-farm",
-            'description' => "{$this->uuid}-description",
+            'comments' => "{$this->uuid}-description",
             'envId' => $environment->id,
             'accountId' => $user->getAccountId(),
-            'createdById' => $user->getId()
+            'ownerId' => $user->getId()
         ]);
         $farmRole = $this->createTestFarmRole($farm);
 

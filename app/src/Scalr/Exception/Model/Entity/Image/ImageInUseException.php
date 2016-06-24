@@ -1,7 +1,7 @@
 <?php
 namespace Scalr\Exception\Model\Entity\Image;
 
-use Scalr\Exception\ScalrException;
+use Scalr\Exception\ObjectInUseException;
 
 /**
  * ImageInUseException
@@ -9,6 +9,6 @@ use Scalr\Exception\ScalrException;
  * @author   Vitaliy Demidov   <vitaliy@scalr.com>
  * @since    5.5 (15.05.2015)
  */
-class ImageInUseException extends ScalrException
+class ImageInUseException extends ObjectInUseException
 {
 }

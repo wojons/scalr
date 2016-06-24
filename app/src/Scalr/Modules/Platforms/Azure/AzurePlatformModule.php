@@ -6,14 +6,16 @@ use Scalr\Model\Entity\CloudCredentialsProperty;
 use Scalr\Model\Entity\CloudInstanceType;
 use Scalr\Model\Entity\Image;
 use Scalr\Model\Entity\FarmRoleSetting;
-use \DBServer;
-use \BundleTask;
+use DBServer;
+use BundleTask;
 use Scalr\Service\Azure\Client\QueryClient;
-use \SERVER_PLATFORMS;
+use Scalr\Service\Azure\Services\Compute\DataType\OfferData;
+use Scalr\Service\Azure\Services\Compute\DataType\SkuData;
+use Scalr\Service\Azure\Services\Compute\DataType\VersionData;
+use SERVER_PLATFORMS;
 use Scalr\Modules\AbstractPlatformModule;
 use Scalr\Modules\PlatformModuleInterface;
-use Scalr\Service\Exception\InstanceNotFound;
-use \Scalr_Server_LaunchOptions;
+use Scalr_Server_LaunchOptions;
 use Scalr\Model\Entity\CloudLocation;
 use Scalr\Service\Azure\Services\Compute\DataType\CreateVirtualMachine;
 use Scalr\Service\Azure\Services\Compute\DataType\VirtualMachineProperties;
@@ -30,7 +32,7 @@ use Scalr\Service\Azure\Exception\NotFoundException;
 use Scalr\Modules\Platforms\Azure\Adapters\StatusAdapter;
 use Scalr\Service\Azure\Services\Network\DataType\CreatePublicIpAddress;
 use Scalr\Service\Azure\Services\Network\DataType\PublicIpAddressProperties;
-use Scalr\Service\Exception\NotFound;
+use Scalr\Service\Azure\Services\Compute\DataType\PlanProperties;
 
 class AzurePlatformModule extends AbstractPlatformModule implements PlatformModuleInterface
 {
@@ -77,21 +79,79 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
 
     /**
      * {@inheritdoc}
+     * @see PlatformModuleInterface::getImageInfo()
+     */
+    public function getImageInfo(\Scalr_Environment $environment, $cloudLocation, $imageId)
+    {
+        //Example of the correct imageid: Canonical/UbuntuServer/12.04.5-LTS/latest
+        // Format: Publisher/Offering/Sku/Version/IsPaid
+        $imageDetails = explode("/", $imageId);
+        
+        // Azure Marketplace is not tied to location.
+        $cloudLocation = 'eastus';
+
+        $info = ['name' => $imageId];
+
+        if (count($imageDetails) >= 4) {
+            $subscriptionId = $environment->keychain(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID];
+            $azure = $environment->azure();
+
+            try {
+                $offers = $azure->compute->location->getOffersList($subscriptionId, $cloudLocation, $imageDetails[0]);
+
+                foreach ($offers as $offer) {
+                    /* @var $offer OfferData */
+                    if ($offer->name == $imageDetails[1]) {
+                        $skus = $azure->compute->location->getSkusList($subscriptionId, $cloudLocation, $imageDetails[0], $imageDetails[1]);
+
+                        foreach ($skus as $sku) {
+                            /* @var $sku SkuData */
+                            if ($sku->name == $imageDetails[2]) {
+                                                            
+                                if (isset($imageDetails[3])) {
+                                    
+                                    if ($imageDetails[3] == 'latest') {
+                                        return $info;
+                                    }
+                                    
+                                    $versions = $azure->compute->location->getVersionsList($subscriptionId, $cloudLocation, $imageDetails[0], $imageDetails[1], $imageDetails[2]);
+    
+                                    foreach ($versions as $version) {
+                                        /* @var $version VersionData */
+                                        if ($version->name == $imageDetails[3]) {
+                                            return $info;
+                                        }
+                                    }
+                                } else {
+                                    return $info;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (\Exception $e) {}
+        }
+        
+        return [];
+    }
+    
+    /**
+     * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::getLocations()
      */
     public function getLocations(\Scalr_Environment $environment = null)
     {
-        if ($environment === null || !$environment->isPlatformEnabled(\SERVER_PLATFORMS::AZURE))
-            return [];
-
-        $locationsResponse = $environment->azure()->getLocationsList();
         $retval = [];
 
-        foreach ($locationsResponse->resourceTypes as $rt) {
-            /* @var $rt \Scalr\Service\Azure\DataType\ResourceTypeData */
-            if ($rt->resourceType == 'locations/vmSizes') {
-                foreach ($rt->locations as $location) {
-                    $retval[strtolower(str_replace(" ", "", $location))] = $location;
+        if ($environment && $environment->isPlatformEnabled(\SERVER_PLATFORMS::AZURE)) {
+            $locationsResponse = $environment->azure()->getLocationsList();
+
+            foreach ($locationsResponse->resourceTypes as $rt) {
+                /* @var $rt \Scalr\Service\Azure\DataType\ResourceTypeData */
+                if ($rt->resourceType == 'locations/vmSizes') {
+                    foreach ($rt->locations as $location) {
+                        $retval[strtolower(str_replace(" ", "", $location))] = $location;
+                    }
                 }
             }
         }
@@ -150,7 +210,7 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
             $this->instancesListCache[$cacheKey] = array();
             $azure = $environment->azure();
 
-            $subscriptionId = $environment->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID];
+            $subscriptionId = $environment->keychain(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID];
 
             $vmList = $azure->compute->virtualMachine->getList(
                 $subscriptionId,
@@ -188,7 +248,7 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
         $azure = $env->azure();
 
         $nicInfo = $azure->network->interface->getInfo(
-            $env->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+            $env->keychain(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
             $DBServer->GetProperty(\AZURE_SERVER_PROPERTIES::RESOURCE_GROUP),
             $DBServer->GetProperty(\AZURE_SERVER_PROPERTIES::NETWORK_INTERFACE),
             true
@@ -230,7 +290,7 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
             $azure = $env->azure();
             try {
                 $info = $azure->compute->virtualMachine->getModelViewInfo(
-                    $env->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+                    $env->keychain(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
                     $resourceGroup,
                     $serverName,
                     true
@@ -262,7 +322,7 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
         $azure = $env->azure();
         try {
             return $azure->compute->virtualMachine->delete(
-                $env->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+                $env->keychain(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
                 $DBServer->GetProperty(\AZURE_SERVER_PROPERTIES::RESOURCE_GROUP),
                 $DBServer->GetProperty(\AZURE_SERVER_PROPERTIES::SERVER_NAME)
             );
@@ -282,7 +342,7 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
 
         try {
             $res = $azure->compute->virtualMachine->start(
-                $env->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+                $env->keychain(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
                 $DBServer->GetProperty(\AZURE_SERVER_PROPERTIES::RESOURCE_GROUP),
                 $DBServer->GetProperty(\AZURE_SERVER_PROPERTIES::SERVER_NAME)
             );
@@ -306,10 +366,10 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
     {
         $env = $DBServer->GetEnvironmentObject();
         $azure = $env->azure();
-
+        
         try {
             return $azure->compute->virtualMachine->poweroff(
-                $env->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+                $env->keychain(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
                 $DBServer->GetProperty(\AZURE_SERVER_PROPERTIES::RESOURCE_GROUP),
                 $DBServer->GetProperty(\AZURE_SERVER_PROPERTIES::SERVER_NAME)
             );
@@ -372,15 +432,19 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
         try {
             $env = $DBServer->GetEnvironmentObject();
             $azure = $env->azure();
+
             $info = $azure->compute->virtualMachine->getModelViewInfo(
-                $env->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+                $env->keychain(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
                 $DBServer->GetProperty(\AZURE_SERVER_PROPERTIES::RESOURCE_GROUP),
                 $DBServer->GetProperty(\AZURE_SERVER_PROPERTIES::SERVER_NAME),
                 true
             );
 
             $statuses = [];
-            foreach ($info->properties->instanceView->statuses as $status) {
+
+            $instanceStatuses = empty($info->properties->instanceView->statuses) ? [] : $info->properties->instanceView->statuses;
+
+            foreach ($instanceStatuses as $status) {
                 $statusInfo = explode("/", $status->code);
                 $statuses[$statusInfo[0]] = $statusInfo[1];
             }
@@ -408,8 +472,8 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
                 'Server Name'		    => $info->name,
                 'Server Type'           => $info->properties->hardwareProfile->vmSize,
                 'Availability Set'      => $availabilitySet,
-                'Provisioning State'    => $statuses['ProvisioningState'],
-                'Power State'           => $statuses['PowerState'],
+                'Provisioning State'    => isset($statuses['ProvisioningState']) ? $statuses['ProvisioningState'] : null,
+                'Power State'           => isset($statuses['PowerState']) ? $statuses['PowerState'] : null,
                 'Network Interface'     => $networkInterface,
                 'Private IP'            => $ips['localIp'],
                 'Public IP'             => $ips['remoteIp'],
@@ -440,7 +504,7 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
         $environment = $DBServer->GetEnvironmentObject();
         $governance = new \Scalr_Governance($DBServer->envId);
         $azure = $environment->azure();
-        $subscriptionId = $environment->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID];
+        $subscriptionId = $environment->keychain(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID];
 
         if (!$launchOptions) {
             $dbFarmRole = $DBServer->GetFarmRoleObject();
@@ -448,10 +512,12 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
 
             $launchOptions = new \Scalr_Server_LaunchOptions();
             $launchOptions->cloudLocation = $dbFarmRole->CloudLocation;
-            $launchOptions->serverType = $dbFarmRole->GetSetting(FarmRoleSetting::SETTING_AZURE_VM_SIZE);
+            $launchOptions->serverType = $dbFarmRole->GetSetting(FarmRoleSetting::INSTANCE_TYPE);
             $launchOptions->availZone = $dbFarmRole->GetSetting(FarmRoleSetting::SETTING_AZURE_AVAIL_SET);
 
             $launchOptions->imageId = $DBRole->__getNewRoleObject()->getImage(\SERVER_PLATFORMS::AZURE, "")->imageId;
+            
+            $isWindows = ($DBRole->getOs()->family == 'windows');
 
             // Set User Data
             $u_data = "";
@@ -477,7 +543,15 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
                 );
 
                 $publicIpName = null;
-                if ($dbFarmRole->GetSetting(FarmRoleSetting::SETTING_AZURE_USE_PUBLIC_IPS)) {
+
+                if ($governance->isEnabled(\SERVER_PLATFORMS::AZURE, \Scalr_Governance::AZURE_NETWORK)) {
+                    $usePublicIp = $governance->getValue(\SERVER_PLATFORMS::AZURE, \Scalr_Governance::AZURE_NETWORK, 'use_public_ips');
+                }
+                if (!isset($usePublicIp)) {
+                    $usePublicIp = $dbFarmRole->GetSetting(FarmRoleSetting::SETTING_AZURE_USE_PUBLIC_IPS);
+                }
+
+                if ($usePublicIp) {
                     //Create Public IP object
                     $publicIpName = "scalr-{$DBServer->serverId}";
                     $createPublicIpAddressRequest = new CreatePublicIpAddress(
@@ -563,16 +637,24 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
         )];
         $storageProfile = new StorageProfile(new OsDisk($osDiskName, $vhd, 'FromImage'));
 
-        $isWindows = false;
-        if (preg_match("/^([^\/]+)\/([^\/]+)\/([^\/]+)\/([^\/]+)$/i", $launchOptions->imageId, $imageChunks)) {
+        if (preg_match("/^([^\/]+)\/([^\/]+)\/([^\/]+)\/([^\/]+)(\/(1))?$/", rtrim($launchOptions->imageId, '/'), $imageChunks)) {
+            $publisher = $imageChunks[1];
+            $offer = $imageChunks[2];
+            $sku = $imageChunks[3];
+            $version = $imageChunks[4];
+            $isMarketPlaceImage = isset($imageChunks[5]) ? true : false;
+            
+            if ($isMarketPlaceImage) {
+                $plan = new PlanProperties($sku, $publisher, $offer);
+            }
+           
             $storageProfile->setImageReference([
-                'publisher' => $imageChunks[1],
-                'offer'     => $imageChunks[2],
-                'sku'       => $imageChunks[3],
-                'version'   => $imageChunks[4]
+                'publisher' => $publisher,
+                'offer'     => $offer,
+                'sku'       => $sku,
+                'version'   => $version
             ]);
-
-            $isWindows = ($imageChunks[1] == 'MicrosoftWindowsServer');
+            
         } else {
             throw new \Exception("Image definition '{$launchOptions->imageId}' is not supported");
         }
@@ -593,6 +675,10 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
         $vmData = new CreateVirtualMachine($DBServer->serverId, $launchOptions->cloudLocation, $vmProps);
 
         $vmData->tags = $DBServer->getAzureTags();
+        
+        if (isset($plan)) {
+            $vmData->setPlan($plan);
+        }
 
         $azure->compute->virtualMachine->create(
             $subscriptionId,
@@ -631,7 +717,7 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
         $DBServer->cloudLocationZone = $launchOptions->availZone;
 
         // we set server history here
-        $DBServer->getServerHistory();
+        $DBServer->getServerHistory()->update(['cloudServerId' => $DBServer->serverId]);
 
         return $DBServer;
     }
@@ -695,7 +781,7 @@ class AzurePlatformModule extends AbstractPlatformModule implements PlatformModu
 
         if ($collection === false || $collection->count() == 0) {
             $instanceTypesResult = $env->azure()->compute->location->getInstanceTypesList(
-                $env->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+                $env->keychain(SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
                 $cloudLocation
             );
             $ret = [];

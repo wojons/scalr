@@ -3,7 +3,7 @@
 namespace Scalr\Stats\CostAnalytics\Iterator;
 
 use Scalr\Stats\CostAnalytics\ChartPointInfo;
-use \DateTime, \DateTimeZone;
+use DateTime, DateTimeZone;
 
 /**
  * ChartDailyIterator

@@ -146,7 +146,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         }
 
         $this->user->getPermissions()->validate($dbFarm);
-        $this->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_MANAGE);
+        $this->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_UPDATE);
 
         $governance = new Scalr_Governance($this->Environment->id);
 
@@ -240,7 +240,16 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         return $response;
     }
 
-    private function validateFarmRoleConfiguration(array $config)
+    /**
+     * Validates configuration.
+     *
+     * It also updates passed array to ensure backward capability when mapping is changed during development
+     *
+     * @param    array      $config  The configuration options that looks like [property => value]
+     * @return   boolean    Returns true if configuration is valid or false otherwise
+     * @throws   Exception
+     */
+    private function validateFarmRoleConfiguration(array &$config)
     {
         $allowedConfiguration = array(
             'scaling.enabled',
@@ -287,21 +296,34 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
             'gce.machine-type',
             'gce.network',
-            'gce.on-host-maintenance'
+            'gce.on-host-maintenance',
+
+            'instance_type'
         );
 
         foreach ($config as $key => $value) {
-            if (!in_array($key, $allowedConfiguration))
+            if (!in_array($key, $allowedConfiguration)) {
                 throw new Exception(sprintf(
                     "Unknown configuration option '%s'",
                     $this->stripValue($key)
                 ));
+            }
+
+            if (in_array($key, ['openstack.flavor-id', 'aws.instance_type', 'gce.machine-type', 'cloudstack.service_offering_id'])) {
+                $instanceType = $value;
+            }
 
             /*
             if ($key == 'gce.on-host-maintenance' && !in_array($value, array('MIGRATE, TERMINATE')))
                 throw new Exception("Allowed values for 'gce.on-host-maintenance' are MIGRATE or TERMINATE");
             */
         }
+
+        if (isset($instanceType)) {
+            $config[Entity\FarmRoleSetting::INSTANCE_TYPE] = $instanceType;
+        }
+
+        unset($config['openstack.flavor-id'], $config['aws.instance_type'], $config['gce.machine-type'], $config['cloudstack.service_offering_id']);
 
         return true;
     }
@@ -315,7 +337,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
             throw new Exception(sprintf("Farm #%s not found", $FarmID));
         }
         $this->user->getPermissions()->validate($dbFarm);
-        $this->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_MANAGE);
+        $this->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_UPDATE);
 
         $dbFarm->isLocked(true);
 
@@ -472,7 +494,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
             throw new Exception(sprintf("Farm #%s not found", $FarmID));
         }
         $this->user->getPermissions()->validate($DBFarm);
-        $this->restrictFarmAccess($DBFarm, Acl::PERM_FARMS_MANAGE);
+        $this->restrictFarmAccess($DBFarm, Acl::PERM_FARMS_UPDATE);
 
         $DBFarm->isLocked(true);
 
@@ -508,7 +530,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         }
 
         $this->user->getPermissions()->validate($dbFarm);
-        $this->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_MANAGE);
+        $this->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_DELETE);
 
         $dbFarm->isLocked(true);
 
@@ -567,7 +589,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
         $this->DB->CommitTrans();
 
-        $this->DB->Execute("DELETE FROM scripting_log WHERE farmid=?", array($dbFarm->ID));
+        $this->DB->Execute("DELETE FROM orchestration_log WHERE farmid=?", [$dbFarm->ID]);
 
         $response = $this->CreateInitialResponse();
         $response->Result = true;
@@ -577,7 +599,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
     public function FarmCreate($Name, $Description = "", $ProjectID = "", array $Configuration = array())
     {
-        $this->restrictFarmAccess(null, Acl::PERM_FARMS_MANAGE);
+        $this->restrictAccess(Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_CREATE);
 
         $governance = new Scalr_Governance($this->Environment->id);
 
@@ -617,9 +639,8 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         $dbFarm->EnvID = $this->Environment->id;
         $dbFarm->Status = FARM_STATUS::TERMINATED;
 
-        $dbFarm->createdByUserId = $this->user->getId();
-        $dbFarm->createdByUserEmail = $this->user->getEmail();
         $dbFarm->changedByUserId = $this->user->getId();
+        $dbFarm->ownerId = $this->user->getId();
         $dbFarm->changedTime = microtime();
 
         $dbFarm->Name = $Name;
@@ -627,6 +648,9 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         $dbFarm->Comments = $Description;
 
         $dbFarm->save();
+
+        $dbFarm->SetSetting(Entity\FarmSetting::CREATED_BY_ID, $this->user->getId());
+        $dbFarm->SetSetting(Entity\FarmSetting::CREATED_BY_EMAIL, $this->user->getEmail());
 
         //Associates cost analytics project with the farm.
         $dbFarm->setProject(!empty($ProjectID) ? $ProjectID : null);
@@ -671,7 +695,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
     public function ScriptingLogsList($FarmID, $ServerID = null, $EventID = null, $StartFrom = 0, $RecordsLimit = 20)
     {
-        $this->restrictAccess(Acl::RESOURCE_LOGS_SCRIPTING_LOGS);
+        $this->restrictAccess(Acl::RESOURCE_LOGS_ORCHESTRATION_LOGS);
 
         //Note! We do not check not-owned-farms permission here. It's approved by Igor.
         $farminfo = $this->DB->GetRow("SELECT clientid FROM farms WHERE id=? AND env_id=?",
@@ -681,7 +705,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         if (!$farminfo)
             throw new Exception(sprintf("Farm not found", $FarmID));
 
-        $sql = "SELECT * FROM scripting_log WHERE farmid='{$FarmID}'";
+        $sql = "SELECT * FROM orchestration_log WHERE farmid='{$FarmID}'";
         if ($ServerID)
             $sql .= " AND server_id=".$this->DB->qstr($ServerID);
 
@@ -701,9 +725,12 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
         $response->StartFrom = $start;
         $response->RecordsLimit = $limit;
         $response->LogSet = new stdClass();
-        $response->LogSet->Item = array();
+        $response->LogSet->Item = [];
 
         $rows = $this->DB->Execute($sql);
+
+        $eventCahce = [];
+
         while ($row = $rows->FetchRow())
         {
             $itm = new stdClass();
@@ -714,12 +741,19 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
             $itm->ExecTime = $row['exec_time'];
             $itm->ExecExitCode = $row['exec_exitcode'];
 
-            if (stristr($row['event'], 'CustomEvent'))
-                $itm->Event = "Manual";
-            elseif (stristr($row['event'], 'APIEvent'))
-                $itm->Event = "API";
-            else
-                $itm->Event = $row['event'];
+            if (!empty($row['event_id'])) {
+                if (empty($eventCahce[$row['event_id']])) {
+                    $eventCahce[$row['event_id']] = $this->DB->GetOne("SELECT `type` FROM events WHERE event_id=?", [$row['event_id']]);
+                }
+
+                if (stristr($eventCahce[$row['event_id']], 'CustomEvent')) {
+                    $itm->Event = "Manual";
+                } elseif (stristr($eventCahce[$row['event_id']], 'APIEvent')) {
+                    $itm->Event = "API";
+                } else {
+                    $itm->Event = $eventCahce[$row['event_id']];
+                }
+            }
 
             $response->LogSet->Item[] = $itm;
         }
@@ -740,9 +774,7 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
     public function FarmRoleUpdateParameterValue($FarmRoleID, $ParamName, $ParamValue)
     {
-        $this->restrictAccess(Acl::RESOURCE_ROLES_ENVIRONMENT, Acl::PERM_ROLES_ENVIRONMENT_MANAGE);
-
-        throw new Exception("FarmRole parameters are deprected. Please use GlobalVariables instead.");
+        throw new Exception("FarmRole parameters are deprecated. Please use GlobalVariables instead.");
     }
 
     public function EnvironmentsList()
@@ -970,260 +1002,41 @@ class ScalrAPI_2_3_0 extends ScalrAPI_2_2_0
 
     public function DmSourcesList()
     {
-        $this->restrictAccess(Acl::RESOURCE_DEPLOYMENTS_SOURCES);
-
-        $response = $this->CreateInitialResponse();
-        $response->SourceSet = new stdClass();
-        $response->SourceSet->Item = array();
-
-        $rows = $this->DB->Execute("SELECT * FROM dm_sources WHERE env_id=?", array($this->Environment->id));
-        while ($row = $rows->FetchRow()) {
-            $itm = new stdClass();
-            $itm->ID = $row['id'];
-            $itm->Type = $row['type'];
-            $itm->URL = $row['url'];
-            $itm->AuthType = $row['auth_type'];
-
-            $response->SourceSet->Item[] = $itm;
-        }
-
-        return $response;
+        throw new Exception("Deployments feature was deprecated and no longer available.");
     }
 
     public function DmSourceCreate($Type, $URL, $AuthLogin=null, $AuthPassword=null)
     {
-        $this->restrictAccess(Acl::RESOURCE_DEPLOYMENTS_SOURCES);
-
-        $source = Scalr_Model::init(Scalr_Model::DM_SOURCE);
-
-        $authInfo = new stdClass();
-        if ($Type == Scalr_Dm_Source::TYPE_SVN)
-        {
-            $authInfo->login = $AuthLogin;
-            $authInfo->password	= $AuthPassword;
-            $authType = Scalr_Dm_Source::AUTHTYPE_PASSWORD;
-        }
-
-        if (Scalr_Dm_Source::getIdByUrlAndAuth($URL, $authInfo))
-            throw new Exception("Source already exists in database");
-
-        $source->envId = $this->Environment->id;
-
-        $source->url = $URL;
-        $source->type = $Type;
-        $source->authType = $authType;
-        $source->setAuthInfo($authInfo);
-
-        $source->save();
-
-        $response = $this->CreateInitialResponse();
-        $response->SourceID = $source->id;
-
-        return $response;
+        throw new Exception("Deployments feature was deprecated and no longer available.");
     }
 
     public function DmApplicationCreate($Name, $SourceID, $PreDeployScript=null, $PostDeployScript=null)
     {
-        $this->restrictAccess(Acl::RESOURCE_DEPLOYMENTS_APPLICATIONS);
-
-        $application = Scalr_Model::init(Scalr_Model::DM_APPLICATION);
-        $application->envId = $this->Environment->id;
-
-        if (Scalr_Dm_Application::getIdByNameAndSource($Name, $SourceID))
-            throw new Exception("Application already exists in database");
-
-        $application->name = $Name;
-        $application->sourceId = $SourceID;
-
-        $application->setPreDeployScript($PreDeployScript);
-        $application->setPostDeployScript($PostDeployScript);
-
-        $application->save();
-
-        $response = $this->CreateInitialResponse();
-        $response->ApplicationID = $application->id;
-
-        return $response;
+        throw new Exception("Deployments feature was deprecated and no longer available.");
     }
 
     public function DmApplicationsList()
     {
-        $this->restrictAccess(Acl::RESOURCE_DEPLOYMENTS_APPLICATIONS);
-
-        $response = $this->CreateInitialResponse();
-        $response->ApplicationSet = new stdClass();
-        $response->ApplicationSet->Item = array();
-
-        $rows = $this->DB->Execute("SELECT * FROM dm_applications WHERE env_id=?", array($this->Environment->id));
-        while ($row = $rows->FetchRow()) {
-            $itm = new stdClass();
-            $itm->ID = $row['id'];
-            $itm->SourceID = $row['dm_source_id'];
-            $itm->Name = $row['name'];
-
-            $response->ApplicationSet->Item[] = $itm;
-        }
-
-        return $response;
+        throw new Exception("Deployments feature was deprecated and no longer available.");
     }
 
     public function DmDeploymentTasksList($FarmRoleID = null, $ApplicationID = null, $ServerID = null)
     {
-        $this->restrictAccess(Acl::RESOURCE_DEPLOYMENTS_TASKS);
-
-        $sql = "SELECT id FROM dm_deployment_tasks WHERE status !='".Scalr_Dm_DeploymentTask::STATUS_ARCHIVED."' AND env_id = '{$this->Environment->id}'";
-        if ($FarmRoleID)
-            $sql .= ' AND farm_role_id = ' . $this->DB->qstr($FarmRoleID);
-
-        if ($ApplicationID)
-            $sql .= ' AND dm_application_id = ' . $this->DB->qstr($ApplicationID);
-
-        if ($ServerID)
-            $sql .= ' AND server_id = ' . $this->DB->qstr($ServerID);
-
-        $response = $this->CreateInitialResponse();
-        $response->DeploymentTasksSet = new stdClass();
-        $response->DeploymentTasksSet->Item = array();
-
-        $rows = $this->DB->Execute($sql);
-        while ($task = $rows->FetchRow()) {
-            $deploymentTask = Scalr_Model::init(Scalr_Model::DM_DEPLOYMENT_TASK)->loadById($task['id']);
-
-            $itm = new stdClass();
-            $itm->ServerID = $deploymentTask->serverId;
-            $itm->DeploymentTaskID = $deploymentTask->id;
-            $itm->FarmRoleID = $deploymentTask->farmRoleId;
-            $itm->RemotePath = $deploymentTask->remotePath;
-            $itm->Status = $deploymentTask->status;
-
-            $response->DeploymentTasksSet->Item[] = $itm;
-        }
-
-        return $response;
+        throw new Exception("Deployments feature was deprecated and no longer available.");
     }
 
     public function DmDeploymentTaskGetLog($DeploymentTaskID, $StartFrom = 0, $RecordsLimit = 20)
     {
-        $this->restrictAccess(Acl::RESOURCE_DEPLOYMENTS_TASKS);
-
-        $deploymentTask = Scalr_Model::init(Scalr_Model::DM_DEPLOYMENT_TASK)->loadById($DeploymentTaskID);
-        if ($deploymentTask->envId != $this->Environment->id)
-            throw new Exception(sprintf("Deployment task #%s not found", $DeploymentTaskID));
-
-        $response = $this->CreateInitialResponse();
-
-        $sql = "SELECT * FROM dm_deployment_task_logs WHERE dm_deployment_task_id = " . $this->DB->qstr($DeploymentTaskID);
-
-        $total = $this->DB->GetOne(preg_replace('/\*/', 'COUNT(*)', $sql, 1));
-
-        $sql .= " ORDER BY id DESC";
-
-        $start = $StartFrom ? (int) $StartFrom : 0;
-        $limit = $RecordsLimit ? (int) $RecordsLimit : 20;
-        $sql .= " LIMIT {$start}, {$limit}";
-
-        $response = $this->CreateInitialResponse();
-        $response->TotalRecords = $total;
-        $response->StartFrom = $start;
-        $response->RecordsLimit = $limit;
-        $response->LogSet = new stdClass();
-        $response->LogSet->Item = array();
-
-        $rows = $this->DB->Execute($sql);
-        while ($row = $rows->FetchRow()) {
-            $itm = new stdClass();
-            $itm->Message = $row['message'];
-            $itm->Timestamp = strtotime($row['dtadded']);
-
-            $response->LogSet->Item[] = $itm;
-        }
-
-        return $response;
+        throw new Exception("Deployments feature was deprecated and no longer available.");
     }
 
     public function DmDeploymentTaskGetStatus($DeploymentTaskID)
     {
-        $this->restrictAccess(Acl::RESOURCE_DEPLOYMENTS_TASKS);
-
-        $deploymentTask = Scalr_Model::init(Scalr_Model::DM_DEPLOYMENT_TASK)->loadById($DeploymentTaskID);
-        if ($deploymentTask->envId != $this->Environment->id)
-            throw new Exception(sprintf("Deployment task #%s not found", $DeploymentTaskID));
-
-        $response = $this->CreateInitialResponse();
-        $response->DeploymentTaskStatus = $deploymentTask->status;
-        if ($deploymentTask->status == Scalr_Dm_DeploymentTask::STATUS_FAILED)
-            $response->FailureReason = $deploymentTask->lastError;
-
-        return $response;
+        throw new Exception("Deployments feature was deprecated and no longer available.");
     }
 
     public function DmApplicationDeploy($ApplicationID, $FarmRoleID, $RemotePath)
     {
-        $this->restrictAccess(Acl::RESOURCE_DEPLOYMENTS_APPLICATIONS);
-
-        $application = Scalr_Model::init(Scalr_Model::DM_APPLICATION)->loadById($ApplicationID);
-        if ($application->envId != $this->Environment->id)
-            throw new Exception("Aplication not found in database");
-
-        $dbFarmRole = DBFarmRole::LoadByID($FarmRoleID);
-
-        if ($dbFarmRole->GetFarmObject()->EnvID != $this->Environment->id)
-            throw new Exception("Farm Role not found in database");
-
-        $this->user->getPermissions()->validate($dbFarmRole);
-
-        $servers = $dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING));
-
-        if (count($servers) == 0)
-            throw new Exception("There is no running servers on selected farm/role");
-
-        $response = $this->CreateInitialResponse();
-        $response->DeploymentTasksSet = new stdClass();
-        $response->DeploymentTasksSet->Item = array();
-
-        foreach ($servers as $dbServer) {
-            $taskId = Scalr_Dm_DeploymentTask::getId($ApplicationID, $dbServer->serverId, $RemotePath);
-            $deploymentTask = Scalr_Model::init(Scalr_Model::DM_DEPLOYMENT_TASK);
-
-            if (!$taskId) {
-                try {
-                    if (!$dbServer->IsSupported("0.7.38"))
-                        throw new Exception("Scalr agent installed on this server doesn't support deployments. Please update it to the latest version");
-
-                    $deploymentTask->create(
-                        $FarmRoleID,
-                        $ApplicationID,
-                        $dbServer->serverId,
-                        Scalr_Dm_DeploymentTask::TYPE_API,
-                        $RemotePath,
-                        $this->Environment->id
-                    );
-                } catch (Exception $e) {
-                    $itm = new stdClass();
-                    $itm->ServerID = $dbServer->serverId;
-                    $itm->ErrorMessage = $e->getMessage();
-
-                    $response->DeploymentTasksSet->Item[] = $itm;
-
-                    continue;
-                }
-            } else {
-                $deploymentTask->loadById($taskId);
-                $deploymentTask->status = Scalr_Dm_DeploymentTask::STATUS_PENDING;
-                $deploymentTask->log("Re-deploying application. Status: pending");
-                $deploymentTask->save();
-            }
-
-            $itm = new stdClass();
-            $itm->ServerID = $dbServer->serverId;
-            $itm->DeploymentTaskID = $deploymentTask->id;
-            $itm->FarmRoleID = $deploymentTask->farmRoleId;
-            $itm->RemotePath = $deploymentTask->remotePath;
-            $itm->Status = $deploymentTask->status;
-
-            $response->DeploymentTasksSet->Item[] = $itm;
-        }
-
-        return $response;
+        throw new Exception("Deployments feature was deprecated and no longer available.");
     }
 }

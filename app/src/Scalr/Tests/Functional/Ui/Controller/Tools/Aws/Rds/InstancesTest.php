@@ -29,9 +29,9 @@ class InstancesTest extends WebTestCase
     public function testXListInstancesAction()
     {
         $content = $this->request('/tools/aws/rds/instances/xListInstances/?cloudLocation=us-east-1');
-        $this->assertResponseDataHasKeys(array(
-            'engine', 'status', 'hostname', 'port', 'name', 'username', 'type', 'storage', 'dtadded', 'avail_zone'
-        ), $content);
+        $this->assertResponseDataHasKeys([
+            'Engine', 'DBInstanceStatus', 'Endpoint', 'Port', 'DBName', 'MasterUsername', 'DBInstanceClass', 'AllocatedStorage', 'InstanceCreateTime', 'AvailabilityZone', 'isReplica'
+        ], $content);
     }
 
     /**

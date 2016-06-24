@@ -1,9 +1,9 @@
 <?php
 namespace Scalr\Tests;
 
-use \Scalr_UI_Request;
-use \Scalr_UI_Response;
-use \Scalr_UI_Controller;
+use Scalr_UI_Request;
+use Scalr_UI_Response;
+use Scalr_UI_Controller;
 
 /**
  * WebTestCase class which is used for functional testing of the interface
@@ -13,6 +13,9 @@ use \Scalr_UI_Controller;
  */
 abstract class WebTestCase extends TestCase
 {
+
+    const TEST_TYPE = TestCase::TEST_TYPE_UI;
+
     /**
      * ID of the user which is used in the functional test
      * @var int
@@ -60,6 +63,8 @@ abstract class WebTestCase extends TestCase
     protected function setUp()
     {
         parent::setUp();
+
+        //TODO It should be removed when we clean up NOTICES
         $this->errorLevel = error_reporting();
 
         $this->markTestSkippedIfFunctionalTestsDisabled();
@@ -82,8 +87,8 @@ abstract class WebTestCase extends TestCase
      */
     protected function markTestSkippedIfFunctionalTestsDisabled()
     {
-        if (\Scalr::config('scalr.phpunit.skip_functional_tests')) {
-            $this->markTestSkipped('(scalr.phpunit.skip_functional_tests: no) is required to proceed.');
+        if (self::isSkippedFunctionalTest()) {
+            $this->markTestSkipped();
         }
     }
 
@@ -95,7 +100,9 @@ abstract class WebTestCase extends TestCase
     {
         $this->env = null;
         $this->user = null;
+
         error_reporting($this->errorLevel);
+
         parent::tearDown();
     }
 

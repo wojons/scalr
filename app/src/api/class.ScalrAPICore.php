@@ -1,9 +1,12 @@
 <?php
 
 use Scalr\Exception\Http\BadRequestException;
-use Scalr\AuditLogger;
+use Scalr\LogCollector\AuditLogger;
+use Scalr\LogCollector\AuditLoggerConfiguration;
+use Scalr\LogCollector\AuditLoggerRetrieveConfigurationInterface;
+use Scalr\Model\Entity\Farm;
 
-abstract class ScalrAPICore
+abstract class ScalrAPICore implements AuditLoggerRetrieveConfigurationInterface
 {
     const HASH_ALGO = 'SHA256';
 
@@ -96,16 +99,8 @@ abstract class ScalrAPICore
         //Releases auditloger to ensure it will be updated
         $container->release('auditlogger');
 
-        //Adjusts metadata to invoke audit loger
-        $container->setShared('auditlogger.metadata', function ($cont) {
-            return (object) [
-                'user'        => $this->user,
-                'envId'       => isset($this->Environment) ? $this->Environment->id : null,
-                'remoteAddr'  => $cont->request->getRemoteAddr(),
-                'ruid'        => null,
-                'requestType' => AuditLogger::REQUEST_TYPE_API,
-                'systemTask'  => null,
-            ];
+        $container->set('auditlogger.request', function () {
+            return $this;
         });
     }
 
@@ -119,7 +114,7 @@ abstract class ScalrAPICore
      */
     protected function auditLog($event, ...$extra)
     {
-        return $this->getContainer()->auditlogger->auditLog($event, ...$extra);
+        return $this->getContainer()->auditlogger->log($event, ...$extra);
     }
 
     protected function insensitiveUksort($a,$b)
@@ -701,11 +696,11 @@ abstract class ScalrAPICore
 
             $result = $acl->isUserAllowedByEnvironment($this->user, $this->Environment, \Scalr\Acl\Acl::RESOURCE_FARMS, $permissionId);
 
-            if (!$result && $dbFarm->teamId && $this->user->isInTeam($dbFarm->teamId)) {
+            if (!$result && $dbFarm->__getNewFarmObject()->hasUserTeamOwnership($this->user)) {
                 $result = $acl->isUserAllowedByEnvironment($this->user, $this->Environment, \Scalr\Acl\Acl::RESOURCE_TEAM_FARMS, $permissionId);
             }
 
-            if (!$result && $dbFarm->createdByUserId && $this->user->id == $dbFarm->createdByUserId) {
+            if (!$result && $dbFarm->ownerId && $this->user->id == $dbFarm->ownerId) {
                 $result = $acl->isUserAllowedByEnvironment($this->user, $this->Environment, \Scalr\Acl\Acl::RESOURCE_OWN_FARMS, $permissionId);
             }
 
@@ -753,4 +748,52 @@ abstract class ScalrAPICore
             throw new Scalr_Exception_InsufficientPermissions();
         }
     }
+
+    /**
+     * Generate conditions for sql query to limit access by only allowable farms.
+     * Table `farms` should have alias `f`.
+     *
+     * @param   string  $permissionId   optional
+     * @return  string
+     */
+    public function getFarmSqlQuery($permissionId = null)
+    {
+        if (!$this->isAllowed(\Scalr\Acl\Acl::RESOURCE_FARMS, $permissionId)) {
+            $q = [];
+            if ($this->isAllowed(\Scalr\Acl\Acl::RESOURCE_TEAM_FARMS, $permissionId)) {
+                $q[] = Farm::getUserTeamOwnershipSql($this->user->id);
+            }
+
+            if ($this->isAllowed(\Scalr\Acl\Acl::RESOURCE_OWN_FARMS, $permissionId)) {
+                $q[] = "f.created_by_id = '{$this->user->getId()}'";
+            }
+
+            if (count($q)) {
+                $sql = '(' . join(' OR ', $q) . ')';
+            } else {
+                $sql = '0'; // no permissions
+            }
+        } else {
+            $sql = '1'; // all farms in env
+        }
+
+        return $sql;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\LogCollector\AuditLoggerRetrieveConfigurationInterface::getAuditLoggerConfig()
+     */
+    public function getAuditLoggerConfig()
+    {
+        $config = new AuditLoggerConfiguration(AuditLogger::REQUEST_TYPE_API);
+
+        $config->user = $this->user;
+        $config->accountId = $this->user ? $this->user->getAccountId() : null;
+        $config->envId = isset($this->Environment) ? $this->Environment->id : null;
+        $config->remoteAddr = $this->getContainer()->request->getRemoteAddr();
+
+        return $config;
+    }
+
 }

@@ -146,8 +146,9 @@ class ContainerTest extends TestCase
      */
     public function testFunctionalLdap()
     {
-        if ($this->isSkipFunctionalTests())
+        if (static::isSkippedFunctionalTest()) {
             $this->markTestSkipped();
+        }
 
         $this->assertInstanceOf('Scalr\\Net\\Ldap\\LdapClient', $this->container->ldap('somelogin', 'somepassword'));
     }

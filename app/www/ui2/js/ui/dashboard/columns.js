@@ -377,7 +377,7 @@ Ext.define('Scalr.ui.dashboard.Farm', {
         itemSelector: 'div.scalr-ui-dashboard-farms-servers',
         tpl: new Ext.XTemplate(
             '<tpl if="values.length">',
-                '<ul class="scalr-ui-dashboard-farms" align="center">' +
+                '<ul class="scalr-ui-dashboard-farms" style="text-align:center">' +
                     '<tpl for=".">' +
                     '<li>' +
                     '<a href="#/farms/{farmId}/roles/{farmRoleId}/view" data-anchor="top"  data-qtip="{farmRoleAlias:htmlEncode}" class="icon"><div class="x-icon-role-small x-icon-role-small-{[Scalr.utils.getRoleCls(values)]}" /></div></a>' +
@@ -393,7 +393,7 @@ Ext.define('Scalr.ui.dashboard.Farm', {
         this.down('dataview').store.load({
             data: content['servers']
         });
-        this.title = 'Farm ' + content['name'];
+        this.title = 'Farm <span style="font: 14px OpenSansRegular; text-transform: none;">(' + content['name'] + ')</span>';
     },
     widgetError: function (msg) {
         this.down('dataview').emptyText = '<div class="x-grid-empty x-error">' + msg + '</div>';
@@ -525,51 +525,45 @@ Ext.define('Scalr.ui.dashboard.Announcement', {
     extend: 'Ext.panel.Panel',
     alias: 'widget.dashboard.announcement',
 
-    title: 'From the Scalr blog',
+    title: 'Announcements',
     items: {
-        xtype: 'dataview',
-        store: {
-            fields: ['time','text', 'url', 'newS'],
-            proxy: 'object'
-        },
-        deferEmptyText: false,
-        loadMask: false,
-        itemSelector: 'div.scalr-ui-dashboard-widgets-div',
-        tpl: new Ext.XTemplate(
-            '<tpl for=".">',
-            '<div class="scalr-ui-dashboard-widgets-div">',
-            '<div class="scalr-ui-dashboard-widgets-desc">{time}</div>',
-            '<div>' +
-                '<a href="{url}" target="_blank"><span class="scalr-ui-dashboard-widgets-message-slim">{text}</span></a>' +
-                '<tpl if="newS"><span style="margin-left: 5px; cursor: pointer;" class="scalr-ui-dashboard-widgets-info">New</span></tpl>' +
-                '</div>',
-            '</div>',
-            '</tpl>'
-        )
+        xtype: 'announcementsview',
+        client: 'dashboard',
+        maxHeight: 600,
+        store: Ext.create('Ext.data.ChainedStore', {
+            source: Scalr.utils.announcement.store,
+            newsCount: 8,
+            recCount: 8,
+            listeners: {
+                datachanged: function () {
+                    this.recCount = this.newsCount;
+                }
+            }
+        })
     },
     widgetType: 'local',
-    widgetUpdate: function (content) {
-        if (!this.params || !this.params['newsCount'])
-            this.params = {'newsCount': 5};
-        this.down('dataview').emptyText = '<div class="x-grid-empty">No news</div>';
-        this.down('dataview').store.load({
-            data: content
-        });
+
+    checkParams: function (newsCount, force) {
+        if (Ext.isEmpty(this.params)) {
+            this.params = {newsCount: 8};
+            this.down('announcementsview').store.newsCount = 8;
+        } else if (newsCount && (newsCount !== this.params['newsCount'] || force)) {
+            this.params['newsCount'] = newsCount;
+            this.down('announcementsview').store.newsCount = newsCount;
+        }
     },
-    widgetError: function (msg) {
-        this.down('dataview').emptyText = '<div class="x-grid-empty x-error">' + msg + '</div>';
-    },
+    widgetUpdate: Ext.emptyFn,
+    widgetError: Ext.emptyFn,
     showSettingsWindow: function () {
-        if (!this.params || !this.params['newsCount'])
-            this.params = {'newsCount': 5};
+        this.checkParams();
+
         Scalr.Confirm({
             formSimple: true,
             form: [{
                 xtype: 'combo',
-                //margin: 5,
-                store: [1, 2, 5, 10],
-                fieldLabel: 'Number of news:',
-                labelWidth: 120,
+                store: [1, 4, 8, 10],
+                fieldLabel: 'Number of announcements:',
+                labelWidth: 200,
                 editable: false,
                 value: this.params['newsCount'],
                 queryMode: 'local',
@@ -578,13 +572,35 @@ Ext.define('Scalr.ui.dashboard.Announcement', {
             }],
             title: 'Settings',
             success: function (data) {
-                if (data['newsCount']) {
-                    this.params['newsCount'] = data['newsCount'];
-                    this.up('dashpanel').savePanel(1);
+                var newsCount = data['newsCount'],
+                    store = this.down('announcementsview').store;
+
+                if (newsCount) {
+                    this.checkParams(newsCount);
+                    this.up('dashpanel').savePanel(0);
+
+                    store.fireEvent('datachanged', store);
+                    store.source.loadData(store.source.data.items);
                 }
             },
             scope: this
         });
+    },
+
+    listeners: {
+        render: function () {
+            var store = this.down('announcementsview').store;
+
+            this.checkParams(this.params && this.params['newsCount'] || null, true);
+            store.fireEvent('datachanged', store);
+            if (!store.getFilters().length) {
+                store.setFilters([function () {
+                    return 0 < store.recCount--;
+                }]);
+            } else {
+                store.source.loadData(store.source.data.items);
+            }
+        }
     }
 });
 
@@ -806,21 +822,21 @@ Ext.define('Scalr.ui.dashboard.Status', {
             xtype: 'templatecolumn',
             sortable: false,
             resizable: false,
-            tpl: '<img class="x-grid-icon x-grid-icon-{[values && values.EC2.img==\'normal.png\'?\'ok\':\'notok\']}" src="'+Ext.BLANK_IMAGE_URL+'" title="{EC2.status}">',
+            tpl: '<img class="x-grid-icon x-grid-icon-{[values && values.EC2.img==\'normal.png\'?\'ok\':\'notok\']}" src="'+Ext.BLANK_IMAGE_URL+'" data-qtip="{EC2.status}">',
             flex: 1
         }, {
             text: 'RDS',
             xtype: 'templatecolumn',
             sortable: false,
             resizable: false,
-            tpl: '<img class="x-grid-icon x-grid-icon-{[values && values.RDS.img==\'normal.png\'?\'ok\':\'notok\']}" src="'+Ext.BLANK_IMAGE_URL+'" title="{RDS.status}">',
+            tpl: '<img class="x-grid-icon x-grid-icon-{[values && values.RDS.img==\'normal.png\'?\'ok\':\'notok\']}" src="'+Ext.BLANK_IMAGE_URL+'" data-qtip="{RDS.status}">',
             flex: 1
         }, {
             text: 'S3',
             xtype: 'templatecolumn',
             sortable: false,
             resizable: false,
-            tpl: '<img class="x-grid-icon x-grid-icon-{[values && values.S3.img==\'normal.png\'?\'ok\':\'notok\']}" src="'+Ext.BLANK_IMAGE_URL+'" title="{S3.status}">',
+            tpl: '<img class="x-grid-icon x-grid-icon-{[values && values.S3.img==\'normal.png\'?\'ok\':\'notok\']}" src="'+Ext.BLANK_IMAGE_URL+'" data-qtip="{S3.status}">',
             flex: 1
         }],
         disableSelection: true,
@@ -853,7 +869,47 @@ Ext.define('Scalr.ui.dashboard.Status', {
                 var items = [];
                 if (this.isDestroyed)
                     return;
+
                 Ext.each(content['data'], function(item){
+                    Ext.Object.each(item, function(prop){
+                        // status formatting
+                        if (item[prop].status) {
+                            var status = item[prop].status.trim();
+                            // server tags must be encoded twice, because once they will be decoded by qtip
+                            status = Ext.util.Format.htmlEncode(status);
+                            // wrap first line in <b> tag in multiline status
+                            var statusLines = status.match(/.*\n/g);
+                            if (statusLines) {
+                                status = status.replace(statusLines[0].trim(), '<b>' + statusLines[0] + '</b>\n');
+                            }
+
+                            // remove 'more' word
+                            status = status.replace(/\n\s*more\s*\n/g, '\n');
+
+                            // replace new lines with <br> tag
+                            status = status.replace(/\n\s*/g, '<br>');
+
+                            // time formatting
+                            // if dot + time add <br>
+                            var timeWithDot = status.match(/\.\s\d{1,2}:\d{2}\s\w*/g);
+                            Ext.each(timeWithDot, function (item) {
+                                var formattedItem = item.replace('.', '.<br>');
+                                status = status.replace(item, formattedItem);
+                            });
+
+                            // wrap time in <b> tag
+                            var timeArray = status.match(/\d{1,2}:\d{2}\s\w*/g);
+                            Ext.each(timeArray, function (item) {
+                                var formattedItem = '<b>' + item + '</b>'
+                                status = status.replace(item, formattedItem);
+                            });
+
+                            // encode string for qtip
+                            status = Ext.util.Format.htmlEncode(status);
+                            item[prop].status = status;
+                        }
+                    });
+
                     if (item) items.push(item);
                 });
                 this.child('grid').store.load({
@@ -1049,29 +1105,6 @@ Ext.define('Scalr.ui.dashboard.tutorApp', {
             '</div></a>' +
             '<div style="width: 5%; float: left; height: 100%; padding-left: 5px;">' +
                 '<div class="x-menu-icon-help" style="cursor: pointer; position: absolute; top: 115px;" align="right"></div>' +
-                '</div>'
-    }, {
-        xtype: 'panel',
-        margin: '10 0 0 0',
-        itemId: 'tutorAppInfo',
-        height: 230,
-        hidden: true,
-        autoScroll: true,
-        border: false,
-        html:
-            '<div class="scalr-ui-dashboard-tutor-desc"><span class="scalr-ui-dashboard-tutor-title">Application</span><br/>' +
-                '<br/>You can use Scalr\'s deployment functionality to orchestrate code deployments to your farms. To do so, simply go to <a href="#/dm/tasks/view">Websites > Deployments</a>.' +
-                '<br/>Within Scalr, Deployments are implemented through Sources and Applications.' +
-                '<br/><br/><a href="#/dm/sources/view"><span class="scalr-ui-dashboard-tutor-title">Sources</span></a>' +
-                '<br/>A source in Scalr is a path to your application’s source code. This can be Git, SVN, or simply HTTP. When you add a source, you have the option of providing authentication if your source is protected. You can have multiple sources for the testing or stable branches of your code.' +
-                '<br/><br/>Depending on the type of source you chose, your code will be deployed:' +
-                '<br/>- with a simple download (http);' +
-                '<br/>- with svn checkout the first time, then svn update (svn);' +
-                '<br/>- with git clone the first time, then git pull (git).' +
-                '<br/><br/>To automatically deploy code when you push to your repository, you can set post-commit hooks in svn and git that trigger a new deployment.' +
-                '<br/><br/><a href="#/dm/applications/view"><span class="scalr-ui-dashboard-tutor-title">Applications</span></a>' +
-                '<br/>We assume that everyone is familiar with the concept of application: this is simply the' +
-                'software that you want to run on your servers. In Scalr, an application is an object that has one or several *sources* attached to it and to which you can apply pre and post deploy scripts. This object can then be deployed on the instances of a specific role in a given farm. ' +
                 '</div>'
     }],
     onBoxReady: function () {
@@ -1437,7 +1470,7 @@ Ext.define('Scalr.ui.dashboard.Addfarm', {
             projectId = form.findField('projectId');
         if (Scalr.flags['analyticsEnabled']) {
             projectId.getStore().load({data: content.projects});
-            projectId.findPlugin('comboaddnew').setDisabled(!Scalr.isAllowed('ANALYTICS_ACCOUNT', 'manage-projects') || content.costCenterLocked == 1);
+            projectId.findPlugin('comboaddnew').setDisabled(!Scalr.isAllowed('ANALYTICS_PROJECTS_ACCOUNT', 'create') || content.costCenterLocked == 1);
             form.reset();
         }
         form.findField('name').refreshFarmName();
@@ -1502,7 +1535,12 @@ Ext.define('Scalr.ui.dashboard.NewUser', {
     },
 
     widgetError: function(message) {
-        Scalr.message.Error(message);
+        this.removeAll();
+
+        this.add({
+            xtype: 'component',
+            html: '<div class="x-grid-empty x-error">' + message + '</div>'
+        });
     }
 });
 
@@ -1625,12 +1663,16 @@ Ext.define('Scalr.ui.dashboard.Environments', {
     title: 'Environments in this account',
     cls: 'scalr-ui-dashboard-widgets-environments',
     autoScroll: true,
-    minHeight: 120,
     items: {
         xtype: 'gridpanel',
         border: false,
         store: {
-            fields: ['id',  'name', 'farmsCount', 'serversCount'],
+            fields: [
+                'id',
+                'name',
+                {name: 'farmsCount', type: 'int'},
+                {name: 'serversCount', type: 'int'}
+            ],
             proxy: 'object',
             sorters: {
                 property: 'name',
@@ -1691,5 +1733,278 @@ Ext.define('Scalr.ui.dashboard.Environments', {
         var grid = this.down('grid');
         grid.getView().headerCt.setHeight(0);
         grid.view.emptyText = '<div class="x-grid-empty x-error">' + msg + '</div>';
+    }
+});
+
+Ext.define('Scalr.ui.dashboard.GettingStarted', {
+    extend: 'Ext.panel.Panel',
+    alias: 'widget.dashboard.gettingstarted',
+
+    title: 'First Steps',
+
+    widgetType: 'local',
+    widgetUpdate: Ext.emptyFn,
+    widgetError: Ext.emptyFn,
+
+    items: {
+        xtype: 'container',
+        bodyStyle: 'font-size: 11px; body-padding: 4px; overflow-y: auto;',
+        items: [{
+            xtype: 'dataview',
+            store: {
+                fields: [ 'href', 'name' ],
+                proxy: 'object',
+                data: [
+                    {href: 'https://scalr-wiki.atlassian.net/wiki/x/igAeAQ', name: 'First Steps - Login as an administrator'},
+                    {href: 'https://scalr-wiki.atlassian.net/wiki/x/iAAeAQ', name: 'First Steps - Create a new user'},
+                    {href: 'https://scalr-wiki.atlassian.net/wiki/x/kgAeAQ', name: 'First Steps - Add Cloud Credentials'},
+                    {href: 'https://scalr-wiki.atlassian.net/wiki/x/ngAeAQ', name: 'First Steps - Add Images and Roles'}
+                ]
+            },
+            loadMask: false,
+            itemSelector: 'div.scalr-ui-dashboard-widgets-div',
+            tpl: [
+                '<h2 style="text-align: center">Did you just deploy your new Scalr install?<br/>Follow these instructions to get started.</h2><p><ul>',
+                '<tpl for=".">',
+                '<li><h3><a href="{href}" target="_blank">{name}</a></h3></li>',
+                '</tpl>',
+                '</p></ul>'
+            ]
+        }]
+    }
+});
+
+Ext.define('Scalr.ui.dashboard.ScalrHealth', {
+    extend: 'Ext.panel.Panel',
+    alias: 'widget.dashboard.scalrhealth',
+
+    title: 'SCALR HEALTH',
+
+    widgetType: 'local',
+    widgetUpdate: function (content) {
+        var errPanel = this.down('#error');
+
+        if (errPanel.isVisible()) {
+            errPanel.hide();
+        }
+
+        this.query('#hosts, #services').forEach(function (grid) {
+            var data = content[grid.itemId] || [];
+
+            grid.store.load({data: data});
+            grid.getView().headerCt.setHeight(data.length ? null : 0);
+            if (!grid.isVisible()) {
+                grid.show();
+            }
+
+            // hide optionscolumn if only one host in table
+            if (grid.itemId === 'hosts') {
+                var optionscolumn = grid.down('optionscolumn');
+
+                if (data.length <= 1) {
+                    optionscolumn.hide();
+                } else {
+                    optionscolumn.show();
+                }
+            }
+        });
+        this.lastUpdateTime = (new Date()).getTime();
+    },
+    widgetError: function (msg) {
+        this.query('#hosts, #services').forEach(function (grid) {
+            grid.hide();
+        });
+        var errPanel = this.down('#error');
+        errPanel.update('<div class="x-grid-empty x-error">' + msg + '</div>');
+        errPanel.show();
+    },
+
+    items: {
+        xtype: 'container',
+        defaults: {
+            xtype: 'grid',
+            header: {style: 'background-color:#f1f5fa'},
+            disableSelection: true,
+            enableColumnHide: false,
+            enableColumnMove: false
+        },
+        items: [{
+            xtype: 'panel',
+            itemId: 'error',
+            header: false,
+            hidden: true
+        }, {
+            title: 'HOSTS',
+            itemId: 'hosts',
+
+            store: {
+                fields: ['host', 'version', 'edition', 'revision', 'revDate'],
+                proxy: 'object'
+            },
+            columns: [{
+                text: 'Host Name',
+                dataIndex: 'host',
+                sortable: true,
+                flex: 2
+            }, {
+                text: 'Version',
+                xtype: 'templatecolumn',
+                dataIndex: 'id',
+                tpl: [
+                    '{version} ({edition})',
+                    '<tpl if="revision">',
+                        ' Rev: {revision}',
+                    '</tpl>',
+                    '<tpl if="revDate">',
+                        ' ({revDate})',
+                    '</tpl>'
+                ],
+                sortable: false,
+                flex: 4
+            }, {
+                xtype: 'optionscolumn',
+                menu: [{
+                    iconCls: 'x-menu-icon-delete',
+                    text: 'Remove host from widget',
+                    showAsQuickAction: true,
+                    request: {
+                        confirmBox: {
+                            type: 'delete',
+                            msg: 'Are you sure want to remove host "{host}" ?'
+                        },
+                        processBox: {
+                            type: 'delete'
+                        },
+                        url: '/dashboard/widget/scalrhealth/xRemove',
+                        dataHandler: function (data) {
+                            return {hostName: data['host']};
+                        },
+                        success: function (data) {
+                            var store = this.up('grid').getStore();
+                            var record = store.findRecord('host', data.host);
+
+                            store.remove(record);
+
+                            if (store.count() <= 1) {
+                                this.hide();
+                            }
+                        }
+                    }
+                }]
+            }]
+        }, {
+            title: 'SERVICES',
+            itemId: 'services',
+
+            store: {
+                fields: [
+                    'name',
+                    {name: 'numWorkers', type: 'int'},
+                    {name: 'numTasks', type: 'int'},
+                    'lastStart',
+                    'timeSpent',
+                    {
+                        name: 'state', convert: function (val) {
+                        return val || 'unknown';
+                    }
+                    }
+                ],
+                proxy: 'object'
+            },
+            columns: [{
+                text: 'Service',
+                dataIndex: 'name',
+                sortable: true,
+                width: 220
+            }, {
+                text: 'Tasks / Workers',
+                dataIndex: 'numTasks',
+                xtype: 'templatecolumn',
+                tpl: new Ext.XTemplate(
+                    '<tpl if="values.numWorkers || values.numTasks">',
+                    '<span data-anchor="left" data-qalign="l-r" data-qtip="{[this.getTooltipHtml(values)]}" data-qwidth="360">',
+                        '<span style="color:#1e90ff">{[values.numTasks]}</span>',
+                        '/<span style="color:#ffa500">{[values.numWorkers]}</span>',
+                    '</span>',
+                    '</tpl>',
+                    {
+                        disableFormats: true,
+                        getTooltipHtml: function (values) {
+                            return Ext.String.htmlEncode(
+                                '<span style="color:#1e90ff;">' + values.numTasks + '</span> &ndash; Tasks in the queue<br/>' +
+                                '<span style="color:#ffa500;">' + values.numWorkers + '</span> &ndash; Workers have been used into working cycle'
+                            );
+                        }
+                    }
+                ),
+                align: 'center',
+                sortable: false,
+                width: 120
+            }, {
+                text: 'Last run',
+                dataIndex: 'lastStart',
+                sortable: false,
+                flex: 1
+            }, {
+                text: 'Time spent',
+                dataIndex: 'timeSpent',
+                xtype: 'templatecolumn',
+                tpl: new Ext.XTemplate(
+                    '<tpl if="timeSpent != null">{[this.getInterval(values.timeSpent)]}</tpl>',
+                    {
+                        disableFormats: true,
+                        /**
+                         * Convert interval in seconds if necessary to minutes, hours or days.
+                         * Truncate result and add appropriate suffix.
+                         * Convert to
+                         *  - days if &gt;= 86400, suffix ' d'
+                         *  - hours if &gt;= 3600, suffix ' h'
+                         *  - minutes if &gt;= 60, suffix ' min'
+                         *  - seconds if &lt; 60, suffix ' sec'
+                         *  If is impossible to convert input parameter into integer, or converted value
+                         *  less than 0 - return empty string.
+                         *  If input parameter converts to 0 - return `1 sec`.
+                         *
+                         * @param sec {string|number} interval in seconds
+                         * @return {string} converted value with appropriate suffix
+                         */
+                        getInterval: function (sec) {
+                            var suffix = ' sec', d;
+
+                            sec = parseInt(sec, 10);
+                            if (isNaN(sec) || !isFinite(sec) || sec < 0) {
+                                return '';
+                            }
+
+                            if (sec >= 86400) {
+                                d = 86400;
+                                suffix = ' d';
+                            } else if (sec >= 3600) {
+                                d = 3600;
+                                suffix = ' h';
+                            } else if (sec >= 60) {
+                                d = 60;
+                                suffix = ' min';
+                            } else if (sec == 0) {
+                                sec = 1;
+                            }
+
+                            return (d ? parseInt(sec / d) : sec) + suffix;
+                        }
+                    }
+                ),
+                sortable: false,
+                width: 90
+            }, {
+                text: 'State',
+                dataIndex: 'state',
+                xtype: 'statuscolumn',
+                statustype: 'service',
+                sortable: false,
+                width: 100,
+                minWidth: 100
+
+            }]
+        }]
     }
 });

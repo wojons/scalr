@@ -16,8 +16,6 @@ use CheckFailedEvent;
 use CheckRecoveredEvent;
 use MysqlBackupCompleteEvent;
 use MysqlBackupFailEvent;
-use MySQLReplicationFailEvent;
-use MySQLReplicationRecoveredEvent;
 use NewMysqlMasterUpEvent;
 use MYSQL_BACKUP_TYPE;
 use Scalr_Storage_Snapshot;
@@ -101,10 +99,6 @@ class DBEventObserver extends AbstractEventObserver
             switch ($event->DBServer->platform) {
                 case SERVER_PLATFORMS::EC2:
                     $provider = 's3';
-                    break;
-
-                case SERVER_PLATFORMS::RACKSPACE:
-                    $provider = 'cf';
                     break;
 
                 default:
@@ -232,24 +226,6 @@ class DBEventObserver extends AbstractEventObserver
 
     /**
      * {@inheritdoc}
-     * @see \Scalr\Observer\AbstractEventObserver::OnMySQLReplicationFail()
-     */
-    public function OnMySQLReplicationFail(MySQLReplicationFailEvent $event)
-    {
-        $event->DBServer->SetProperty(SERVER_PROPERTIES::DB_MYSQL_REPLICATION_STATUS, 0);
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see \Scalr\Observer\AbstractEventObserver::OnMySQLReplicationRecovered()
-     */
-    public function OnMySQLReplicationRecovered(MySQLReplicationRecoveredEvent $event)
-    {
-        $event->DBServer->SetProperty(SERVER_PROPERTIES::DB_MYSQL_REPLICATION_STATUS, 1);
-    }
-
-    /**
-     * {@inheritdoc}
      * @see \Scalr\Observer\AbstractEventObserver::OnNewMysqlMasterUp()
      */
     public function OnNewMysqlMasterUp(NewMysqlMasterUpEvent $event)
@@ -361,7 +337,7 @@ class DBEventObserver extends AbstractEventObserver
             FARM_STATUS::RUNNING, $this->FarmID
         ]);
 
-        $this->getContainer()->auditlogger->auditLog('farm.launch', $DBFarm, $event->auditLogExtra);
+        $this->getContainer()->auditlogger->log('farm.launch', $DBFarm, $event->auditLogExtra);
 
         $governance = new Scalr_Governance($DBFarm->EnvID);
 
@@ -395,14 +371,17 @@ class DBEventObserver extends AbstractEventObserver
 
                         $dbFarmRole->SetSetting(Entity\FarmRoleSetting::SCALING_UPSCALE_DATETIME, time(), Entity\FarmRoleSetting::TYPE_LCL);
 
+                        $role = $dbFarmRole->GetRoleObject();
                         \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->info(new FarmLogMessage(
                             $DBFarm->ID,
                             sprintf("Farm %s, role %s scaling up. Starting new instance. ServerID = %s.",
-                                $DBFarm->Name,
-                                $dbFarmRole->GetRoleObject()->name,
-                                $DBServer->serverId
+                                !empty($DBFarm->Name) ? $DBFarm->Name : null,
+                                !empty($role->name) ? $role->name : null,
+                                !empty($DBServer->serverId) ? $DBServer->serverId : null
                             ),
-                            $DBServer->serverId
+                            !empty($DBServer->serverId) ? $DBServer->serverId : null,
+                            !empty($DBServer->envId) ? $DBServer->envId : null,
+                            !empty($DBServer->farmRoleId) ? $DBServer->farmRoleId : null
                         ));
                     } catch (Exception $e) {
                         \Scalr::getContainer()->logger(LOG_CATEGORY::SCALING)->error($e->getMessage());
@@ -421,7 +400,7 @@ class DBEventObserver extends AbstractEventObserver
         $dbFarm = DBFarm::LoadByID($this->FarmID);
 
         //Tracks Audit Log farm.terminate event
-        \Scalr::getContainer()->auditlogger->auditLog('farm.terminate', $dbFarm, $event->auditLogExtra);
+        \Scalr::getContainer()->auditlogger->log('farm.terminate', $dbFarm, $event->auditLogExtra);
 
         $dbFarm->Status = FARM_STATUS::TERMINATED;
         $dbFarm->TermOnSyncFail = $event->TermOnSyncFail;
@@ -465,6 +444,10 @@ class DBEventObserver extends AbstractEventObserver
     public function OnResumeComplete(ResumeCompleteEvent $event)
     {
         $event->DBServer->updateStatus(SERVER_STATUS::RUNNING);
+        $event->DBServer->SetProperties([
+            SERVER_PROPERTIES::REBOOTING => 0,
+            SERVER_PROPERTIES::SYSTEM_FORCE_RESUME_INITIATED   => null
+        ]);
     }
 
     /**
@@ -593,9 +576,13 @@ class DBEventObserver extends AbstractEventObserver
         \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
             $this->FarmID,
             sprintf("IP changed for server %s. New public IP: %s New private IP: %s",
-                $event->DBServer->serverId, $event->NewIPAddress, $event->NewLocalIPAddress
+                !empty($event->DBServer->serverId) ? $event->DBServer->serverId : null,
+                !empty($event->NewIPAddress) ? $event->NewIPAddress : null,
+                !empty($event->NewLocalIPAddress) ? $event->NewLocalIPAddress : null
             ),
-            $event->DBServer->serverId
+            !empty($event->DBServer->serverId) ? $event->DBServer->serverId : null,
+            !empty($event->DBServer->envId) ? $event->DBServer->envId : null,
+            !empty($event->DBServer->farmRoleId) ? $event->DBServer->farmRoleId : null
         ));
 
         if ($event->NewIPAddress !== null) {

@@ -1,5 +1,6 @@
 <?php
 
+use Scalr\LogCollector\AuditLogger;
 use Scalr\LoggerAwareTrait;
 
 class Scalr_SchedulerTask extends Scalr_Model
@@ -17,7 +18,6 @@ class Scalr_SchedulerTask extends Scalr_Model
 
     const STATUS_ACTIVE = "Active";
     const STATUS_SUSPENDED = "Suspended";
-    const STATUS_FINISHED = "Finished";
 
     const TARGET_FARM = 'farm';
     const TARGET_ROLE = 'role';
@@ -33,7 +33,6 @@ class Scalr_SchedulerTask extends Scalr_Model
         'target_type'           => array('property' => 'targetType'),
         'script_id'             => array('property' => 'scriptId'),
         'start_time'            => array('property' => 'startTime'),
-        'end_time'              => array('property' => 'endTime'),
         'last_start_time'       => array('property' => 'lastStartTime'),
         'restart_every'         => array('property' => 'restartEvery'),
         'config'                => array('property' => 'config', 'type' => 'serialize'),
@@ -53,7 +52,6 @@ class Scalr_SchedulerTask extends Scalr_Model
         $targetType,
         $scriptId,
         $startTime,
-        $endTime,
         $lastStartTime,
         $restartEvery,
         $config,
@@ -232,20 +230,20 @@ class Scalr_SchedulerTask extends Scalr_Model
                             $farmId = $DBFarm->ID;
                             $farmRoleId = null;
 
-                            $servers = $this->db->GetAll("SELECT server_id FROM servers WHERE `status` IN (?,?) AND farm_id = ?",
+                            $servers = $this->db->GetAll("SELECT server_id FROM servers WHERE is_scalarized = 1 AND `status` IN (?,?) AND farm_id = ?",
                                 array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, $farmId)
                             );
                             break;
 
                         case self::TARGET_ROLE:
                             $farmRoleId = $this->targetId;
-                            $servers = $this->db->GetAll("SELECT server_id FROM servers WHERE `status` IN (?,?) AND farm_roleid = ?",
+                            $servers = $this->db->GetAll("SELECT server_id FROM servers WHERE is_scalarized = 1 AND `status` IN (?,?) AND farm_roleid = ?",
                                 array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, $farmRoleId)
                             );
                             break;
 
                         case self::TARGET_INSTANCE:
-                            $servers = $this->db->GetAll("SELECT server_id FROM servers WHERE `status` IN (?,?) AND farm_roleid = ? AND `index` = ? ",
+                            $servers = $this->db->GetAll("SELECT server_id FROM servers WHERE is_scalarized = 1 AND `status` IN (?,?) AND farm_roleid = ? AND `index` = ? ",
                                 array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, $this->targetId, $this->targetServerIndex)
                             );
                             break;
@@ -270,36 +268,10 @@ class Scalr_SchedulerTask extends Scalr_Model
 
                             $script = Scalr_Scripting_Manager::prepareScript($scriptSettings, $DBServer);
 
-                            $itm = new stdClass();
-                            // Script
-                            $itm->asynchronous = ($script['issync'] == 1) ? '0' : '1';
-                            $itm->timeout = $script['timeout'];
-
-                            if ($script['body']) {
-                                $itm->name = $script['name'];
-                                $itm->body = $script['body'];
-                            } else {
-                                $itm->path = $script['path'];
+                            if ($script) {
+                                $DBServer->executeScript($script, $msg);
+                                $this->getContainer()->auditlogger->log('script.execute', $script, $DBServer, $this->id);
                             }
-                            $itm->executionId = $script['execution_id'];
-
-                            $msg->scripts = array($itm);
-                            $msg->setGlobalVariables($DBServer, true);
-
-                            /*
-                            if ($DBServer->IsSupported('2.5.12')) {
-                                $api = $DBServer->scalarizr->system;
-                                $api->timeout = 5;
-
-                                $api->executeScripts(
-                                    $msg->scripts,
-                                    $msg->globalVariables,
-                                    $msg->eventName,
-                                    $msg->roleName
-                                );
-                            } else
-                            */
-                            $DBServer->SendMessage($msg, false, true);
                         }
                     } else {
                         $farmRoleNotFound = true;

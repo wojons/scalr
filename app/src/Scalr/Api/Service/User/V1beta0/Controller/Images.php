@@ -10,9 +10,10 @@ use Scalr\Model\Entity;
 use Scalr\Api\Rest\Http\Request;
 use Scalr\Service\Aws;
 use Scalr\Exception\NotEnabledPlatformException;
+use Scalr\DataType\ScopeInterface;
 
 /**
- * User/Version-1/Images API Controller
+ * User/Images API Controller
  *
  * @author   Vitaliy Demidov   <vitaliy@scalr.com>
  * @since    5.4.0  (03.03.2015)
@@ -69,10 +70,17 @@ class Images extends ApiController
 
         $this->checkPermissions($image);
 
-        if ($restrictToCurrentScope && $image->getScope() !== $this->getScope()) {
-            throw new ApiErrorException(403, ErrorMessage::ERR_SCOPE_VIOLATION,
-                "The image is not either from the environment scope or owned by your environment."
-            );
+        if ($restrictToCurrentScope) {
+            if ($image->getScope() !== $this->getScope()) {
+                throw new ApiErrorException(403, ErrorMessage::ERR_SCOPE_VIOLATION,
+                    "The image is not either from the environment scope or owned by your environment."
+                );
+            }
+            if ($image->status === Entity\Image::STATUS_DELETE) {
+                throw new ApiErrorException(409, ErrorMessage::ERR_UNACCEPTABLE_IMAGE_STATUS, sprintf(
+                    "You can not use the image %s because it awaiting deletion on the cloud.", $image->name
+                ));
+            }
         }
 
         return $image;
@@ -149,13 +157,13 @@ class Images extends ApiController
 
         $imageAdapter->validateEntity($image);
 
-        if (!$image->getEnvironment()->isPlatformEnabled($image->platform)) {
+        if ($this->getScope() == ScopeInterface::SCOPE_ENVIRONMENT && !$image->getEnvironment()->isPlatformEnabled($image->platform)) {
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, sprintf(
                 "Platform '%s' is not enabled.", $image->platform
             ));
         }
 
-        if (!$image->checkImage()) {
+        if ($image->checkImage() === false) {
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE,
                 "Unable to find the requested image on the cloud, or it is not usable by your account"
             );
@@ -232,7 +240,13 @@ class Images extends ApiController
             );
         }
 
-        $image->delete();
+        if ($this->params('deleteFromCloud', false)) {
+            $image->status = Entity\Image::STATUS_DELETE;
+            $image->save();
+            $this->response->setStatus(202);
+        } else {
+            $image->delete();
+        }
 
         return $this->result(null);
     }

@@ -1,7 +1,7 @@
 <?php
 namespace Scalr\Tests;
 
-use \Scalr_Validator;
+use Scalr_Validator;
 
 /**
  * Scalr_Validator test

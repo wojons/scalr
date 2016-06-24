@@ -166,7 +166,7 @@
             var css = document.createElement('link');
             css.type = 'text/css';
             css.rel = 'stylesheet';
-            css.href = '/ui2/js/extjs-5.0/theme/ext-scalr-3.css';
+            css.href = '/ui2/js/extjs-5.0/theme/ext-scalr-1460362801.css';
             head.appendChild(css);
 
             script.type = 'text/javascript';
@@ -195,16 +195,19 @@
                                     queue: Ext.Array.clone(sc),
                                     handler: handler
                                 }, me = this;
-
-                                for (var i = 0; i < sc.length; i++) {
-                                    (function(script) {
-                                        me.loadScalrScript(script, function() {
-                                            var ind = this.queue.indexOf(script);
-                                            this.queue.splice(ind, 1);
-                                            if (! this.queue.length)
-                                                this.handler();
-                                        }, scope);
-                                    })(sc[i]);
+                                if (sc.length) {
+                                    for (var i = 0; i < sc.length; i++) {
+                                        (function(script) {
+                                            me.loadScalrScript(script, function() {
+                                                var ind = this.queue.indexOf(script);
+                                                this.queue.splice(ind, 1);
+                                                if (! this.queue.length)
+                                                    this.handler();
+                                            }, scope);
+                                        })(sc[i]);
+                                    }
+                                } else {
+                                    handler();
                                 }
                             }
                         });

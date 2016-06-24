@@ -391,15 +391,13 @@ class QueryClient extends AbstractClient implements ClientInterface, CallbackInt
     public function createRequest()
     {
         $q = new Request();
-        $q->setOptions(array(
+
+        $q->setOptions([
             'redirect'       => 10,
-            'verifypeer'     => false,
-            'verifyhost'     => false,
             'timeout'        => 30,
             'connecttimeout' => 30,
-            'cookiesession' => true
-            //'ssl' => array('version' => 1)
-        ));
+            'cookiesession'  => true
+        ]);
 
         $proxySettings = $this->getAws()->getProxy();
 
@@ -464,7 +462,8 @@ class QueryClient extends AbstractClient implements ClientInterface, CallbackInt
                     $clientException->getErrorData()->getCode() == ErrorData::ERR_REQUEST_LIMIT_EXCEEDED) {
                     if (--$attempts > 0) {
                         //Tries to handle RequestLimitExceeded AWS Response
-                        sleep(3);
+                        $sleepTimeout = 3 * (3 - $attempts);
+                        sleep($sleepTimeout > 0 ? $sleepTimeout : 3);
                         return $this->tryCall($httpRequest, $attempts, $interval);
                     }
                 }

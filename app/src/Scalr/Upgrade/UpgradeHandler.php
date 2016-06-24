@@ -6,7 +6,7 @@ use Scalr\Upgrade\Entity\MysqlUpgradeEntity;
 use Scalr\Upgrade\Entity\FilesystemUpgradeEntity;
 use Scalr\Upgrade\Entity\AbstractUpgradeEntity;
 use Scalr\Model\Entity\SettingEntity;
-use \DateTime, DateTimeZone;
+use DateTime, DateTimeZone;
 use Scalr\Exception;
 
 define('FS_STORAGE_PATH', CACHEPATH . '/upgrades/');

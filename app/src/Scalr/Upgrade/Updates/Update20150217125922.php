@@ -14,7 +14,7 @@ class Update20150217125922 extends AbstractUpdate implements SequenceInterface
 
     protected $description = 'Creates account_user_apikeys table';
 
-    protected $ignoreChanges = false;
+    protected $ignoreChanges = true;
 
     protected $dbservice = 'adodb';
 

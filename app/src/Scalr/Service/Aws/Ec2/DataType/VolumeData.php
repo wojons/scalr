@@ -4,7 +4,7 @@ namespace Scalr\Service\Aws\Ec2\DataType;
 
 use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Ec2\AbstractEc2DataType;
-use \DateTime;
+use DateTime;
 
 /**
  * AWS Ec2 VolumeData (DescribeVolumesSetItemResponseType)
@@ -78,7 +78,7 @@ class VolumeData extends AbstractEc2DataType
 
     /**
      * The volume type
-     * standard | io1 | gp2
+     * standard | io1 | gp2 | sc1 | st1
      * @var string
      */
     public $volumeType;

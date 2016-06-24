@@ -56,7 +56,7 @@ class Scalr_Scaling_Manager
 
             $this->farmRoleMetrics[$metric_id]->clearSettings();
             $this->farmRoleMetrics[$metric_id]->setSettings($metric_settings);
-            $this->farmRoleMetrics[$metric_id]->save();
+            $this->farmRoleMetrics[$metric_id]->save(false, array('dtlastpolled', 'last_value', 'last_data'));
         }
     }
 
@@ -82,7 +82,8 @@ class Scalr_Scaling_Manager
             $this->dbFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MONGODB);
 
         // Check do we need upscale to min instances count
-        $roleTotalInstances = $this->dbFarmRole->GetRunningInstancesCount()+$this->dbFarmRole->GetPendingInstancesCount();
+        $runningInstances = $this->dbFarmRole->GetRunningInstancesCount();
+        $roleTotalInstances = $runningInstances + $this->dbFarmRole->GetPendingInstancesCount();
 
         // Need to check Date&Time based scaling. Otherwise Scalr downscale role every time.
         if (isset($scalingMetricInstancesCount)) {
@@ -93,12 +94,13 @@ class Scalr_Scaling_Manager
         }
 
         if ($roleTotalInstances < $minInstances) {
+            $this->decisonInfo = "Min: {$roleTotalInstances} < {$minInstances}";
             if ($needOneByOneLaunch) {
                 $pendingTerminateInstances = count($this->dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::PENDING_TERMINATE)));
                 // If we launching DbMSR instances. Master should be running.
                 if ($this->dbFarmRole->GetPendingInstancesCount() == 0 && !$pendingTerminateInstances) {
                     $this->logger->info(_("Increasing number of running instances to fit min instances setting"));
-                    $this->decisonInfo = '2';
+                    $this->decisonInfo .= ' OneByOne';
                     return Scalr_Scaling_Decision::UPSCALE;
                 } else {
                     $this->logger->info(_("Found servers in Pending or PendingTerminate state. Waiting..."));
@@ -108,7 +110,7 @@ class Scalr_Scaling_Manager
                 // If we launching DbMSR instances. Master should be running.
                 if ($this->dbFarmRole->GetRunningInstancesCount() > 0 || $this->dbFarmRole->GetPendingInstancesCount() == 0) {
                     $this->logger->info(_("Increasing number of running instances to fit min instances setting"));
-                    $this->decisonInfo = '3';
+                    $this->decisonInfo .= ' DbMsr';
                     return Scalr_Scaling_Decision::UPSCALE;
                 } else {
                     $this->logger->info(_("Waiting for running master"));
@@ -116,12 +118,11 @@ class Scalr_Scaling_Manager
                 }
             } else {
                 $this->logger->info(_("Increasing number of running instances to fit min instances setting"));
-                $this->decisonInfo = '4';
                 return Scalr_Scaling_Decision::UPSCALE;
             }
-        } elseif ($maxInstances && $this->dbFarmRole->GetRunningInstancesCount() > $maxInstances) {
+        } elseif ($runningInstances > $maxInstances) {
             $this->logger->info(_("Decreasing number of running instances to fit max instances setting ({$scalingMetricInstancesCount})"));
-            $this->decisonInfo = '6';
+            $this->decisonInfo = "Max: {$roleTotalInstances} > {$maxInstances}";
             return Scalr_Scaling_Decision::DOWNSCALE;
         }
 
@@ -135,22 +136,21 @@ class Scalr_Scaling_Manager
      * @param   string  $scalingMetricName               Name of metric by which a decision was made
      * @param   mixed   $lastValue              optional Last sensor value
      */
-    public function logDecisionInfo($scalingMetricDecision, $scalingMetricName, $lastValue = null)
+    public function logDecisionInfo($scalingMetricDecision, $scalingMetricName, $details = null)
     {
         if ($scalingMetricDecision !== Scalr_Scaling_Decision::NOOP) {
             \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->info(new FarmLogMessage(
                 $this->dbFarmRole->FarmID,
-                sprintf("%s: Role '%s' on farm '%s'. Metric name: %s. Last metric value: %s.",
+                sprintf("%s on role '%s'. Metric name: %s. Details: %s.",
                     $scalingMetricDecision,
-                    $this->dbFarmRole->Alias ? $this->dbFarmRole->Alias : $this->dbFarmRole->GetRoleObject()->name,
-                    $this->dbFarmRole->GetFarmObject()->Name,
+                    $this->dbFarmRole->Alias,
                     $scalingMetricName,
-                    $lastValue
+                    $details
                 )
             ));
 
-            $this->logger->info(sprintf(_("Metric: %s. Decision: %s. Last value: %s"),
-                    $scalingMetricName, $scalingMetricDecision, $lastValue)
+            $this->logger->info(sprintf(_("Metric: %s. Decision: %s. Details: %s"),
+                 $scalingMetricName, $scalingMetricDecision, $details)
             );
         }
     }
@@ -162,9 +162,8 @@ class Scalr_Scaling_Manager
      */
     function makeScalingDecision()
     {
-        /**
-         * Base Scaling
-         */
+        // Base Scaling
+        
         foreach (Scalr_Role_Behavior::getListForFarmRole($this->dbFarmRole) as $behavior) {
             $result = $behavior->makeUpscaleDecision($this->dbFarmRole);
             if ($result === false)
@@ -192,6 +191,7 @@ class Scalr_Scaling_Manager
         ));
 
         if (isset($this->farmRoleMetrics[Entity\ScalingMetric::METRIC_DATE_AND_TIME_ID])) {
+            // Date & Time scaling
             $dateAndTimeMetric = $this->farmRoleMetrics[Entity\ScalingMetric::METRIC_DATE_AND_TIME_ID];
 
             try {
@@ -201,66 +201,61 @@ class Scalr_Scaling_Manager
             }
 
             $scalingMetricName = $dateAndTimeMetric->getMetric()->name;
-
             $scalingMetricInstancesCount = $dateAndTimeMetric->instancesNumber;
 
-            $this->decisonInfo = '1';
+            $this->decisonInfo = "Metric: {$scalingMetricName}";
 
             if ($scalingMetricDecision !== Scalr_Scaling_Decision::NOOP) {
                 $this->logDecisionInfo($scalingMetricDecision, $scalingMetricName, $dateAndTimeMetric->lastValue);
                 return $scalingMetricDecision;
             }
-        }
-
-        /**
-         * Metrics scaling
-         */
-        $farmRoleMetrics = array_diff_key($this->farmRoleMetrics, [Entity\ScalingMetric::METRIC_DATE_AND_TIME_ID => null]);
-        if (!empty($farmRoleMetrics)) {
-            $checkAllMetrics = $this->dbFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_DOWN_ONLY_IF_ALL_METRICS_TRUE);
-            $variousDecisions = false;
-
-            /* @var $farmRoleMetric Scalr_Scaling_FarmRoleMetric */
-            foreach ($farmRoleMetrics as $farmRoleMetric) {
-                try {
-                    $newDecision = $farmRoleMetric->getScalingDecision();
-                } catch (Exception $e) {
-                    $this->logger->error("Scaling error in deciding metric '{$farmRoleMetric->getMetric()->name}' for farm role '{$this->dbFarmRole->FarmID}:{$this->dbFarmRole->Alias}': {$e->getMessage()}");
-                    continue;
-                }
-
-                if (isset($scalingMetricDecision)) {
-                    if ($newDecision != $scalingMetricDecision) {
-                        $variousDecisions = true;
+        } else {
+            // Metrics scaling
+            $farmRoleMetrics = array_diff_key($this->farmRoleMetrics, [Entity\ScalingMetric::METRIC_DATE_AND_TIME_ID => null]);
+            
+            if (!empty($farmRoleMetrics)) {
+                $checkAllMetrics = $this->dbFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_DOWN_ONLY_IF_ALL_METRICS_TRUE);
+                $variousDecisions = false;
+    
+                /* @var $farmRoleMetric Scalr_Scaling_FarmRoleMetric */
+                foreach ($farmRoleMetrics as $farmRoleMetric) {
+                    try {
+                        $newDecision = $farmRoleMetric->getScalingDecision();
+                    } catch (Exception $e) {
+                        $this->logger->error("Scaling error in deciding metric '{$farmRoleMetric->getMetric()->name}' for farm role '{$this->dbFarmRole->FarmID}:{$this->dbFarmRole->Alias}': {$e->getMessage()}");
+                        continue;
+                    }
+    
+                    if (isset($scalingMetricDecision)) {
+                        if ($newDecision != $scalingMetricDecision) {
+                            $variousDecisions = true;
+                        }
+                    }
+    
+                    $scalingMetricDecision = $newDecision;
+                    $scalingMetricName = $farmRoleMetric->getMetric()->name;
+                    $this->decisonInfo = "Metric: {$farmRoleMetric->getMetric()->name}";
+    
+                    switch ($scalingMetricDecision) {
+                        case Scalr_Scaling_Decision::NOOP:
+                            continue;
+    
+                        case Scalr_Scaling_Decision::DOWNSCALE:
+                            if (!$checkAllMetrics) {
+                                break 2;
+                            }
+                            continue;
+    
+                        case Scalr_Scaling_Decision::UPSCALE:
+                            break 2;
                     }
                 }
-
-                $scalingMetricDecision = $newDecision;
-
-                $scalingMetricName = $farmRoleMetric->getMetric()->name;
-
-                $this->decisonInfo = '1';
-
-                switch ($scalingMetricDecision) {
-                    case Scalr_Scaling_Decision::NOOP:
-                        continue;
-
-                    case Scalr_Scaling_Decision::DOWNSCALE:
-                        if (!$checkAllMetrics) {
-                            break 2;
-                        }
-
-                        continue;
-
-                    case Scalr_Scaling_Decision::UPSCALE:
-                        break 2;
+    
+                if (isset($scalingMetricDecision) && !($scalingMetricDecision == Scalr_Scaling_Decision::DOWNSCALE && $checkAllMetrics && $variousDecisions)) {
+                    $this->logDecisionInfo($scalingMetricDecision, $scalingMetricName, "Metric value: {$farmRoleMetric->lastValue}");
+                } else {
+                    $scalingMetricDecision = Scalr_Scaling_Decision::NOOP;
                 }
-            }
-
-            if (isset($scalingMetricDecision) && !($scalingMetricDecision == Scalr_Scaling_Decision::DOWNSCALE && $checkAllMetrics && $variousDecisions)) {
-                $this->logDecisionInfo($scalingMetricDecision, $scalingMetricName, isset($farmRoleMetric) ? $farmRoleMetric->lastValue : null);
-            } else {
-                $scalingMetricDecision = Scalr_Scaling_Decision::NOOP;
             }
         }
 

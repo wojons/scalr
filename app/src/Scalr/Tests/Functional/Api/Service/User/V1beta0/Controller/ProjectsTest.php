@@ -3,6 +3,7 @@
 namespace Scalr\Tests\Functional\Api\Service\User\V1beta0\Controller;
 
 use Scalr\Api\DataType\ApiEntityAdapter;
+use Scalr\Api\Rest\Controller\ApiController;
 use Scalr\Api\Rest\Http\Request;
 use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
@@ -21,7 +22,7 @@ class ProjectsTest extends ApiTestCase
 
     public function projectToDelete($projectId)
     {
-        static::toDelete('Scalr\Stats\CostAnalytics\Entity\ProjectEntity', [$projectId]);
+        static::toDelete(ProjectEntity::class, [$projectId]);
     }
 
     /**
@@ -41,11 +42,11 @@ class ProjectsTest extends ApiTestCase
     /**
      * Return list of Projects available in this environment
      *
-     * @param  array $filters optional filterable properties
-     *
+     * @param  array $filters    optional Filterable properties
+     * @param  int   $maxResults optional Max Results
      * @return array
      */
-    public function listProjects(array $filters = [])
+    public function listProjects(array $filters = [], $maxResults = null)
     {
         $envelope = null;
         $projects = [];
@@ -53,6 +54,10 @@ class ProjectsTest extends ApiTestCase
 
         do {
             $params = $filters;
+
+            if ($maxResults) {
+                $params[ApiController::QUERY_PARAM_MAX_RESULTS] = $maxResults;
+            }
 
             if (isset($envelope->pagination->next)) {
                 $parts = parse_url($envelope->pagination->next);
@@ -67,10 +72,13 @@ class ProjectsTest extends ApiTestCase
 
             $envelope = $response->getBody();
 
-            $projects[] = $envelope->data;
-        } while (!empty($envelope->pagination->next));
+            foreach ($envelope->data as $v) {
+                $projects[] = $v;
+            }
 
-        return call_user_func_array('array_merge', $projects);
+        } while (!empty($envelope->pagination->next) && !$maxResults);
+
+        return $projects;
     }
 
     /**
@@ -86,22 +94,22 @@ class ProjectsTest extends ApiTestCase
         $projectData['description'] = "project-description-{$projectData['description']}";
 
         $uri = self::getUserApiUrl('/projects');
+
         return $this->request($uri, Request::METHOD_POST, [], $projectData);
     }
 
     /**
      * @test
      */
-    public function textComplex()
+    public function testComplex()
     {
-
         //create archived project
         $projectArch = $this->createTestProject([
             'name'     => $this->getTestName(),
             'archived' => ProjectEntity::ARCHIVED
         ]);
 
-        $projects = $this->listProjects();
+        $projects = $this->listProjects([], 1);
 
         $adapter = $this->getAdapter('project');
 
@@ -111,9 +119,9 @@ class ProjectsTest extends ApiTestCase
             foreach ($filterable as $property) {
                 $filterValue = $project->{$property};
 
-                $listResult = $this->listProjects([ $property => $filterValue ]);
+                $listResult = $this->listProjects([$property => $filterValue], 1);
 
-                if (!static::isRecursivelyEmpty($filterValue)) {
+                if (!empty($filterValue)) {
                     foreach ($listResult as $filtered) {
                         $this->assertEquals($filterValue, $filtered->{$property}, "Property '{$property}' mismatch");
                     }
@@ -130,29 +138,36 @@ class ProjectsTest extends ApiTestCase
             $this->assertObjectEqualsEntity($response->getBody()->data, $dbProject, $adapter);
         }
 
-        $filterByName = $this->listProjects(['name' => $projectArch->name]);
+        $filterByName = $this->listProjects(['name' => $projectArch->name], 1);
+
         $this->assertNotEmpty($filterByName);
+
         foreach ($filterByName as $project) {
             $this->assertObjectEqualsEntity($project, $projectArch, $adapter);
+
             $this->assertNotContains($project, $projects, "List of project shouldn't  have an archived project", false, false);
         }
 
-        $filterByBillingCode = $this->listProjects(['billingCode' => $projectArch->getProperty(ProjectPropertyEntity::NAME_BILLING_CODE)]);
+        $filterByBillingCode = $this->listProjects(['billingCode' => $projectArch->getProperty(ProjectPropertyEntity::NAME_BILLING_CODE)], 1);
+
         $this->assertNotEmpty($filterByBillingCode);
+
         foreach ($filterByBillingCode as $project) {
             $this->assertObjectEqualsEntity($project, $projectArch, $adapter);
+
             $this->assertNotContains($project, $projects, "List of project shouldn't  have an archived project", false, false);
         }
 
         $ccId = Scalr_Environment::init()->loadById($this->getEnvironment()->id)->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID);
+
         $cc = \Scalr::getContainer()->analytics->ccs->get($ccId);
 
         //test create project
         $projectData = [
-            'name' => 'test',
-            'costCenter' => [ 'id' => $ccId ],
+            'name'        => 'test',
+            'costCenter'  => [ 'id' => $ccId ],
             'billingCode' => $cc->getProperty(CostCentrePropertyEntity::NAME_BILLING_CODE),
-            'leadEmail' => 'test@example.com',
+            'leadEmail'   => 'test@example.com',
             'description' => 'test'
         ];
 
@@ -172,10 +187,10 @@ class ProjectsTest extends ApiTestCase
 
         //test empty project name
         $projectData = [
-            'name' => "\t\r\n\0\x0B<a href=\"#\">\t\r\n\0\x0B</a>\t\r\n\0\x0B",
-            'costCenter' => [ 'id' => $ccId ],
+            'name'        => "\t\r\n\0\x0B<a href=\"#\">\t\r\n\0\x0B</a>\t\r\n\0\x0B",
+            'costCenter'  => [ 'id' => $ccId ],
             'billingCode' => $cc->getProperty(CostCentrePropertyEntity::NAME_BILLING_CODE),
-            'leadEmail' => 'test@example.com',
+            'leadEmail'   => 'test@example.com',
             'description' => 'test-empty-name'
         ];
 
@@ -185,10 +200,10 @@ class ProjectsTest extends ApiTestCase
 
         //test wrong ccId
         $projectData = [
-            'name' => "test-wrong-cc-id",
-            'costCenter' => [ 'id' => "\t\r\n\0\x0B<a href=\"#\">\t\r\n\0\x0B</a>\t\r\n\0\x0B" ],
+            'name'        => "test-wrong-cc-id",
+            'costCenter'  => [ 'id' => "\t\r\n\0\x0B<a href=\"#\">\t\r\n\0\x0B</a>\t\r\n\0\x0B" ],
             'billingCode' => $cc->getProperty(CostCentrePropertyEntity::NAME_BILLING_CODE),
-            'leadEmail' => 'test@example.com',
+            'leadEmail'   => 'test@example.com',
             'description' => 'test-empty-name'
         ];
 
@@ -198,10 +213,10 @@ class ProjectsTest extends ApiTestCase
 
         //test wrong leadEmail
         $projectData = [
-            'name' => "test-wrong-cc-id",
-            'costCenter' => [ 'id' => $ccId ],
+            'name'        => "test-wrong-cc-id",
+            'costCenter'  => [ 'id' => $ccId ],
             'billingCode' => $cc->getProperty(CostCentrePropertyEntity::NAME_BILLING_CODE),
-            'leadEmail' => "\t\r\n\0\x0B<a href=\"#\">\t\r\n\0\x0B</a>\t\r\n\0\x0B",
+            'leadEmail'   => "\t\r\n\0\x0B<a href=\"#\">\t\r\n\0\x0B</a>\t\r\n\0\x0B",
             'description' => 'test-empty-lead-email'
         ];
 
@@ -244,31 +259,16 @@ class ProjectsTest extends ApiTestCase
      * Also Removes Project properties generated for test
      *
      * {@inheritdoc}
-     * @see Scalr\Tests\Functional\Api\ApiTestCase::tearDownAfterClass()
      */
     public static function tearDownAfterClass()
     {
-        ksort(static::$testData, SORT_REGULAR);
-        foreach (static::$testData as $priority => $data) {
-            foreach ($data as $class => $ids) {
-                if ($class === 'Scalr\Stats\CostAnalytics\Entity\ProjectEntity') {
-                    $ids = array_unique($ids, SORT_REGULAR);
-                    foreach ($ids as $entry) {
-                        /* @var $project ProjectEntity */
-                        $project = $class::findPk(...$entry);
-                        if (!empty($project)) {
-                            try {
-                                ProjectPropertyEntity::deleteByProjectId($project->projectId);
-                                $project->delete();
-                            } catch (\Exception $e) {
-                                \Scalr::logException($e);
-                            }
-                        }
-                    }
-                    unset(static::$testData[$priority][$class]);
-                }
+        //We have to remove CostCenter properties as they don't have foreign keys
+        foreach (static::$testData as $rec) {
+            if ($rec['class'] === ProjectEntity::class) {
+                ProjectPropertyEntity::deleteByProjectId($rec['pk'][0]);
             }
         }
+
         parent::tearDownAfterClass();
     }
 

@@ -4,7 +4,6 @@ namespace Scalr\Modules\Platforms\Azure\Helpers;
 
 use Scalr\Service\Azure\Services\Compute\DataType\ResourceExtensionProperties;
 use Scalr\Service\Azure\Services\Compute\DataType\CreateResourceExtension;
-use Scalr\Modules\Platforms\Azure\AzurePlatformModule;
 use Scalr\Model\Entity;
 use SERVER_PLATFORMS;
 
@@ -20,16 +19,14 @@ class AzureHelper
         if ($nic) {
             try {
                 $res1 = $azure->network->interface->delete(
-                    $env->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+                    $env->keychain(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
                     $dbServer->GetProperty(\AZURE_SERVER_PROPERTIES::RESOURCE_GROUP),
                     $nic
                 );
             } catch (\Exception $e) {
-                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(
-                    new \FarmLogMessage($dbServer->farmId, sprintf(
-                        _("Unable to remove NIC object on server termination: %s"),
-                        $e->getMessage()
-                    ), $dbServer->serverId
+                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(new \FarmLogMessage(
+                    $dbServer,
+                    sprintf(_("Unable to remove NIC object on server termination: %s"), $e->getMessage())
                 ));
             }
         }
@@ -39,16 +36,14 @@ class AzureHelper
         if ($publicIpName) {
             try {
                 $res2 = $azure->network->publicIPAddress->delete(
-                    $env->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+                    $env->keychain(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
                     $dbServer->GetProperty(\AZURE_SERVER_PROPERTIES::RESOURCE_GROUP),
                     $publicIpName
                 );
             } catch (\Exception $e) {
-                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(
-                    new \FarmLogMessage($dbServer->farmId, sprintf(
-                        _("Unable to remove PublicIP object on server termination: %s"),
-                        $e->getMessage()
-                    ), $dbServer->serverId
+                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(new \FarmLogMessage(
+                    $dbServer,
+                    sprintf(_("Unable to remove PublicIP object on server termination: %s"), $e->getMessage())
                 ));
             }
         }
@@ -61,10 +56,8 @@ class AzureHelper
 
         $env = $dbServer->GetEnvironmentObject();
         $azure = $env->azure();
-
-        // TODO: check for default branch (stable or latest)
-        // right now azure is worked only with latest szr
-        $branch = 'latest';
+        
+        $branch = $dbServer->getScalarizrRepository()['repository'];
         $develRepos = \Scalr::getContainer()->config->get('scalr.scalarizr_update.devel_repos');
         $scmBranch = $dbServer->GetFarmRoleObject()->GetSetting('user-data.scm_branch');
         if ($scmBranch != '' && $develRepos) {
@@ -81,7 +74,7 @@ class AzureHelper
                 '1.2'
             );
             $extensionProperties->setSettings([
-                'commandToExecute' => "bash -c 'curl -L \"{$baseurl}/public/linux/{$branch}/azure/{$scmBranch}install_scalarizr.sh\" | bash && service scalr-upd-client start'"
+                'commandToExecute' => "bash -c 'curl -k -L \"{$baseurl}/public/linux/{$branch}/azure/{$scmBranch}install_scalarizr.sh\" | bash && service scalr-upd-client start'"
             ]);
         } else {
             $extensionProperties = new ResourceExtensionProperties(
@@ -99,27 +92,18 @@ class AzureHelper
 
         try {
             $response = $azure->compute->resourceExtension->create(
-                $env->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+                $env->keychain(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
                 $dbServer->GetProperty(\AZURE_SERVER_PROPERTIES::RESOURCE_GROUP),
                 $dbServer->GetProperty(\AZURE_SERVER_PROPERTIES::SERVER_NAME),
                 $createExtension
             );
 
-            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(
-                new \FarmLogMessage($dbServer->farmId, sprintf(
-                    _("Created azure resource extension to install and launch scalr agent")
-                ), $dbServer->serverId
-            ));
+            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(new \FarmLogMessage($dbServer, sprintf(_("Created azure resource extension to install and launch scalr agent"))));
 
             $dbServer->SetProperty(\AZURE_SERVER_PROPERTIES::SZR_EXTENSION_DEPLOYED, 1);
 
         } catch (\Exception $e) {
-            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(
-                new \FarmLogMessage($dbServer->farmId, sprintf(
-                    _("Unable to create azure resource extension to install and launch scalr agent: %s"),
-                    $e->getMessage()
-                ), $dbServer->serverId
-            ));
+            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(new \FarmLogMessage($dbServer, sprintf(_("Unable to create azure resource extension to install and launch scalr agent: %s"), $e->getMessage())));
         }
     }
 }

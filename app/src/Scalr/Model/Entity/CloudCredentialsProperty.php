@@ -1,6 +1,7 @@
 <?php
 
 namespace Scalr\Model\Entity;
+
 use Scalr\Model\Type\EncryptedType;
 use Scalr\Model\Loader\Field;
 
@@ -55,13 +56,6 @@ class CloudCredentialsProperty extends Setting
     const OPENSTACK_EXT_CINDER_ENABLED          = 'ext.cinder_enabled';
     const OPENSTACK_EXT_FLOATING_IPS_ENABLED    = 'ext.floating_ips_enabled';
     const OPENSTACK_EXT_LBAAS_ENABLED           = 'ext.lbaas_enabled';
-
-    /*
-     * Rackspace
-     */
-    const RACKSPACE_USERNAME    = 'username';
-    const RACKSPACE_API_KEY     = 'api_key';
-    const RACKSPACE_IS_MANAGED  = 'is_managed';
 
     /*
      * GCE
@@ -166,7 +160,6 @@ class CloudCredentialsProperty extends Setting
                 static::OPENSTACK_TENANT_NAME,
                 static::OPENSTACK_DOMAIN_NAME,
                 static::OPENSTACK_USERNAME,
-                static::OPENSTACK_SSL_VERIFYPEER,
 
                 static::AWS_ACCESS_KEY,
                 static::AWS_CERTIFICATE,
@@ -178,11 +171,7 @@ class CloudCredentialsProperty extends Setting
                 static::GCE_KEY,
                 static::GCE_PROJECT_ID,
                 static::GCE_SERVICE_ACCOUNT_NAME,
-                static::GCE_JSON_KEY,
-
-                static::RACKSPACE_API_KEY,
-                static::RACKSPACE_IS_MANAGED,
-                static::RACKSPACE_USERNAME
+                static::GCE_JSON_KEY
             ];
         }
 

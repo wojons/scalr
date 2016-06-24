@@ -14,6 +14,8 @@ use Scalr\Tests\TestCase;
 class OpenStackTestCase extends TestCase
 {
 
+    const TEST_TYPE = TestCase::TEST_TYPE_CLOUD_DEPENDENT;
+
     /**
      * OpenStack instance
      * @var OpenStack
@@ -47,7 +49,7 @@ class OpenStackTestCase extends TestCase
         $this->container = \Scalr::getContainer();
         $this->environment = new \Scalr_Environment();
 
-        if (!$this->isSkipFunctionalTests()) {
+        if (!static::isSkippedFunctionalTest()) {
             $this->environment->loadById(\Scalr::config('scalr.phpunit.envid'));
             $this->container->environment = $this->environment;
         }

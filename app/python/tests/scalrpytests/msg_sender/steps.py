@@ -10,7 +10,6 @@ sys.path.insert(0, scalrpy_dir)
 scalrpytests_dir = os.path.join(cwd, '../..')
 sys.path.insert(0, scalrpytests_dir)
 
-import time
 import random
 import subprocess
 
@@ -44,7 +43,6 @@ def start_wsgi_server(step, port):
     server = os.path.join(os.path.dirname(__file__), 'scalarizr.py')
     cmd = "/usr/bin/python {server} {port}".format(server=server, port=port)
     wsgi_server = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    time.sleep(1)
     assert not wsgi_server.poll(), wsgi_server.stderr.read()
     lib.world.wsgi_servers[port] = wsgi_server
 
@@ -85,7 +83,7 @@ def db_has_messages(step, count):
         record['env_id'] = lib.generate_id()
         record['role_id'] = lib.generate_id()
         record['platform'] = random.choice(["'ec2'", "'gce'", "'idcf'", "'openstack'"])
-        record['status'] = "'running'"
+        record['server_status'] = "'Running'"
         record['remote_ip'] = "'127.0.0.1'"
         record['local_ip'] = "'127.0.0.1'"
         record['index'] = 1
@@ -101,16 +99,24 @@ def db_has_messages(step, count):
     for record in step.hashes:
         # server_properties
         record['name'] = "'scalarizr.ctrl_port'"
-        record['value'] = random.choice(["'8010'",
-                                         "'8011'",
-                                         "'8012'",
-                                         "'8013'",
-                                         "'8014'",
-                                         "'8015'",
-                                         "'8016'",
-                                         "'8017'",
-                                         "'8018'",
-                                         "'8019'"])
+        record['value'] = random.choice([
+            "'8010'",
+            "'8011'",
+            "'8012'",
+            "'8013'",
+            "'8014'",
+            "'8015'",
+            "'8016'",
+            "'8017'",
+            "'8018'",
+            "'8019'",
+            "'8020'",
+            "'8021'",
+            "'8022'",
+            "'8023'",
+            "'8024'",
+            "'8025'",
+        ])
     fill_server_properties(step)
 
     for record in step.hashes:

@@ -46,6 +46,13 @@ class SettingsCollection extends ObjectAccess
     private $entities = [];
 
     /**
+     * An array of settings that have new values
+     *
+     * @var array
+     */
+    private $modified = [];
+
+    /**
      * Flag indicates whether settings is loaded from DB
      *
      * @var bool
@@ -78,13 +85,19 @@ class SettingsCollection extends ObjectAccess
      */
     public function __clone()
     {
+        if (!$this->loaded) {
+            $this->load();
+        }
+
         $entities = $this->entities;
         $this->entities = [];
+        $this->modified = [];
         $this->data = [];
 
         foreach ($entities as $name => $entity) {
             $newEntity = clone $entity;
             $this->entities[$name] = $newEntity;
+            $this->modified[$name] = $newEntity;
             $this->data[$name] = &$newEntity->value;
         }
     }
@@ -174,6 +187,7 @@ class SettingsCollection extends ObjectAccess
 
         if ($setting instanceof $this->entityClass) {
             $entity = $setting;
+            $entity->name = $name;
 
             foreach ($this->defaultProperties as $property => &$value) {
                 if (empty($entity->{$property})) {
@@ -189,6 +203,8 @@ class SettingsCollection extends ObjectAccess
         } else {
             $entity->value = $setting;
         }
+
+        $this->modified[$entity->name] = $entity;
     }
 
     /**
@@ -226,13 +242,15 @@ class SettingsCollection extends ObjectAccess
      */
     public function save()
     {
-        foreach ($this->entities as $entity) {
+        foreach ($this->modified as $entity) {
             if ($entity->value === false) {
                 $entity->delete();
             } else {
                 $entity->save();
             }
         }
+
+        $this->modified = [];
     }
 
     /**
@@ -321,5 +339,21 @@ class SettingsCollection extends ObjectAccess
     public function getSettingsClass()
     {
         return $this->entityClass;
+    }
+
+    /**
+     * Get array copy
+     *
+     * @link http://php.net/manual/en/arrayiterator.getarraycopy.php
+     *
+     * @return  array   A copy of the array, or array of public properties if ArrayIterator refers to an object.
+     */
+    public function getArrayCopy()
+    {
+        if (!$this->loaded) {
+            $this->load();
+        }
+
+        return $this->data;
     }
 }

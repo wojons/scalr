@@ -38,6 +38,11 @@ class ScalingMetric extends AbstractEntity implements ScopeInterface
     const RETRIEVE_METHOD_EXECUTE = 'execute';
 
     /**
+     * URL retrieve method
+     */
+    const RETRIEVE_METHOD_URL_REQUEST = 'url-request';
+
+    /**
      * Calculation function "Average"
      */
     const CALC_FUNCTION_AVERAGE = 'avg';
@@ -66,6 +71,11 @@ class ScalingMetric extends AbstractEntity implements ScopeInterface
      * DateTime scaling algorithm
      */
     const ALGORITHM_DATETIME = 'DateTime';
+
+    /**
+     * Regex for name validation
+     */
+    const NAME_REGEXP = '[A-Za-z0-9]{5,}';
 
     /**
      * ID.
@@ -191,7 +201,7 @@ class ScalingMetric extends AbstractEntity implements ScopeInterface
      */
     public static function getAlgorithm($algoName)
     {
-        if (!self::$algos[$algoName]) {
+        if (empty(self::$algos[$algoName])) {
             $className = "Scalr_Scaling_Algorithms_{$algoName}";
 
             if (class_exists($className)) {
@@ -211,5 +221,21 @@ class ScalingMetric extends AbstractEntity implements ScopeInterface
     public function getScope()
     {
         return !empty($this->envId) ? self::SCOPE_ENVIRONMENT : self::SCOPE_SCALR;
+    }
+
+    /**
+     * Checks whether the ScalingMetric is already used in some FarmRoleScalingMetric
+     *
+     * @return int|false Number of FarmRoleScalingMetric using this metric or false
+     */
+    public function isUsed()
+    {
+        $metricsCount = $this->db()->GetOne("
+            SELECT COUNT(*)
+            FROM `farm_role_scaling_metrics`
+            WHERE `metric_id` = ?
+        ", [$this->id]);
+
+        return $metricsCount ? $metricsCount : false;
     }
 }

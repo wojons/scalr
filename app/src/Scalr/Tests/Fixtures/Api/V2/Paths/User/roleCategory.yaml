@@ -1,0 +1,75 @@
+paths:
+  - uri: /{envId}/role-categories/
+    acl: fullAccess
+    operations:
+      - {method: post, response: 201, body: '&{4}RoleCategoryData'}
+      - {method: post, response: 409, body: '&{4}RoleCategoryData'}
+      - {method: post, response: 400, body: '&{5}RoleCategoryData'}
+      - {method: post, response: 400, body: '&{6}RoleCategoryData'}
+      - {method: get,  response: 200}
+  - uri: /{envId}/role-categories/
+    acl: readOnly
+    operations:
+      - {method: post, response: 403, body: '&{4}RoleCategoryData'}
+      - {method: get,  response: 200}
+  - uri: /{envId}/role-categories/
+    acl: noAccess
+    operations:
+      - {method: post, response: 403, body: '&{4}RoleCategoryData'}
+      - {method: get,  response: 403}
+
+  - uri: /{envId}/role-categories/{roleCategoryId}/
+    acl: readOnly
+    operations:
+     - {method: get,     response: 200, params: '&RoleCategoryData'}
+     - {method: get,     response: 200, params: '&RoleCategoryData'}
+     - {method: get,     response: 200, params: '&RoleCategoryData'}
+     - {method: get,     response: 200, params: '&RoleCategoryData'}
+     - {method: patch,   response: 403, params: '&{2}RoleCategoryData', body: '&{9}RoleCategoryData'}
+     - {method: delete,  response: 403, params: '&{2}RoleCategoryData'}
+  - uri: /{envId}/role-categories/{roleCategoryId}/
+    acl: noAccess
+    operations:
+     - {method: get,     response: 403, params: '&{2}RoleCategoryData'}
+     - {method: patch,   response: 403, params: '&{2}RoleCategoryData', body: '&{9}RoleCategoryData'}
+     - {method: delete,  response: 403, params: '&{2}RoleCategoryData'}
+
+  - uri: /{envId}/role-categories/{roleCategoryId}/
+    acl: fullAccess
+    operations:
+     - {method: get,     response: 200, params: '&RoleCategoryData'}
+     - {method: get,     response: 200, params: '&RoleCategoryData'}
+     - {method: get,     response: 200, params: '&RoleCategoryData'}
+     - {method: get,     response: 200, params: '&RoleCategoryData'}
+     - {method: patch,   response: 403, params: '&{0}RoleCategoryData', body: '&{7}RoleCategoryData'}
+     - {method: patch,   response: 403, params: '&{1}RoleCategoryData', body: '&{8}RoleCategoryData'}
+     - {method: patch,   response: 200, params: '&{2}RoleCategoryData', body: '&{9}RoleCategoryData'}
+     - {method: patch,   response: 200, params: '&{3}RoleCategoryData', body: '&{10}RoleCategoryData'}
+     - {method: delete,  response: 403, params: '&{0}RoleCategoryData'}
+     - {method: delete,  response: 403, params: '&{1}RoleCategoryData'}
+     - {method: delete,  response: 200, params: '&{2}RoleCategoryData'}
+     - {method: delete,  response: 404, params: '&{2}RoleCategoryData'}
+     - {method: delete,  response: 409, params: '&{3}RoleCategoryData'}
+
+
+RoleCategoryData:
+  - {roleCategoryId: '&RoleCategory.id'}
+  - {roleCategoryId: '&RoleCategory.id'}
+  - {roleCategoryId: '&RoleCategory.id'}
+  - {roleCategoryId: '&RoleCategory.id'}
+  - {name: 'testRoleCategory'}
+  - {name: ''}
+  - {name: 'LongLongLongRolecategoryName'}
+  - {name: p-scalr-scope}     #7
+  - {name: p-account-scope}   #8
+  - {name: p-env-scope }      #9
+  - {name: p-used-env-scope } #10
+
+RoleCategory:
+  - {name: scalr scope}
+  - {name: account scope, accountId: }
+  - {name: environment scope, accountId: , envId: }
+  - {name: used environment scope, accountId: , envId: }
+
+Role:
+ - {name: testPostRole, catId: '&{3}RoleCategory.id', behaviors: 'base', osId: centos-5-x}

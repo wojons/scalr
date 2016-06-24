@@ -5,7 +5,8 @@ namespace Scalr\Api\Service\User\V1beta0\Controller;
 use Scalr\Api\Rest\ApiApplication;
 use Scalr\Api\Rest\Controller\ApiController;
 use Scalr\Api\Rest\Exception\ApiNotImplementedErrorException;
-use Scalr\Api\Service\User\V1beta0\Adapter\RoleGlobalVariableAdapter;
+use Scalr\Api\Service\User\V1beta0\Adapter\GlobalVariableAdapter;
+use Scalr\Exception\Model\Entity\Image\ImageNotScalarizedException;
 use Scalr\Model\Entity;
 use Scalr\Api\Rest\Exception\ApiErrorException;
 use Scalr\Api\DataType\ErrorMessage;
@@ -18,15 +19,18 @@ use Scalr\Exception\Model\Entity\Os\OsMismatchException;
 use Scalr\Exception\Model\Entity\Image\ImageNotFoundException;
 use Scalr\Exception\Model\Entity\Image\NotAcceptableImageStatusException;
 use Scalr\Exception\Model\Entity\Image\ImageInUseException;
+use Scalr_Scripting_GlobalVariables;
 
 /**
- * User/Version-1/Roles API Controller
+ * User/Roles API Controller
  *
  * @author   Vitaliy Demidov   <vitaliy@scalr.com>
  * @since    5.4.0  (04.03.2015)
  */
 class Roles extends ApiController
 {
+    use GlobalVariableTrait;
+
     /**
      * Gets Default search criteria for the Environment scope
      *
@@ -126,11 +130,12 @@ class Roles extends ApiController
      *
      * @param    int     $roleId                             The identifier of the Role
      * @param    bool    $restrictToCurrentScope    optional Whether it should additionally check that role corresponds to current scope
+     * @param    bool    $modify                    optional Whether it should check access permission with modify flag
      *
      * @throws   ApiErrorException
      * @return   \Scalr\Model\Entity\Role|null Returns Role entity on success or NULL otherwise
      */
-    public function getRole($roleId, $restrictToCurrentScope = false)
+    public function getRole($roleId, $restrictToCurrentScope = false, $modify = null)
     {
         $criteria = $this->getDefaultCriteria();
         $criteria[] = ['id' => $roleId];
@@ -143,7 +148,7 @@ class Roles extends ApiController
         }
 
         //To be over-suspicious check READ access to Role object
-        $this->checkPermissions($role);
+        $this->checkPermissions($role, $modify);
 
         if ($restrictToCurrentScope && $role->getScope() !== $this->getScope()) {
             throw new ApiErrorException(403, ErrorMessage::ERR_SCOPE_VIOLATION,
@@ -275,6 +280,8 @@ class Roles extends ApiController
             throw new ApiErrorException(409, ErrorMessage::ERR_UNACCEPTABLE_IMAGE_STATUS, $e->getMessage());
         } catch (ImageInUseException $e) {
             throw new ApiErrorException(409, ErrorMessage::ERR_OBJECT_IN_USE, $e->getMessage());
+        } catch (ImageNotScalarizedException $e) {
+            throw new ApiErrorException(409, ErrorMessage::ERR_UNACCEPTABLE_IMAGE_STATUS, $e->getMessage());
         }
     }
 
@@ -331,7 +338,7 @@ class Roles extends ApiController
         //Pre validates the request object
         $roleAdapter->validateObject($object, Request::METHOD_PATCH);
 
-        $role = $this->getRole($roleId, true);
+        $role = $this->getRole($roleId, true, true);
 
         //Copies all alterable properties to fetched Role Entity
         $roleAdapter->copyAlterableProperties($object, $role);
@@ -357,7 +364,7 @@ class Roles extends ApiController
     {
         $this->checkScopedPermissions('ROLES', 'MANAGE');
 
-        $role = $this->getRole($roleId, true);
+        $role = $this->getRole($roleId, true, true);
 
         if ($role->isUsed()) {
             throw new ApiErrorException(409, ErrorMessage::ERR_OBJECT_IN_USE,
@@ -382,7 +389,7 @@ class Roles extends ApiController
         $this->checkScopedPermissions('ROLES', 'MANAGE');
 
         //Gets role checking Environment scope
-        $role = $this->getRole($roleId, true);
+        $role = $this->getRole($roleId, true, true);
 
         $object = $this->request->getJsonBody();
 
@@ -448,7 +455,7 @@ class Roles extends ApiController
     {
         $this->checkScopedPermissions('ROLES', 'MANAGE');
 
-        $role = $this->getRole($roleId, true);
+        $role = $this->getRole($roleId, true, true);
 
         $oldImage = $this->getImage($roleId, $imageId);
 
@@ -515,7 +522,8 @@ class Roles extends ApiController
         $list = $globalVar->getValues($roleId);
         $foundRows = count($list);
 
-        $adapter = $this->adapter('roleGlobalVariable');
+        /* @var $adapter GlobalVariableAdapter */
+        $adapter = $this->adapter('globalVariable');
 
         $data = [];
 
@@ -545,13 +553,13 @@ class Roles extends ApiController
 
         $globalVar = $this->getVariableInstance();
 
-        $fetch = $this->getGlobalVariable($roleId, $name, $globalVar);
+        $fetch = $this->getGlobalVariable($name, $globalVar, $roleId);
 
         if (empty($fetch)) {
             throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Requested Global Variable does not exist.");
         }
 
-        return $this->result($this->adapter('roleGlobalVariable')->convertData($fetch));
+        return $this->result($this->adapter('globalVariable')->convertData($fetch));
     }
 
     /**
@@ -569,8 +577,8 @@ class Roles extends ApiController
 
         $object = $this->request->getJsonBody();
 
-        /* @var  $adapter RoleGlobalVariableAdapter */
-        $adapter = $this->adapter('roleGlobalVariable');
+        /* @var  $adapter GlobalVariableAdapter */
+        $adapter = $this->adapter('globalVariable');
 
         //Pre validates the request object
         $adapter->validateObject($object, Request::METHOD_POST);
@@ -597,7 +605,7 @@ class Roles extends ApiController
             'scopes'     => [ScopeInterface::SCOPE_ROLE]
         ];
 
-        $checkVar = $this->getGlobalVariable($roleId, $object->name, $globalVar);
+        $checkVar = $this->getGlobalVariable($object->name, $globalVar, $roleId);
 
         if (!empty($checkVar)) {
             throw new ApiErrorException(409, ErrorMessage::ERR_UNICITY_VIOLATION, sprintf('Variable with name %s already exists', $object->name));
@@ -609,7 +617,7 @@ class Roles extends ApiController
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, $e->getMessage());
         }
 
-        $data = $this->getGlobalVariable($roleId, $variable['name'], $globalVar);
+        $data = $this->getGlobalVariable($variable['name'], $globalVar, $roleId);
 
         //Responds with 201 Created status
         $this->response->setStatus(201);
@@ -633,56 +641,27 @@ class Roles extends ApiController
 
         $object = $this->request->getJsonBody();
 
-        /* @var  $adapter RoleGlobalVariableAdapter */
-        $adapter = $this->adapter('roleGlobalVariable');
+        /* @var  $adapter GlobalVariableAdapter */
+        $adapter = $this->adapter('globalVariable');
 
         //Pre validates the request object
         $adapter->validateObject($object, Request::METHOD_POST);
 
         $globalVar = $this->getVariableInstance();
 
-        $entity = new Entity\RoleGlobalVariable();
-
-        $adapter->copyAlterableProperties($object, $entity);
-
-        $variable = $this->getGlobalVariable($roleId, $name, $globalVar);
+        $variable = $this->getGlobalVariable($name, $globalVar, $roleId);
 
         if (empty($variable)) {
             throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Requested Global Variable does not exist.");
         }
 
-        if (!empty($variable['locked']) && (!isset($object->value) || count(get_object_vars($object)) > 1)) {
-            throw new ApiErrorException(403, ErrorMessage::ERR_SCOPE_VIOLATION, sprintf("This variable was declared in the %s Scope, you can only modify its 'value' field in the Role Scope", ucfirst($variable['locked']['scope'])));
-        }
+        $entity = $this->makeGlobalVariableEntity($variable);
 
-        $variable['flagDelete'] = '';
+        $adapter->copyAlterableProperties($object, $entity, ScopeInterface::SCOPE_ROLE);
 
-        if (!empty($variable['locked'])) {
-            $variable['current']['name'] = $name;
-            $variable['current']['value'] = $object->value;
-            $variable['current']['scope'] = ScopeInterface::SCOPE_ROLE;
-        } else {
-            $variable['current'] = [
-                'name'          => $name,
-                'value'         => !empty($object->value) ? $object->value : '',
-                'category'      => !empty($object->category) ? strtolower($object->category) : '',
-                'flagFinal'     => !empty($object->locked) ? 1 : $variable['current']['flagFinal'],
-                'flagRequired'  => !empty($object->requiredIn) ? $object->requiredIn : $variable['current']['flagRequired'],
-                'flagHidden'    => !empty($object->hidden) ? 1 : $variable['current']['flagHidden'],
-                'format'        => !empty($object->outputFormat) ? $object->outputFormat : $variable['current']['format'],
-                'validator'     => !empty($object->validationPattern) ? $object->validationPattern : $variable['current']['validator'],
-                'description'   => !empty($object->description) ? $object->description : '',
-                'scope'         => ScopeInterface::SCOPE_ROLE,
-            ];
-        }
+        $this->updateGlobalVariable($globalVar, $variable, $object, $name, ScopeInterface::SCOPE_ROLE, $roleId);
 
-        try {
-            $globalVar->setValues([$variable], $roleId);
-        } catch (ValidationErrorException $e) {
-            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, $e->getMessage());
-        }
-
-        $data = $this->getGlobalVariable($roleId, $name, $globalVar);
+        $data = $this->getGlobalVariable($name, $globalVar, $roleId);
 
         return $this->result($adapter->convertData($data));
     }
@@ -702,13 +681,15 @@ class Roles extends ApiController
 
         $this->getRole($roleId, true);
 
-        $fetch = $this->getGlobalVariable($roleId, $name, $this->getVariableInstance());
+        $fetch = $this->getGlobalVariable($name, $this->getVariableInstance(), $roleId);
 
-        $roleVariable = Entity\RoleGlobalVariable::findPk($roleId, $name);
+        $roleVariable = Entity\GlobalVariable\RoleGlobalVariable::findPk($roleId, $name);
 
         if (empty($fetch)) {
             throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Requested Global Variable does not exist.");
-        } else if (empty($roleVariable)) {
+        }
+
+        if (empty($roleVariable)) {
             throw new ApiErrorException(403, ErrorMessage::ERR_SCOPE_VIOLATION, "You can only delete Global Variables declared in Role scope.");
         }
 
@@ -718,41 +699,15 @@ class Roles extends ApiController
     }
 
     /**
-     * Gets a specific global variable data
-     *
-     * @param int                              $roleId
-     * @param string                           $name
-     * @param \Scalr_Scripting_GlobalVariables $globalVar
-     * @return mixed
-     * @throws ApiErrorException
-     */
-    private function getGlobalVariable($roleId, $name, \Scalr_Scripting_GlobalVariables $globalVar)
-    {
-        $list = $globalVar->getValues($roleId);
-        $fetch = [];
-
-        foreach ($list as $var) {
-            if ((!empty($var['current']['name']) && $var['current']['name'] == $name)
-                || (!empty($var['default']['name']) && $var['default']['name'] == $name)) {
-
-                $fetch = $var;
-                break;
-            }
-        }
-
-        return $fetch;
-    }
-
-    /**
      * Gets global variable object
      *
-     * @return \Scalr_Scripting_GlobalVariables
+     * @return Scalr_Scripting_GlobalVariables
      */
-    private function getVariableInstance()
+    public function getVariableInstance()
     {
-        return new \Scalr_Scripting_GlobalVariables(
+        return new Scalr_Scripting_GlobalVariables(
             $this->getUser()->getAccountId(),
-            $this->getEnvironment() ? $this->getEnvironment()->id : 0,
+            $this->getEnvironment()->id,
             ScopeInterface::SCOPE_ROLE
         );
     }

@@ -53,18 +53,24 @@ class AnalyticsNotifications extends AbstractTask
                 $subjectEntityName = 'Scalr\\Stats\\CostAnalytics\\Entity\\Project';
             }
 
+            $ifAccountLevel = !empty($notification->accountId) && $notification->subjectType === NotificationEntity::SUBJECT_TYPE_PROJECT;
+
             if (!empty($notification->subjectId)) {
                 $subject = call_user_func($subjectEntityName . 'Entity::findPk', $notification->subjectId);
-                $this->saveNotificationData($subject, $notification);
+                $this->saveNotificationData($subject, $notification, $ifAccountLevel);
             } else {
-                $subjects = call_user_func($subjectEntityName . 'Entity::find');
+                if ($ifAccountLevel) {
+                    $subjects = \Scalr::getContainer()->analytics->projects->getAccountProjects($notification->accountId);
+                } else {
+                    $subjects = call_user_func($subjectEntityName . 'Entity::find');
+                }
 
                 foreach ($subjects as $subject) {
-                    if ($subject->archived) {
+                    if ($subject->archived || ($ifAccountLevel && $subject->shared !== ProjectEntity::SHARED_WITHIN_ACCOUNT)) {
                         continue;
                     }
 
-                    $this->saveNotificationData($subject, $notification);
+                    $this->saveNotificationData($subject, $notification, $ifAccountLevel);
                 }
             }
         }
@@ -229,6 +235,8 @@ class AnalyticsNotifications extends AbstractTask
 
             unset($currentQuarter, $currentYear);
 
+            $ifAccountLevel = !empty($report->accountId) && $report->subjectType === ReportEntity::SUBJECT_TYPE_PROJECT;
+
             if (!empty($report->subjectType) && !empty($report->subjectId)) {
                 $subject = call_user_func($subjectEntityName . 'Entity::findPk', $report->subjectId);
 
@@ -239,21 +247,24 @@ class AnalyticsNotifications extends AbstractTask
                 $this->saveReportData($getPeriodicSubjectData, $subjectEntityName,
                                       ['period' => $period, 'start' => $start, 'end' => $end],
                                       ['period' => $periodForecast, 'start' => $startForecast, 'end' => $endForecast],
-                                      $report->subjectId, $report->subjectType, $report->emails, $formatedTitle, $formatedForecastDate
+                                      $report->subjectId, $report->subjectType, $report->emails, $formatedTitle, $formatedForecastDate, $ifAccountLevel
                 );
             } else if (!empty($report->subjectType)) {
-                $subjects = call_user_func($subjectEntityName . 'Entity::find');
+                if ($ifAccountLevel) {
+                    $subjects = \Scalr::getContainer()->analytics->projects->getAccountProjects($report->accountId);
+                } else {
+                    $subjects = call_user_func($subjectEntityName . 'Entity::find');
+                }
 
                 foreach ($subjects as $subject) {
-
-                    if ($subject->archived) {
+                    if ($subject->archived || ($ifAccountLevel && $subject->shared !== ProjectEntity::SHARED_WITHIN_ACCOUNT)) {
                         continue;
                     }
 
                     $this->saveReportData($getPeriodicSubjectData, $subjectEntityName,
                                           ['period' => $period, 'start' => $start, 'end' => $end],
                                           ['period' => $periodForecast, 'start' => $startForecast, 'end' => $endForecast],
-                                          $subject->{$subjectId}, $report->subjectType, $report->emails, $formatedTitle, $formatedForecastDate
+                                          $subject->{$subjectId}, $report->subjectType, $report->emails, $formatedTitle, $formatedForecastDate, $ifAccountLevel
                     );
                 }
 
@@ -277,8 +288,9 @@ class AnalyticsNotifications extends AbstractTask
      * @param string $emails                  Target emails
      * @param string $formatedTitle           Formated title name for report
      * @param string $formatedForecastDate    Formated forecast end estimate
+     * @param bool   $ifAccountLevel          True if account level report
      */
-    private function saveReportData($getPeriodicSubjectData, $subjectEntityName, array $params, array $forecastParams, $subjectId, $subjectType, $emails, $formatedTitle, $formatedForecastDate)
+    private function saveReportData($getPeriodicSubjectData, $subjectEntityName, array $params, array $forecastParams, $subjectId, $subjectType, $emails, $formatedTitle, $formatedForecastDate, $ifAccountLevel = false)
     {
         $periodData = \Scalr::getContainer()->analytics->usage->$getPeriodicSubjectData($subjectId, $params['period'], $params['start'], $params['end']);
         $periodDataForecast = \Scalr::getContainer()->analytics->usage->$getPeriodicSubjectData($subjectId, $forecastParams['period'], $forecastParams['start'], $forecastParams['end']);
@@ -293,7 +305,9 @@ class AnalyticsNotifications extends AbstractTask
             $subjectIdName = 'ccId';
         }
 
-        $periodData['detailsUrl'] = $baseUrl . '#/admin/analytics/' . $subjects . '?' . $subjectIdName . '=' . $subjectId;
+        $scope = $ifAccountLevel ? 'account' : 'admin';
+
+        $periodData['detailsUrl'] = "{$baseUrl}#/{$scope}/analytics/{$subjects}?{$subjectIdName}={$subjectId}";
         $periodData['period'] = $params['period'];
         $periodData['forecastPeriod'] = $formatedForecastDate;
         $periodData['totals']['forecastCost'] = $periodDataForecast['totals']['forecastCost'];
@@ -345,11 +359,12 @@ class AnalyticsNotifications extends AbstractTask
     /**
      * Saves project or cost center notification
      *
-     * @param ProjectEntity|CostCentreEntity $subject       Project or cost center entity
-     * @param NotificationEntity             $notification  Current notification object
+     * @param ProjectEntity|CostCentreEntity $subject        Project or cost center entity
+     * @param NotificationEntity             $notification   Current notification object
+     * @param bool                           $ifAccountLevel True if account level notification
      * @throws InvalidArgumentException
      */
-    private function saveNotificationData($subject, NotificationEntity $notification)
+    private function saveNotificationData($subject, NotificationEntity $notification, $ifAccountLevel = false)
     {
         $baseUrl = rtrim(\Scalr::getContainer()->config('scalr.endpoint.scheme') . "://" . \Scalr::getContainer()->config('scalr.endpoint.host') , '/');
         $quarters = new Quarters(SettingEntity::getQuarters());
@@ -374,6 +389,8 @@ class AnalyticsNotifications extends AbstractTask
 
         $periodSubjectData = \Scalr::getContainer()->analytics->usage->$getPeriodicSubjectData($subject->{$subjectIdName}, 'quarter', $date->start->format('Y-m-d'), $date->end->format('Y-m-d'));
 
+        $scope = $ifAccountLevel ? 'account' : 'admin';
+
         $subjectAnalytics = [
             'budget'         => $periodSubjectData['totals']['budget'],
             'name'           => $subject->name,
@@ -381,7 +398,7 @@ class AnalyticsNotifications extends AbstractTask
             'forecastCost'   => $periodSubjectData['totals']['forecastCost'],
             'interval'       => $periodSubjectData['interval'],
             'date'           => $formatedTitle,
-            'detailsUrl'     => $baseUrl . '#/admin/analytics/' . $subjects . '?' . $subjectIdName . '=' . $subject->{$subjectIdName},
+            'detailsUrl'     => $baseUrl . "#/{$scope}/analytics/{$subjects}?{$subjectIdName}={$subject->$subjectIdName}",
             'jsonVersion'    => '1.0.0',
             $childItems      => [],
         ];

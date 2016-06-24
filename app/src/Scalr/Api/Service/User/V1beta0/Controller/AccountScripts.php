@@ -13,7 +13,7 @@ use Scalr\Exception\ModelException;
 use Scalr\Model\Entity\AccountScript;
 
 /**
- * Account/Version-1beta0/AccountScripts API Controller
+ * Account/AccountScripts API Controller
  *
  * @author N.V.
  */

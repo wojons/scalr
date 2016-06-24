@@ -361,6 +361,8 @@ class ProjectEntity extends \Scalr\Model\AbstractEntity implements AccessPermiss
         if ($this->checkRemoval()) {
             //Completely remove it
             parent::delete();
+            ReportEntity::deleteBy([['subjectId' => $this->projectId], ['subjectType' => ReportEntity::SUBJECT_TYPE_PROJECT]]);
+            NotificationEntity::deleteBy([['subjectId' => $this->projectId], ['subjectType' => NotificationEntity::SUBJECT_TYPE_PROJECT]]);
         } else {
             //Archive it
             $this->archived = true;

@@ -10,6 +10,26 @@ namespace Scalr\Tests;
 abstract class TestCase extends \PHPUnit_Framework_TestCase
 {
 
+    /**
+     * Scalr UI tests
+     */
+    const TEST_TYPE_UI = 'ui';
+
+    /**
+     * Scalr Rest APIv2 tests
+     */
+    const TEST_TYPE_API = 'api';
+
+    /**
+     * Third party cloud dependent tests
+     */
+    const TEST_TYPE_CLOUD_DEPENDENT = 'cloud-dependent';
+
+    /**
+     * It's supposed to be overridden
+     */
+    const TEST_TYPE = null;
+
     public static $dbLog = array();
 
     /**
@@ -33,11 +53,23 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase
     /**
      * Returns true if functional tests should be skipped.
      *
+     * @param   string $type  optional The type of the test ui, api, cloud-dependent.
+     *          If option is not provided it will try to resolve static::TEST_TYPE constant
+     *
      * @return  bool Returns true if functional tests should be skipped.
      */
-    public function isSkipFunctionalTests()
+    public static function isSkippedFunctionalTest($type = null)
     {
-        return \Scalr::config('scalr.phpunit.skip_functional_tests') ? true : false;
+        $type = $type ?: static::TEST_TYPE;
+
+        $value = \Scalr::config('scalr.phpunit.functional_tests');
+
+        if (!is_array($value)) {
+            return !$value;
+        }
+
+        //It silently skips test with undefined type.
+        return $type ? !in_array($type, $value) : true;
     }
 
     /**
@@ -67,7 +99,7 @@ abstract class TestCase extends \PHPUnit_Framework_TestCase
      */
     protected function runTest()
     {
-        if (isset($this->getAnnotations()['method']['functional']) && $this->isSkipFunctionalTests()) {
+        if (isset($this->getAnnotations()['method']['functional']) && static::isSkippedFunctionalTest()) {
             $this->markTestSkipped();
         }
 

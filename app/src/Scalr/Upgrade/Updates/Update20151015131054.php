@@ -130,11 +130,8 @@ class Update20151015131054 extends AbstractUpdate implements SequenceInterface
                 Acl::RESOURCE_ANALYTICS_ENVIRONMENT,
                 Acl::RESOURCE_SECURITY_RETRIEVE_WINDOWS_PASSWORDS,
                 Acl::RESOURCE_SERVICES_RABBITMQ,
-                Acl::RESOURCE_DEPLOYMENTS_APPLICATIONS,
-                Acl::RESOURCE_DEPLOYMENTS_SOURCES,
-                Acl::RESOURCE_DEPLOYMENTS_TASKS,
                 Acl::RESOURCE_DB_SERVICE_CONFIGURATION,
-                Acl::RESOURCE_ORPHANED_SERVERS
+                Acl::RESOURCE_DISCOVERY_SERVERS
             ];
 
             $notIn = "AND arc.`resource_id` NOT IN (" . implode(",", array_fill(0, count($noAccessResources), '?')) . ")";

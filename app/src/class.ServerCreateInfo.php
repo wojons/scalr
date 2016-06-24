@@ -8,7 +8,6 @@ class ServerCreateInfo
     public $platform;
 
     /**
-     *
      * @var DBFarmRole
      */
     public $dbFarmRole;
@@ -25,12 +24,12 @@ class ServerCreateInfo
     private $properties;
 
     /**
+     * Constructor
      *
-     * @param string $platform (From SERVER_PLATFORMS class)
-     * @param integer $farmid
-     * @param integer $farm_roleid
-     * @param integer $index
-     * @return void
+     * @param    string     $platform    Platform
+     * @param    DBFarmRole $DBFarmRole  optional Farm Role object
+     * @param    int        $index       optional Server index within the Farm Role scope
+     * @param    string     $role_id     optional Identifier of the Role
      */
     public function __construct($platform, DBFarmRole $DBFarmRole = null, $index = null, $role_id = null)
     {
@@ -60,12 +59,6 @@ class ServerCreateInfo
                 ));
             } else {
                 switch($this->platform) {
-                	case SERVER_PLATFORMS::RACKSPACE:
-                	    $this->SetProperties(array(
-                	       RACKSPACE_SERVER_PROPERTIES::DATACENTER => $DBFarmRole->CloudLocation
-                	    ));
-                	    break;
-
                 	case SERVER_PLATFORMS::GCE:
                 	    $this->SetProperties(array(
                 	       GCE_SERVER_PROPERTIES::CLOUD_LOCATION => $DBFarmRole->CloudLocation
@@ -80,12 +73,9 @@ class ServerCreateInfo
                 	    break;
                 }
             }
-
-            //TODO:
-            $this->SetProperties(array(SERVER_PROPERTIES::SZR_VESION => '0.20.0'));
-        } else {
-            $this->SetProperties(array(SERVER_PROPERTIES::SZR_VESION => '0.20.0'));
         }
+
+        $this->SetProperties(array(SERVER_PROPERTIES::SZR_VESION => '0.20.0'));
     }
 
     public function SetProperties(array $props)

@@ -20,8 +20,8 @@ use Scalr\Service\Aws\S3Exception;
 use Scalr\Service\Aws\S3;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\EntityManager;
-use \DateTimeZone;
-use \DateTime;
+use DateTimeZone;
+use DateTime;
 
 /**
  * S3 Api messaging.
@@ -754,7 +754,7 @@ class S3Api extends AbstractApi
      * @param   string      $bucketName A bucket name.
      * @return  string      Returns bucket location
      *                      Valid Values: EU | eu-west-1 | eu-central-1 | us-west-1 | us-west-2 | ap-southeast-1 |
-     *                      ap-northeast-1 | sa-east-1 | empty string (for the US Classic Region)
+     *                      ap-northeast-1 | ap-northeast-2 | sa-east-1 | empty string (for the US Classic Region)
      * @throws  ClientException
      * @throws  S3Exception
      */

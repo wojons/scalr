@@ -3,7 +3,6 @@
 class Scalr_Scaling_Sensors_BandWidth extends Scalr_Scaling_Sensor
 {
     const SETTING_BW_TYPE = 'type';
-    const SETTING_BW_LAST_VALUE_RAW = 'raw_last_value';
 
     public function __construct()
     {
@@ -12,45 +11,64 @@ class Scalr_Scaling_Sensors_BandWidth extends Scalr_Scaling_Sensor
 
     public function getValue(DBFarmRole $dbFarmRole, Scalr_Scaling_FarmRoleMetric $farmRoleMetric)
     {
-        $servers = $dbFarmRole->GetServersByFilter(array('status' => SERVER_STATUS::RUNNING));
-        $DBFarm = $dbFarmRole->GetFarmObject();
+        $curTime = time();
+        $newData = [];
+        $servers = $dbFarmRole->GetServersByFilter(['status' => SERVER_STATUS::RUNNING]);
 
-        if (count($servers) == 0)
-            return 0;
+        if (!empty($farmRoleMetric->dtLastPolled)) {
+            $interval = $curTime - $farmRoleMetric->dtLastPolled;
 
-        $roleBWRaw = array();
-        $retval = array();
+            if ($interval < 1) {
+                // The service was started less than one second ago
+                return false;
+            }
+        }
+
+        $mbitsPerInterface = [];
 
         foreach ($servers as $DBServer) {
-            $type = $farmRoleMetric->getSetting(self::SETTING_BW_TYPE) == 'inbound' ? 'receive' : 'transmit';            
+            $type = $farmRoleMetric->getSetting(self::SETTING_BW_TYPE) == 'inbound' ? 'receive' : 'transmit';
 
             $netStat = (array)$DBServer->scalarizr->system->netStat();
+
             foreach ($netStat as $interface => $usage) {
-                if ($interface != 'lo')
-                    break;
+                if ($interface != 'lo' && !empty($usage)) {
+                    $totalBytes = round($usage->{$type}->bytes);
+                    $dataKey = $DBServer->serverId . '-' . $interface . '-' . $type;
+                    $newData[$dataKey] = $totalBytes;
+
+                    if (isset($interval)) {
+                        if (is_array($farmRoleMetric->lastData) && array_key_exists($dataKey, $farmRoleMetric->lastData)) {
+                            $lastTotalBytes = intval($farmRoleMetric->lastData[$dataKey]);
+                            $usedBytes = $totalBytes - $lastTotalBytes;
+
+                            if ($usedBytes > 0) {
+                                $usedMBits = ($usedBytes) * 8 / 1024 / 1024 / $interval;
+                                array_push($mbitsPerInterface, round($usedMBits, 2));
+                            } else {
+                                // The last value is considered to be incorrect as the server has been restarted
+                                $missStep = true;
+                            }
+
+                        } else {
+                            // The last value hasn't been set yet
+                            $missStep = true;
+                        }
+                    }
+                }
             }
-
-            if ($usage)
-                array_push($roleBWRaw, round($usage->{$type}->bytes / 1024 / 1024, 2));
         }
 
-        $roleBW = round(array_sum($roleBWRaw) / count($roleBWRaw), 2);
+        $farmRoleMetric->lastData = $newData;
 
-        if ($farmRoleMetric->getSetting(self::SETTING_BW_LAST_VALUE_RAW) !== null &&
-            $farmRoleMetric->getSetting(self::SETTING_BW_LAST_VALUE_RAW) !== '') {
-            $time = time() - $farmRoleMetric->dtLastPolled;
+        if (!isset($interval) || !empty($missStep)) {
+            // Sets the Server time to avoid differences between Database and Server time
+            $farmRoleMetric->dtLastPolled = $curTime;
+            $farmRoleMetric->save(false, ['settings', 'metric_id']);
 
-            $bandwidthUsage = ($roleBW - (float)$farmRoleMetric->getSetting(self::SETTING_BW_LAST_VALUE_RAW)) * 8;
-
-            $bandwidthChannelUsage = $bandwidthUsage/$time; // in Mbits/sec
-
-            $retval = round($bandwidthChannelUsage, 2);
-        } else {
-            $retval = 0;
+            return false;
         }
 
-        $farmRoleMetric->setSetting(self::SETTING_BW_LAST_VALUE_RAW, $roleBW);
-
-        return array($retval);
+        return $mbitsPerInterface;
     }
 }

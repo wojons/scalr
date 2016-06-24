@@ -17,7 +17,7 @@ class Client extends \http\Client
      *
      * @param Request $request
      *
-     * @return Response Returns http response
+     * @return Response $response Returns http response
      */
     public function sendRequest(Request $request)
     {

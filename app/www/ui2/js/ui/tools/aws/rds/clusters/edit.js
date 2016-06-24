@@ -954,6 +954,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.clusters.edit', function (loadParams, modu
             form: [{
                 xtype: 'rdssgmultiselect',
                 title: 'Add Security Groups to DB Instance',
+                listGroupsUrl: '/tools/aws/rds/xListSecurityGroups',
                 limit: isVpcDefined ? 5 : 25,
                 minHeight: 200,
                 selection: selected,

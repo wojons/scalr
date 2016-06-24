@@ -37,7 +37,7 @@ class DbMock1
     {
         $this->selectQueries++;
         $ret = array();
-        for ($i = 2; $i < count($pars); $i++) {
+        for ($i = 2, $c = count($pars); $i < $c; $i++) {
             if (isset($this->storage[$pars[0]][$pars[1]][$pars[$i]])) {
                 $ret[$pars[$i]] = $this->storage[$pars[0]][$pars[1]][$pars[$i]];
             }

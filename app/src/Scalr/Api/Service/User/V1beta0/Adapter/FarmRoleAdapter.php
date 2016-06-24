@@ -7,10 +7,16 @@ use Scalr\Api\DataType\ApiEntityAdapter;
 use Scalr\Api\DataType\ErrorMessage;
 use Scalr\Api\Rest\Controller\ApiController;
 use Scalr\Api\Rest\Exception\ApiErrorException;
+use Scalr\Api\Rest\Exception\ApiNotImplementedErrorException;
 use Scalr\Api\Service\User\V1beta0\Controller\FarmRoles;
+use Scalr\Model\AbstractEntity;
+use Scalr\Model\Entity\Farm;
 use Scalr\Model\Entity\FarmRole;
 use Scalr\Model\Entity\FarmRoleSetting;
 use Scalr\Model\Entity\FarmSetting;
+use Scalr\Model\Entity\Role;
+use Scalr\Model\Entity\FarmRoleScalingMetric;
+use Scalr\Model\Entity\RoleProperty;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 use Scalr\Service\Aws;
@@ -19,6 +25,9 @@ use Scalr_Environment;
 use Scalr_Role_Behavior_Router;
 use SERVER_PLATFORMS;
 use Scalr_Governance;
+use ROLE_BEHAVIORS;
+use Scalr_Role_Behavior_Chef;
+use Scalr\Model\Collections\EntityIterator;
 
 /**
  * FarmRoleAdapter V1
@@ -56,6 +65,39 @@ class FarmRoleAdapter extends ApiEntityAdapter
 
         self::RULE_TYPE_FILTERABLE  => ['id', 'farm', 'role', 'platform'],
         self::RULE_TYPE_SORTING     => [self::RULE_TYPE_PROP_DEFAULT => ['id' => true]],
+    ];
+
+    /**
+     * List of behaviors disabled for scaling
+     */
+    public static $disableScalingBehaviors = [
+        ROLE_BEHAVIORS::CF_HEALTH_MANAGER,
+        ROLE_BEHAVIORS::CF_CLOUD_CONTROLLER,
+        ROLE_BEHAVIORS::MONGODB,
+        ROLE_BEHAVIORS::RABBITMQ
+    ];
+
+    /**
+     * List of unique behaviors
+     * Farm can include only one farm-role with following behaviors
+     *
+     * @var array
+     */
+    protected static $uniqueFarmBehaviors = [
+        [ROLE_BEHAVIORS::POSTGRESQL],
+        [ROLE_BEHAVIORS::REDIS],
+        [ROLE_BEHAVIORS::MONGODB],
+        ROLE_BEHAVIORS::MYSQL => [ROLE_BEHAVIORS::MYSQL, ROLE_BEHAVIORS::MYSQL2, ROLE_BEHAVIORS::PERCONA]
+    ];
+
+    /**
+     * List of farm role supported behaviors
+     *
+     * @var array
+     */
+    protected static $farmRoleSupportedBehaviors = [
+        ROLE_BEHAVIORS::BASE,
+        ROLE_BEHAVIORS::CHEF
     ];
 
     /**
@@ -100,6 +142,60 @@ class FarmRoleAdapter extends ApiEntityAdapter
                         throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, sprintf(
                             "Could not find out the Role with ID: %d", $role->id
                         ));
+                    }
+
+                    if ($role->isDeprecated) {
+                        throw new ApiErrorException(409, ErrorMessage::ERR_DEPRECATED, "Role '{$roleId}' is deprecated");
+                    }
+
+                    $destinationBehaviors = $role->getBehaviors();
+                    if ($role->isScalarized) {
+                        $unsupportedBehaviors = array_diff($destinationBehaviors, static::$farmRoleSupportedBehaviors);
+                        if (!empty($unsupportedBehaviors)) {
+                            throw new ApiNotImplementedErrorException(sprintf(
+                                'For now Scalr API supports only following built-in automation types: %s.',
+                                implode(', ', RoleAdapter::behaviorsToData(static::$farmRoleSupportedBehaviors))
+                            ));
+                        }
+                    }
+
+                    /* @var $sourceRole Role */
+                    $sourceRole = $to->getRole();
+                    if (!empty($sourceRole)) {
+                        if ($sourceRole->getOs()->family !== $role->getOs()->family) {
+                            throw new ApiErrorException(409, ErrorMessage::ERR_OS_MISMATCH, sprintf(
+                                'Operating System of the Role "%s" must match to the OS of the replacement Role "%s"',
+                                $sourceRole->getOs()->family,
+                                $role->getOs()->family
+                            ));
+                        }
+
+                        if ($sourceRole->isScalarized) {
+                            if (!$role->isScalarized) {
+                                throw new ApiErrorException(409, ErrorMessage::ERR_CONFIGURATION_MISMATCH,
+                                    'Can not replace the Role that has Scalr Agent to the agentless Role'
+                                );
+                            }
+
+                            $sourceBehaviors = $sourceRole->getBehaviors();
+                            if ($sourceRole->hasBehavior(ROLE_BEHAVIORS::CHEF) &&
+                                empty($to->settings[Scalr_Role_Behavior_Chef::ROLE_CHEF_BOOTSTRAP]) &&
+                                empty(RoleProperty::findOne([
+                                    ['name' => Scalr_Role_Behavior_Chef::ROLE_CHEF_BOOTSTRAP],
+                                    ['roleId' => $sourceRole->id],
+                                    ['value' => 1]
+                                ]))) {
+                                $sourceBehaviors = array_diff($sourceBehaviors, [ROLE_BEHAVIORS::CHEF]);
+                            }
+
+                            $compareBehaviors = array_diff($sourceBehaviors, $destinationBehaviors);
+                            if (!empty($compareBehaviors)) {
+                                throw new ApiErrorException(409, ErrorMessage::ERR_UNICITY_VIOLATION, sprintf(
+                                    'The replacement role does not include the necessary builtinAutomation %s',
+                                    implode(', ', RoleAdapter::behaviorsToData($compareBehaviors))
+                                ));
+                            }
+                        }
                     }
                 }
 
@@ -188,11 +284,61 @@ class FarmRoleAdapter extends ApiEntityAdapter
         if (empty($entity->farmId)) {
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property farm.id");
         } else {
+            /* @var  $farm Farm */
             $farm = $this->controller->getFarm($entity->farmId, true);
+        }
+
+        if (empty($entity->alias)) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property alias");
+        }
+
+        if (!preg_match("/^[[:alnum:]](?:-*[[:alnum:]])*$/", $entity->alias)) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Alias should start and end with letter or number and contain only letters, numbers and dashes.");
         }
 
         if (empty($entity->roleId)) {
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property role.id");
+        }
+        $roleBehaviors = $entity->getRole()->getBehaviors();
+        $uniqueBehaviors = array_intersect($roleBehaviors, array_merge(...array_values(static::$uniqueFarmBehaviors)));
+        if (!empty($uniqueBehaviors)) {
+            //farm can include only one mysql or percona role
+            if (array_intersect($uniqueBehaviors, static::$uniqueFarmBehaviors[ROLE_BEHAVIORS::MYSQL])) {
+                $uniqueBehaviors = array_merge($uniqueBehaviors, array_diff(static::$uniqueFarmBehaviors[ROLE_BEHAVIORS::MYSQL], $uniqueBehaviors));
+            }
+
+            $farmRoleEntity = new FarmRole();
+            $roleEntity = new Role();
+
+            /* @var $conflicts EntityIterator */
+            $conflicts = Role::find([
+                AbstractEntity::STMT_FROM => "{$roleEntity->table()} JOIN {$farmRoleEntity->table('fr')} ON {$farmRoleEntity->columnRoleId('fr')} = {$roleEntity->columnId()}",
+                AbstractEntity::STMT_WHERE => "{$farmRoleEntity->columnFarmId('fr')} = {$farmRoleEntity->qstr('farmId', $entity->farmId)} " .
+                    (empty($entity->id) ? '' : " AND {$farmRoleEntity->columnId('fr')} <> {$farmRoleEntity->qstr('id', $entity->id)}"),
+                ['behaviors' => ['$regex' => implode('|', $uniqueBehaviors)]],
+            ]);
+
+
+            if ($conflicts->count() > 0) {
+                $conflictedBehaviors = [];
+                /* @var  $role Role */
+                foreach ($conflicts as $role) {
+                    $conflictedBehaviors = array_merge($conflictedBehaviors, array_intersect($uniqueBehaviors, $role->getBehaviors()));
+                }
+
+                if (!empty(array_intersect($conflictedBehaviors, static::$uniqueFarmBehaviors[ROLE_BEHAVIORS::MYSQL]))) {
+                    $conflictedBehaviors = array_diff($conflictedBehaviors, static::$uniqueFarmBehaviors[ROLE_BEHAVIORS::MYSQL]);
+                    $conflictedBehaviors[] = 'mysql/percona';
+                }
+
+                $conflictedBehaviors = RoleAdapter::behaviorsToData($conflictedBehaviors);
+
+                throw new ApiErrorException(
+                    409,
+                    ErrorMessage::ERR_UNICITY_VIOLATION,
+                    sprintf('Only one [%s] role can be added to farm', implode(', ', $conflictedBehaviors))
+                );
+            }
         }
 
         if (empty($entity->platform)) {
@@ -201,20 +347,20 @@ class FarmRoleAdapter extends ApiEntityAdapter
 
         switch ($entity->platform) {
             case SERVER_PLATFORMS::EC2:
-                if (empty($entity->settings[FarmRoleSetting::AWS_INSTANCE_TYPE])) {
+                if (empty($entity->settings[FarmRoleSetting::INSTANCE_TYPE])) {
                     throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Missed property instance.type");
                 }
 
                 /* @var $platform Ec2PlatformModule */
                 $platform = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
 
-                if (!in_array($entity->settings[FarmRoleSetting::AWS_INSTANCE_TYPE], $platform->getInstanceTypes())) {
+                if (!in_array($entity->settings[FarmRoleSetting::INSTANCE_TYPE], $platform->getInstanceTypes())) {
                     throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Wrong instance type");
                 }
 
                 $gov = new Scalr_Governance($this->controller->getEnvironment()->id);
-                $allowGovernanceIns = $gov->getValue(SERVER_PLATFORMS::EC2, Scalr_Governance::AWS_INSTANCE_TYPE);
-                if(isset($allowGovernanceIns) && !in_array($entity->settings[FarmRoleSetting::AWS_INSTANCE_TYPE], $allowGovernanceIns)) {
+                $allowGovernanceIns = $gov->getValue(SERVER_PLATFORMS::EC2, Scalr_Governance::INSTANCE_TYPE);
+                if (isset($allowGovernanceIns) && !in_array($entity->settings[FarmRoleSetting::INSTANCE_TYPE], $allowGovernanceIns)) {
                     throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, sprintf(
                         "Only %s %s allowed according to governance settings",
                         ...(count($allowGovernanceIns) > 1 ? [implode(', ', $allowGovernanceIns), 'instances are'] : [array_shift($allowGovernanceIns), 'instance is'])
@@ -226,7 +372,7 @@ class FarmRoleAdapter extends ApiEntityAdapter
                 }
 
                 $vpcGovernanceRegions = $gov->getValue(SERVER_PLATFORMS::EC2, Scalr_Governance::AWS_VPC, 'regions');
-                if(isset($vpcGovernanceRegions) && !array_key_exists($entity->cloudLocation, $vpcGovernanceRegions)) {
+                if (isset($vpcGovernanceRegions) && !array_key_exists($entity->cloudLocation, $vpcGovernanceRegions)) {
                     $regions = array_keys($vpcGovernanceRegions);
                     throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, sprintf(
                         "Only %s %s allowed according to governance settings",
@@ -248,7 +394,7 @@ class FarmRoleAdapter extends ApiEntityAdapter
                         }
                     }
                     $diffZones = array_diff($availZones, $ec2availabilityZones);
-                    if(!empty($diffZones)) {
+                    if (!empty($diffZones)) {
                         throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, sprintf(
                             '%s %s available. Available zones are %s',
                             ...(count($diffZones) > 1) ? [implode(', ', $diffZones), 'zones are not', implode(', ', $ec2availabilityZones)] : [array_shift($diffZones), 'zone is not', implode(', ', $ec2availabilityZones)]
@@ -256,7 +402,11 @@ class FarmRoleAdapter extends ApiEntityAdapter
                     }
                 }
 
-                if (!empty($entity->settings[FarmRoleSetting::AWS_VPC_SUBNET_ID])) {
+                if (!empty($farm->settings[FarmSetting::EC2_VPC_ID])) {
+                    if (empty($entity->settings[FarmRoleSetting::AWS_VPC_SUBNET_ID])) {
+                        throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "VPC Subnet(s) should be described");
+                    }
+
                     $vpcId = $farm->settings[FarmSetting::EC2_VPC_ID];
                     $subnets = $platform->listSubnets($env, $entity->cloudLocation, $vpcId, true);
                     $vpcGovernanceIds = $gov->getValue(SERVER_PLATFORMS::EC2, Scalr_Governance::AWS_VPC, 'ids');
@@ -279,9 +429,9 @@ class FarmRoleAdapter extends ApiEntityAdapter
                                             "Only %s %s allowed by governance settings",
                                             ...(count($vpcGovernanceIds[$vpcId]) > 1 ? [implode(', ', $vpcGovernanceIds[$vpcId]), 'subnets are'] : [array_shift($vpcGovernanceIds[$vpcId]), 'subnet is'])
                                         ));
-                                    } elseif($vpcGovernanceIds[$vpcId] == "outbound-only" && $subnetType != 'private' ) {
+                                    } else if ($vpcGovernanceIds[$vpcId] == "outbound-only" && $subnetType != 'private' ) {
                                         throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Only private subnets allowed by governance settings");
-                                    } elseif($vpcGovernanceIds[$vpcId] == "full" && $subnetType != 'public' ) {
+                                    } else if ($vpcGovernanceIds[$vpcId] == "full" && $subnetType != 'public' ) {
                                         throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Only public subnets allowed by governance settings");
                                     }
                                 }
@@ -300,16 +450,14 @@ class FarmRoleAdapter extends ApiEntityAdapter
                         if (empty($router->settings[Scalr_Role_Behavior_Router::ROLE_VPC_NID])) {
                             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Farm-role with id '{$router->id}' is not a valid router");
                         }
-                    } else if ($subnetType == 'private') {
+                    } else if (\Scalr::config('scalr.instances_connection_policy') != 'local' && $subnetType == 'private') {
                         throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "You must describe a VPC Router");
                     }
-                } else if ($farm->settings[FarmSetting::EC2_VPC_ID]) {
-                    throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "VPC Subnet(s) should be described");
                 }
                 break;
 
             default:
-                if (in_array($entity->platform, SERVER_PLATFORMS::GetList())) {
+                if (isset(SERVER_PLATFORMS::GetList()[$entity->platform])) {
                     throw new ApiErrorException(501, ErrorMessage::ERR_NOT_IMPLEMENTED, "Platform '{$entity->platform}' is not supported yet");
                 } else {
                     throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Unknown platform '{$entity->platform}'");
@@ -343,8 +491,8 @@ class FarmRoleAdapter extends ApiEntityAdapter
                     $configuration['ebsOptimized'] = $role->settings[FarmRoleSetting::AWS_EBS_OPTIMIZED];
                 }
 
-                if (!empty($role->settings[FarmRoleSetting::AWS_INSTANCE_TYPE])) {
-                    $configuration['instanceType']['id'] = $role->settings[FarmRoleSetting::AWS_INSTANCE_TYPE];
+                if (!empty($role->settings[FarmRoleSetting::INSTANCE_TYPE])) {
+                    $configuration['instanceType']['id'] = $role->settings[FarmRoleSetting::INSTANCE_TYPE];
                 }
                 break;
         }
@@ -379,7 +527,9 @@ class FarmRoleAdapter extends ApiEntityAdapter
                     }
 
                     if (!empty($role->settings[Scalr_Role_Behavior_Router::ROLE_VPC_SCALR_ROUTER_ID])) {
-                        $configuration['router'] = $role->settings[Scalr_Role_Behavior_Router::ROLE_VPC_SCALR_ROUTER_ID];
+                        $configuration['router'] = [
+                            'id' => $role->settings[Scalr_Role_Behavior_Router::ROLE_VPC_SCALR_ROUTER_ID]
+                        ];
                     }
                 //TODO: improve that condition check
                 } else if (!empty($role->settings[FarmRoleSetting::AWS_AVAIL_ZONE])) {
@@ -430,6 +580,8 @@ class FarmRoleAdapter extends ApiEntityAdapter
             $configuration['maxInstances'] = $role->settings[FarmRoleSetting::SCALING_MAX_INSTANCES];
         }
 
+        $configuration['rules'] = ScalingMetricAdapter::metricNameToData(FarmRole::listFarmRoleMetric($role->id));
+
         return $configuration;
     }
 
@@ -477,7 +629,7 @@ class FarmRoleAdapter extends ApiEntityAdapter
                 break;
 
             case FarmRoles::AWS_CLASSIC_PLACEMENT_CONFIGURATION:
-                if(is_array($placement->availabilityZones)) {
+                if (isset($placement->availabilityZones) && is_array($placement->availabilityZones)) {
                     if (empty($placement->availabilityZones)) {
                         $role->settings[FarmRoleSetting::AWS_AVAIL_ZONE] = "x-scalr-diff";
                     } else {
@@ -503,30 +655,42 @@ class FarmRoleAdapter extends ApiEntityAdapter
     /**
      * Setups given scaling configuration to specified farm role
      *
-     * @param   FarmRole    $role       Configurable farm role
+     * @param   FarmRole    $farmRole       Configurable farm role
      * @param   object      $scaling    Scaling configuration
      *
      * @throws ApiErrorException
      */
-    public static function setupScalingConfiguration(FarmRole $role, $scaling)
+    public static function setupScalingConfiguration(FarmRole $farmRole, $scaling)
     {
+        $disabledScalingBehaviors = array_intersect(static::$disableScalingBehaviors, $farmRole->getRole()->getBehaviors());
+        if (!empty($disabledScalingBehaviors)) {
+            throw new ApiErrorException(409, ErrorMessage::ERR_CONFIGURATION_MISMATCH, sprintf(
+                'Can not add scaling configuration to the Role with the following built-in automation types: %s.',
+                implode(', ', RoleAdapter::behaviorsToData($disabledScalingBehaviors))
+            ));
+        }
+
         if (isset($scaling->enabled)) {
-            $role->settings[FarmRoleSetting::SCALING_ENABLED] = intval($scaling->enabled);
+            $farmRole->settings[FarmRoleSetting::SCALING_ENABLED] = intval($scaling->enabled);
         }
 
         if (isset($scaling->minInstances)) {
-            if ($scaling->minInstances <= 0) {
-                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Property scaling.minInstances must be positive");
+            if ($scaling->minInstances < 0) {
+                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Property scaling.minInstances must be greater than or equal to 0");
             }
 
-            $role->settings[FarmRoleSetting::SCALING_MIN_INSTANCES] = intval($scaling->minInstances);
+            $farmRole->settings[FarmRoleSetting::SCALING_MIN_INSTANCES] = intval($scaling->minInstances);
         }
 
         if (isset($scaling->maxInstances)) {
-            $role->settings[FarmRoleSetting::SCALING_MAX_INSTANCES] = intval($scaling->maxInstances);
+            if ($scaling->maxInstances > 400) {
+                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Property scaling.maxInstances must be less than or equal to 400");
+            }
+
+            $farmRole->settings[FarmRoleSetting::SCALING_MAX_INSTANCES] = intval($scaling->maxInstances);
         }
 
-        if ($role->settings[FarmRoleSetting::SCALING_MAX_INSTANCES] < $role->settings[FarmRoleSetting::SCALING_MIN_INSTANCES]) {
+        if ($farmRole->settings[FarmRoleSetting::SCALING_MAX_INSTANCES] < $farmRole->settings[FarmRoleSetting::SCALING_MIN_INSTANCES]) {
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Property scaling.maxInstances must be greater than or equal to scaling.minInstances");
         }
     }
@@ -550,7 +714,7 @@ class FarmRoleAdapter extends ApiEntityAdapter
                 if (isset($instance->instanceType)) {
                     $type = ApiController::getBareId($instance, 'instanceType');
 
-                    $role->settings[FarmRoleSetting::AWS_INSTANCE_TYPE] = $type;
+                    $role->settings[FarmRoleSetting::INSTANCE_TYPE] = $type;
                 }
 
                 if (isset($instance->ebsOptimized)) {

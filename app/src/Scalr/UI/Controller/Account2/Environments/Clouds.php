@@ -21,7 +21,6 @@ use Scalr\Model\Entity;
 class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controller
 {
     /**
-     *
      * @var Scalr_Environment
      */
     private $env;
@@ -66,7 +65,6 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
             'ui/account2/environments/clouds/gce.js',
             'ui/account2/environments/clouds/cloudstack.js',
             'ui/account2/environments/clouds/openstack.js',
-            'ui/account2/environments/clouds/rackspace.js',
             'ui/account2/environments/clouds/azure.js'
         ), array('ui/account2/environments/clouds.css'));
     }
@@ -82,7 +80,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 if ($this->getParam($varName)) {
                     return intval($this->getParam($varName));
                 } else {
-                    $value = $this->env->cloudCredentials($cloud)->properties[$name];
+                    $value = $this->env->keychain($cloud)->properties[$name];
                     if (!$value && $requiredError)
                         $this->checkVarError[$errorName] = $requiredError;
 
@@ -94,7 +92,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 if ($this->getParam($varName)) {
                     return $this->getParam($varName);
                 } else {
-                    $value = $this->env->cloudCredentials($cloud)->properties[$name];
+                    $value = $this->env->keychain($cloud)->properties[$name];
                     if ($value == '' && $requiredError)
                         $this->checkVarError[$errorName] = $requiredError;
 
@@ -106,7 +104,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 if ($this->getParam($varName) && $this->getParam($varName) != '******') {
                     return $this->getParam($varName);
                 } else {
-                    $value = $this->env->cloudCredentials($cloud)->properties[$name];
+                    $value = $this->env->keychain($cloud)->properties[$name];
                     if ($value == '' && $requiredError)
                         $this->checkVarError[$errorName] = $requiredError;
 
@@ -127,7 +125,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
 
                     return $base64encode ? base64_encode($value) : $value;
                 } else {
-                    $value = $this->env->cloudCredentials($cloud)->properties[$name];
+                    $value = $this->env->keychain($cloud)->properties[$name];
                     if ($value == '' && $requiredError)
                         $this->checkVarError[$errorName] = $requiredError;
 
@@ -150,7 +148,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 $value = $this->getParam($varName);
                 $value = $trim ? trim($value) : $value;
                 if (empty($value) && $fetchIfEmpty) {
-                    $value = $this->env->cloudCredentials($cloud)->properties[$name];
+                    $value = $this->env->keychain($cloud)->properties[$name];
                 }
                 if (empty($value) && $requiredError) {
                     $this->checkVarError[$name] = $requiredError;
@@ -159,7 +157,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
             case 'password':
                 $value = $this->getParam($varName);
                 if ($value === '******' || empty($value) && $fetchIfEmpty) {
-                    $value = $this->env->cloudCredentials($cloud)->properties[$name];
+                    $value = $this->env->keychain($cloud)->properties[$name];
                 }
                 if (empty($value) && $requiredError) {
                     $this->checkVarError[$name] = $requiredError;
@@ -176,7 +174,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 if (!empty($value)) {
                     $value = $base64encode ? base64_encode($value) : $value;
                 } else if ($fetchIfEmpty){
-                    $value = $this->env->cloudCredentials($cloud)->properties[$name];
+                    $value = $this->env->keychain($cloud)->properties[$name];
                 }
                 if (empty($value) && $requiredError) {
                     $this->checkVarError[$name] = $requiredError;
@@ -197,7 +195,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
         $params = [];
 
         if (in_array($platform, $this->env->getEnabledPlatforms()) || $platform == SERVER_PLATFORMS::AZURE) {
-            $cloudCredentials = $this->env->cloudCredentials($platform);
+            $cloudCredentials = $this->env->keychain($platform);
             $ccProps = $cloudCredentials->properties;
 
             switch ($platform) {
@@ -253,19 +251,6 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 case SERVER_PLATFORMS::HPCLOUD:
                     $params = $this->getOpenStackDetails($platform);
                     break;
-                case SERVER_PLATFORMS::RACKSPACE:
-                    $params[SERVER_PLATFORMS::RACKSPACE . '.is_enabled'] = true;
-                    /* @var $locations Entity\Account\EnvironmentProperty[] */
-                    $locations = Entity\Account\EnvironmentProperty::find([['envId' => $this->env->id], ['name' => Entity\Account\EnvironmentProperty::RACKSPACE_LOCATIONS]]);
-                    foreach ($locations as $location) {
-                        $ccProps = $this->env->cloudCredentials("{$location->group}.{$platform}")->properties;
-                        $params[$location->group] = [
-                            Entity\CloudCredentialsProperty::RACKSPACE_USERNAME => $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_USERNAME],
-                            Entity\CloudCredentialsProperty::RACKSPACE_API_KEY => $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_API_KEY],
-                            Entity\CloudCredentialsProperty::RACKSPACE_IS_MANAGED => $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_IS_MANAGED],
-                        ];
-                    }
-                    break;
                 case SERVER_PLATFORMS::AZURE:
                     $params[SERVER_PLATFORMS::AZURE . '.is_enabled'] = $cloudCredentials->isEnabled();
                     $params[Entity\CloudCredentialsProperty::AZURE_TENANT_NAME] = $ccProps[Entity\CloudCredentialsProperty::AZURE_TENANT_NAME];
@@ -293,7 +278,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                                 strpos($e->getMessage(), 'Refresh token is expired or not exists') !== false) {
 
                                 $cloudCredentials->delete();
-                                $cloudCredentials->release($this->env->getContainer());
+                                $cloudCredentials->release();
                                 $params[Entity\CloudCredentialsProperty::AZURE_AUTH_STEP] = 0;
                                 $params[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID] = null;
                             }
@@ -303,7 +288,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                         }
 
                         if (empty($subscriptionList)) {
-                            $params['errorMessage'] = sprintf("There are no active subscriptions available for the '%s' tenant", $params[AzurePlatformModule::TENANT_NAME]);
+                            $params['errorMessage'] = sprintf("There are no active subscriptions available for the '%s' tenant", $params[Entity\CloudCredentialsProperty::AZURE_TENANT_NAME]);
                         }
 
                         $params['subscriptions'] = $subscriptionList;
@@ -359,7 +344,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
 
         $enabled = false;
 
-        $currentCloudCredentials = $this->env->cloudCredentials(SERVER_PLATFORMS::AZURE);
+        $currentCloudCredentials = $this->env->keychain(SERVER_PLATFORMS::AZURE);
 
         if (empty($currentCloudCredentials->id)) {
             $currentCloudCredentials = $this->makeCloudCredentials(SERVER_PLATFORMS::AZURE, [], Entity\CloudCredentials::STATUS_DISABLED);
@@ -516,7 +501,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
 
         $bNew = !$this->env->isPlatformEnabled(SERVER_PLATFORMS::EC2);
 
-        $currentCloudCredentials = $this->env->cloudCredentials(SERVER_PLATFORMS::EC2);
+        $currentCloudCredentials = $this->env->keychain(SERVER_PLATFORMS::EC2);
         $ccProps = $currentCloudCredentials->properties;
 
         if ($this->getParam('ec2_is_enabled')) {
@@ -619,13 +604,18 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 $aws = $this->env->aws($region, $pars[Entity\CloudCredentialsProperty::AWS_ACCESS_KEY], $pars[Entity\CloudCredentialsProperty::AWS_SECRET_KEY]);
 
                 if (!empty($pars[Entity\CloudCredentialsProperty::AWS_DETAILED_BILLING_PAYER_ACCOUNT]) && $aws->getAccountNumber() != $pars[Entity\CloudCredentialsProperty::AWS_DETAILED_BILLING_PAYER_ACCOUNT]) {
-                    $payerCredentials = $this->env->cloudCredentialsList(
+                    $payerCredentials = $this->getUser()->getAccount()->cloudCredentialsList(
                         [SERVER_PLATFORMS::EC2],
-                        [['accountId' => $this->user->getAccountId()]],
-                        [['name' => Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID], ['value' => $pars[Entity\CloudCredentialsProperty::AWS_DETAILED_BILLING_PAYER_ACCOUNT]]]
+                        [],
+                        [Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID => [['value' => $pars[Entity\CloudCredentialsProperty::AWS_DETAILED_BILLING_PAYER_ACCOUNT]]]]
                     );
 
-                    $payerCredentials = array_shift($payerCredentials) ?: $currentCloudCredentials;
+                    if (count($payerCredentials) == 0) {
+                        throw new Exception("Payer account not found!");
+                    }
+
+                    $payerCredentials = $payerCredentials->current();
+
 
                     $aws = $this->env->aws(
                         $region,
@@ -734,7 +724,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
         $pars = array();
         $enabled = false;
 
-        $currentCloudCredentials = $this->env->cloudCredentials(SERVER_PLATFORMS::GCE);
+        $currentCloudCredentials = $this->env->keychain(SERVER_PLATFORMS::GCE);
         $cccProps = $currentCloudCredentials->properties;
 
         if ($this->getParam('gce_is_enabled')) {
@@ -774,25 +764,10 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                     $pars[Entity\CloudCredentialsProperty::GCE_KEY] != $cccProps[Entity\CloudCredentialsProperty::GCE_KEY]
                 ) {
                     try {
-                        $client = new Google_Client();
-                        $client->setApplicationName("Scalr GCE");
-                        $client->setScopes(array('https://www.googleapis.com/auth/compute'));
-
-                        $key = base64_decode($pars[Entity\CloudCredentialsProperty::GCE_KEY]);
-                        $client->setAssertionCredentials(new Google_Auth_AssertionCredentials(
-                            $pars[Entity\CloudCredentialsProperty::GCE_SERVICE_ACCOUNT_NAME],
-                            array('https://www.googleapis.com/auth/compute'),
-                            $key,
-                            $pars[Entity\CloudCredentialsProperty::GCE_JSON_KEY] ? null : 'notasecret'
-                        ));
-
-                        //$client->setUseObjects(true);
-                        $client->setClientId($pars[Entity\CloudCredentialsProperty::GCE_CLIENT_ID]);
-
-                        $gce = new Google_Service_Compute($client);
-
+                        $googlePlatform = PlatformFactory::NewPlatform(SERVER_PLATFORMS::GCE);
+                        $gce = $googlePlatform->getClient(null, $pars);
+                        
                         $gce->zones->listZones($pars[Entity\CloudCredentialsProperty::GCE_PROJECT_ID]);
-
                     } catch (Exception $e) {
                         throw new Exception(_("Provided GCE credentials are incorrect: ({$e->getMessage()})"));
                     }
@@ -826,7 +801,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
 
     private function getCloudStackDetails($platform)
     {
-        $ccProps = $this->env->cloudCredentials($platform)->properties;
+        $ccProps = $this->env->keychain($platform)->properties;
 
         $params = array();
         $params["{$platform}.is_enabled"] = true;
@@ -841,6 +816,20 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_SECRET_KEY],
                 $platform
             );
+
+            /* @var $config Yaml */
+            $config = $this->env->getContainer()->config;
+
+            if ($config->defined("scalr.{$platform}.use_proxy") &&
+                $config("scalr.{$platform}.use_proxy") &&
+                in_array($config('scalr.connections.proxy.use_on'), ['both', 'scalr'])) {
+                $proxySettings = $config('scalr.connections.proxy');
+
+                $cs->setProxy(
+                    $proxySettings['host'], $proxySettings['port'], $proxySettings['user'],
+                    $proxySettings['pass'], $proxySettings['type'], $proxySettings['authtype']
+                );
+            }
 
             $params['_info'] = $cs->listCapabilities();
 
@@ -882,7 +871,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
         $enabled = false;
         $platform = $this->getParam('platform');
 
-        $currentCloudCredentials = $this->env->cloudCredentials($platform);
+        $currentCloudCredentials = $this->env->keychain($platform);
         $ccProps = $currentCloudCredentials->properties;
 
         $bNew = !$currentCloudCredentials->isEnabled();
@@ -915,6 +904,20 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                 $listAccountsData->listall = true;
                 //$listAccountsData->accounttype = 0;
 
+                /* @var $config Yaml */
+                $config = $this->env->getContainer()->config;
+
+                if ($config->defined("scalr.{$platform}.use_proxy") &&
+                    $config("scalr.{$platform}.use_proxy") &&
+                    in_array($config('scalr.connections.proxy.use_on'), ['both', 'scalr'])) {
+                    $proxySettings = $config('scalr.connections.proxy');
+
+                    $cs->setProxy(
+                        $proxySettings['host'], $proxySettings['port'], $proxySettings['user'],
+                        $proxySettings['pass'], $proxySettings['type'], $proxySettings['authtype']
+                    );
+                }
+
                 if (!$this->searchCloudstackUser($cs->listAccounts($listAccountsData), $pars)) {
                     throw new Exception("Cannot determine account name for provided keys");
                 }
@@ -931,7 +934,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
                         $this->getContainer()->analytics->notifications->onCloudAdd($platform, $this->env, $this->user);
                     }
                 } else {
-                    $currentCloudCredentials->delete();
+                    $currentCloudCredentials->environments[$this->env->id]->delete();
                 }
 
                 if (! $this->user->getAccount()->getSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED))
@@ -949,9 +952,9 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
 
     private function getOpenStackDetails($platform)
     {
-        $params = array();
+        $params = [];
 
-        $cloudCredentials = $this->env->cloudCredentials($platform);
+        $cloudCredentials = $this->env->keychain($platform);
         $ccProps = $cloudCredentials->properties;
 
         $params["{$platform}.is_enabled"] = true;
@@ -963,7 +966,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
         $params[Entity\CloudCredentialsProperty::OPENSTACK_TENANT_NAME]     = $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_TENANT_NAME];
         $params[Entity\CloudCredentialsProperty::OPENSTACK_DOMAIN_NAME]     = $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_DOMAIN_NAME];
 
-        $params['features'] = array();
+        $params['features'] = [];
 
         /* @var $config Yaml */
         $config = $this->env->getContainer()->config;
@@ -978,66 +981,59 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
         }
 
         if ($params[Entity\CloudCredentialsProperty::OPENSTACK_KEYSTONE_URL]) {
-
             try {
-                $os = new OpenStack(new OpenStackConfig(
-                        $params[Entity\CloudCredentialsProperty::OPENSTACK_USERNAME],
-                        $params[Entity\CloudCredentialsProperty::OPENSTACK_KEYSTONE_URL],
-                        'fake-region',
-                        $params[Entity\CloudCredentialsProperty::OPENSTACK_API_KEY],
-                        null, // Closure callback for token
-                        null, // Auth token. We should be assured about it right now
-                        $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_PASSWORD],
-                        $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_TENANT_NAME],
-                        $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_DOMAIN_NAME],
-                        null,
-                        $params['proxySettings']
-                ));
+                $openstackConfig = new OpenStackConfig(
+                    $params[Entity\CloudCredentialsProperty::OPENSTACK_USERNAME],
+                    $params[Entity\CloudCredentialsProperty::OPENSTACK_KEYSTONE_URL],
+                    'fake-region',
+                    $params[Entity\CloudCredentialsProperty::OPENSTACK_API_KEY],
+                    null, // Closure callback for token
+                    null, // Auth token. We should be assured about it right now
+                    $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_PASSWORD],
+                    $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_TENANT_NAME],
+                    $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_DOMAIN_NAME],
+                    null,
+                    $params['proxySettings'],
+                    5
+                );
 
-                //$os->setDebug(true);
+                $os = new OpenStack($openstackConfig);
 
                 $params['regions'] = $os->listZones();
+
                 foreach ($params['regions'] as $region) {
                     $cloudLocation = $region->name;
+
+                    $osConfig = clone $openstackConfig;
+                    $osConfig->setRegion($cloudLocation);
+
                     try {
-                        $os = new OpenStack(new OpenStackConfig(
-                                $params[Entity\CloudCredentialsProperty::OPENSTACK_USERNAME],
-                                $params[Entity\CloudCredentialsProperty::OPENSTACK_KEYSTONE_URL],
-                                $cloudLocation,
-                                $params[Entity\CloudCredentialsProperty::OPENSTACK_API_KEY],
-                                null, // Closure callback for token
-                                null, // Auth token. We should be assured about it right now
-                                $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_PASSWORD],
-                                $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_TENANT_NAME],
-                                $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_DOMAIN_NAME],
-                                null,
-                                $params['proxySettings']
-                        ));
+                        $os = new OpenStack($osConfig);
 
-                        $params['features'][$cloudLocation] = array(
-                            'Volumes (Cinder)' => $os->hasService('volume'),
-                            'Security groups (Nova)' => $os->servers->isExtensionSupported(ServersExtension::securityGroups()),
-                            'Networking (Neutron)' => $os->hasService('network'),
-                            'Load balancing (Neutron LBaaS)' => (!in_array($platform, array(SERVER_PLATFORMS::RACKSPACENG_US, SERVER_PLATFORMS::RACKSPACENG_UK)) && $os->hasService('network')) ? $os->network->isExtensionSupported('lbaas') : false,
-                            'Floating IPs (Nova)' => $os->servers->isExtensionSupported(ServersExtension::floatingIps()),
-                            'Objects store (Swift)' => $os->hasService('object-store')
-                        );
+                        $params['features'][$cloudLocation] = [
+                            'Volumes (Cinder)'               => $os->hasService('volume'),
+                            'Security groups (Nova)'         => $os->servers->isExtensionSupported(ServersExtension::securityGroups()),
+                            'Networking (Neutron)'           => $os->hasService('network'),
+                            'Load balancing (Neutron LBaaS)' => (!in_array($platform, [SERVER_PLATFORMS::RACKSPACENG_US, SERVER_PLATFORMS::RACKSPACENG_UK]) && $os->hasService('network')) ?
+                                                                $os->network->isExtensionSupported('lbaas') : false,
+                            'Floating IPs (Nova)'            => $os->servers->isExtensionSupported(ServersExtension::floatingIps()),
+                            'Objects store (Swift)'          => $os->hasService('object-store')
+                        ];
 
-                        $params['info'][$cloudLocation] = array(
-                            'services' => $os->listServices(),
+                        $params['info'][$cloudLocation] = [
+                            'services'        => $os->listServices(),
                             'nova_extensions' => $os->servers->listExtensions()
-                        );
+                        ];
 
                         if ($os->hasService('network')) {
                             $params['info'][$cloudLocation]['neutron_url'] = $os->network->getEndpointUrl();
                             $params['info'][$cloudLocation]['neutron_extensions'] = $os->network->listExtensions();
                         }
                     } catch (Exception $e) {
-                        $params['info'][$cloudLocation]['exception'] = $e->getMessage();
+                        $params['features'][$cloudLocation] = $e->getMessage();
                     }
                 }
             } catch (Exception $e) {
-                //TODO: Show in UI
                 $params['info']['exception'] = $e->getMessage();
             }
         }
@@ -1050,7 +1046,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
         $pars = array();
         $enabled = false;
         $platform = $this->getParam('platform');
-        $currentCloudCredentials = $this->env->cloudCredentials($platform);
+        $currentCloudCredentials = $this->env->keychain($platform);
 
         $bNew = !$currentCloudCredentials->isEnabled();
         if (!$bNew) {
@@ -1061,7 +1057,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
             $enabled = true;
 
             $pars[Entity\CloudCredentialsProperty::OPENSTACK_KEYSTONE_URL] = trim($this->checkVar(Entity\CloudCredentialsProperty::OPENSTACK_KEYSTONE_URL, 'string', 'KeyStone URL required', $platform));
-            $pars[Entity\CloudCredentialsProperty::OPENSTACK_SSL_VERIFYPEER] = trim($this->checkVar(Entity\CloudCredentialsProperty::OPENSTACK_SSL_VERIFYPEER, 'int', '', $platform));
+            $pars[Entity\CloudCredentialsProperty::OPENSTACK_SSL_VERIFYPEER] = trim($this->checkVar(Entity\CloudCredentialsProperty::OPENSTACK_SSL_VERIFYPEER, 'bool', '', $platform));
             $pars[Entity\CloudCredentialsProperty::OPENSTACK_USERNAME] = $this->checkVar(Entity\CloudCredentialsProperty::OPENSTACK_USERNAME, 'string', 'Username required', $platform);
             $pars[Entity\CloudCredentialsProperty::OPENSTACK_PASSWORD] = $this->checkVar(Entity\CloudCredentialsProperty::OPENSTACK_PASSWORD, 'password', '', $platform, false);
             $pars[Entity\CloudCredentialsProperty::OPENSTACK_API_KEY] = $this->checkVar(Entity\CloudCredentialsProperty::OPENSTACK_API_KEY, 'string', '', $platform);
@@ -1168,70 +1164,6 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
         }
     }
 
-    private function saveRackspace()
-    {
-        $pars = array();
-        $locations = array('rs-ORD1', 'rs-LONx');
-
-        $enabled = false;
-        /* @var $currentCloudCredentials Entity\CloudCredentials[] */
-        $currentCloudCredentials = $this->env->cloudCredentialsList(array_map(function ($location) { return "{$location}." . SERVER_PLATFORMS::RACKSPACE; }, $locations));
-
-        foreach ($currentCloudCredentials as $cloudCredential) {
-            if ($cloudCredential->isEnabled()) {
-                $enabled = true;
-                break;
-            }
-        }
-
-        if (!$enabled) {
-            throw new Scalr_Exception_Core('Rackspace cloud has been deprecated. Please use Rackspace Open Cloud instead.');
-        } else {
-            $enabled = false;
-        }
-
-        foreach ($locations as $location) {
-            if ($this->getParam("rackspace_is_enabled_{$location}")) {
-                $enabled = true;
-
-                $pars[$location][Entity\CloudCredentialsProperty::RACKSPACE_USERNAME] = $this->checkVar(Entity\CloudCredentialsProperty::RACKSPACE_USERNAME, 'string', "Username required", $location . SERVER_PLATFORMS::RACKSPACE);
-                $pars[$location][Entity\CloudCredentialsProperty::RACKSPACE_API_KEY] = $this->checkVar(Entity\CloudCredentialsProperty::RACKSPACE_API_KEY, 'string', "API Key required", $location . SERVER_PLATFORMS::RACKSPACE);
-                $pars[$location][Entity\CloudCredentialsProperty::RACKSPACE_IS_MANAGED] = $this->checkVar(Entity\CloudCredentialsProperty::RACKSPACE_IS_MANAGED, 'bool', "", $location . SERVER_PLATFORMS::RACKSPACE);
-            }
-            else {
-                $pars[$location][Entity\CloudCredentialsProperty::RACKSPACE_USERNAME] = false;
-                $pars[$location][Entity\CloudCredentialsProperty::RACKSPACE_API_KEY] = false;
-                $pars[$location][Entity\CloudCredentialsProperty::RACKSPACE_IS_MANAGED] = false;
-            }
-        }
-
-        if (count($this->checkVarError)) {
-            $this->response->failure();
-            $this->response->data(array('errors' => $this->checkVarError));
-        } else {
-            $this->db->BeginTrans();
-            try {
-                foreach ($pars as $location => $prs) {
-                    $this->env->enablePlatform("{$location}." . SERVER_PLATFORMS::RACKSPACE, $enabled);
-
-                    $this->makeCloudCredentials("{$location}." . SERVER_PLATFORMS::RACKSPACE, $prs);
-                    $this->env->setPlatformConfig([Entity\Account\EnvironmentProperty::RACKSPACE_LOCATIONS => 'enabled'], true, $location);
-                }
-
-                if (! $this->user->getAccount()->getSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED)) {
-                    $this->user->getAccount()->setSetting(Scalr_Account::SETTING_DATE_ENV_CONFIGURED, time());
-                }
-
-                $this->response->success('Cloud credentials have been ' . ($enabled ? 'saved' : 'removed from Scalr'));
-                $this->response->data(array('enabled' => $enabled));
-            } catch (Exception $e) {
-                $this->db->RollbackTrans();
-                throw new Exception(_('Failed to save Rackspace settings'));
-            }
-            $this->db->CommitTrans();
-        }
-    }
-
     /**
      * Makes clod credentials entity for specified platform
      *
@@ -1266,7 +1198,7 @@ class Scalr_UI_Controller_Account2_Environments_Clouds extends Scalr_UI_Controll
             throw $e;
         }
 
-        $cloudCredentials->cache($this->env->getContainer());
+        $cloudCredentials->cache();
 
         return $cloudCredentials;
     }

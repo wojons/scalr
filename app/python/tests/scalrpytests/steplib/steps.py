@@ -121,7 +121,7 @@ def fill_servers(step):
         record['platform'] = record.get(
             'platform', random.choice(["'ec2'", "'gce'", "'idcf'", "'openstack'"]))
         record['cloud_location'] = record.get('cloud_location', "'us-east-1'")
-        record['status'] = record.get('status', "'running'")
+        record['status'] = record.get('server_status') or record.get('status', "'Running'")
         record['remote_ip'] = record.get('remote_ip', 'NULL')
         record['local_ip'] = record.get('local_ip', 'NULL')
         record['index'] = record.get('index', 1)
@@ -506,7 +506,7 @@ def fill_settings(step):
     for record in step.hashes:
         query = (
             "INSERT INTO settings (id,value) "
-            "VALUES ('{id}', '{value}')"
+            "VALUES ({id}, {value})"
         ).format(**record)
         db.execute(query)
 
@@ -680,18 +680,27 @@ def check_farm_usage_d(step):
     result = db.execute(query)
     assert int(result[0]['count']) == len(step.hashes)
     query = (
-        "SELECT * "
+        "SELECT *, HEX(usage_item) usage_item "
         "FROM farm_usage_d")
     results = db.execute(query)
     for record in step.hashes:
         record['date'] = record.get('date', "'%s'" % dtime.split()[0])
         record['cc_id'] = uuid.UUID(strip(record['cc_id'])).bytes
         record['project_id'] = uuid.UUID(strip(record['project_id'])).bytes
+        query = (
+            "SELECT HEX(ui.id) id FROM usage_items ui "
+            "WHERE ui.name={name}"
+        ).format(name=record['usage_items.name'])
+        result = db.execute(query)
+        record['usage_item'] = result[0]['id'].upper()
         for k, v in record.iteritems():
             record[k] = strip(v)
         for result in results:
             try:
+                result['usage_item'] = result.get('.usage_item', result['usage_item'])
                 for k, v in record.iteritems():
+                    if k in ('usage_items.name',):
+                        continue
                     assert record[k] == str(result[k])
                 break
             except AssertionError:

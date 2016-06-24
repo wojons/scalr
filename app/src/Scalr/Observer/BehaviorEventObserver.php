@@ -6,6 +6,8 @@ use Scalr\Farm\Role\FarmRoleStorageDevice;
 
 class BehaviorEventObserver extends AbstractEventObserver
 {
+    public $isScalarizrRequired = true;
+    
     public function OnBeforeInstanceLaunch(\BeforeInstanceLaunchEvent $event)
     {
         $dbServer = $event->DBServer;
@@ -86,11 +88,7 @@ class BehaviorEventObserver extends AbstractEventObserver
                         }
                     }
                 } catch (\Exception $e) {
-                    $this->logger->error(new \FarmLogMessage(
-                        $dbServer->farmId,
-                        "Marking storage for disposal failed: {$e->getMessage()}",
-                        !empty($dbServer->serverId) ? $dbServer->serverId : null
-                    ));
+                    $this->logger->error(new \FarmLogMessage($dbServer, "Marking storage for disposal failed: {$e->getMessage()}"));
                 }
             }
         }

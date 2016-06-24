@@ -26,7 +26,7 @@ class SettingEntity extends AbstractSettingEntity
     public $id;
 
     /**
-     * The date
+     * The data
      *
      * @var string
      */
@@ -39,6 +39,12 @@ class SettingEntity extends AbstractSettingEntity
     const LEASE_NOT_STANDARD_REQUEST = 'statistic.lease.not.standard.request';
     const LEASE_DECLINED_REQUEST = 'statistic.lease.declined.request';
     const LEASE_TERMINATE_FARM = 'statistic.lease.terminate.farm';
+
+    /**
+     * Constants for announcements
+     */
+    const ANNOUNCEMENT_SCALRBLOG_CACHE = 'announcement.scalrblog.cache';
+    const ANNOUNCEMENT_CHANGELOG_CACHE = 'announcement.changelog.cache';
 
     /**
      * Increase count for event

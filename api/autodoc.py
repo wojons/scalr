@@ -16,7 +16,6 @@ logging.getLogger("autodoc")
 
 base_path = {}
 
-
 def _make_render_env(doc_root):
     tpl_dir = os.path.join(doc_root, "tpl")
     env = jinja2.Environment(loader=jinja2.FileSystemLoader(tpl_dir),
@@ -25,7 +24,7 @@ def _make_render_env(doc_root):
                              trim_blocks=True,
                              lstrip_blocks=True)
 
-    for o in [link_to_ref, link_to_path]:
+    for o in [link_to_ref, link_to_path, str_upper_first]:
         env.filters[o.__name__] = o
 
     for o in [json, prioritized_properties, property_attributes, parameters_by_type, is_filterable]:
@@ -72,6 +71,10 @@ def property_attributes(obj, prop):
     return attrs
 
 
+def str_upper_first(s):
+    return "".join([s[0].upper(), s[1:]])
+
+
 @jinja2.contextfilter
 def link_to_ref(ctx, ref):
     name = ref["$ref"].rsplit("/", 1)[-1]
@@ -116,6 +119,7 @@ def _merge(yaml1, yaml2):
 
 def main(swaggers, doc_root):
     # Create all dirs
+    cwd = os.path.dirname(os.path.abspath(__file__))
     doc_dir = os.path.join(doc_root, "autodoc")
     definitions_dir = os.path.join(doc_dir, "definitions")
     if os.path.exists(definitions_dir):
@@ -126,7 +130,7 @@ def main(swaggers, doc_root):
 
     data = []
     for swagger in swaggers:
-        with open(swagger) as f:
+        with open(cwd + "/" + swagger) as f:
             data.append(yaml.load(f))
         api_dir = os.path.join(doc_dir, "rest{0}".format(data[-1]["basePath"]))
         if os.path.exists(api_dir):
@@ -147,6 +151,10 @@ def main(swaggers, doc_root):
     # Document definitions
     definition_template = render_env.get_template("definition.mkd")
     for name, definition in definitions.items():
+        for attr, value in definition.iteritems():
+            if isinstance(value, list):
+                value.sort()
+                
         logging.info("Autogenerating documentation for: %s", name)
         with open(os.path.join(definitions_dir, "{0}.mkd".format(name)), "w") as f:
             ctx = {"name": name, "definition": definition, "depth": 1}

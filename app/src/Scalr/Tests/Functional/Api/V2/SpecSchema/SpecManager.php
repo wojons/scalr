@@ -2,8 +2,7 @@
 
 namespace Scalr\Tests\Functional\Api\V2\SpecSchema;
 
-use Scalr\Api\Rest\Http\Request;
-use Scalr\Tests\Functional\Api\V2\SpecSchema\DataTypes\DetailResponse;
+use Scalr\Tests\Functional\Api\V2\SpecSchema\DataTypes\DetailsResponse;
 use Scalr\Tests\Functional\Api\V2\SpecSchema\DataTypes\ListResponse;
 use Scalr\Tests\Functional\Api\V2\SpecSchema\DataTypes\Property;
 use Scalr\Tests\Functional\Api\V2\SpecSchema\DataTypes\AbstractSpecObject;
@@ -16,7 +15,7 @@ use Scalr\System\Config\Yaml;
  * Generate SpecObject from swagger specifications
  *
  * @author Andrii Penchuk <a.penchuk@scalr.com>
- * @since 5.6.14 (03.12.2015)
+ * @since 5.11 (03.12.2015)
  */
 class SpecManager
 {
@@ -32,7 +31,7 @@ class SpecManager
      *
      * @var mixed array
      */
-    private $definition;
+    private $specification;
 
     /**
      * SpecManager constructor.
@@ -53,7 +52,7 @@ class SpecManager
             throw new FileNotFoundException("{$service}.{$version}", "Api {$version} specification not found for service '{$service}'");
         }
 
-        $this->definition = Yaml::load($this->specFile)->toArray();
+        $this->specification = Yaml::load($this->specFile)->toArray();
     }
 
     /**
@@ -66,13 +65,38 @@ class SpecManager
     {
         if (!is_null($method)) {
             $method = strtolower($method);
-            $paths = array_filter($this->definition['paths'], function ($v) use ($method) {
+            $paths = array_filter($this->specification['paths'], function ($v) use ($method) {
                 return array_key_exists($method, $v) && array_key_exists(200, $v[$method]['responses']);
             });
         } else {
-            $paths = $this->definition['paths'];
+            $paths = $this->specification['paths'];
         }
         return array_keys($paths);
+    }
+
+    /**
+     * Get Object definition
+     *
+     * @param string $filter optional The pattern to filter for object definition in specification
+     * if the name of the object matched the filter this object will not be included in return result
+     *
+     * @return array
+     */
+    public function getDefinitions($filter = null)
+    {
+        $definitions = $this->getPath('definitions');
+
+        if (!is_null($filter)) {
+            $definitions = array_filter($definitions, function ($k) use ($filter) {
+                return !preg_match($filter, $k);
+            }, ARRAY_FILTER_USE_KEY);
+        }
+
+        foreach ($definitions as $name => $definition) {
+            $definitions[$name] = $this->resolveReferences($definition, null, $name);
+        }
+
+        return $definitions;
     }
 
     /**
@@ -81,21 +105,14 @@ class SpecManager
      * @param string $path     Api endpoint
      * @param string $method   HTTP method
      * @param int    $httpCode HTTP code
-     * @return DetailResponse|ListResponse
+     * @return DetailsResponse|ListResponse
      */
     public function getResponse($path, $method, $httpCode)
     {
         $this->checkPath($path);
-        if (strtoupper($method) === Request::METHOD_DELETE && 200 == $httpCode) {
-            return $this->resolveReferences(
-                $this->getPath('paths', $path, strtolower($method), 'responses', $httpCode),
-                AbstractSpecObject::init('DeleteDetailResponse')
-            );
-        } else {
-            return $this->resolveReferences(
-                $this->getPath('paths', $path, strtolower($method), 'responses', $httpCode, 'schema')
-            );
-        }
+        return $this->resolveReferences(
+            $this->getPath('paths', $path, strtolower($method), 'responses', $httpCode, 'schema')
+        );
     }
 
     /**
@@ -118,7 +135,7 @@ class SpecManager
      */
     protected function getPath(...$segments)
     {
-        $result = $this->definition;
+        $result = $this->specification;
         foreach ($segments as $segment) {
             if (!isset($result[$segment])) {
                 throw new InvalidArgumentException(
@@ -135,9 +152,10 @@ class SpecManager
      *
      * @param array $schema               segment Api specifications
      * @param mixed $specObject optional  object schema view
-     * @return DetailResponse|ListResponse
+     * @param mixed $objectName optional  object property name
+     * @return DetailsResponse|ListResponse
      */
-    protected function resolveReferences($schema, $specObject = null)
+    protected function resolveReferences($schema, $specObject = null, $objectName = null)
     {
         $ref = '$ref';
         if (array_key_exists($ref, $schema)) {
@@ -154,14 +172,14 @@ class SpecManager
             }
             $schema = $this->getPath(...$refPath);
         } else {
-            if(is_null($specObject)) {
-                $specObject = new Property();
+            if (is_null($specObject)) {
+                $specObject = AbstractSpecObject::init($objectName);
             }
             $object = $specObject;
         }
 
         if (array_key_exists('items', $schema)) {
-            $object->items = $this->resolveReferences($schema['items']);
+            $object->items = $this->resolveReferences($schema['items'], null, $object->getObjectName());
             unset($schema['items']);
         }
 

@@ -12,13 +12,18 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
                 msgTarget: 'none'
             }]
         });
-        var widgets = [
-            {name: 'dashboard.announcement', title: 'From the Scalr blog', desc: 'Displays last 10 news from The Official Scalr blog'},
+        var widgets = Scalr.scope !== 'scalr' ? [
+            {name: 'dashboard.announcement', title: 'Announcements', desc: 'Displays announcements from The Official Scalr blog,<br/> from Changelog and User defined ones.'},
             {name: 'dashboard.newuser', title: 'New user checklist', desc: ''}
-        ];
+        ] : [];
 
         if (Scalr.isAllowed('BILLING_ACCOUNT') && moduleParams.flags['billingEnabled'])
             widgets.push({name: 'dashboard.billing', title: 'Billing', desc: 'Displays your current billing parameters'});
+
+        if (Scalr.scope === 'scalr') {
+            widgets.push({name: 'dashboard.gettingstarted', title: 'Getting started', desc: 'Getting started tutorials.'});
+            widgets.push({name: 'dashboard.scalrhealth', title: 'Scalr Health', desc: 'Scalr health monitoring.'});
+        }
 
         if (Scalr.scope == 'account') {
             widgets.push({name: 'dashboard.environments', title: 'Environments in this account', desc: 'Displays environments in this account'});
@@ -31,7 +36,7 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
                 widgets.push({name: 'dashboard.lasterrors', title: 'Last errors', desc: 'Displays last 10 errors from system logs'});
             }
 
-            if (Scalr.isAllowed('FARMS', 'manage') || Scalr.isAllowed('TEAM_FARMS', 'manage') || Scalr.isAllowed('OWN_FARMS', 'manage')) {
+            if (Scalr.isAllowed('FARMS', 'create') || Scalr.isAllowed('TEAM_FARMS', 'create') || Scalr.isAllowed('OWN_FARMS', 'create')) {
                 widgets.push({name: 'dashboard.addfarm', title: 'Create new Farm', desc: ''});
             }
 
@@ -75,7 +80,7 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
             widgetForm.down('checkboxgroup').hide();
             widgetForm.add({xtype: 'displayfield', anchor: '100%', fieldStyle: 'text-align:center', value: 'All available widgets are already in use'});
         }
-        widgetForm.doLayout();
+        widgetForm.updateLayout();
         return widgetForm;
     };
     var updateHandler = {
@@ -105,12 +110,15 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
                         };
                     }
                 });
-            }); 								/*end*/
-            if(widgetCount)
+            }); /*end*/
+            if (widgetCount)
                 Scalr.Request({
                     url: '/dashboard/xAutoUpdateDash/',
                     params: {
                         updateDashboard: Ext.encode(widgets)
+                    },
+                    headers: {
+                        'Scalr-Autoload-Request': 1
                     },
                     success: function (data) {
                         for (var i in data['updateDashboard']) {
@@ -135,14 +143,14 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
         scalrOptions: {
             maximize: 'all',
             reload: false,
-            menuTitle: Scalr.scope == 'account' ? 'Account Dashboard' : 'Dashboard'
+            menuTitle: Scalr.scope == 'scalr' ? 'Admin Dashboard' : Scalr.scope == 'account' ? 'Account Dashboard' : 'Dashboard'
         },
         style: {
             overflowY: 'visible',
             overflowX: 'hidden',
             minHeight: '100%'
         },
-        stateId: Scalr.scope == 'account' ? 'panel-account-dashboard' : 'panel-dashboard',
+        stateId: Scalr.scope === 'scalr' ? 'panel-admin-dashboard' : Scalr.scope == 'account' ? 'panel-account-dashboard' : 'panel-dashboard',
 
         bodyStyle: 'background-color: transparent;', // should be padding: 12px, but extjs goes into recursion in 4.2.2
 
@@ -278,7 +286,12 @@ Scalr.regPage('Scalr.ui.dashboard.view', function (loadParams, moduleParams) {
                                         panel.remove(this);
                                         panel.savePanel(0);
                                         panel.updateColWidth();
-                                        panel.doLayout();
+                                        panel.updateLayout();
+
+                                        var divs = panel.el.query('div.add')
+                                        for (var i = 0; i < divs.length; i++) {
+                                            divs[i].setAttribute('index', i);
+                                        }
                                     }
                                 }
                             });

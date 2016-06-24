@@ -2,19 +2,29 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.openstack', function (loadP
     var params = moduleParams['params'],
         isEnabledProp = loadParams['platform'] + '.is_enabled',
         cloudFeatures = params['features'] || {},
-        cloudFeaturesTabs = [];
+        cloudFeaturesTabs = [],
+        hideSslVerifyPeer = loadParams['platform'] == 'rackspacengus' || loadParams['platform'] == 'rackspacenguk';
 
     if (Ext.Object.getSize(cloudFeatures) !== 0) {
         Ext.Object.each(cloudFeatures, function(key, value) {
             var items = [];
-            Ext.Object.each(value, function(feature, featureValue) {
+            if (Ext.isString(value)) {
                 items.push({
                     xtype: 'displayfield',
-                    fieldLabel: feature,
-                    margin: 0,
-                    value: Ext.isBoolean(featureValue) ? (featureValue ? '<div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div>' : '&nbsp;&ndash;') : featureValue
+                    cls: 'x-form-field-warning',
+                    margin: '0 0 20 0',
+                    value: value
                 });
-            });
+            } else {
+                Ext.Object.each(value, function(feature, featureValue) {
+                    items.push({
+                        xtype: 'displayfield',
+                        fieldLabel: feature,
+                        margin: 0,
+                        value: Ext.isBoolean(featureValue) ? (featureValue ? '<div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div>' : '&nbsp;&ndash;') : featureValue
+                    });
+                });
+            }
             cloudFeaturesTabs.push({
                 xtype: 'container',
                 cls: 'x-container-fieldset',
@@ -100,8 +110,8 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.openstack', function (loadP
             xtype: 'checkbox',
             name: 'ssl_verifypeer',
             width: 260,
-            checked: params['ssl_verifypeer'],
-            hidden: (loadParams['platform'] == 'rackspacengus' || loadParams['platform'] == 'rackspacenguk'),
+            checked: Ext.isEmpty(params) && !hideSslVerifyPeer || params['ssl_verifypeer'] == 1,
+            hidden: hideSslVerifyPeer,
             boxLabel: 'Enable SSL certificate verification for Keystone endpoints'
         }, {
             xtype: 'tabpanel',
@@ -110,6 +120,13 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds.openstack', function (loadP
             margin: '24 0 0 0',
             hidden: Ext.Object.getSize(cloudFeatures) === 0,
             items: cloudFeaturesTabs
+        },{
+            xtype: 'displayfield',
+            cls: 'x-form-field-warning',
+            margin: '0 0 20 0',
+            hidden: !params['info'] || !params['info']['exception'],
+            value: params['info'] && params['info']['exception'] ? params['info']['exception'] : ''
+            
         }]
 	});
 

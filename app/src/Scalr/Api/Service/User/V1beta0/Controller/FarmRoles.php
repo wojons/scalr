@@ -6,30 +6,40 @@ use Scalr\Acl\Acl;
 use Scalr\Api\DataType\ErrorMessage;
 use Scalr\Api\DataType\ListResultEnvelope;
 use Scalr\Api\DataType\ResultEnvelope;
+use \Scalr\Api\DataType\ApiEntityAdapter;
 use Scalr\Api\Rest\Controller\ApiController;
 use Scalr\Api\Rest\Exception\ApiErrorException;
+use Scalr\Api\Rest\Exception\ApiNotImplementedErrorException;
 use Scalr\Api\Rest\Http\Request;
 use Scalr\Api\Service\User\V1beta0\Adapter\FarmRoleAdapter;
-use Scalr\Api\Service\User\V1beta0\Adapter\FarmRoleGlobalVariableAdapter;
+use Scalr\Api\Service\User\V1beta0\Adapter\GlobalVariableAdapter;
+use Scalr\Api\Service\User\V1beta0\Adapter\ScalingMetricAdapter;
+use Scalr\Api\Service\User\V1beta0\Adapter\ScalingRuleAdapter;
+use Scalr\Api\Service\User\V1beta0\Adapter\ServerAdapter;
 use Scalr\DataType\ScopeInterface;
 use Scalr\Exception\InvalidEntityConfigurationException;
 use Scalr\Exception\ModelException;
+use Scalr\Exception\NotSupportedException;
+use Scalr\Exception\ServerImportException;
 use Scalr\Exception\ValidationErrorException;
-use Scalr\Model\AbstractEntity;
 use Scalr\Model\Entity\Farm;
 use Scalr\Model\Entity\FarmRole;
-use Scalr\Model\Entity\FarmRoleGlobalVariable;
+use Scalr\Model\Entity\GlobalVariable;
+use Scalr\Model\Entity\FarmRoleScalingMetric;
 use Scalr\Model\Entity\FarmRoleSetting;
 use Scalr\Model\Entity\Role;
-use Scalr_Role_Behavior_Router;
+use Scalr\Model\Entity\Server;
+use Exception;
+use Scalr_Scripting_GlobalVariables;
 
 /**
- * User/Version-1/FarmRoles API Controller
+ * User/FarmRoles API Controller
  *
  * @author N.V.
  */
 class FarmRoles extends ApiController
 {
+    use GlobalVariableTrait;
 
     const AWS_INSTANCE_CONFIGURATION = 'AwsInstanceConfiguration';
 
@@ -41,6 +51,13 @@ class FarmRoles extends ApiController
 
     private static $roleControllerClass = 'Scalr\Api\Service\User\V1beta0\Controller\Roles';
     private static $farmControllerClass = 'Scalr\Api\Service\User\V1beta0\Controller\Farms';
+
+    /**
+     * Namespace for scaling rule adapters
+     *
+     * @var string
+     */
+    protected static $scalingRuleNamespace = 'ScalingRule';
 
     /**
      * @var Roles
@@ -82,7 +99,7 @@ class FarmRoles extends ApiController
             $this->farmController = $this->getContainer()->api->controller(static::$farmControllerClass);
         }
 
-        return $this->farmController->getFarm($farmId, $modify ? Acl::PERM_FARMS_MANAGE : null);
+        return $this->farmController->getFarm($farmId, $modify);
     }
 
     /**
@@ -101,7 +118,7 @@ class FarmRoles extends ApiController
         $role = FarmRole::findPk($farmRoleId);
 
         if (!$role) {
-            throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Requested Farm either does not exist or is not owned by your environment.");
+            throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Requested Farm Role either does not exist or is not owned by your environment.");
         }
 
         if (isset($farmId)) {
@@ -131,8 +148,6 @@ class FarmRoles extends ApiController
      */
     public function describeAction($farmId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ROLES_ENVIRONMENT);
-
         return $this->adapter('farmRole')->getDescribeResult([[ 'farmId' => $this->getFarm($farmId)->id ]]);
     }
 
@@ -146,8 +161,6 @@ class FarmRoles extends ApiController
      */
     public function fetchAction($farmRoleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ROLES_ENVIRONMENT);
-
         return $this->result($this->adapter('farmRole')->toData($this->getFarmRole($farmRoleId)));
     }
 
@@ -161,8 +174,6 @@ class FarmRoles extends ApiController
      */
     public function createAction($farmId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ROLES_ENVIRONMENT, Acl::PERM_ROLES_ENVIRONMENT_MANAGE);
-
         $object = $this->request->getJsonBody();
 
         /* @var $farmRoleAdapter FarmRoleAdapter */
@@ -212,8 +223,6 @@ class FarmRoles extends ApiController
      */
     public function modifyAction($farmRoleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ROLES_ENVIRONMENT, Acl::PERM_ROLES_ENVIRONMENT_MANAGE);
-
         $object = $this->request->getJsonBody();
 
         /* @var $farmRole FarmRoleAdapter */
@@ -251,11 +260,9 @@ class FarmRoles extends ApiController
      */
     public function deleteAction($farmRoleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ROLES_ENVIRONMENT, Acl::PERM_ROLES_ENVIRONMENT_MANAGE);
+        $farmRole = $this->getFarmRole($farmRoleId, null, true);
 
-        $role = $this->getFarmRole($farmRoleId, null, true);
-
-        $role->delete();
+        $farmRole->delete();
 
         return $this->result(null);
     }
@@ -270,8 +277,6 @@ class FarmRoles extends ApiController
      */
     public function describePlacementAction($farmRoleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ROLES_ENVIRONMENT);
-
         $role = $this->getFarmRole($farmRoleId);
 
         return $this->result(FarmRoleAdapter::getPlacementConfiguration($role));
@@ -287,8 +292,6 @@ class FarmRoles extends ApiController
      */
     public function modifyPlacementAction($farmRoleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ROLES_ENVIRONMENT);
-
         $role = $this->getFarmRole($farmRoleId, null, true);
 
         FarmRoleAdapter::setupPlacementConfiguration($role, $this->request->getJsonBody());
@@ -313,8 +316,6 @@ class FarmRoles extends ApiController
      */
     public function describeInstanceAction($farmRoleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ROLES_ENVIRONMENT);
-
         $role = $this->getFarmRole($farmRoleId);
 
         return $this->result(FarmRoleAdapter::getInstanceConfiguration($role));
@@ -330,8 +331,6 @@ class FarmRoles extends ApiController
      */
     public function modifyInstanceAction($farmRoleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ROLES_ENVIRONMENT, Acl::PERM_ROLES_ENVIRONMENT_MANAGE);
-
         $role = $this->getFarmRole($farmRoleId, null, true);
 
         FarmRoleAdapter::setupInstanceConfiguration($role, $this->request->getJsonBody());
@@ -356,8 +355,6 @@ class FarmRoles extends ApiController
      */
     public function describeScalingAction($farmRoleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ROLES_ENVIRONMENT);
-
         $role = $this->getFarmRole($farmRoleId);
 
         return $this->result(FarmRoleAdapter::getScalingConfiguration($role));
@@ -373,20 +370,136 @@ class FarmRoles extends ApiController
      */
     public function modifyScalingAction($farmRoleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_ROLES_ENVIRONMENT, Acl::PERM_ROLES_ENVIRONMENT_MANAGE);
-
         $role = $this->getFarmRole($farmRoleId, null, true);
 
         FarmRoleAdapter::setupScalingConfiguration($role, $this->request->getJsonBody());
 
-        /* @var $farmRoleAdapter FarmRoleAdapter */
-        $farmRoleAdapter = $this->adapter('farmRole');
-
-        $farmRoleAdapter->validateEntity($role);
-
         $role->save();
 
         return $this->result(FarmRoleAdapter::getScalingConfiguration($role));
+    }
+
+    /**
+     * Add new scaling metric configuration for farm-role
+     *
+     * @param int $farmRoleId  Unique farm-role identifier
+     * @return ResultEnvelope
+     * @throws ApiErrorException
+     * @throws ModelException
+     */
+    public function createScalingRuleAction($farmRoleId)
+    {
+        $farmRole = $this->getFarmRole($farmRoleId, null, true);
+
+        $object = $this->request->getJsonBody();
+        if (!is_object($object)) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Invalid body");
+        }
+
+        /* @var $scalingRuleAdapter ScalingRuleAdapter */
+        $scalingRuleAdapter = $this->adapter($object);
+
+        //Pre validates the request object
+        $scalingRuleAdapter->validateObject($object, Request::METHOD_POST);
+
+        /* @var $scalingRule FarmRoleScalingMetric */
+        $scalingRule = $scalingRuleAdapter->toEntity($object);
+        $scalingRule->farmRoleId = $farmRoleId;
+        $scalingRuleAdapter->validateEntity($scalingRule);
+        $scalingRule->save();
+
+        //Responds with 201 Created status
+        $this->response->setStatus(201);
+
+        return $this->result(FarmRoleAdapter::getScalingConfiguration($farmRole));
+    }
+
+    /**
+     * Gets specified farm role scaling metric entity
+     *
+     * @param int    $farmRoleId      Unique farm-role identifier
+     * @param string $scalingRuleName Scaling metric's name.
+     * @param bool   $modify          optional Flag checking write permissions
+     * @return FarmRoleScalingMetric
+     * @throws ApiErrorException
+     */
+    public function getScalingRule($farmRoleId, $scalingRuleName, $modify = false)
+    {
+        $farmRole = $this->getFarmRole($farmRoleId, null, $modify);
+
+        $scalingRuleName = ScalingMetricAdapter::metricNameToEntity($scalingRuleName);
+
+        if (empty($farmRole->farmRoleMetrics[$scalingRuleName])) {
+            throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, 'Requested Scaling Metric does not exist.');
+        }
+
+        return $farmRole->farmRoleMetrics[$scalingRuleName];
+    }
+
+    /**
+     * Gets specific scaling metric of the farm role
+     *
+     * @param int    $farmRoleId      Unique farm-role identifier
+     * @param string $scalingRuleName Scaling metric's name.
+     * @return ResultEnvelope
+     * @throws ApiErrorException
+     */
+    public function fetchScalingRuleAction($farmRoleId, $scalingRuleName)
+    {
+        $scalingRule = $this->getScalingRule($farmRoleId, $scalingRuleName);
+
+        return $this->result($this->adapter($scalingRule)->toData($scalingRule));
+    }
+
+    /**
+     * Change farm role scaling metric attributes.
+     *
+     * @param int    $farmRoleId      Unique farm-role identifier
+     * @param string $scalingRuleName Scaling metric's name.
+     * @return ResultEnvelope
+     * @throws ApiErrorException
+     * @throws ModelException
+     */
+    public function modifyScalingRuleAction($farmRoleId, $scalingRuleName)
+    {
+        $object = $this->request->getJsonBody();
+
+        $scalingRule = $this->getScalingRule($farmRoleId, $scalingRuleName, true);
+
+        /* @var $scalingRuleAdapter ScalingRuleAdapter */
+        $scalingRuleAdapter = $this->adapter($scalingRule);
+
+        //Pre validates the request object
+        $scalingRuleAdapter->validateObject($object, Request::METHOD_PATCH);
+
+        //Copies all alterable properties to fetched Role Entity
+        $scalingRuleAdapter->copyAlterableProperties($object, $scalingRule);
+
+        //Re-validates an Entity
+        $scalingRuleAdapter->validateEntity($scalingRule);
+
+        //Saves verified results
+        $scalingRule->save();
+
+        return $this->result($scalingRuleAdapter->toData($scalingRule));
+    }
+
+    /**
+     * Delete farm role scaling metric
+     *
+     * @param int    $farmRoleId      Unique farm-role identifier
+     * @param string $scalingRuleName Scaling metric's name.
+     * @return ResultEnvelope
+     * @throws ApiErrorException
+     * @throws ModelException
+     */
+    public function deleteScalingRuleAction($farmRoleId, $scalingRuleName)
+    {
+        $scalingRule = $this->getScalingRule($farmRoleId, $scalingRuleName, true);
+
+        $scalingRule->delete();
+
+        return $this->result(null);
     }
 
     /**
@@ -398,8 +511,6 @@ class FarmRoles extends ApiController
      */
     public function describeVariablesAction($farmRoleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_GLOBAL_VARIABLES_ENVIRONMENT);
-
         $farmRole = $this->getFarmRole($farmRoleId);
 
         $globalVar = $this->getVariableInstance();
@@ -407,8 +518,8 @@ class FarmRoles extends ApiController
         $list = $globalVar->getValues($farmRole->roleId, $farmRole->farmId, $farmRoleId);
         $foundRows = count($list);
 
-        /* @var  $adapter FarmRoleGlobalVariableAdapter */
-        $adapter = $this->adapter('farmRoleGlobalVariable');
+        /* @var  $adapter GlobalVariableAdapter */
+        $adapter = $this->adapter('globalVariable');
 
         $data = [];
 
@@ -433,19 +544,17 @@ class FarmRoles extends ApiController
      */
     public function fetchVariableAction($farmRoleId, $name)
     {
-        $this->checkPermissions(Acl::RESOURCE_GLOBAL_VARIABLES_ENVIRONMENT);
-
         $farmRole = $this->getFarmRole($farmRoleId);
 
         $globalVar = $this->getVariableInstance();
 
-        $fetch = $this->getGlobalVariable($farmRole->roleId, $farmRole->farmId, $farmRoleId, $name, $globalVar);
+        $fetch = $this->getGlobalVariable($name, $globalVar, $farmRole->roleId, $farmRole->farmId, $farmRoleId);
 
         if (empty($fetch)) {
             throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Requested Global Variable does not exist.");
         }
 
-        return $this->result($this->adapter('farmRoleGlobalVariable')->convertData($fetch));
+        return $this->result($this->adapter('globalVariable')->convertData($fetch));
     }
 
     /**
@@ -458,14 +567,12 @@ class FarmRoles extends ApiController
      */
     public function createVariableAction($farmRoleId)
     {
-        $this->checkPermissions(Acl::RESOURCE_GLOBAL_VARIABLES_ENVIRONMENT, Acl::PERM_GLOBAL_VARIABLES_ENVIRONMENT_MANAGE);
-
         $farmRole = $this->getFarmRole($farmRoleId, null, true);
 
         $object = $this->request->getJsonBody();
 
-        /* @var  $adapter FarmRoleGlobalVariableAdapter */
-        $adapter = $this->adapter('farmRoleGlobalVariable');
+        /* @var  $adapter GlobalVariableAdapter */
+        $adapter = $this->adapter('globalVariable');
 
         //Pre validates the request object
         $adapter->validateObject($object, Request::METHOD_POST);
@@ -492,7 +599,7 @@ class FarmRoles extends ApiController
             'scopes'     => [ScopeInterface::SCOPE_FARMROLE]
         ];
 
-        $checkVar = $this->getGlobalVariable($farmRole->roleId, $farmRole->farmId, $farmRoleId, $object->name, $globalVar);
+        $checkVar = $this->getGlobalVariable($object->name, $globalVar, $farmRole->roleId, $farmRole->farmId, $farmRoleId);
 
         if (!empty($checkVar)) {
             throw new ApiErrorException(409, ErrorMessage::ERR_UNICITY_VIOLATION, sprintf('Variable with name %s already exists', $object->name));
@@ -504,7 +611,7 @@ class FarmRoles extends ApiController
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, $e->getMessage());
         }
 
-        $data = $this->getGlobalVariable($farmRole->roleId, $farmRole->farmId, $farmRoleId, $variable['name'], $globalVar);
+        $data = $this->getGlobalVariable($variable['name'], $globalVar, $farmRole->roleId, $farmRole->farmId, $farmRoleId);
 
         //Responds with 201 Created status
         $this->response->setStatus(201);
@@ -523,62 +630,40 @@ class FarmRoles extends ApiController
      */
     public function modifyVariableAction($farmRoleId, $name)
     {
-        $this->checkPermissions(Acl::RESOURCE_GLOBAL_VARIABLES_ENVIRONMENT, Acl::PERM_GLOBAL_VARIABLES_ENVIRONMENT_MANAGE);
-
         $farmRole = $this->getFarmRole($farmRoleId, null, true);
 
         $object = $this->request->getJsonBody();
 
-        /* @var  $adapter FarmRoleGlobalVariableAdapter */
-        $adapter = $this->adapter('farmRoleGlobalVariable');
+        /* @var  $adapter GlobalVariableAdapter */
+        $adapter = $this->adapter('globalVariable');
 
         //Pre validates the request object
         $adapter->validateObject($object, Request::METHOD_POST);
 
         $globalVar = $this->getVariableInstance();
 
-        $entity = new FarmRoleGlobalVariable();
-
-        $adapter->copyAlterableProperties($object, $entity);
-
-        $variable = $this->getGlobalVariable($farmRole->roleId, $farmRole->farmId, $farmRoleId, $name, $globalVar);
+        $variable = $this->getGlobalVariable($name, $globalVar, $farmRole->roleId, $farmRole->farmId, $farmRoleId);
 
         if (empty($variable)) {
             throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Requested Global Variable does not exist.");
         }
 
-        if (!empty($variable['locked']) && (!isset($object->value) || count(get_object_vars($object)) > 1)) {
-            throw new ApiErrorException(403, ErrorMessage::ERR_SCOPE_VIOLATION, sprintf("This variable was declared in the %s Scope, you can only modify its 'value' field in the Farm Role Scope", ucfirst($variable['locked']['scope'])));
-        }
+        $entity = $this->makeGlobalVariableEntity($variable);
 
-        $variable['flagDelete'] = '';
+        $adapter->copyAlterableProperties($object, $entity, ScopeInterface::SCOPE_FARMROLE);
 
-        if (!empty($variable['locked'])) {
-            $variable['current']['name'] = $name;
-            $variable['current']['value'] = $object->value;
-            $variable['current']['scope'] = ScopeInterface::SCOPE_FARMROLE;
-        } else {
-            $variable['current'] = [
-                'name'          => $name,
-                'value'         => !empty($object->value) ? $object->value : '',
-                'category'      => !empty($object->category) ? strtolower($object->category) : '',
-                'flagFinal'     => !empty($object->locked) ? 1 : $variable['current']['flagFinal'],
-                'flagRequired'  => !empty($object->requiredIn) ? $object->requiredIn : $variable['current']['flagRequired'],
-                'flagHidden'    => !empty($object->hidden) ? 1 : $variable['current']['flagHidden'],
-                'format'        => !empty($object->outputFormat) ? $object->outputFormat : $variable['current']['format'],
-                'validator'     => !empty($object->validationPattern) ? $object->validationPattern : $variable['current']['validator'],
-                'description'   => !empty($object->description) ? $object->description : '',
-                'scope'         => ScopeInterface::SCOPE_FARMROLE,
-            ];
-        }
+        $this->updateGlobalVariable(
+            $globalVar,
+            $variable,
+            $object,
+            $name,
+            ScopeInterface::SCOPE_FARMROLE,
+            $farmRole->roleId,
+            $farmRole->farmId,
+            $farmRoleId
+        );
 
-        try {
-            $globalVar->setValues([$variable], $farmRole->roleId, $farmRole->farmId, $farmRoleId);
-        } catch (ValidationErrorException $e) {
-            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, $e->getMessage());
-        }
-
-        $data = $this->getGlobalVariable($farmRole->roleId, $farmRole->farmId, $farmRoleId, $name, $globalVar);
+        $data = $this->getGlobalVariable($name, $globalVar, $farmRole->roleId, $farmRole->farmId, $farmRoleId);
 
         return $this->result($adapter->convertData($data));
     }
@@ -596,17 +681,23 @@ class FarmRoles extends ApiController
      */
     public function deleteVariableAction($farmRoleId, $name)
     {
-        $this->checkPermissions(Acl::RESOURCE_GLOBAL_VARIABLES_ENVIRONMENT, Acl::PERM_GLOBAL_VARIABLES_ENVIRONMENT_MANAGE);
-
         $farmRole = $this->getFarmRole($farmRoleId, null, true);
 
-        $fetch = $this->getGlobalVariable($farmRole->roleId, $farmRole->farmId, $farmRoleId, $name, $this->getVariableInstance());
+        $fetch = $this->getGlobalVariable(
+            $name,
+            $this->getVariableInstance(),
+            $farmRole->roleId,
+            $farmRole->farmId,
+            $farmRoleId
+        );
 
-        $variable = FarmRoleGlobalVariable::findPk($farmRoleId, $name);
+        $variable = GlobalVariable\FarmRoleGlobalVariable::findPk($farmRoleId, $name);
 
         if (empty($fetch)) {
             throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Requested Global Variable does not exist.");
-        } else if (empty($variable)) {
+        }
+
+        if (empty($variable)) {
             throw new ApiErrorException(403, ErrorMessage::ERR_SCOPE_VIOLATION, "You can only delete Global Variables declared in Farm Role scope.");
         }
 
@@ -616,46 +707,130 @@ class FarmRoles extends ApiController
     }
 
     /**
-     * Gets a specific global variable data
+     * Gets list of farm role's servers
      *
-     * @param   int                                 $roleId         Numeric identifier of the Role
-     * @param   int                                 $farmId         Numeric identifier of the Farm
-     * @param   int                                 $farmRoleId     Numeric identifier of the Farm Role
-     * @param   string                              $name           Variable name
-     * @param   \Scalr_Scripting_GlobalVariables    $globalVar      Instance of Global variable handler
-     *
-     * @return  mixed
-     * @throws  ApiErrorException
+     * @param int $farmRoleId       Identifier of the Farm Role
+     * @return ListResultEnvelope
+     * @throws ApiErrorException
      */
-    private function getGlobalVariable($roleId, $farmId, $farmRoleId, $name, \Scalr_Scripting_GlobalVariables $globalVar)
+    public function describeServersAction($farmRoleId)
     {
-        $list = $globalVar->getValues($roleId, $farmId, $farmRoleId);
-        $fetch = [];
+        $farmRole = $this->getFarmRole($farmRoleId, null, true);
+        /* @var $farmRole FarmRole */
+        $this->farmController->checkPermissions($farmRole->getFarm());
 
-        foreach ($list as $var) {
-            if ((!empty($var['current']['name']) && $var['current']['name'] == $name)
-                || (!empty($var['default']['name']) && $var['default']['name'] == $name)) {
+        return $this->adapter('server')->getDescribeResult([['farmRoleId' => $farmRoleId]]);
+    }
 
-                $fetch = $var;
-                break;
+    /**
+     * Import non-scalarizr server to the Farm Role
+     *
+     * @param int $farmRoleId
+     * @return ResultEnvelope
+     * @throws ApiErrorException
+     */
+    public function importServerAction($farmRoleId)
+    {
+        $this->checkPermissions(Acl::RESOURCE_DISCOVERY_SERVERS, Acl::PERM_DISCOVERY_SERVERS_IMPORT);
+
+        /* @var  $farmRole FarmRole */
+        $farmRole = $this->getFarmRole($farmRoleId, null, true);
+        $this->farmController->checkPermissions($farmRole->getFarm(), ACL::PERM_FARMS_SERVERS);
+
+        if (!$this->getEnvironment()->keychain($farmRole->platform)->isEnabled()) {
+            throw new ApiErrorException(409, ErrorMessage::ERR_NOT_ENABLED_PLATFORM,
+                sprintf("Platform '%s' is not enabled", $farmRole->platform)
+            );
+        }
+
+        $object = $this->request->getJsonBody();
+
+        if (empty($object->cloudServerId)) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property cloudServerId");
+        }
+
+        $cloudServerId = ServerAdapter::convertInputValue('string', $object->cloudServerId, 'cloudServerId');
+
+        //TODO the loader of the list of the Tags should be moved into separate class/method
+        $serverTags = [];
+        if (!empty($object->tags)) {
+            if (!is_array($object->tags)) {
+                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Property tags must be array");
+            }
+            foreach ($object->tags as $tag) {
+                if (!isset($tag->key)) {
+                    throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property tag.key");
+                }
+                $serverTags[ServerAdapter::convertInputValue('string', $tag->key, 'tag.key')] =
+                    isset($tag->value) ? ServerAdapter::convertInputValue('string', $tag->value, 'tag.value') : null;
             }
         }
 
-        return $fetch;
+        try {
+            /* @var $server Server */
+            $server = $farmRole->getServerImport($this->getUser())->import($cloudServerId, $serverTags);
+        } catch (NotSupportedException $e) {
+            throw new ApiNotImplementedErrorException(sprintf("Platform '%s' is not supported yet", $farmRole->platform));
+        } catch (ValidationErrorException $e) {
+            if (strpos($e->getMessage(), 'Instance was not found') !== false) {
+                throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, $e->getMessage(), $e->getCode(), $e);
+            } else {
+                throw new ApiErrorException(409, ErrorMessage::ERR_CONFIGURATION_MISMATCH, $e->getMessage(), $e->getCode(), $e);
+            }
+        } catch (ServerImportException $e) {
+            throw new ApiErrorException(409, ErrorMessage::ERR_CONFIGURATION_MISMATCH, $e->getMessage(), $e->getCode(), $e);
+        } catch (Exception $e) {
+            throw new ApiErrorException(503, ErrorMessage::ERR_SERVICE_UNAVAILABLE, $e->getMessage(), $e->getCode(), $e);
+        }
+
+        $this->response->setStatus(201);
+
+        return $this->result($this->adapter('server')->toData($server));
+    }
+
+    /**
+     * Gets a new Instance of the adapter
+     *
+     * @param   string|FarmRoleScalingMetric|object $name                The name of the adapter or FarmRoleScalingMetric entity or farm role scaling metric data
+     * @param   string                              $scope      optional The scope of the adapter
+     * @param   string                              $version    optional The version of the adapter
+     *
+     * @return ApiEntityAdapter
+     *
+     * @throws ApiErrorException
+     */
+    public function adapter($name, $scope = null, $version = null)
+    {
+        if (is_object($name)) {
+            $object = $name;
+            if ($object instanceof FarmRoleScalingMetric) {
+                $name = ScalingRuleAdapter::$ruleTypeMap[$object->metric->alias];
+            } else {
+                $name = $this->getBareId($object, 'ruleType');
+                if (!$name) {
+                    throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, 'Missed property ruleType');
+                }
+                if (!in_array($name, ScalingRuleAdapter::$ruleTypeMap)) {
+                    throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, 'Unexpected ruleType value');
+                }
+            }
+            $name = static::$scalingRuleNamespace . "\\" . $name;
+        }
+
+        return parent::adapter($name, $scope, $version);
     }
 
     /**
      * Gets global variable object
      *
-     * @return  \Scalr_Scripting_GlobalVariables
+     * @return Scalr_Scripting_GlobalVariables
      */
-    private function getVariableInstance()
+    public function getVariableInstance()
     {
-        return new \Scalr_Scripting_GlobalVariables(
+        return new Scalr_Scripting_GlobalVariables(
             $this->getUser()->getAccountId(),
             $this->getEnvironment()->id,
             ScopeInterface::SCOPE_FARMROLE
         );
     }
-
 }

@@ -13,6 +13,8 @@ class Scalr_Governance
     const SCALR_META_TAG_NAME = 'scalr-meta';
     const SCALR_META_TAG_VALUE = 'v1:{SCALR_ENV_ID}:{SCALR_FARM_ID}:{SCALR_FARM_ROLE_ID}:{SCALR_SERVER_ID}';
 
+    const INSTANCE_TYPE = 'instance_type';
+
     const AWS_KEYPAIR = 'aws.ssh_key_pair';
     const AWS_SECURITY_GROUPS = 'aws.additional_security_groups';
     const AWS_RDS_SECURITY_GROUPS = 'aws.rds_additional_security_groups';
@@ -21,7 +23,6 @@ class Scalr_Governance
     const AWS_VPC = 'aws.vpc';
     const AWS_TAGS = 'aws.tags';
     const AWS_INSTANCE_NAME_FORMAT = 'aws.instance_name_format';
-    const AWS_INSTANCE_TYPE = 'aws.instance_type';
     const AWS_KMS_KEYS = 'aws.kms_keys';
 
     const OPENSTACK_SECURITY_GROUPS = 'openstack.additional_security_groups';
@@ -29,6 +30,7 @@ class Scalr_Governance
     const OPENSTACK_TAGS = 'openstack.tags';
 
     const AZURE_TAGS = 'azure.tags';
+    const AZURE_NETWORK = 'azure.network';
 
     const CLOUDSTACK_SECURITY_GROUPS = 'cloudstack.additional_security_groups';
 
@@ -137,7 +139,11 @@ class Scalr_Governance
         $policy = $this->loadValue($category, $name);
 
         if (!empty($policy['value']) && $policy['enabled'] == 1) {
-            $result = !empty($option) ? $policy['value'][$option] : $policy['value'];
+            if (!empty($option)) {
+                $result = isset($policy['value'][$option]) ? $policy['value'][$option] : null;
+            } else {
+                $result = $policy['value'];
+            }
         }
 
         return $result;
@@ -180,6 +186,7 @@ class Scalr_Governance
 
     /**
      * Converts astrisk(*) pattern to regular expression
+     *
      * @param   string   $pattern Pattern with asterisk
      * @return  string   Regular expression
      */
@@ -192,6 +199,7 @@ class Scalr_Governance
 
     /**
      * Prepare governance security groups patterns
+     *
      * @param   string  $list List of security groups, separated by comma
      * @return  Array   Security groups patterns
      */
@@ -215,7 +223,8 @@ class Scalr_Governance
     }
     
     /**
-     * Prepare governance security groups patterns
+     * Checks if security group is allowed
+     *
      * @param   string  $sgName Security group name
      * @param   Array   $patterns List of patterns
      * @return  bool    Returns true if security matches at list one pattern
@@ -240,6 +249,7 @@ class Scalr_Governance
     
     /**
      * Returns Security group policy name for service
+     *
      * @param string  $serviceName Service name (rds, elb ...)
      * @return string Policy name
      */
@@ -257,4 +267,25 @@ class Scalr_Governance
         return $policyName;
     }
 
+    /**
+     * Checks if instance type is allowed
+     *
+     * @param   string  $platform      Platform
+     * @param   string  $cloudLocation Cloud location
+     * @param   string  $instanceType  Instance type
+     * @return  bool    Returns true if instance type is allowed
+     */
+    public function isInstanceTypeAllowed($platform, $cloudLocation, $instanceType)
+    {
+        $allowed = true;
+        $allowGovernanceIns = $this->getValue($platform, Scalr_Governance::INSTANCE_TYPE);
+        if (isset($allowGovernanceIns)) {
+            if ($platform == \SERVER_PLATFORMS::AZURE) {//azure instance type policy is separated by region
+                $allowGovernanceIns = isset($allowGovernanceIns[$cloudLocation]['value']) ? $allowGovernanceIns[$cloudLocation]['value'] : null;
+            }
+            $allowed = !isset($allowGovernanceIns) || in_array($instanceType, $allowGovernanceIns);
+        }
+        return $allowed;
+    }
+    
 }

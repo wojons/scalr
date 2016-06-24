@@ -62,7 +62,7 @@ class Scalr_UI_Controller_Tools_Cloudstack_Ips extends Scalr_UI_Controller
 
         $cs = $this->environment->cloudstack($platformName);
 
-        $ccProps = $this->environment->cloudCredentials($platformName)->properties;
+        $ccProps = $this->environment->keychain($platformName)->properties;
 
         $accountName = $ccProps[\Scalr\Model\Entity\CloudCredentialsProperty::CLOUDSTACK_ACCOUNT_NAME];
         $domainId = $ccProps[\Scalr\Model\Entity\CloudCredentialsProperty::CLOUDSTACK_DOMAIN_ID];

@@ -11,7 +11,7 @@ use Scalr\Api\Rest\Exception\ApiErrorException;
 use Scalr\Api\DataType\ErrorMessage;
 
 /**
- * User/Version-1/Events API Controller
+ * User/Events API Controller
  *
  * @author   Vlad Dobrovolskiy   <v.dobrovolskiy@scalr.com>
  * @since    5.4 (07.05.2015)
@@ -237,6 +237,10 @@ class Events extends ApiController
         $this->checkPermissions(Acl::RESOURCE_GENERAL_CUSTOM_EVENTS, Acl::PERM_GENERAL_CUSTOM_EVENTS_MANAGE);
 
         $event = $this->getEvent($eventId, true);
+
+        if ($event->getUsed()) {
+            throw new ApiErrorException(409, ErrorMessage::ERR_OBJECT_IN_USE, sprintf('Event with ID %s is in use.', $eventId));
+        }
 
         $event->delete();
 

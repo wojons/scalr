@@ -155,6 +155,17 @@ class Scalr
 
             // Notify class observers
             foreach (self::$EventObservers as $observer) {
+                /**
+                 * @var $observer \EventObserver
+                 */
+
+                // Skip observer if it requires agent (scalarizr), but server doesn't have it.
+                if (isset($event->DBServer)) {
+                    if ($observer->isScalarizrRequired && !$event->DBServer->isScalarized)
+                        continue;
+                }
+
+
                 $observerStartTime = microtime(true);
                 $observer->SetFarmID($farmid);
 
@@ -282,8 +293,9 @@ class Scalr
                     if ($webhook->postData) {
                         //Parse variable
                         $keys = array_keys($variables);
-                        $f = create_function('$item', 'return "{".$item."}";');
-                        $keys = array_map($f, $keys);
+                        $keys = array_map(function ($item) {
+                            return '{' . $item . '}';
+                        }, $keys);
                         $values = array_values($variables);
                         // Strip undefined variables & return value
                         $payload->userData = preg_replace("/{[A-Za-z0-9_-]+}/", "", str_replace($keys, $values, $webhook->postData));
@@ -424,8 +436,8 @@ class Scalr
             }
 
             if ($farm instanceof DBFarm) {
-                $propsToSet[SERVER_PROPERTIES::FARM_CREATED_BY_ID] = $farm->createdByUserId;
-                $propsToSet[SERVER_PROPERTIES::FARM_CREATED_BY_EMAIL] = $farm->createdByUserEmail;
+                $propsToSet[SERVER_PROPERTIES::FARM_CREATED_BY_ID] = $farm->ownerId ?: $farm->GetSetting(Entity\FarmSetting::CREATED_BY_ID);
+                $propsToSet[SERVER_PROPERTIES::FARM_CREATED_BY_EMAIL] = $farm->ownerId ? Entity\Account\User::findPk($farm->ownerId)->email : $farm->GetSetting(Entity\FarmSetting::CREATED_BY_EMAIL);
                 $projectId = $farm->GetSetting(Entity\FarmSetting::PROJECT_ID);
 
                 if (!empty($projectId)) {
@@ -444,6 +456,15 @@ class Scalr
                 }
 
                 $propsToSet[SERVER_PROPERTIES::FARM_PROJECT_ID] = $projectId;
+            }
+
+            if ($farmRole instanceof DBFarmRole) {
+                $role = $farmRole->GetRoleObject();
+                $DBServer->isScalarized = $role->isScalarized;
+                if (!$DBServer->isScalarized) {
+                    $propsToSet[SERVER_PROPERTIES::SZR_VESION] = '';
+                }
+                $DBServer->Save();
             }
 
             if (!empty($ccId)) {
@@ -468,16 +489,19 @@ class Scalr
             return [call_user_func_array('sprintf', $args), $reasonId];
         };
 
-        if ($delayed) {
+        if ($reason) {
             list($reasonMsg, $reasonId) = is_array($reason) ? call_user_func_array($fnGetReason, $reason) : $fnGetReason($reason);
-
             $DBServer->SetProperties([
                 SERVER_PROPERTIES::LAUNCH_REASON    => $reasonMsg,
                 SERVER_PROPERTIES::LAUNCH_REASON_ID => $reasonId
             ]);
+        } else {
+            $reasonMsg = $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_REASON);
+            $reasonId = $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_REASON_ID);
+        }
 
+        if ($delayed) {
             $DBServer->updateStatus(SERVER_STATUS::PENDING_LAUNCH);
-
             return $DBServer;
         }
 
@@ -533,43 +557,26 @@ class Scalr
             $DBServer->Save();
 
             try {
-                if ($reason) {
-                    list($reasonMsg, $reasonId) = is_array($reason) ? call_user_func_array($fnGetReason, $reason) : $fnGetReason($reason);
-                } else {
-                    $reasonMsg = $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_REASON);
-                    $reasonId = $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_REASON_ID);
-                }
 
                 $DBServer->getServerHistory()->markAsLaunched($reasonMsg, $reasonId);
                 $DBServer->updateTimelog('ts_launched');
 
                 if ($DBServer->imageId) {
                     //Update Image last used date
-                    $image = Image::findOne([
-                        ['id'            => $DBServer->imageId],
-                        ['envId'         => $DBServer->envId],
-                        ['platform'      => $DBServer->platform],
-                        ['cloudLocation' => $DBServer->cloudLocation]
-                    ]);
-
-                    if (!$image)
-                        $image = Image::findOne([
-                            ['id'            => $DBServer->imageId],
-                            ['envId'         => null],
-                            ['platform'      => $DBServer->platform],
-                            ['cloudLocation' => $DBServer->cloudLocation]
-                        ]);
-
+                    /* @var $server Entity\Server */
+                    $server = Entity\Server::findPk($DBServer->serverId);
+                    $image = $server->getImage();
                     if ($image) {
-                        $image->dtLastUsed = new DateTime();
-                        $image->save();
+                        $image->update(['dtLastUsed' => new DateTime()]);
                     }
 
-                    //Update Role last used date
-                    if ($DBServer->farmRoleId) {
-                        $dbRole = $DBServer->GetFarmRoleObject()->GetRoleObject();
-                        $dbRole->dtLastUsed = date("Y-m-d H:i:s");
-                        $dbRole->save();
+                    if ($server->farmRoleId && empty($server->getFarmRole())) {
+                        trigger_error(sprintf("Call to a member function getRole() on null. Server: %s, FarmRole: %d", $server->serverId, $server->farmRoleId), E_USER_WARNING);
+                    }
+
+                    if ($server->farmRoleId && !empty($server->getFarmRole()->getRole())) {
+                        //Update Role last used date
+                        $server->getFarmRole()->getRole()->update(['lastUsed' => new DateTime()]);
                     }
                 }
 
@@ -578,12 +585,11 @@ class Scalr
             }
         } catch (Exception $e) {
             self::getContainer()->logger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
-                $DBServer->farmId,
+                $DBServer,
                 sprintf("Cannot launch server on '%s' platform: %s",
-                    $DBServer->platform,
+                    !empty($DBServer->platform) ? $DBServer->platform : null,
                     $e->getMessage()
-                ),
-                $DBServer->serverId
+                )
             ));
 
             $existingLaunchError = $DBServer->GetProperty(SERVER_PROPERTIES::LAUNCH_ERROR);
@@ -753,8 +759,10 @@ class Scalr
      */
     public static function errorHandler($errno, $errstr, $errfile, $errline)
     {
+        $level = error_reporting();
+
         // Handles error suppression.
-        if (0 === error_reporting()) {
+        if (($level & $errno) === 0) {
             return false;
         }
 

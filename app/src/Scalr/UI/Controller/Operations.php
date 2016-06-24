@@ -1,5 +1,7 @@
 <?php
 
+use Scalr\Acl\Acl;
+
 class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
 {
     const CALL_PARAM_NAME = 'operationId';
@@ -7,21 +9,6 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
     public function defaultAction($serverId, $operationId = null, $operation = null)
     {
         $this->detailsAction($serverId, $operationId, $operation);
-    }
-
-    /**
-     * @param string serverId
-     * @param string operationId optional
-     * @throws Scalr_Exception_InsufficientPermissions
-     * @throws Scalr_UI_Exception_NotFound
-     */
-    public function progressAction($serverId, $operationId = null)
-    {
-        $dbServer = DBServer::LoadByID($serverId);
-        $this->user->getPermissions()->validate($dbServer);
-
-        $info = $dbServer->scalarizr->operation->getStatus($operationId);
-        var_dump($info);
     }
 
     private function getScalarizrPhaseName($eventName)
@@ -40,17 +27,31 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
     {
         $dbServer = DBServer::LoadByID($serverId);
 
-        if (!$dbServer)
+        if (!$dbServer) {
             throw new Exception("Operation details not available yet.");
+        }
 
-        $this->user->getPermissions()->validate($dbServer);
+        // check farm permissions to allow read-only access
+        if ($dbServer->farmId) {
+            $this->user->getPermissions()->validate($dbServer->GetFarmObject());
+        } else {
+            if (!($this->request->isAllowed(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_BUILD) || $this->request->isAllowed(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_IMPORT))) {
+                throw new Scalr_Exception_InsufficientPermissions();
+            }
+        }
 
         $details = [];
+        $download = null;
+        $opStatus = null;
+        $msgInfo = [];
+        $info = [];
 
         if ($operationId) {
             $opInfo = $dbServer->scalarizr->operation->getStatus($operationId);
 
             $info = $opInfo;
+            $status = '';
+            $message = '';
 
             $opStatus = 'In progress';
             $operation = $opInfo->name;
@@ -59,20 +60,21 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
                 case "in-progress":
                     $status = 'running';
                     break;
+
                 case "failed":
                     $status = 'error';
                     $message = $opInfo->error;
                     $opStatus = 'Failed';
                     $download = true;
                     break;
+
                 case "completed":
                     $status = 'complete';
                     $opStatus = 'Completed';
-                    break;
             }
 
             $details[$opInfo->name] = array(
-                'status' => $status,
+                'status'  => $status,
                 'message' => $message
             );
         } else if ($operation == 'Initialization') {
@@ -87,22 +89,32 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
              */
             $timeFormat = "H:i:s";
             $timings = $this->db->GetRow("SELECT * FROM servers_launch_timelog WHERE server_id = ?", array($dbServer->serverId));
-            $messages = $this->db->Execute("SELECT * FROM `messages` WHERE `server_id` = ? AND (event_server_id = ? OR event_server_id IS NULL)",
-                array($dbServer->serverId, $dbServer->serverId)
-            );
-            $msgInfo = [];
-            while ($message = $messages->FetchRow())
-                $msgInfo[$message['message_name']][$message['type']] = $message['status'];
 
-            $details = [
-                'Create Server record in Scalr' => ['status' => 'complete', 'timestamp' => Scalr_Util_DateTime::convertTz((int)$timings['ts_created'], $timeFormat)],
-                'Provision Server in Cloud Platform' => ['status' => 'pending'],
-                'Wait for OS to finish booting' => ['status' => 'pending'],
-                'Wait for Scalarizr Agent to update and start' => ['status' => 'pending'],
-                'HostInit' => ['status' => 'pending'],
-                'BeforeHostUp' => ['status' => 'pending'],
-                'HostUp' => ['status' => 'pending']
-            ];
+            if ($dbServer->isScalarized) {
+                $messages = $this->db->Execute("SELECT * FROM `messages` WHERE `server_id` = ? AND (event_server_id = ? OR event_server_id IS NULL)",
+                    array($dbServer->serverId, $dbServer->serverId)
+                );
+
+                while ($message = $messages->FetchRow()) {
+                    $msgInfo[$message['message_name']][$message['type']] = $message['status'];
+                }
+
+                $details = [
+                    'Create Server record in Scalr' => ['status' => 'complete', 'timestamp' => Scalr_Util_DateTime::convertTz((int)$timings['ts_created'], $timeFormat)],
+                    'Provision Server in Cloud Platform' => ['status' => 'pending'],
+                    'Wait for OS to finish booting' => ['status' => 'pending'],
+                    'Wait for Scalarizr Agent to update and start' => ['status' => 'pending'],
+                    'HostInit' => ['status' => 'pending'],
+                    'BeforeHostUp' => ['status' => 'pending'],
+                    'HostUp' => ['status' => 'pending']
+                ];
+            } else {
+                $details = [
+                    'Create Server record in Scalr' => ['status' => 'complete', 'timestamp' => Scalr_Util_DateTime::convertTz((int)$timings['ts_created'], $timeFormat)],
+                    'Provision Server in Cloud Platform' => ['status' => 'pending'],
+                    'Wait for OS to finish booting' => ['status' => 'pending']
+                ];
+            }
 
             $timeToBootOs = (int)$timings['ts_launched']+(int)$timings['time_to_boot'];
             $timeToBootScalarizr = (int)$timings['ts_launched']+(int)$timings['time_to_boot']+(int)$timings['time_to_hi'];
@@ -114,33 +126,36 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
                 switch ($phase) {
                     case "Provision Server in Cloud Platform":
                         $launchError = $dbServer->GetProperty(SERVER_PROPERTIES::LAUNCH_ERROR);
+
                         if ($launchError) {
                             $details[$phase]['status'] = 'error';
                             $opStatus = 'Failed';
                             $details[$phase]['message'] = "Unable to launch instance:".  htmlspecialchars($launchError);
                             $download = true;
+
                             break 2;
                         } else {
                             if ($dbServer->status != SERVER_STATUS::PENDING_LAUNCH) {
                                 if ($dbServer->GetRealStatus(true)->isPending()) {
                                     $details[$phase]['status'] = 'running';
+
                                     break 2;
-                                }
-                                else {
+                                } else {
                                     $details[$phase]['status'] = 'complete';
                                     $details[$phase]['timestamp'] = Scalr_Util_DateTime::convertTz($timeToProvisionServer, $timeFormat);
                                 }
-                            } else
+                            } else {
                                 break 2;
+                            }
                         }
 
                         break;
+
                     case "Wait for OS to finish booting":
                         if ($dbServer->status != SERVER_STATUS::PENDING || $isInitFailed) {
                             $details[$phase]['status'] = 'complete';
                             $details[$phase]['timestamp'] = Scalr_Util_DateTime::convertTz((int)$timeToBootOs, $timeFormat);
-                        }
-                        else {
+                        } else {
                             $details[$phase]['status'] = 'running';
                             break 2 ;
                         }
@@ -148,12 +163,10 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
                         break;
 
                     case "Wait for Scalarizr Agent to update and start":
-
                         if (isset($msgInfo['HostInit']['in']) || $dbServer->status == SERVER_STATUS::RUNNING || $isInitFailed) {
                             $details[$phase]['status'] = 'complete';
                             $details[$phase]['timestamp'] = Scalr_Util_DateTime::convertTz($timeToBootScalarizr, $timeFormat);
-                        }
-                        else {
+                        } else {
                             $details[$phase]['status'] = 'running';
                             break 2 ;
                         }
@@ -163,7 +176,6 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
                     case "HostInit":
                     case "BeforeHostUp":
                     case "HostUp":
-
                         $newPhaseName = $this->getScalarizrPhaseName($phase);
                         $details[$newPhaseName] = $details[$phase];
                         unset($details[$phase]);
@@ -214,12 +226,13 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
                         }
 
                         if ($details[$newPhaseName]['status'] == 'complete') {
-                            if ($phase == 'HostInit')
+                            if ($phase == 'HostInit') {
                                 $details[$newPhaseName]['timestamp'] = Scalr_Util_DateTime::convertTz((int)$timings['ts_hi'], $timeFormat);
-                            elseif ($phase == 'BeforeHostUp')
+                            } elseif ($phase == 'BeforeHostUp') {
                                 $details[$newPhaseName]['timestamp'] = Scalr_Util_DateTime::convertTz((int)$timings['ts_bhu'], $timeFormat);
-                            elseif ($phase == 'HostUp')
+                            } elseif ($phase == 'HostUp') {
                                 $details[$newPhaseName]['timestamp'] = Scalr_Util_DateTime::convertTz((int)$timings['ts_hu'], $timeFormat);
+                            }
                         }
 
                         break;
@@ -231,8 +244,7 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
                     $errorEvent = 'BeforeHostUp';
                     $errorPhaseName = $this->getScalarizrPhaseName($errorEvent);
                     $details[$this->getScalarizrPhaseName('HostUp')]['status'] = 'pending';
-                }
-                elseif ($dbServer->status == SERVER_STATUS::PENDING) {
+                } elseif ($dbServer->status == SERVER_STATUS::PENDING) {
                     $errorPhaseName = 'Wait for Scalarizr Agent to update and start';
                     $details['Wait for OS to finish booting']['status'] = 'complete';
                 } else {
@@ -247,39 +259,29 @@ class Scalr_UI_Controller_Operations extends Scalr_UI_Controller
                 $opStatus = 'Failed';
             }
 
-            /*
-            foreach (array('HostInit', 'BeforeHostUp', 'HostUp') as $phase) {
-                if ($details[$phase]) {
-                    $newPhaseName = $this->getScalarizrPhaseName($phase);
-                    $details[$newPhaseName] = (!empty($details[$newPhaseName])) ? array_merge($details[$phase], $details[$newPhaseName]) : $details[$phase];
-                    unset($details[$phase]);
-                }
-            }
-            */
-
             $info = array($msgInfo, $timings);
 
             if ($dbServer->status == SERVER_STATUS::RUNNING) {
                 $details['Done'] = ['status' => 'complete', 'timestamp' => Scalr_Util_DateTime::convertTz((int)$timings['ts_hu'], $timeFormat)];
                 $opStatus = 'Completed';
-            }
-            else {
+            } else {
                 $details['Done'] = ['status' => 'pending'];
 
-                if ($opStatus != 'Failed')
+                if ($opStatus != 'Failed') {
                     $opStatus = 'In progress';
+                }
             }
 
         }
 
         return [
-            'serverId' => $dbServer->serverId,
-            'status'	=> $opStatus,
+            'serverId'     => $dbServer->serverId,
+            'status'       => $opStatus,
             'serverStatus' => $dbServer->status,
-            'name'		=> $operation,
-            'details'   => $details,
-            'download'  => $download,
-            'debug' => $info
+            'name'         => $operation,
+            'details'      => $details,
+            'download'     => $download,
+            'debug'        => $info
         ];
     }
 

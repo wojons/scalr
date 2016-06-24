@@ -97,7 +97,7 @@ class VolumeFilterNameType extends StringType
 
     /**
      * The Amazon EBS volume type. If the volume is an io1 volume, the response includes the IOPS as well.
-     * Valid values: standard | io1 | gp2
+     * Valid values: standard | io1 | gp2 | st1 | sc1
      */
     const TYPE_VOLUME_TYPE = 'volume-type';
 

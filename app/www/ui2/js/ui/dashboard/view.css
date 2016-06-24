@@ -65,7 +65,6 @@
 	visibility: hidden;
 	display: inline;
 	float: left;
-
     height: 40px;
     line-height: 43px;
     background-color: rgba(80, 159, 0, 0.2);
@@ -141,6 +140,7 @@
 	overflow-y: hidden;
 	background: #ffffff;
     border-bottom: 1px solid #f7f7f7;
+    max-height: 396px;
 }
 
 .scalr-ui-dashboard-widgets-div:last-child {
@@ -159,20 +159,20 @@
 }
 
 .scalr-ui-dashboard-widgets-message-slim {
-	font-family: arial, sans-serif;
-	font-size: 13px;
+    font-family: OpenSansRegular,Arial,sans-serif;
+    font-size: 13px;
 }
 
 .scalr-ui-dashboard-widgets-text {
-	font-size: 13px;
-	font-family: arial;
-	font-weight: bold;
-	color: white;
+    font-size: 13px;
+    font-family: arial;
+    font-weight: bold;
+    color: white;
 }
 
 .scalr-ui-dashboard-widgets-desc {
-	font: 11px OpenSansBold;
-	margin-bottom: 3px;
+    font: 11px OpenSansBold;
+    margin-bottom: 3px;
     text-transform: uppercase;
 }
 
@@ -182,9 +182,10 @@
 }
 
 .scalr-ui-dashboard-widgets-info {
-	font: bold 11px arial;
-	color: #EB4608;
-	vertical-align: super;
+    font: 10px OpenSansBold,Arial,sans-serif;
+    color: #F05140;
+    vertical-align: super;
+    text-transform: uppercase;
 }
 
 
@@ -196,8 +197,8 @@ ul.scalr-ui-dashboard-farms {
 ul.scalr-ui-dashboard-farms li {
 	position: relative;
 	display: inline-block;
-	margin: 7px;
-	margin-bottom: 15px;
+	margin: 8px;
+	margin-bottom: 18px;
 	height: 55px;
 	width: 50px;
 	cursor: pointer;
@@ -217,13 +218,13 @@ ul.scalr-ui-dashboard-farms li a.icon {
 
 ul.scalr-ui-dashboard-farms li a.icon div {
     position: relative;
-    top: 14px;
+    top: 13px;
     margin: 0 auto;
 }
 
 ul.scalr-ui-dashboard-farms li a.count {
 	position: absolute;
-	top: 0;
+	top: -2px;
 	left: 37px;
     background: #439A25;
     font: 12px OpenSansSemiBold;
@@ -303,7 +304,6 @@ ul.scalr-ui-dashboard-farms li a.count {
 .scalr-ui-dashboard-checklist-icon-2 {
     background-position: 0 -76px;
 }
-
 
 @font-face {
 	font-family: "Roboto Black";

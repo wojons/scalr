@@ -1,14 +1,17 @@
 <?php
 
 use Scalr\Acl\Acl;
+use Scalr\Model\Entity\OrchestrationLogManualScript;
 use Scalr\Model\Entity\Script;
 use Scalr\Model\Entity\ScriptVersion;
 use Scalr\Model\Entity\ScriptShortcut;
 use Scalr\Model\Entity\Tag;
+use Scalr\Model\Entity;
 use Scalr\UI\Request\JsonData;
 use Scalr\UI\Request\RawData;
 use Scalr\UI\Request\FileUploadData;
 use Scalr\UI\Request\Validator;
+use Scalr\UI\Utils;
 use Scalr\DataType\ScopeInterface;
 
 class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
@@ -25,28 +28,9 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
         $this->viewAction();
     }
 
-    /**
-     * Check access permissions on account or environment level (depends on request scope)
-     *
-     * @param   string    $permissionMnemonic   Permission to check. Could be FORK or MANAGE
-     */
-    private function restrictScopeAccess($permissionMnemonic = null)
-    {
-        $permission = $permissionMnemonic ?
-            constant(
-                ($this->request->getScope() == ScopeInterface::SCOPE_ACCOUNT ? 'Scalr\Acl\Acl::PERM_SCRIPTS_ACCOUNT_' : 'Scalr\Acl\Acl::PERM_SCRIPTS_ENVIRONMENT_') . $permissionMnemonic
-            ) : NULL;
-
-        if ($this->request->getScope() == ScopeInterface::SCOPE_ACCOUNT) {
-            $this->request->restrictAccess(Acl::RESOURCE_SCRIPTS_ACCOUNT, $permission);
-        } else {
-            $this->request->restrictAccess(Acl::RESOURCE_SCRIPTS_ENVIRONMENT, $permission);
-        }
-    }
-
     public function viewAction()
     {
-        $this->restrictScopeAccess();
+        $this->request->restrictAccess('SCRIPTS');
 
         $vars = Scalr_Scripting_Manager::getScriptingBuiltinVariables();
         $environments = $this->user->getEnvironments();
@@ -89,9 +73,9 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
      */
     public function xGetAction($scriptId)
     {
-        $this->restrictScopeAccess();
+        $this->request->restrictAccess('SCRIPTS');
 
-        /* @var Script $script */
+        /* @var $script Script */
         $script = Script::findPk($scriptId);
         if (! $script)
             throw new Scalr_UI_Exception_NotFound();
@@ -112,7 +96,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
      */
     public function xRemoveAction(JsonData $scriptId)
     {
-        $this->restrictScopeAccess('MANAGE');
+        $this->request->isAllowed('SCRIPTS', 'MANAGE');
 
         $errors = [];
         $processed = [];
@@ -151,7 +135,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
      */
     public function xRemoveVersionAction($scriptId, $version)
     {
-        $this->restrictScopeAccess('MANAGE');
+        $this->request->restrictAccess('SCRIPTS', 'MANAGE');
 
         /* @var $script Script */
         $script = Script::findPk($scriptId);
@@ -199,7 +183,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
     public function xSaveAction($id, $name, $description, $isSync = 0, $allowScriptParameters = false, $envId = NULL, $timeout = NULL,
                                 $version, RawData $content, $tags, $uploadType = NULL, $uploadUrl = NULL, FileUploadData $uploadFile = NULL, $checkScriptParameters = false)
     {
-        $this->restrictScopeAccess('MANAGE');
+        $this->request->restrictAccess('SCRIPTS', 'MANAGE');
 
         $validator = new Validator();
         $validator->validate($name, 'name', Validator::NOEMPTY);
@@ -353,7 +337,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
      */
     public function xForkAction($scriptId, $name)
     {
-        $this->restrictScopeAccess('FORK');
+        $this->request->restrictAccess('SCRIPTS', 'FORK');
 
         if (! $name)
             throw new Scalr_Exception_Core('Name cannot be null');
@@ -417,7 +401,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
      */
     public function xListAction($scriptId = null, $query = null, $scope = null, JsonData $sort, $start = 0, $limit = 20)
     {
-        $this->restrictScopeAccess();
+        $this->request->restrictAccess('SCRIPTS');
 
         $criteria = [];
         if ($this->user->isScalrAdmin()) {
@@ -466,7 +450,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
             $criteria[] = ['id' => $scriptId];
         }
 
-        $result = Script::find($criteria, null, \Scalr\UI\Utils::convertOrder($sort, ['name' => true], ['id', 'name', 'description', 'isSync', 'dtCreated', 'dtChanged']), $limit, $start, true);
+        $result = Script::find($criteria, null, Utils::convertOrder($sort, ['name' => true], ['id', 'name', 'description', 'isSync', 'dtCreated', 'dtChanged']), $limit, $start, true);
         $data = [];
         foreach ($result as $script) {
             /* @var $script Script */
@@ -521,7 +505,7 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
             'farmId' => ($farmId == 0 ? '' : (string) $farmId), // TODO: remove (string) and use integer keys for whole project [UI-312]
             'farmRoleId' => (string) $farmRoleId,
             'serverId' => $serverId
-        ), array('addAll', 'addAllFarm', 'requiredFarm', 'permServers'));
+        ), array('addAll', 'addAllFarm', 'requiredFarm', 'permServers', 'isScalarizedOnly'));
 
         $data['scriptId'] = $scriptId;
 
@@ -573,8 +557,9 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
             $farmId = $dbFarm->ID;
         }
 
-        if ($farmId)
-            $this->request->restrictFarmAccess(DBFarm::LoadByID($farmId), Acl::PERM_FARMS_SERVERS);
+        if ($farmId) {
+            $this->request->checkPermissions(Entity\Farm::findPk($farmId), Acl::PERM_FARMS_SERVERS);
+        }
 
         if ($scriptId) {
             $script = Script::findPk($scriptId);
@@ -628,24 +613,39 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
         if ($executeScript) {
             switch($target) {
                 case Script::TARGET_FARM:
-                    $servers = $this->db->GetAll("SELECT server_id FROM servers WHERE status IN (?,?) AND farm_id=?",
-                        array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, $farmId)
+                    $servers = $this->db->GetAll("
+                        SELECT server_id
+                        FROM servers
+                        WHERE is_scalarized = 1 AND status IN (?,?) AND farm_id=?",
+                        [SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, $farmId]
                     );
                     break;
                 case Script::TARGET_ROLE:
-                    $servers = $this->db->GetAll("SELECT server_id FROM servers WHERE status IN (?,?) AND farm_roleid=?",
-                        array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, $farmRoleId)
+                    $servers = $this->db->GetAll("
+                        SELECT server_id
+                        FROM servers
+                        WHERE is_scalarized = 1 AND status IN (?,?) AND farm_roleid=?",
+                        [SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, $farmRoleId]
                     );
                     break;
                 case Script::TARGET_INSTANCE:
-                    $servers = $this->db->GetAll("SELECT server_id FROM servers WHERE status IN (?,?) AND server_id=?",
-                        array(SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, $serverId)
+                    $servers = $this->db->GetAll("
+                        SELECT server_id
+                        FROM servers
+                        WHERE is_scalarized = 1 AND status IN (?,?) AND server_id=?",
+                        [SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, $serverId]
                     );
                     break;
                 case Script::TARGET_ALL:
-                    $sql = 'SELECT s.server_id FROM servers s LEFT JOIN farms f ON f.id = s.farm_id WHERE s.status IN (?,?) AND s.env_id = ?';
+                    $sql = "
+                        SELECT s.server_id
+                        FROM servers s
+                        JOIN farms f ON f.id = s.farm_id
+                        WHERE s.is_scalarized = 1
+                        AND s.status IN (?,?)
+                        AND s.env_id = ?
+                        AND " . $this->request->getFarmSqlQuery(Acl::PERM_FARMS_SERVERS);
                     $args = [ SERVER_STATUS::INIT, SERVER_STATUS::RUNNING, $this->getEnvironmentId()];
-                    list($sql, $args) = $this->request->prepareFarmSqlQuery($sql, $args, 'f');
                     $servers = $this->db->GetAll($sql, $args);
                     break;
             }
@@ -679,33 +679,17 @@ class Scalr_UI_Controller_Scripts extends Scalr_UI_Controller
 
                     $script = Scalr_Scripting_Manager::prepareScript($scriptSettings, $DBServer);
 
-                    $itm = new stdClass();
-                    // Script
-                    $itm->asynchronous = ($script['issync'] == 1) ? '0' : '1';
-                    $itm->timeout = $script['timeout'];
+                    if ($script) {
+                        $DBServer->executeScript($script, $msg);
 
-                    if ($script['body']) {
-                        $itm->name = $script['name'];
-                        $itm->body = $script['body'];
-                    } else {
-                        $itm->path = $script['path'];
-                        $itm->name = "local-".crc32($script['path']).mt_rand(100, 999);
+                        $this->auditLog("script.execute", $script, $DBServer);
+                        
+                        $manualLog = new OrchestrationLogManualScript($script['execution_id'], $msg->serverId);
+                        $manualLog->userId    = $this->getUser()->getId();
+                        $manualLog->userEmail = $this->getUser()->getEmail();
+                        $manualLog->added     = new DateTime('now', new DateTimeZone('UTC'));
+                        $manualLog->save();
                     }
-                    $itm->executionId = $script['execution_id'];
-
-                    $msg->scripts = array($itm);
-                    $msg->setGlobalVariables($DBServer, true);
-
-                    /*
-                    if ($DBServer->IsSupported('2.5.12')) {
-                        $DBServer->scalarizr->system->executeScripts(
-                            $msg->scripts,
-                            $msg->globalVariables,
-                            $msg->eventName,
-                            $msg->roleName
-                        );
-                    } else
-                        */$DBServer->SendMessage($msg, false, true);
                 }
             }
 

@@ -14,6 +14,7 @@ use HostDownEvent;
 use HostInitEvent;
 use SERVER_PROPERTIES;
 use Exception;
+use FarmLogMessage;
 
 class CloudstackObserver extends AbstractEventObserver
 {
@@ -93,9 +94,11 @@ class CloudstackObserver extends AbstractEventObserver
         if (!in_array($event->DBServer->platform, array(\SERVER_PLATFORMS::CLOUDSTACK, \SERVER_PLATFORMS::IDCF))) {
             return;
         }
+
         if ($event->DBServer->IsRebooting()) {
             return;
         }
+
         try {
             $DBFarm = DBFarm::LoadByID($this->FarmID);
 
@@ -107,10 +110,12 @@ class CloudstackObserver extends AbstractEventObserver
                 $requestObject->ipaddress = $event->DBServer->remoteIp;
                 $ipInfo = $cs->listPublicIpAddresses($requestObject);
                 $info = !empty($ipInfo[0]) ? $ipInfo[0] : null;
+
                 if (!empty($info->isstaticnat)) {
                     if ($info->virtualmachineid == $event->DBServer->GetCloudServerID()) {
-                        $this->Logger->warn(new \FarmLogMessage($this->FarmID,
-                            sprintf(_("Calling disableStaticNat for IP: %s"), $event->DBServer->remoteIp)
+                        $this->Logger->warn(new FarmLogMessage(
+                            $event->DBServer,
+                            sprintf(_("Calling disableStaticNat for IP: %s"), !empty($event->DBServer->remoteIp) ? $event->DBServer->remoteIp : null)
                         ));
 
                         $cs->firewall->disableStaticNat($info->id);
@@ -164,7 +169,7 @@ class CloudstackObserver extends AbstractEventObserver
             $cloudLocation = $event->DBServer->GetCloudLocation();
 
             if (empty($sharedIpId)) {
-                $sharedIpId = $environment->cloudCredentials($event->DBServer->platform)->properties[Entity\CloudCredentialsProperty::CLOUDSTACK_SHARED_IP_ID . ".{$cloudLocation}"];
+                $sharedIpId = $environment->keychain($event->DBServer->platform)->properties[Entity\CloudCredentialsProperty::CLOUDSTACK_SHARED_IP_ID . ".{$cloudLocation}"];
             }
 
             if (!$sharedIpId) {
@@ -174,7 +179,7 @@ class CloudstackObserver extends AbstractEventObserver
             $cs = $environment->cloudstack($event->DBServer->platform);
 
             // Create port forwarding rules for scalarizr
-            $port = $environment->cloudCredentials($event->DBServer->platform)->properties[Entity\CloudCredentialsProperty::CLOUDSTACK_SZR_PORT_COUNTER . ".{$cloudLocation}.{$sharedIpId}"];
+            $port = $environment->keychain($event->DBServer->platform)->properties[Entity\CloudCredentialsProperty::CLOUDSTACK_SZR_PORT_COUNTER . ".{$cloudLocation}.{$sharedIpId}"];
             if (!$port) {
                 $port1 = 30000;
                 $port2 = 30001;
@@ -236,12 +241,16 @@ class CloudstackObserver extends AbstractEventObserver
                 SERVER_PROPERTIES::CUSTOM_SSH_PORT => $port4
             ));
 
-            $environment->cloudCredentials($event->DBServer->platform)->properties->saveSettings([
+            $environment->keychain($event->DBServer->platform)->properties->saveSettings([
                 Entity\CloudCredentialsProperty::CLOUDSTACK_SZR_PORT_COUNTER . ".{$cloudLocation}.{$sharedIpId}" => $port4
             ]);
         } catch (Exception $e) {
-            $this->Logger->fatal(new \FarmLogMessage($this->FarmID,
-                sprintf(_("Cloudstack handler failed: %s."), $e->getMessage())
+            $this->Logger->fatal(new FarmLogMessage(
+                !empty($this->FarmID) ? $this->FarmID : null,
+                sprintf(_("Cloudstack handler failed: %s."), $e->getMessage()),
+                !empty($event->DBServer->serverId) ? $event->DBServer->serverId : null,
+                !empty($event->DBServer->envId) ? $event->DBServer->envId : null,
+                !empty($event->DBServer->farmRoleId) ? $event->DBServer->farmRoleId : null
             ));
         }
     }

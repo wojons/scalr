@@ -29,17 +29,11 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                 labelWidth: 90
             },
             items: [{
-                xtype: 'component',
-                itemId: 'nameReadonly',
-                cls: 'x-fieldset-subheader x-fieldset-subheader-no-text-transform',
-                hidden: true
-            },{
                 xtype: 'textfield',
                 name: 'name',
                 itemId: 'name',
                 fieldLabel: 'Name',
                 vtype: 'rolename',
-                hideInputOnReadOnly: true,
                 allowBlank: false
             },{
                 xtype: 'fieldcontainer',
@@ -108,18 +102,31 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                     }
                 }]
             },{
+                xtype: 'displayfield',
+                itemId: 'osReadonly',
+                fieldLabel: 'OS',
+                hidden: true,
+                renderer: function(value) {
+                    var os = Scalr.utils.getOsById(value);
+                    if (os) {
+                        return '<img src="'+Ext.BLANK_IMAGE_URL+'" title="" class="x-icon-osfamily-small x-icon-osfamily-small-'+os.family+'" />&nbsp;' + os.name
+                    } else {
+                        return value;
+                    }
+                }
+            },{
                 xtype: 'combo',
                 name: 'catId',
                 valueField: 'id',
                 displayField: 'name',
                 editable: false,
-                hideInputOnReadOnly: true,
                 store: {
-                    fields: ['id', 'name'],
+                    fields: ['id', 'name', 'scope'],
                     proxy: 'object'
                 },
                 fieldLabel: 'Category',
-                allowBlank: false
+                allowBlank: false,
+                plugins: {ptype: 'fieldinnericonscope', tooltipScopeType: 'rolecategory'},
             }, {
                 xtype: 'displayfield',
                 name: 'created',
@@ -151,7 +158,7 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                 plugins: {
                     ptype: 'fieldicons',
                     align: 'right',
-                    icons: [{id: 'info', tooltip: 'Make this a Quick Start Role.'}]
+                    icons: [{id: 'info', tooltip: 'Make this a Quick Start Role. Available only if Scalarizr usage is enabled.'}]
                 }
             }, {
                 xtype: 'buttongroupfield',
@@ -186,21 +193,65 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                     labelWidth: 150
                 },
                 items: [{
-                    xtype: 'container',
+                    xtype: 'component',
+                    cls: 'x-fieldset-subheader',
+                    html: 'Automation'
+                },{
+                    xtype: 'buttongroupfield',
+                    name: 'isScalarized',
+                    itemId: 'isScalarized',
+                    fieldLabel: 'Use Scalarizr',
+                    value: 1,
+                    maxWidth: 280,
+                    defaults: {
+                        width: 60
+                    },
+                    items: [{
+                        text: 'Yes',
+                        value: 1
+                    },{
+                        text: 'No',
+                        value: 0
+                    }],
+                    plugins: {
+                        ptype: 'fieldicons',
+                        align: 'right',
+                        position: 'outer',
+                        icons: [{
+                            id: 'info',
+                            tooltip: 'Using Scalarizr (Scalr agent) is optional, but gives you access to additional features in Scalr, including Orchestration, Autoscaling and many others.'
+                        }]
+                    },
+                    listeners: {
+                        change: function(comp, value) {
+                            var ct = this.up('roleeditoverview');
+                            if (value == 0) {
+                                ct.down('#automation').hide();
+                                ct.down('#configureAutomation').disable().setTooltip('Available only if Scalarizr usage is enabled.');
+                                ct.down('[name="isQuickStart"]').disable().setValue(0);
+                                ct.down('#automation').store.loadData([]);
+                                ct.fireEvent('behaviorschange', []);
+                            } else {
+                                ct.down('#automation').show();
+                                ct.down('#configureAutomation').enable().setTooltip('');
+                                ct.down('[name="isQuickStart"]').enable();
+                            }
+                        }
+                    }
+                },{
+                    xtype: 'fieldcontainer',
+                    fieldLabel: 'Built-in automation',
                     layout: 'hbox',
                     items: [{
                         xtype: 'component',
-                        itemId: 'topRightcol',
-                        //hidden: true,
-                        cls: 'x-fieldset-subheader',
-                        html: 'Software and built-in automation'
-                    },{
-                        xtype: 'tbfill',
+                        itemId: 'emptyAutomation',
+                        hidden: true,
+                        html: '&mdash;'
                     },{
                         xtype: 'button',
                         itemId: 'configureAutomation',
+                        width: 60,
                         iconCls: 'x-btn-icon-settings',
-                        margin: '0 0 0 10',
                         handler: function() {
                             var behaviors = [
                                     {name: 'mysql2', disable: {behavior: ['postgresql', 'redis', 'mongodb', 'percona','mariadb'], os:[{family: 'centos', version: /^7/i}]}},
@@ -316,38 +367,22 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                         }
                     }]
                 },{
-                    xtype: 'displayfield',
-                    itemId: 'osReadonly',
-                    fieldLabel: 'Operating system',
-                    hidden: true,
-                    renderer: function(value) {
-                        var os = Scalr.utils.getOsById(value);
-                        if (os) {
-                            return '<img src="'+Ext.BLANK_IMAGE_URL+'" title="" class="x-icon-osfamily-small x-icon-osfamily-small-'+os.family+'" />&nbsp;' + os.name
-                        } else {
-                            return value;
-                        }
-                    }
-                },{
-                    xtype: 'fieldcontainer',
-                    fieldLabel: 'Built-in automation',
-                    items: {
-                        xtype: 'dataview',
-                        itemId: 'automation',
-                        itemSelector: '.x-item',
-                        store: Ext.create('Ext.data.ArrayStore', {
-                            fields: ['name']
-                        }),
-                        style: 'line-height:26px',
-                        tpl  : new Ext.XTemplate(
-                            '<tpl for=".">',
-                                '<tpl if="values.name!=\'base\'">',
-                                    '<img style="margin:0 8px 0 0" src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-role-small x-icon-role-small-{name}" data-qtip="{[Scalr.utils.beautifyBehavior(values.name, true)]}"/>',
-                                '<tpl elseif="xcount==1">&mdash;',
-                                '</tpl>',
-                            '</tpl>'
-                        )
-                    }
+                    xtype: 'dataview',
+                    itemId: 'automation',
+                    itemSelector: '.x-item',
+                    store: Ext.create('Ext.data.ArrayStore', {
+                        fields: ['name']
+                    }),
+                    style: 'line-height:26px',
+                    tpl  : new Ext.XTemplate(
+                        '<tpl for=".">',
+                            '<tpl if="values.name!=\'base\'">',
+                                '<img style="margin:0 8px 0 0" src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-role-small x-icon-role-small-{name}" data-qtip="{[Scalr.utils.beautifyBehavior(values.name, true)]}"/>',
+                            //'<tpl elseif="xcount==1">&mdash;',
+                            '</tpl>',
+                        '</tpl>'
+                    )
+
                 }]
             }]
         },{
@@ -367,7 +402,7 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                 size: 'large',
                 autoSelect: true,
                 //hidden: true,
-                listeners: {
+                /*listeners: {
                     selectlocation: function(location){
                         var grid = this.next(),
                             res = grid.store.query('location', location, false, false, true),
@@ -378,7 +413,7 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                             selModel.setLastFocused(res.first());
                         }
                     }
-                }
+                }*/
             },{
                 xtype: 'displayfield',
                 name: 'usage',
@@ -639,7 +674,7 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                         fieldLabel: 'Chef server',
                         renderer: function(value, comp) {
                             if (value) {
-                                Scalr.cachedRequest.load({url: '/services/chef/servers/xListServers/'},function(data, status) {
+                                Scalr.cachedRequest.load({url: '/services/chef/xListServers/'},function(data, status) {
                                     if (comp.rendered && !comp.isDestroyed && status) {
                                         Ext.Object.each(data, function(key, chefServer){
                                             if (chefServer.id == value) {
@@ -706,8 +741,6 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                     var isNewRole = !params['role']['roleId'];
                     this.down('[name="catId"]').store.load({data: params.categories});
                     if (!isNewRole) {
-                        this.down('#nameReadonly').show().update(params['role']['name']);
-                        this.down('#name').hide().disable();
                         this.down('#osReadonly').show().setValue(params['role']['osId']);
                         this.down('#os').hide();
                         this.setFieldValues({
@@ -717,37 +750,48 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
                             isQuickStart: params['role']['isQuickStart'],
                             isDeprecated: params['role']['isDeprecated'],
                             created: params['role']['addedByEmail'] ? '<i>' + params['role']['addedByEmail'] + '</i>' + (params['role']['dtadded'] ? ' on <i>' + params['role']['dtadded'] + '</i>' : '') : '-',
-                            usage: '<span style="color:green;font-size:140%">' + params['roleUsage']['farms'] + '</span> farm(s) with ' + '<span style="color:green;font-size:140%">' + params['roleUsage']['instances'] + '</span> running instance(s) of this role'
+                            usage: '<span style="color:green;font-size:140%">' + params['roleUsage']['farms'] + '</span> farm(s) with ' + '<span style="color:green;font-size:140%">' + params['roleUsage']['instances'] + '</span> running instance(s) of this role',
+                            isScalarized: params['role']['isScalarized']
                         });
                     } else {
                         if (params['role']['osId']) {
                             this.down('#osFamily').setValue(Scalr.utils.getOsById(params['role']['osId'], 'family'));
                             this.down('#osId').setValue(params['role']['osId']);
+                        } else {
+                            this.down('#images').view.findFeature('addbutton').setDisabled(true, 'Please select Role OS before adding Images');
                         }
+                        
+                        this.setFieldValues({
+                            isQuickStart: 0,
+                            isDeprecated: 0,
+                            isScalarized: params['role']['isScalarized']
+                        });
 
-                        this.down('[name="isQuickStart"]').setValue(0);
-                        this.down('[name="isDeprecated"]').setValue(0);
                         this.down('[name="created"]').hide();
                         this.down('[name="usage"]').hide();
                     }
 
                     var fields = this.down('#roleSettings').query('[isFormField]');
                     Ext.Array.each(fields, function(item){
-                        if (item.name !== 'description' && item.name !== 'isQuickStart' && item.name !== 'isDeprecated') {
+                        if (!Ext.Array.contains(['name', 'catId', 'description', 'isQuickStart', 'isDeprecated'], item.name)) {
                             item.setReadOnly(!isNewRole, false);
-                        }
-                        if (item.name === 'catId') {
-                            item.allowBlank = !isNewRole;
                         }
                     });
 
+                    var behaviors = params['role']['behaviors'] || [];
                     this.down('#configureAutomation').setVisible(isNewRole);
-                    this.down('#automation').store.loadData(isNewRole ? [['base']] : Ext.Array.map(params['role']['behaviors'], function(item){return [item];}));
+                    this.down('#emptyAutomation').setVisible(!isNewRole && (behaviors.length === 0 || behaviors.length === 1 && behaviors[0] === 'base'));
+
+                    this.down('#automation').store.loadData(isNewRole ? [['base']] : Ext.Array.map(behaviors, function(item){return [item];}));
 
                     this.down('#scripts').getStore().loadEvents(Ext.apply({'*': {name: '*', description: 'All events', scope: ''}}, params['scriptData']['events']));
 
                     this.down('#osId').on('change', function(comp, value){
-                        this.up('roleeditoverview').fireEvent('osidchange', value);
+                        this.down('#images').view.findFeature('addbutton').setDisabled(!value, value ? '' : 'Please select Role OS before adding Images');
+                        comp.up('roleeditoverview').fireEvent('osidchange', value);
+                    }, this);
+                    this.down('#isScalarized').on('change', function(comp, value){
+                        this.up('roleeditoverview').fireEvent('isscalarizedchange', value);
                     });
                 },
                 single: true
@@ -767,10 +811,14 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
             showtab: {
                 fn: function(params){
                     var images = [],
-                        platformsAdded = {};
+                        platformsAdded = {},
+                        hasNonScalarizedImage = false;
                     Ext.Array.each(params['role']['images'], function(value) {
                         images.push(value);
                         platformsAdded[value['platform']] = true;
+                        if (value['isScalarized'] != 1 && value['hasCloudInit'] != 1) {
+                            hasNonScalarizedImage = true;
+                        }
                     });
                     if (Scalr.user.type !== 'ScalrAdmin') {
                         Ext.Object.each(Scalr.platforms, function(key, value) {
@@ -793,6 +841,13 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
 
                     this.down('#scripts').refreshScripts(params);
                     this.down('#chefPanel').refreshChefSettings(params);
+
+                    if (!params['role']['roleId']) {
+                        this.down('#isScalarized').setReadOnly(hasNonScalarizedImage);
+                        this.down('#osFamily').setReadOnly(params['role']['images'].length > 0);
+                        this.down('#osId').setReadOnly(params['role']['images'].length > 0);
+
+                    }
                 }
             }
         });
@@ -812,6 +867,8 @@ Ext.define('Scalr.ui.RoleDesignerTabOverview', {
         var valid = true;
         if (!params['roleId']) {
             valid = this.down('#roleSettings').isValid();
+        } else {
+            valid = this.down('[name="name"]').isValid() && this.down('[name="catId"]').isValid();
         }
         return valid;
     }

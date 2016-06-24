@@ -197,6 +197,7 @@ Ext.define('Scalr.ui.ComboAddNewPlugin', {
     url: '',
     postUrl: '',
     disabled: false,
+    isRedirect: false,
     applyNewValue: true,
 
     init: function(comp) {
@@ -209,12 +210,12 @@ Ext.define('Scalr.ui.ComboAddNewPlugin', {
 
                 var me = this,
                     picker = me.getPicker(),
-                    heightAbove = me.getPosition()[1] - Ext.getBody().getScroll().top,
-                    heightBelow = Ext.dom.Element.getDocumentHeight() - heightAbove - me.getHeight(),
-                    space = Math.max(heightAbove, heightBelow);
+                    pickerEl = picker.getEl(),
+                    itemContainerEl = pickerEl.down('.x-boundlist-list-ct'),
+                    itemContainerElHeight = itemContainerEl.getHeight();
 
-                if (picker.getHeight() > space - (5 + 24)) {
-                    picker.setHeight(space - (5 + 24)); // have some leeway so we aren't flush against
+                if (pickerEl.down('.x-boundlist-addnew').isVisible() && itemContainerElHeight >= pickerEl.getHeight()) {
+                    itemContainerEl.setHeight(itemContainerElHeight - 32);
                 }
             }
         });
@@ -261,7 +262,7 @@ Ext.define('Scalr.ui.ComboAddNewPlugin', {
     },
 
     handler: function() {
-        Scalr.event.fireEvent('modal', '#' + this.url + this.postUrl);
+        Scalr.event.fireEvent(this.isRedirect ? 'redirect' : 'modal', '#' + this.url + this.postUrl, false, this.redirectParams);
     }
 });
 
@@ -1665,16 +1666,26 @@ Ext.define('Scalr.ui.LeftMenu', {
                     itemId: 'environments',
                     href: '#/account/analytics/environments',
                     text: 'Environments'
-                },{
-                    itemId: 'projects',
-                    href: '#/account/analytics/projects',
-                    text: 'Projects'
                 });
-                if (Scalr.isAllowed('ANALYTICS_ACCOUNT', 'allocate-budget')) {
+                if (Scalr.isAllowed('ANALYTICS_PROJECTS_ACCOUNT')) {
+                    config.items.push({
+                        itemId: 'projects',
+                        href: '#/account/analytics/projects',
+                        text: 'Projects'
+                    });
+                }
+                if (Scalr.isAllowed('ANALYTICS_PROJECTS_ACCOUNT', 'allocate-budget')) {
                     config.items.push({
                         itemId: 'budgets',
                         href: '#/account/analytics/budgets',
                         text: 'Budgets'
+                    });
+                }
+                if (Scalr.isAllowed('ANALYTICS_PROJECTS_ACCOUNT')) {
+                    config.items.push({
+                        itemId: 'notifications',
+                        href: '#/account/analytics/notifications',
+                        text: 'Notifications'
                     });
                 }
                 break;
@@ -2343,7 +2354,8 @@ Ext.define('Scalr.ui.StoreProxyCachedRequest', {
             resultSet,
             records,
             root = me.getRoot(),
-            data = me.getData();
+            data = me.getData(),
+            requestParams;
         if (data) {
             resultSet = me.getReader().read(me.getData());
             if (operation.process(resultSet, null, null, false) !== false) {
@@ -2354,11 +2366,15 @@ Ext.define('Scalr.ui.StoreProxyCachedRequest', {
                 operation.setCompleted();
             }
         } else {
+            requestParams = {
+                url: me.getUrl(),
+                params: Ext.Object.getSize(me.params) ? me.params : me.extraParams
+            };
+            if (operation.config.clearCache) {
+                Scalr.CachedRequestManager.get(me.getCrscope()).setExpired(requestParams);
+            }
             Scalr.CachedRequestManager.get(me.getCrscope()).load(
-                {
-                    url: me.getUrl(),
-                    params: Ext.Object.getSize(me.params) ? me.params : me.extraParams
-                },
+                requestParams,
                 function(data, status, cacheId, response) {
                     var filterFn,
                         testRe,
@@ -2465,11 +2481,17 @@ Ext.define('Scalr.ui.ColoredStatus', {
             'Initializing': {
                 cls: 'yellow',
                 iconCls: 'running',
-                text: 'The server has finished booting. Scalarizr has fired the HostInit event and is now configuring the server.'
+                text:
+                    function(data){
+                        return 'The server has finished booting.' + (data.isScalarized == 1 ? ' Scalarizr has fired the HostInit event and is now configuring the server.' : '');
+                    }
             },
             'Running': {
                 cls: 'green',
-                text: 'The server has finished initializing. Scalarizr has fired the HostUp event, and will continue to process further orchestration events.'
+                text:
+                    function(data){
+                        return 'The server has finished initializing.' + (data.isScalarized == 1 ? ' Scalarizr has fired the HostUp event, and will continue to process further orchestration events.' : '');
+                    }
             },
             'Pending terminate': {
                 text: 'Scalr has scheduled this server for termination. No API call to your Cloud Platform has been made yet.'
@@ -2770,6 +2792,12 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 text: 'The instance is being rebooted because of a customer request or an Amazon RDS ' +
                     'process that requires the rebooting of the instance.'
             },
+            'maintenance': {
+                cls: 'yellow',
+                iconCls: 'running',
+                title: 'Maintenance',
+                text: 'Amazon RDS is applying a maintenance update to the DB instance.'
+            },
             'modifying': {
                 cls: 'yellow',
                 iconCls: 'running',
@@ -2789,6 +2817,12 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 text: 'The master credentials for the instance are being reset ' +
                     'because of a customer request to reset them.'
             },
+            'upgrading': {
+                cls: 'yellow',
+                iconCls: 'running',
+                title: 'Upgrading',
+                text: 'The database engine version is being upgraded.'
+            },
             'deleting': {
                 iconCls: 'running',
                 title: 'Deleting',
@@ -2804,6 +2838,18 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 title: 'Failed',
                 text: 'The instance has failed and Amazon RDS was unable to recover it. ' +
                     'Perform a point-in-time restore to the latest restorable time of the instance to recover the data.'
+            },
+            'inaccessible-encryption-credentials': {
+                cls: 'red',
+                iconCls: 'failed',
+                title: 'Inaccessible encryption credentials',
+                text: 'The KMS key used to encrypt or decrypt the DB instance could not be accessed.'
+            },
+            'incompatible-credentials': {
+                cls: 'red',
+                iconCls: 'failed',
+                title: 'Incompatible credentials',
+                text: 'The supplied CloudHSM username or password is incorrect. Please update the CloudHSM credentials for the DB instance.'
             },
             'incompatible-network': {
                 cls: 'red',
@@ -2841,6 +2887,12 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 text: 'Amazon RDS is unable to do a point-in-time restore. ' +
                     'Common causes for this status include using temp tables or using MyISAM tables.'
             },
+            'restore-error': {
+                cls: 'red',
+                iconCls: 'failed',
+                title: 'Restore error',
+                text: 'The DB instance encountered an error attempting to restore to a point-in-time or from a snapshot.'
+            },
             'storage-full': {
                 cls: 'red',
                 iconCls: 'failed',
@@ -2849,23 +2901,23 @@ Ext.define('Scalr.ui.ColoredStatus', {
                     'This is a critical status and should be remedied immediately; ' +
                     'you should scale up your storage by modifying the DB instance. Set CloudWatch alarms to ' +
                     'warn you when storage space is getting low so you don\'t run into this situation.'
-            },
+            }
         },
         rdsdbcluster: {
             'creating': {
                 cls: 'yellow',
                 title: 'Creating',
-                text: 'The instance is being created. The instance is inaccessible while it is being created.'
+                text: 'The cluster is being created. The cluster is inaccessible while it is being created.'
             },
             'backing-up': {
                 cls: 'yellow',
                 title: 'Backing up',
-                text: 'The instance is currently being backed up.'
+                text: 'The cluster is currently being backed up.'
             },
             'available': {
                 cls: 'green',
                 title: 'Available',
-                text: 'The instance is healthy and available.'
+                text: 'The cluster is healthy and available.'
             },
             'pending': {
                 cls: 'yellow',
@@ -2874,48 +2926,70 @@ Ext.define('Scalr.ui.ColoredStatus', {
             'rebooting': {
                 cls: 'yellow',
                 title: 'Rebooting',
-                text: 'The instance is being rebooted because of a customer request or an Amazon RDS ' +
-                    'process that requires the rebooting of the instance.'
+                text: 'The cluster is being rebooted because of a customer request or an Amazon RDS ' +
+                    'process that requires the rebooting of the cluster.'
+            },
+            'maintenance': {
+                cls: 'yellow',
+                title: 'Maintenance',
+                text: 'Amazon RDS is applying a maintenance update to the DB cluster.'
             },
             'modifying': {
                 cls: 'yellow',
                 title: 'Modifying',
-                text: 'The instance is being modified because of a customer request to modify the instance.'
+                text: 'The cluster is being modified because of a customer request to modify the cluster.'
             },
             'renaming': {
                 cls: 'yellow',
                 title: 'Renaming',
-                text: 'The instance is being renamed because of a customer request to rename it.'
+                text: 'The cluster is being renamed because of a customer request to rename it.'
             },
             'resetting-master-credentials': {
                 cls: 'yellow',
                 title: 'Resetting master credentials',
-                text: 'The master credentials for the instance are being reset ' +
+                text: 'The master credentials for the cluster are being reset ' +
                     'because of a customer request to reset them.'
+            },
+            'upgrading': {
+                cls: 'yellow',
+                title: 'Upgrading',
+                text: 'The database engine version is being upgraded.'
             },
             'deleting': {
                 title: 'Deleting',
-                text: 'The instance is being deleted.'
+                text: 'The cluster is being deleted.'
             },
             'deleted': {
                 title: 'Deleted',
-                text: 'The instance is completely deleted.'
+                text: 'The cluster is completely deleted.'
             },
             'failed': {
                 cls: 'red',
                 iconCls: 'failed',
                 title: 'Failed',
-                text: 'The instance has failed and Amazon RDS was unable to recover it. ' +
-                    'Perform a point-in-time restore to the latest restorable time of the instance to recover the data.'
+                text: 'The cluster has failed and Amazon RDS was unable to recover it. ' +
+                    'Perform a point-in-time restore to the latest restorable time of the cluster to recover the data.'
+            },
+            'inaccessible-encryption-credentials': {
+                cls: 'red',
+                iconCls: 'failed',
+                title: 'Inaccessible encryption credentials',
+                text: 'The KMS key used to encrypt or decrypt the DB cluster could not be accessed.'
+            },
+            'incompatible-credentials': {
+                cls: 'red',
+                iconCls: 'failed',
+                title: 'Incompatible credentials',
+                text: 'The supplied CloudHSM username or password is incorrect. Please update the CloudHSM credentials for the DB cluster.'
             },
             'incompatible-network': {
                 cls: 'red',
                 iconCls: 'failed',
                 title: 'Incompatible network',
-                text: 'Amazon RDS is attempting to perform a recovery action on an instance but is unable to do ' +
+                text: 'Amazon RDS is attempting to perform a recovery action on an cluster but is unable to do ' +
                     'so because the VPC is in a state that is preventing the action from being completed. ' +
                     'This status can occur if, for example, all available IP addresses in a subnet were in use and ' +
-                    'Amazon RDS was unable to get an IP address for the DB instance.'
+                    'Amazon RDS was unable to get an IP address for the DB cluster.'
             },
             'incompatible-option-group': {
                 cls: 'red',
@@ -2923,18 +2997,18 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 title: 'Incompatible option group',
                 text: 'Amazon RDS attempted to apply an option group change but was unable to do so, ' +
                     'and Amazon RDS was unable to roll back to the previous option group state. ' +
-                    'Consult the Recent Events list for the DB instance for more information. ' +
+                    'Consult the Recent Events list for the DB cluster for more information. ' +
                     'This status can occur if, for example, the option group contains an option such as TDE ' +
-                    'and the DB instance does not contain encrypted information.'
+                    'and the DB cluster does not contain encrypted information.'
             },
             'incompatible-parameters': {
                 cls: 'red',
                 iconCls: 'failed',
                 title: 'Incompatible parameters',
-                text: 'Amazon RDS was unable to start up the DB instance because the parameters specified ' +
-                    'in the instance\'s DB parameter group were not compatible. ' +
-                    'Revert the parameter changes or make them compatible with the instance to regain access ' +
-                    'to your instance. Consult the Recent Events list for the DB instance for more information ' +
+                text: 'Amazon RDS was unable to start up the DB cluster because the parameters specified ' +
+                    'in the cluster\'s DB parameter group were not compatible. ' +
+                    'Revert the parameter changes or make them compatible with the cluster to regain access ' +
+                    'to your cluster. Consult the Recent Events list for the DB cluster for more information ' +
                     'about the incompatible parameters.'
             },
             'incompatible-restore': {
@@ -2944,15 +3018,21 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 text: 'Amazon RDS is unable to do a point-in-time restore. ' +
                     'Common causes for this status include using temp tables or using MyISAM tables.'
             },
+            'restore-error': {
+                cls: 'red',
+                iconCls: 'failed',
+                title: 'Restore error',
+                text: 'The DB cluster encountered an error attempting to restore to a point-in-time or from a snapshot.'
+            },
             'storage-full': {
                 cls: 'red',
                 iconCls: 'failed',
                 title: 'Storage full',
-                text: 'The instance has reached its storage capacity allocation. ' +
+                text: 'The cluster has reached its storage capacity allocation. ' +
                     'This is a critical status and should be remedied immediately; ' +
-                    'you should scale up your storage by modifying the DB instance. Set CloudWatch alarms to ' +
+                    'you should scale up your storage by modifying the DB cluster. Set CloudWatch alarms to ' +
                     'warn you when storage space is getting low so you don\'t run into this situation.'
-            },
+            }
         },
         os: {
             'active': {
@@ -2972,9 +3052,38 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 text: 'This API key is active.'
             },
             'inactive': {
-                title: 'Inactive',
-                text: 'This API key is inactive'
+                title: 'Disabled',
+                text: 'This API key is disabled'
             }
+        },
+        rolecategory: {
+            'In use': {
+                cls: 'green',
+                text: 'This <b>Role Category</b> is currently used.'
+            },
+            'Not used': {
+                text: 'This <b>Role Category</b> is currently not used.'
+            }
+        },
+        instancehealth: {
+            'InService': {
+                title: 'InService',
+                cls: 'green'
+            },
+            'OutOfService': {
+                title: 'OutOfService'
+            },
+            'Unknown': {
+                title: 'Unknown'
+            }
+        },
+        service: {
+            'unknown': {cls: 'transparent', title: '&nbsp;'},
+            'running': {cls: 'green', title: 'Running'},
+            'scheduled': {cls: 'green', title: 'Scheduled'},
+            'idle': {cls: 'blue', title: 'Idle'},
+            'failed': {cls: 'red', title: 'Failed'},
+            'disabled': {cls: '', title: 'Disabled'}
         }
     },
 
@@ -3001,7 +3110,7 @@ Ext.define('Scalr.ui.ColoredStatus', {
             renderData['cls'] = statusConfig['cls'];
             renderData['iconCls'] = renderData['iconCls'] || statusConfig['iconCls'];
             if (statusConfig['text'] && !renderData['text']) {
-                renderData['text'] = statusConfig['text'];
+                renderData['text'] = Ext.isFunction(statusConfig['text']) ? statusConfig['text'](config.data) : statusConfig['text'];
             }
             if (statusConfig['title']) {
                 renderData['title'] = statusConfig['title'];
@@ -3039,21 +3148,19 @@ Ext.define('Scalr.ui.ColoredStatus', {
                     result['text'] = Ext.String.htmlEncode(Ext.String.htmlEncode(data['termination_error']));
                 }
             } else {
-                if (data['initDetailsSupported']) {
-                    if (data['isInitFailed']) {
+                if (data['isInitFailed']) {
+                    result['link'] = linkOperationStatus;
+                    result['linkText'] = 'Get error details';
+                    result['status'] = 'Failed';
+                } else {
+                    if (result['status'] === 'Pending' || result['status'] === 'Initializing') {
+                        result['link'] = linkOperationStatus;
+                        result['linkText'] = 'View progress';
+                    }
+                    if (data['launch_error'] == 1) {
+                        result['iconCls'] = 'failed';
                         result['link'] = linkOperationStatus;
                         result['linkText'] = 'Get error details';
-                        result['status'] = 'Failed';
-                    } else {
-                        if (result['status'] === 'Pending' || result['status'] === 'Initializing') {
-                            result['link'] = linkOperationStatus;
-                            result['linkText'] = 'View progress';
-                        }
-                        if (data['launch_error'] == 1) {
-                            result['iconCls'] = 'failed';
-                            result['link'] = linkOperationStatus;
-                            result['linkText'] = 'Get error details';
-                        }
                     }
                 }
                 if (data['launch_error'] != 1 && troubleshootingLinks[result['status']]) {
@@ -3085,7 +3192,7 @@ Ext.define('Scalr.ui.ColoredStatus', {
                 result['status'] = 'Failed';
                 result['text'] = 'Image deletion failed with error: ' + data['statusError'];
                 result['cls'] = 'red';
-            } else if (data['status'] == 'delete') {
+            } else if (data['status'] == 'pending_delete') {
                 result['status'] = 'Deleting';
                 result['cls'] = 'yellow';
                 result['text'] = 'Scalr is currently deleting this <b>image</b>.';
@@ -3264,6 +3371,7 @@ Ext.define('Ext.form.field.plugin.Icons', {
     align: 'left',
     childElName: 'iconsEl',
     cls: 'x-field-icons',
+    labelCls: 'x-label-with-fieldicon',
 
     init: function(field) {
         var me = this,
@@ -3330,6 +3438,7 @@ Ext.define('Ext.form.field.plugin.Icons', {
             html.push('<img src="' + Ext.BLANK_IMAGE_URL + '" data-iconid="' + iconId + '" class="x-icon-' + (icons[iconId]['iconCls'] || iconId) + '" data-qclickable="1" data-qtip="' + Ext.String.htmlEncode(icons[iconId]['tooltip'] || '') + '" ' + (icons[iconId]['hidden'] ? 'style="display:none"' : '') + ' />');
             me.visibleIconsCount += icons[iconId]['hidden'] ? 0 : 1;
         });
+        me.initialVisibleIconsCount = me.visibleIconsCount;
         html.push('</span>');
 
         field[destination] = html.join('') + (field[destination] || '');
@@ -3340,6 +3449,16 @@ Ext.define('Ext.form.field.plugin.Icons', {
             me.refreshIconsStyle();
         }, field, {priority: 1});
 
+        if (me.position === 'label') {
+            field.on('beforefieldlabelchange', function(field, opts) {
+                me.visibleIconsCount = me.initialVisibleIconsCount;
+                opts.label += this.afterLabelTextTpl;
+            });
+            field.on('fieldlabelchange', function (field) {
+                this.iconsEl = this.el.down('.' + me.cls);
+                me.refreshIconsStyle();
+            })
+        }
     },
 
     extendField: function() {
@@ -3364,6 +3483,9 @@ Ext.define('Ext.form.field.plugin.Icons', {
 
         switch (this.position) {
             case 'label':
+                if (field.labelEl) {
+                    field.labelEl[this.visibleIconsCount ? 'addCls' : 'removeCls'](this.labelCls);
+                }
                 break;
             case 'over':
                 break;
@@ -3574,6 +3696,17 @@ Ext.define('Ext.form.field.plugin.InnerIconScope', {
     inputPadding: 28
 });
 
+Ext.define('Ext.form.field.plugin.InnerIconRdsInstanceEngine', {
+    extend: 'Ext.form.field.plugin.InnerIcon',
+    alias: 'plugin.fieldinnericonrds',
+    pluginId: 'fieldinnericonrds',
+
+    iconClsPrefix: 'x-icon-engine-small x-icon-engine-small-',
+    field: 'id',
+    innerIconStyle: 'top: 5px; left: 7px;',
+    inputPadding: 34
+});
+
 Ext.define('Ext.form.field.plugin.InnerIconCloud', {
     extend: 'Ext.form.field.plugin.InnerIcon',
     alias: 'plugin.fieldinnericoncloud',
@@ -3598,10 +3731,12 @@ Ext.define('Ext.form.field.plugin.InnerIconCloud', {
 
         field.picker = null;
 
+        me.updateFieldIcon();
+
         return true;
     },
 
-    updateFieldIcon: function(newValue) {
+    updateFieldIcon: function() {
         var me = this,
             field = me.getCmp(),
             platform = me.platform;
@@ -3611,7 +3746,7 @@ Ext.define('Ext.form.field.plugin.InnerIconCloud', {
             delete me._currentCls;
         }
 
-        if (!Ext.isEmpty(newValue) && !Ext.isEmpty(platform)) {
+        if (!Ext.isEmpty(platform)) {
             me._currentCls = me.iconClsPrefix + platform;
             me.innerIconEl.addCls(me._currentCls);
             me.innerIconEl.set({'data-qtip': Scalr.utils.getPlatformName(platform) + me.tooltipSuffix});
@@ -4069,4 +4204,107 @@ Ext.define('Scalr.ui.FormRepeatableTaskPlugin', {
             });
         });
     }
+});
+
+Ext.define('Scalr.ui.expandEditorPlugin', {
+        extend: 'Ext.plugin.Abstract',
+        alias: 'plugin.expandeditor',
+
+        init: function (cmp) {
+            this.setCmp(cmp);
+
+            var expandEditor = {
+                layout: 'fit',
+                height: '80%',
+                width: '80%',
+                scrollable: false,
+
+                editorConfig: {
+                    value: '',
+                    readOnly: false
+                },
+
+                listeners: {
+                    beforeclose: function (panel) {
+                        var value = panel.down(cmp.xtype).getValue();
+                        cmp.focus();
+                        cmp.setValue(value);
+                    }
+                },
+
+                items: [{
+                    xtype: cmp.xtype,
+                    hideLabel: true,
+                    validator: function (value) {
+                        if (Ext.isFunction(cmp.validator)) {
+                            return cmp.validator(value);
+                        } else {
+                            return true;
+                        }
+                    },
+                    listeners: {
+                        boxready: function (field) {
+                            var config = field.up().editorConfig;
+                            var editable = cmp.editable !== false;
+
+                            field.emptyText = cmp.emptyText;
+                            field.setValue(config.value);
+                            field.setReadOnly(!editable || config.readOnly);
+                            field.focus();
+                        }
+                    }
+                }],
+
+                dockedItems: [{
+                    xtype: 'container',
+                    dock: 'bottom',
+                    cls: 'x-docked-buttons',
+                    layout: {
+                        type: 'hbox',
+                        pack: 'center'
+                    },
+                    items: [{
+                        xtype: 'button',
+                        text: 'Close',
+                        maxWidth: 140,
+                        handler: function (button) {
+                            button.up('panel').close();
+                        }
+                    }]
+                }]
+            };
+
+            cmp.on({
+                afterrender: function () {
+                    var parentEl = cmp.xtype === 'codemirror' ? cmp.inputEl : cmp.inputWrap;
+                    var expandBtn = parentEl.appendChild({
+                        tag: 'button',
+                        cls: 'x-grid-icon x-grid-icon-expand',
+                        style: {
+                            backgroundColor: 'transparent',
+                            position: 'absolute',
+                            border: 'none',
+                            height: '20px',
+                            width: '20px',
+                            top: '5px',
+                            right: '5px',
+                            zIndex: '9999',
+                            padding: '0'
+                        }
+                    });
+
+                    parentEl.setStyle('position', 'relative');
+
+                    expandBtn.on('click', function () {
+                        Ext.apply(expandEditor.editorConfig, {
+                            value: cmp.getValue(),
+                            readOnly: cmp.readOnly
+                        });
+
+                        Scalr.utils.Window(expandEditor);
+                    });
+                }
+            });
+        }
+
 });

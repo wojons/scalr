@@ -82,7 +82,7 @@ class EnvironmentsTest extends WebTestCase
      * @test
      * @depends testXListEnvironmentsAction
      */
-    public function textXCreateAction()
+    public function testXCreateAction()
     {
         if (!$this->getUser()->isAccountOwner()) {
             $this->markTestSkipped("Specified test user is not allowed to create environments. It should be account owner.");

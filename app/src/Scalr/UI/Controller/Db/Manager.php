@@ -3,6 +3,7 @@
 use Scalr\Acl\Acl;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Model\Entity;
+use Scalr\Service\Aws\Ec2\DataType\CreateVolumeRequestData;
 
 class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
 {
@@ -155,7 +156,7 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                     'volumeType' => $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_TYPE),
                     'size' => $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE)
                 );
-                if ($retval['ebs_settings']['volumeType'] == 'io1') {
+                if ($retval['ebs_settings']['volumeType'] == CreateVolumeRequestData::VOLUME_TYPE_IO1) {
                     $retval['ebs_settings']['iops'] = $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_IOPS);
                 }
             } else {
@@ -163,7 +164,7 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                     'volumeType' => $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_EBS_DISK_TYPE),
                     'size' => $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_DISK_SIZE)
                 );
-                if ($retval['ebs_settings']['volumeType'] == 'io1') {
+                if ($retval['ebs_settings']['volumeType'] == CreateVolumeRequestData::VOLUME_TYPE_IO1) {
                     $retval['ebs_settings']['iops'] = $masterServer->GetFarmRoleObject()->GetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_EBS_DISK_IOPS);
                 }
             }
@@ -357,7 +358,7 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
             'supported'  => !PlatformFactory::isCloudstack($dbFarmRole->Platform) &&
                            (!PlatformFactory::isOpenstack($dbFarmRole->Platform) ||
                              $this->getEnvironment()
-                                  ->cloudCredentials($dbFarmRole->Platform)
+                                  ->keychain($dbFarmRole->Platform)
                                   ->properties[Entity\CloudCredentialsProperty::OPENSTACK_EXT_SWIFT_ENABLED])
         );
         foreach ($data['backups']['history'] as &$h)
@@ -399,10 +400,10 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                 'cloudLocation' => $dbServer->GetCloudLocation(),
                 'serverRole'    => $serverRole,
                 'index'         => $dbServer->index,
-                'disabledServerPermission' => !$this->request->isFarmAllowed($dbFarm, Acl::PERM_FARMS_SERVERS)
+                'disabledServerPermission' => !$this->request->hasPermissions($dbFarm->__getNewFarmObject(), Acl::PERM_FARMS_SERVERS)
             );
 
-            if ($this->request->isFarmAllowed($dbFarm, Acl::PERM_FARMS_STATISTICS)) {
+            if ($this->request->hasPermissions($dbFarm->__getNewFarmObject(), Acl::PERM_FARMS_STATISTICS)) {
                 $serverInfo['monitoring'] = [
                     'farmId'     => $dbFarmRole->FarmID,
                     'farmRoleId' => $dbFarmRole->ID,
@@ -453,7 +454,7 @@ class Scalr_UI_Controller_Db_Manager extends Scalr_UI_Controller
                     } elseif ($data['dbType'] == ROLE_BEHAVIORS::REDIS) {
                         $status = $rStatus['status'];
                     } elseif ($data['dbType'] == ROLE_BEHAVIORS::POSTGRESQL) {
-                        if ($rStatus['status'] == 'up' && $replication['Xlog_delay'] > 1000) {
+                        if ($rStatus['status'] == 'up' && !empty($replication['Xlog_delay']) && $replication['Xlog_delay'] > 1000) {
                             $status = 'lagging';
                         } else {
                             $status = $rStatus['status'];

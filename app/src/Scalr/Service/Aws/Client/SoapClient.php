@@ -4,7 +4,7 @@ namespace Scalr\Service\Aws\Client;
 use Scalr\Service\Aws\Event\SendRequestEvent;
 use Scalr\Service\Aws\Event\EventType;
 use Scalr\Service\Aws;
-use \stdClass;
+use stdClass;
 
 /**
  * Amazon SOAP client.

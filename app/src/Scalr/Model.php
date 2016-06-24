@@ -11,18 +11,13 @@ abstract class Scalr_Model
      */
     protected $db;
 
-    const ENVIRONMENT				= 'Scalr_Environment';
-    const SERVICE_CONFIGURATION 	= 'Scalr_ServiceConfiguration';
-    const SCALING_FARM_ROLE_METRIC	= 'Scalr_Scaling_FarmRoleMetric';
+    const ENVIRONMENT               = 'Scalr_Environment';
+    const SCALING_FARM_ROLE_METRIC  = 'Scalr_Scaling_FarmRoleMetric';
 
-    const STORAGE_SNAPSHOT			= 'Scalr_Storage_Snapshot';
-    const STORAGE_VOLUME			= 'Scalr_Storage_Volume';
+    const STORAGE_SNAPSHOT          = 'Scalr_Storage_Snapshot';
+    const STORAGE_VOLUME            = 'Scalr_Storage_Volume';
 
-    const DM_APPLICATION			= 'Scalr_Dm_Application';
-    const DM_SOURCE					= 'Scalr_Dm_Source';
-    const DM_DEPLOYMENT_TASK		= 'Scalr_Dm_DeploymentTask';
-
-    const APACHE_VHOST				= 'Scalr_Service_Apache_Vhost';
+    const APACHE_VHOST              = 'Scalr_Service_Apache_Vhost';
 
     /**
      * 'dbkey' => 'classkey'
@@ -69,7 +64,7 @@ abstract class Scalr_Model
      */
     protected function getCrypto()
     {
-        if (! $this->crypto) {
+        if (!$this->crypto) {
             $this->crypto = \Scalr::getContainer()->crypto;
         }
 
@@ -87,7 +82,7 @@ abstract class Scalr_Model
             if ($property && is_array($this->dbPropertyMap[$property]) && isset($this->dbPropertyMap[$property]['is_filter']) && $this->dbPropertyMap[$property]['is_filter']) {
                 if ($loadFlag) {
                     $info = $this->db->getRow("SELECT * FROM {$this->dbTableName} WHERE {$property} = ? LIMIT 1", array($value));
-                    if (! $info)
+                    if (!$info)
                         throw new Exception(sprintf(_($this->dbMessageKeyNotFound), $value));
 
                     return $this->loadBy($info);
@@ -97,13 +92,13 @@ abstract class Scalr_Model
             }
         }
 
-        throw new Exception(_("Method '{$name}' of class '".get_called_class()."' not found"));
+        throw new Exception(_("Method '{$name}' of class '" . get_called_class() . "' not found"));
     }
 
     /**
      * Init
      *
-     * @param   string       $className
+     * @param   string $className
      * @return  Scalr_Model
      */
     public static function init($className = null)
@@ -120,7 +115,7 @@ abstract class Scalr_Model
         foreach ($this->dbPropertyMap as $key => $value) {
             if (is_array($value) && $value['property'] == $property)
                 return $key;
-            elseif(is_string($value) && $value == $property)
+            elseif (is_string($value) && $value == $property)
                 return $key;
         }
         return null;
@@ -128,7 +123,7 @@ abstract class Scalr_Model
 
     public function loadBy($info)
     {
-        foreach($this->dbPropertyMap as $key => $value) {
+        foreach ($this->dbPropertyMap as $key => $value) {
             $property = is_array($value) ? $value['property'] : $value;
 
             if (isset($info[$key])) {
@@ -165,7 +160,7 @@ abstract class Scalr_Model
     public function loadById($id)
     {
         $info = $this->db->GetRow("SELECT * FROM {$this->dbTableName} WHERE {$this->dbPrimaryKey}=?", array($id));
-        if (! $info)
+        if (!$info)
             throw new Exception(sprintf(_($this->dbMessageKeyNotFound), $id));
 
         return $this->loadBy($info);
@@ -216,6 +211,14 @@ abstract class Scalr_Model
         return $this->db->GetAll($sqlString, $args);
     }
 
+    /**
+     * Save current object to database
+     *
+     * @param   bool $forceInsert   optional Force insert. (false by default)
+     * @return  Scalr_Model         Return current object
+     *
+     * @throws  Exception
+     */
     public function save($forceInsert = false)
     {
         $set = array();
@@ -249,7 +252,7 @@ abstract class Scalr_Model
                         $val = $val ? 1 : 0;
                         break;
                     case 'datetime':
-                        $val = is_null($val) ? $val : date("Y-m-d H:m:s", $val);
+                        $val = is_null($val) ? $val : date("Y-m-d H:i:s", $val);
                         break;
                     case 'serialize':
                         $val = serialize($val);

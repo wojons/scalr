@@ -96,6 +96,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Sg extends Scalr_UI_Controller
         $group = $this->getAwsClient($cloudLocation)->rds->dbSecurityGroup->describe($dbSgName)->get(0);
 
         $ipRules = $groupRules = [];
+
         if (!empty($group->iPRanges) && count($group->iPRanges)) {
             $ipRules = $group->iPRanges->toArray(true);
         }
@@ -142,6 +143,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Sg extends Scalr_UI_Controller
 
         foreach ($sgRules as $id => $r) {
             $found = false;
+
             foreach ($rules as $rule) {
                 if ($rule['Type'] == 'CIDR IP') {
                     $rid = md5($rule['CIDRIP']);
@@ -156,26 +158,30 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Sg extends Scalr_UI_Controller
 
             if (!$found) {
                 $request = new DBSecurityGroupIngressRequestData($dbSgName);
+
                 if ($r['CIDRIP']) {
                     $request->cIDRIP = $r['CIDRIP'];
                 } else {
                     $request->eC2SecurityGroupName = $r['EC2SecurityGroupName'];
                     $request->eC2SecurityGroupOwnerId = $r['EC2SecurityGroupOwnerId'];
                 }
+
                 $aws->rds->dbSecurityGroup->revokeIngress($request);
                 unset($request);
             }
         }
 
-        foreach ($rules as $rule){
+        foreach ($rules as $rule) {
             if ($rule['Status'] == 'new') {
                 $request = new DBSecurityGroupIngressRequestData($dbSgName);
+
                 if ($rule['Type'] == 'CIDR IP') {
                     $request->cIDRIP = $rule['CIDRIP'];
                 } else {
-                    $request->eC2SecurityGroupName = $r['EC2SecurityGroupName'];
-                    $request->eC2SecurityGroupOwnerId = $r['EC2SecurityGroupOwnerId'];
+                    $request->eC2SecurityGroupName = $rule['EC2SecurityGroupName'];
+                    $request->eC2SecurityGroupOwnerId = $rule['EC2SecurityGroupOwnerId'];
                 }
+
                 $aws->rds->dbSecurityGroup->authorizeIngress($request);
                 unset($request);
             }

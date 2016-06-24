@@ -13,6 +13,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
         'aws.security_groups.list': undefined
     },
 
+    sgUuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     getTabTitle: function(record){
         var platform = record.get('platform'),
             isGovernanceEnabled = Scalr.getGovernance(platform, this.getSettingsPrefix(platform) + '.additional_security_groups') !==  undefined;
@@ -64,22 +65,22 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
     },
 
     splitGroupsList: function(list, record) {
-        var p = record.get('platform');
-        var uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        var me = this,
+            p = record.get('platform');
         var result = {
             ids: [],
             names: []
         };
         Ext.Array.each(list, function(item) {
             item = item.toString();
-            if (Scalr.isOpenstack(p) || Scalr.isCloudstack(p) || p === 'azure') {
-                if (item == 'default' || item.indexOf('ip-pool') !== -1) {
+            if (p == 'ec2') {
+                if (item.indexOf('sg-') !== 0) {
                     result['names'].push(item);
                 } else {
                     result['ids'].push(item);
                 }
             } else {
-                if (item.indexOf('sg-') !== 0 && !uuid.test(item)) {//item === 'scalr.ip-pool' || item.indexOf('scalr.farm-') === 0 || item.indexOf('scalr.role-') === 0 || item === 'default'
+                if (!me.sgUuid.test(item) || item == 'default' || item.indexOf('ip-pool') !== -1) {
                     result['names'].push(item);
                 } else {
                     result['ids'].push(item);
@@ -90,7 +91,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
     },
 
     loadNotFoundGroups: function(list) {
-        var grid = this.down('grid'),
+        var me = this,
+            grid = this.down('grid'),
             store = grid.getStore(),
             os = Scalr.utils.getOsById(this.currentRole.get('osId')) || {};
         if (this.limits === undefined || this.limits['allow_additional_sec_groups'] == 1) {
@@ -100,7 +102,9 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
                 }
             });
             Ext.Array.each(list['names'], function(name) {
-                store.add(store.createModel({name: name}));
+                if (!store.query('name', name, false, true, false).length) {
+                    store.add(store.createModel({name: name}));
+                }
             });
         }
         if (this.limits !== undefined) {
@@ -110,19 +114,23 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
             }
             if (governanceSGs) {
                 Ext.Array.each(governanceSGs.split(','), function(name) {
-                    var res;
-                    name = Ext.String.trim(name);
-                    res = store.query(name.indexOf('sg-') !== 0 ? 'name' : 'id', name, false, false, true);
+                    var res,
+                        name = Ext.String.trim(name),
+                        isId = name.indexOf('sg-') === 0 || me.sgUuid.test(name);
+                    res = store.query(!isId ? 'name' : 'id', name, false, false, true);
                     if (res.length === 0) {
                         var settings = {
                             addedByGovernance: true,
                             ignoreOnSave: true
                         };
-                        settings[name.indexOf('sg-') !== 0 ? 'name' : 'id'] = name;
+                        settings[!isId ? 'name' : 'id'] = name;
                         store.add(store.createModel(settings));
                     } else {
                         res.each(function(rec) {
-                            rec.set('addedByGovernance', true);
+                            rec.set({
+                                addedByGovernance: true,
+                                ignoreOnSave: true
+                            });
                         });
                     }
                 });
@@ -135,55 +143,64 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
     beforeShowTab: function (record, handler) {
         var me = this,
             settings = record.get('settings', true),
-            list,
+            farmRoleSecurityGroups,
+            governanceSecurityGroups,
+            securityGroups = [],
+            os = Scalr.utils.getOsById(record.get('osId')) || {},
             platform = record.get('platform'),
-            splitList,
             filters = {};
-
+        
         //backward compatibility
         if (platform === 'ec2' && !settings['aws.' + me.SETTING_SG_LIST] && record.get('security_groups', true)) {
             settings['aws.' + me.SETTING_SG_LIST] = Ext.encode(record.get('security_groups', true));
         }
 
-        list = Ext.decode(settings[me.getSettingsPrefix(platform) + '.' + me.SETTING_SG_LIST], true);
-
-        splitList = me.splitGroupsList(list, record);
-
         me.limits = Scalr.getGovernance(platform, me.getSettingsPrefix(platform) + '.additional_security_groups');
         me.vpc = this.up('#farmDesigner').getVpcSettings();
         me.down('#add').setDisabled(me.limits !== undefined && me.limits['allow_additional_sec_groups'] != 1);
-
-        if (me.limits === undefined || me.limits['allow_additional_sec_groups'] == 1) {
-            if (splitList['ids'].length) {
-                filters['sgIds'] = splitList['ids'];
-                if (me.vpc) {
-                    filters['vpcId'] = me.vpc.id;
-                }
-                if (platform === 'azure') {
-                    filters['resourceGroup'] = settings['azure.resource-group'];
-                }
-                Scalr.Request({
-                    url: '/security/groups/xListGroups',
-                    params: {
-                        filters: Ext.encode(filters),
-                        platform: record.get('platform'),
-                        cloudLocation: record.get('cloud_location'),
-                    },
-                    processBox: {
-                        type: 'load',
-                        msg: 'Loading ...'
-                    },
-                    success: function(data) {
-                        me.down('grid').getStore().loadData(data.data);
-                        handler();
-                    },
-                    failure: function (data, response, options) {
-                        handler();
-                    }
-                });
-            } else {
-                handler();
+        
+        if (me.limits !== undefined) {
+            governanceSecurityGroups = (os.family === 'windows' && me.limits['windows'] ? me.limits['windows'] : me.limits['value']) || null;
+            if (governanceSecurityGroups) {
+                securityGroups.push.apply(securityGroups, governanceSecurityGroups.split(','));
             }
+        }        
+        
+        if (me.limits === undefined || me.limits['allow_additional_sec_groups'] == 1) {
+            farmRoleSecurityGroups = Ext.decode(settings[me.getSettingsPrefix(platform) + '.' + me.SETTING_SG_LIST], true);
+            if (Ext.isArray(farmRoleSecurityGroups) && farmRoleSecurityGroups.length) {
+                securityGroups.push.apply(securityGroups, farmRoleSecurityGroups);
+            }
+        }
+        
+        if (securityGroups.length) {
+            securityGroups = me.splitGroupsList(securityGroups, record);
+            filters['sgIds'] = securityGroups['ids'];
+            filters['sgNames'] = securityGroups['names'];
+            filters['vpcId'] = me.vpc ? me.vpc.id : null;
+            
+            if (platform === 'azure') {
+                filters['resourceGroup'] = settings['azure.resource-group'];
+            }
+            Scalr.Request({
+                url: '/farms/builder/xListSecurityGroups',
+                params: {
+                    filters: Ext.encode(filters),
+                    platform: record.get('platform'),
+                    cloudLocation: record.get('cloud_location'),
+                },
+                processBox: {
+                    type: 'load',
+                    msg: 'Loading ...'
+                },
+                success: function(data) {
+                    me.down('grid').getStore().loadData(data.data);
+                    handler();
+                },
+                failure: function (data, response, options) {
+                    handler();
+                }
+            });
         } else {
             handler();
         }
@@ -371,6 +388,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Security', {
                              xtype: 'sgmultiselect',
                              accountId: tabParams['accountId'],
                              remoteAddress: tabParams['remoteAddress'],
+                             listGroupsUrl: '/farms/builder/xListSecurityGroups',
                              title: 'Add security groups to farm role',
                              limit: sgLimit,
                              minHeight: 200,

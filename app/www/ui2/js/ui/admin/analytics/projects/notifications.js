@@ -13,10 +13,25 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
         items: [{
             xtype: 'grid',
             itemId: 'notifications',
-            selModel: 'selectedmodel',
+            selModel: {
+                selType: 'selectedmodel',
+                getVisibility: function(record) {
+                    return (record.get('accountId') || 0) == Scalr.user.clientId;
+                }
+            },
             cls: 'x-grid-shadow x-grid-no-highlighting x-costanalytics-notifications-grid x-grid-with-formfields',
             store: {
-                fields: [{name: 'uuid', defaultValue: ''}, 'subjectType', 'subjectId', 'notificationType', 'threshold', {name: 'recipientType', defaultValue: 1}, 'emails', 'status'],
+                fields: [
+                    {name: 'uuid', defaultValue: ''},
+                    'subjectType',
+                    'subjectId',
+                    'notificationType',
+                    'threshold',
+                    {name: 'recipientType', defaultValue: 1},
+                    'emails',
+                    'status',
+                    {name: 'accountId', defaultValue: Scalr.user.clientId}
+                ],
                 proxy: 'object'
             },
             features: {
@@ -44,6 +59,9 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                     error;
                 store.getUnfiltered().each(function(record){
                     var colIndex;
+                    if ((record.get('accountId') || 0) != Scalr.user.clientId) {
+                        return;
+                    }
                     if (!record.get('notificationType')) {
                         colIndex = 0;
                     } else if (!record.get('threshold')) {
@@ -73,6 +91,9 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                 xtype: 'widgetcolumn',
                 dataIndex: 'notificationType',
                 width: 210,
+                onWidgetAttach: function(column, widget, record) {
+                    widget.setReadOnly((record.get('accountId') || 0) != Scalr.user.clientId);
+                },
                 widget: {
                     xtype: 'combo',
                     store: {
@@ -112,6 +133,9 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                 flex: 1,
                 resizable: false,
                 xtype: 'widgetcolumn',
+                onWidgetAttach: function(column, widget, record) {
+                    widget.setReadOnly((record.get('accountId') || 0) != Scalr.user.clientId);
+                },
                 widget: {
                     xtype: 'textfield',
                     allowBlank: false,
@@ -132,6 +156,9 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                 width: 140,
                 resizable: false,
                 align: 'center',
+                onWidgetAttach: function(column, widget, record) {
+                    widget.setReadOnly((record.get('accountId') || 0) != Scalr.user.clientId);
+                },
                 widget: {
                     xtype: 'buttongroupfield',
                     defaults: {
@@ -162,6 +189,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                 xtype: 'widgetcolumn',
                 onWidgetAttach: function(column, widget, record) {
                     widget.setRecipientType(record.get('recipientType'));
+                    widget.setReadOnly((record.get('accountId') || 0) != Scalr.user.clientId);
                 },
                 widget: {
                     xtype: 'textfield',
@@ -197,6 +225,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
             },{
                 xtype: 'statuscolumn',
                 text: 'Status',
+                dataIndex: 'status',
                 statustype: 'costanalyticsnotification',
                 resizable: false,
                 width: 90,
@@ -250,9 +279,22 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
             itemId: 'reports',
             hidden: true,
             cls: 'x-grid-shadow x-grid-no-highlighting x-costanalytics-notifications-grid x-grid-with-formfields',
-            selModel: 'selectedmodel',
+            selModel: {
+                selType: 'selectedmodel',
+                getVisibility: function(record) {
+                    return (record.get('accountId') || 0) == Scalr.user.clientId;
+                }
+            },
             store: {
-                fields: [{name: 'uuid', defaultValue: ''}, 'subjectType', 'subjectId', {name: 'period', defaultValue: 3}, 'emails', 'status'],
+                fields: [
+                    {name: 'uuid', defaultValue: ''},
+                    'subjectType',
+                    'subjectId',
+                    {name: 'period', defaultValue: 3},
+                    'emails',
+                    'status',
+                    {name: 'accountId', defaultValue: Scalr.user.clientId}
+                ],
                 proxy: 'object'
             },
             features: {
@@ -273,6 +315,9 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                     error;
                 store.getUnfiltered().each(function(record){
                    var widget = grid.columns[1].getWidget(record);//email column
+                    if ((record.get('accountId') || 0) != Scalr.user.clientId) {
+                        return;
+                    }
                     if (widget && !widget.validate()) {
                         widget.focus();
                         error = true;
@@ -295,6 +340,9 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                 dataIndex: 'period',
                 xtype: 'widgetcolumn',
                 width: 130,
+                onWidgetAttach: function(column, widget, record) {
+                    widget.setReadOnly((record.get('accountId') || 0) != Scalr.user.clientId);
+                },
                 widget: {
                     xtype: 'combo',
                     store: [[1, 'Daily'],[2, 'Weekly'],[3, 'Monthly'],[4, 'Quarterly']],
@@ -314,6 +362,9 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                 dataIndex: 'emails',
                 xtype: 'widgetcolumn',
                 flex: 1,
+                onWidgetAttach: function(column, widget, record) {
+                    widget.setReadOnly((record.get('accountId') || 0) != Scalr.user.clientId);
+                },
                 widget: {
                     xtype: 'textfield',
                     emptyText: 'Add one or more emails',
@@ -344,6 +395,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
             },{
                 xtype: 'statuscolumn',
                 text: 'Status',
+                dataIndex: 'status',
                 statustype: 'costanalyticsnotification',
                 resizable: false,
                 minWidth: 90,
@@ -401,21 +453,21 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
 
             },{
                 xtype: 'buttongroupfield',
-                value: 'notifications',
+                value: 'notifications.projects',
                 itemId: 'notificationType',
                 defaults: {
                     width: 150
                 },
                 items: [{
                     text: 'Budget alerts',
-                    value: 'notifications'
+                    value: 'notifications.projects'
                 },{
                     text: 'Periodic reports',
                     value: 'reports'
                 }],
                 listeners: {
                     change: function(comp, value) {
-                        if (value === 'notifications') {
+                        if (value === 'notifications.projects') {
                             form.down('#notifications').show().view.findFeature('addbutton').updateButtonPosition();
                             form.down('#reports').hide();
                         } else {
@@ -437,12 +489,15 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                 xtype: 'button',
                 text: 'Save',
                 handler: function() {
-                    var types = ['notifications', 'reports'],
+                    var types = {
+                            notifications: 'notifications.projects',
+                            reports: 'reports'
+                        },
                         notifications = {};
-                    Ext.each(types, function(type){
-                        notifications[type] = form.down('#' + type).getValues();
-                        if (!notifications[type]) {
-                            form.down('#notificationType').setValue(type);
+                    Ext.Object.each(types, function(id, name){
+                        notifications[name] = form.down('#' + id).getValues();
+                        if (!notifications[name]) {
+                            form.down('#notificationType').setValue(name);
                             notifications = false;
                             return false;
                         }
@@ -454,14 +509,14 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
                         processBox: {
                             type: 'save'
                         },
-                        url: '/admin/analytics/projects/xSaveNotifications/',
+                        url: Scalr.utils.getUrlPrefix() + '/analytics/projects/xSaveNotifications/',
                         params: {
                             projectId: loadParams['projectId'],
                             notifications: Ext.encode(notifications)
                         },
                         success: function (data) {
-                            Ext.each(types, function(type){
-                                form.down('#' + type).store.load({data: data[type]});
+                            Ext.Object.each(types, function(id, name){
+                                form.down('#' + id).store.load({data: data[name]});
                             });
                             Scalr.event.fireEvent('close');
                         }
@@ -476,7 +531,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.notifications', function (loadP
             }]
         }]
     });
-    form.down('#notifications').store.load({data: moduleParams['notifications']});
+    form.down('#notifications').store.load({data: moduleParams['notifications.projects']});
     form.down('#reports').store.load({data: moduleParams['reports']});
     return form;
 });

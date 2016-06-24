@@ -163,9 +163,9 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
                 EC2_SERVER_PROPERTIES::AVAIL_ZONE => $instance->placement->availabilityZone
             ));
         } else if ($platform == SERVER_PLATFORMS::GCE) {
-            $gce = $platformObj->getClient($this->environment, $cloudLocation);
+            $gce = $platformObj->getClient($this->environment);
             $result = $gce->instances->get(
-                $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[CloudCredentialsProperty::GCE_PROJECT_ID],
+                $this->environment->keychain(SERVER_PLATFORMS::GCE)->properties[CloudCredentialsProperty::GCE_PROJECT_ID],
                 $cloudLocation,
                 $cloudServerId
             );
@@ -261,17 +261,17 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
         if (!$this->environment->isPlatformEnabled($platform))
             throw new Exception(sprintf('Cloud %s is not enabled for current environment', $platform));
 
-        $results = array();
+        $results = [];
 
         $platformObj = PlatformFactory::NewPlatform($platform);
 
         if ($platform == SERVER_PLATFORMS::GCE) {
-            $gce = $platformObj->getClient($this->environment, $cloudLocation);
+            $gce = $platformObj->getClient($this->environment);
 
             $result = $gce->instances->listInstances(
-                $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[CloudCredentialsProperty::GCE_PROJECT_ID],
+                $this->environment->keychain(SERVER_PLATFORMS::GCE)->properties[CloudCredentialsProperty::GCE_PROJECT_ID],
                 $cloudLocation,
-                array()
+                []
             );
 
             if (is_array($result->items)) {
@@ -280,14 +280,14 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
                         continue;
 
                     $ips = $platformObj->determineServerIps($gce, $server);
-                    $itm = array(
-                        'id' => $server->name,
-                        'localIp' => $ips['localIp'],
-                        'publicIp' => $ips['remoteIp'],
-                        'zone' => $cloudLocation,
+                    $itm = [
+                        'id'          => $server->name,
+                        'localIp'     => $ips['localIp'],
+                        'publicIp'    => $ips['remoteIp'],
+                        'zone'        => $cloudLocation,
                         'isImporting' => false,
-                        'isManaged' => false
-                    );
+                        'isManaged'   => false
+                    ];
 
                     //Check is instance already importing
                     try {
@@ -314,7 +314,7 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
                       ->virtualMachine
                       ->getList(
                           $this->getEnvironment()
-                               ->cloudCredentials(SERVER_PLATFORMS::AZURE)
+                               ->keychain(SERVER_PLATFORMS::AZURE)
                                ->properties[CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
                           $cloudLocation
                       );
@@ -477,7 +477,7 @@ class Scalr_UI_Controller_Roles_Import extends Scalr_UI_Controller
      */
     public function importAction($serverId = null, $cloudServerId = null, $platform = null, $cloudLocation = null)
     {
-        $unsupportedPlatforms = ['rds', SERVER_PLATFORMS::RACKSPACE];
+        $unsupportedPlatforms = [SERVER_PLATFORMS::AZURE];
         $platforms = [];
         foreach ($this->environment->getEnabledPlatforms() as $plt) {
             if (!in_array($plt, $unsupportedPlatforms)) {

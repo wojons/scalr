@@ -26,7 +26,7 @@ class Scalr_UI_Controller_Tools_Azure_StorageAccounts extends Scalr_UI_Controlle
         }
 
         $storageAccount = $azure->storage->account->create(
-            $this->environment->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+            $this->environment->keychain(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
             $resourceGroup,
             $name,
             new AccountData($cloudLocation, ['accountType' => $accountType])

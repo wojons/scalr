@@ -14,8 +14,8 @@ class RackspaceNgUkPlatformModule extends RackspaceNgUsPlatformModule implements
 
     public function getLocations(\Scalr_Environment $environment = null)
     {
-        return array(
+        return [
             'LON' => 'Rackspace UK / LON'
-        );
+        ];
     }
 }

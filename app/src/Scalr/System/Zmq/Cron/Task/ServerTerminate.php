@@ -9,15 +9,15 @@ use Scalr\Modules\PlatformModuleInterface;
 use Scalr\Service\Exception\InstanceNotFound;
 use Scalr\System\Zmq\Cron\AbstractTask;
 use Scalr\Modules\PlatformFactory;
-use \DBServer;
+use DBServer;
 use Scalr\Util\CallbackInterface;
-use \SERVER_STATUS;
-use \EC2_SERVER_PROPERTIES;
-use \SERVER_PROPERTIES;
-use \ROLE_BEHAVIORS;
-use \LOG_CATEGORY;
-use \FarmLogMessage;
-use \HostDownEvent;
+use SERVER_STATUS;
+use EC2_SERVER_PROPERTIES;
+use SERVER_PROPERTIES;
+use ROLE_BEHAVIORS;
+use LOG_CATEGORY;
+use FarmLogMessage;
+use HostDownEvent;
 use stdClass;
 use Scalr\Model\Entity\ServerTerminationError;
 use Scalr\Exception\InvalidCloudCredentialsException;
@@ -95,11 +95,11 @@ class ServerTerminate extends AbstractTask
                     $isLocked = $dbServer->GetEnvironmentObject()->aws($dbServer->GetCloudLocation())->ec2->instance->describeAttribute($dbServer->GetCloudServerID(), InstanceAttributeType::disableApiTermination());
                     if ($isLocked) {
                         \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
-                            $dbServer->GetFarmObject()->ID,
+                            $dbServer,
                             sprintf("Server '%s' has disableAPITermination flag and can't be terminated (Platform: %s) (ServerTerminate).",
-                                $dbServer->serverId, $dbServer->platform
-                            ),
-                            $dbServer->serverId
+                                !empty($dbServer->serverId) ? $dbServer->serverId : null,
+                                !empty($dbServer->platform) ? $dbServer->platform : null
+                            )
                         ));
 
                         $startTime = strtotime($dbServer->dateShutdownScheduled);
@@ -191,33 +191,53 @@ class ServerTerminate extends AbstractTask
                     if (($isTermination && !$isTerminated) || ($isSuspension && !$dbServer->GetRealStatus()->isSuspended())) {
                         try {
                             if ($dbServer->farmId != 0) {
+                                // If farm role or/and farm was removed this will fail which is okay
+                                $dbFarmRole = null;
                                 try {
-                                    if ($dbServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::RABBITMQ)) {
-                                        $serversCount = count($dbServer->GetFarmRoleObject()->GetServersByFilter([], ['status' => [SERVER_STATUS::TERMINATED, SERVER_STATUS::SUSPENDED]]));
-                                        if ($dbServer->index == 1 && $serversCount > 1) {
-                                            \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(
-                                                new FarmLogMessage(
-                                                    $dbServer->GetFarmObject()->ID,
-                                                    sprintf("RabbitMQ role. Main DISK node should be terminated after all other nodes. Waiting... (Platform: %s) (ServerTerminate).",
-                                                        $dbServer->serverId, $dbServer->platform
-                                                    ),
-                                                    $dbServer->serverId
-                                                )
-                                            );
-
-                                            return false;
-                                        }
-                                    }
-                                } catch (Exception $e) {
+                                    $dbFarmRole = $dbServer->GetFarmRoleObject();
+                                    $dbFarm = $dbServer->GetFarmObject();
+                                } catch (\Exception $e) {
+                                    //do nothing
                                 }
+                                
+                                // We need to make sure that DISK node will be terminated after all other nodes only if farm was terminated
+                                if (!empty($dbFarm) && !empty($dbFarmRole) && $dbFarm->Status == \FARM_STATUS::TERMINATED && $dbFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::RABBITMQ)) {
+                                    $serverExists = \Scalr::getDb()->GetOne("
+                                        SELECT EXISTS (
+                                            SELECT 1 FROM servers
+                                            WHERE farm_roleid = ?
+                                            AND status NOT IN (?, ?)
+                                            AND `index` != ?
+                                        )
+                                    ", [
+                                        $dbServer->farmRoleId,
+                                        SERVER_STATUS::TERMINATED,
+                                        SERVER_STATUS::SUSPENDED,
+                                        1
+                                    ]);
+
+                                    if ($dbServer->index == 1 && $serverExists) {
+                                        \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(
+                                            new FarmLogMessage(
+                                                $dbServer,
+                                                sprintf("RabbitMQ role. Main DISK node should be terminated after all other nodes. Waiting... (Platform: %s) (ServerTerminate).",
+                                                    $dbServer->platform
+                                                )
+                                            )
+                                        );
+
+                                        return false;
+                                    }
+                                }
+
 
                                 \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(
                                     new FarmLogMessage(
-                                        $dbServer->GetFarmObject()->ID,
+                                        $dbServer,
                                         sprintf("Terminating server '%s' (Platform: %s) (ServerTerminate).",
-                                            $dbServer->serverId, $dbServer->platform
-                                        ),
-                                        $dbServer->serverId
+                                            !empty($dbServer->serverId) ? $dbServer->serverId : null,
+                                            !empty($dbServer->platform) ? $dbServer->platform : null
+                                        )
                                     )
                                 );
                             }

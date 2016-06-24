@@ -22,7 +22,6 @@ use Scalr\Service\Aws\Ec2\DataType\VpcData;
 use Scalr\Service\Aws\Ec2\DataType\SubnetFilterNameType;
 use Scalr\Service\Aws\Ec2\DataType\SubnetData;
 use Scalr\Model\Entity\FarmSetting;
-use Scalr\Service\Aws\Ec2\DataType\VpcFilterNameType;
 use Scalr\Service\Azure\Services\Network\DataType\SubnetList;
 
 /**
@@ -73,7 +72,7 @@ class FarmRolesTest extends ApiTestCase
 
     public function farmRoleToDelete($farmId)
     {
-        static::toDelete('Scalr\Model\Entity\FarmRole', $farmId);
+        static::toDelete(FarmRole::class, [$farmId]);
     }
 
     /**
@@ -177,10 +176,10 @@ class FarmRolesTest extends ApiTestCase
         $farm = static::createEntity(new Farm(), [
             'changedById'   => $user->getId(),
             'name'          => "{$this->uuid}-farm",
-            'description'   => "{$this->uuid}-description",
+            'comments'   => "{$this->uuid}-description",
             'envId'         => $environment->id,
             'accountId'     => $user->getAccountId(),
-            'createdById'   => $user->getId()
+            'ownerId'   => $user->getId()
         ]);
 
         /* @var $roles EntityIterator */
@@ -212,7 +211,7 @@ class FarmRolesTest extends ApiTestCase
         $subnetId = $subnet->subnetId;
         $governanceConfiguration = [
             SERVER_PLATFORMS::EC2 => [
-                Scalr_Governance::AWS_INSTANCE_TYPE => [
+                Scalr_Governance::INSTANCE_TYPE => [
                     'enabled' => true,
                     'limits' => [
                         'value' => ['t1.micro', 't2.small', 't2.medium', 't2.large'],
@@ -315,6 +314,7 @@ class FarmRolesTest extends ApiTestCase
         $this->assertNotEmpty($farmRole);
 
         $this->farmRoleToDelete($farmRoleId);
+        $data['scaling']['rules'] = [];
         $this->assertObjectEqualsEntity($data, $farmRole);
 
         //Reset AWS VPC settings
@@ -361,6 +361,7 @@ class FarmRolesTest extends ApiTestCase
         $this->farmRoleToDelete($farmRoleId);
 
         $data['placement']['availabilityZones'] = '';
+        $data['scaling']['rules'] = [];
 
         $this->assertObjectEqualsEntity($data, $farmRole);
 
@@ -476,7 +477,7 @@ class FarmRolesTest extends ApiTestCase
             foreach ($variables->data as $variable) {
                 $this->assertVariableObjectNotEmpty($variable);
 
-                if (empty($declaredNotInRole) && $variable->declaredIn !== ScopeInterface::SCOPE_FARMROLE) {
+                if (empty($declaredNotInRole) && $variable->declaredIn !== ScopeInterface::SCOPE_FARMROLE && !$variable->hidden) {
                     $declaredNotInRole = $variable->name;
                 }
 

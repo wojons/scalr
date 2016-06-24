@@ -6,8 +6,6 @@ use CheckFailedEvent;
 use CheckRecoveredEvent;
 use MysqlBackupCompleteEvent;
 use MysqlBackupFailEvent;
-use MySQLReplicationFailEvent;
-use MySQLReplicationRecoveredEvent;
 use NewMysqlMasterUpEvent;
 use HostInitFailedEvent;
 use InstanceLaunchFailedEvent;
@@ -26,10 +24,7 @@ use IPAddressChangedEvent;
 use EBSVolumeMountedEvent;
 use BeforeInstanceLaunchEvent;
 use BeforeHostTerminateEvent;
-use DNSZoneUpdatedEvent;
-use RoleOptionChangedEvent;
 use EBSVolumeAttachedEvent;
-use ServiceConfigurationPresetChangedEvent;
 use BeforeHostUpEvent;
 
 abstract class AbstractEventObserver implements EventObserverInterface
@@ -62,6 +57,12 @@ abstract class AbstractEventObserver implements EventObserverInterface
      * @var \Scalr\DependencyInjection\Container
      */
     protected $container;
+
+    /**
+     * Is scalr agent (scalarizr) require for the observer
+     * @var boolean
+     */
+    public $isScalarizrRequired = false;
 
     /**
      * Constructor
@@ -255,22 +256,6 @@ abstract class AbstractEventObserver implements EventObserverInterface
 
     /**
      * {@inheritdoc}
-     * @see \Scalr\Observer\EventObserverInterface::OnMySQLReplicationFail()
-     */
-    public function OnMySQLReplicationFail(MySQLReplicationFailEvent $event)
-    {
-    }
-
-    /**
-     * {@inheritdoc}
-     * @see \Scalr\Observer\EventObserverInterface::OnMySQLReplicationRecovered()
-     */
-    public function OnMySQLReplicationRecovered(MySQLReplicationRecoveredEvent $event)
-    {
-    }
-
-    /**
-     * {@inheritdoc}
      * @see \Scalr\Observer\EventObserverInterface::OnEBSVolumeMounted()
      */
     public function OnEBSVolumeMounted(EBSVolumeMountedEvent $event)
@@ -294,33 +279,12 @@ abstract class AbstractEventObserver implements EventObserverInterface
     }
 
     /**
-     * {@inheritdoc}
-     * @see \Scalr\Observer\EventObserverInterface::OnDNSZoneUpdated()
-     */
-    public function OnDNSZoneUpdated(DNSZoneUpdatedEvent $event)
-    {
-    }
-
-    /**
-     * @param \RoleOptionChangedEvent $event
-     */
-    public function OnRoleOptionChanged(RoleOptionChangedEvent $event)
-    {
-    }
-
-    /**
      * @param \EBSVolumeAttachedEvent $event
      */
     public function OnEBSVolumeAttached(EBSVolumeAttachedEvent $event)
     {
     }
 
-    /**
-     * @param \ServiceConfigurationPresetChangedEvent $event
-     */
-    public function OnServiceConfigurationPresetChanged(ServiceConfigurationPresetChangedEvent $event)
-    {
-    }
 
     /**
      * {@inheritdoc}

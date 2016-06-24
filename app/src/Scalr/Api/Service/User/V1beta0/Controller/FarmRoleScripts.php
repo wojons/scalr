@@ -14,7 +14,7 @@ use Scalr\Model\Entity\FarmRoleScript;
 use Scalr\Api\DataType\ErrorMessage;
 
 /**
- * User/Version-1beta0/FarmRoleScripts API Controller
+ * User/FarmRoleScripts API Controller
  *
  * @author N.V.
  */

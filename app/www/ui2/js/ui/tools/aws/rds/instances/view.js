@@ -7,7 +7,14 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             type: 'string'
         }, {
             name: 'AllocatedStorage',
-            type: 'auto'
+            convert: function (value, record) {
+                var pendingModifiedValues = record.get('PendingModifiedValues');
+
+                return {
+                    value: value,
+                    pendingValue: Ext.isObject(pendingModifiedValues) ? pendingModifiedValues['AllocatedStorage'] : null
+                };
+            }
         }, {
             name: 'AutoMinorVersionUpgrade',
             type: 'boolean'
@@ -16,7 +23,14 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             type: 'string'
         }, {
             name: 'BackupRetentionPeriod',
-            type: 'number'
+            convert: function (value, record) {
+                var pendingModifiedValues = record.get('PendingModifiedValues');
+
+                return {
+                    value: value,
+                    pendingValue: Ext.isObject(pendingModifiedValues) ? pendingModifiedValues['BackupRetentionPeriod'] : null
+                };
+            }
         }, {
             name: 'CharacterSetName',
             type: 'string'
@@ -25,7 +39,14 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             type: 'string'
         }, {
             name: 'DBInstanceClass',
-            type: 'string'
+            convert: function (value, record) {
+                var pendingModifiedValues = record.get('PendingModifiedValues');
+
+                return {
+                    value: value,
+                    pendingValue: Ext.isObject(pendingModifiedValues) ? pendingModifiedValues['DBInstanceClass'] : null
+                };
+            }
         }, {
             name: 'DBInstanceIdentifier',
             type: 'string'
@@ -49,13 +70,29 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             type: 'string'
         }, {
             name: 'EngineVersion',
-            type: 'string'
+            //type: 'string',
+            convert: function (value, record) {
+                var pendingModifiedValues = record.get('PendingModifiedValues');
+
+                return {
+                    value: value,
+                    pendingValue: Ext.isObject(pendingModifiedValues) ? pendingModifiedValues['EngineVersion'] : null
+                };
+            }
         }, {
             name: 'InstanceCreateTime',
             type: 'string'
         }, {
             name: 'Iops',
-            type: 'number'
+            //type: 'number',
+            convert: function (value, record) {
+                var pendingModifiedValues = record.get('PendingModifiedValues');
+
+                return {
+                    value: value,
+                    pendingValue: Ext.isObject(pendingModifiedValues) ? pendingModifiedValues['Iops'] : null
+                };
+            }
         }, {
             name: 'KmsKeyId',
             type: 'string'
@@ -67,13 +104,33 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             type: 'string'
         }, {
             name: 'MultiAZ',
-            type: 'string'
+            //type: 'string',
+            convert: function (value, record) {
+                var pendingModifiedValues = record.get('PendingModifiedValues');
+
+                return {
+                    value: value,
+                    pendingValue: Ext.isObject(pendingModifiedValues) ? pendingModifiedValues['MultiAZ'] : null
+                };
+            }
+        }, {
+            name: 'isMultiAzLoaded',
+            type: 'boolean',
+            defaultValue: false
         }, {
             name: 'OptionGroupName',
             type: 'string'
         }, {
             name: 'Port',
-            type: 'number'
+            //type: 'number',
+            convert: function (value, record) {
+                var pendingModifiedValues = record.get('PendingModifiedValues');
+
+                return {
+                    value: value,
+                    pendingValue: Ext.isObject(pendingModifiedValues) ? pendingModifiedValues['Port'] : null
+                };
+            }
         }, {
             name: 'PreferredBackupWindow',
             type: 'string'
@@ -104,6 +161,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
         }, {
             name: 'farmName',
             type: 'string'
+        }, {
+            name: 'PendingModifiedValues',
+            type: 'auto'
         }],
 
         proxy: {
@@ -156,6 +216,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                         me.getLaunchedDbInstancesStatuses()
                     )
                 },
+                headers: {
+                    'Scalr-Autoload-Request': 1
+                },
                 success: function (response) {
                     var dbInstances = response.dbInstances;
 
@@ -165,6 +228,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                             var isRecordExist = !Ext.isEmpty(record);
 
                             if (isRecordExist && dbInstanceData !== 'deleted') {
+                                record.set('PendingModifiedValues', dbInstanceData['PendingModifiedValues']);
                                 record.set(dbInstanceData);
                             } else if (isRecordExist) {
                                 record.set('DBInstanceStatus', 'deleted');
@@ -222,6 +286,24 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             });
         },
 
+        updatePendingValues: function (record, pendingValues) {
+            record.set('PendingModifiedValues', pendingValues);
+
+            var data = record.getData();
+
+            record.set({
+                'AllocatedStorage': data['AllocatedStorage'].value,
+                'BackupRetentionPeriod': data['BackupRetentionPeriod'].value,
+                'DBInstanceClass': data['DBInstanceClass'].value,
+                'EngineVersion': data['EngineVersion'].value,
+                'Iops': data['Iops'].value,
+                'MultiAZ': data['MultiAZ'].value,
+                'Port': data['Port'].value
+            });
+
+            return true;
+        },
+
         updatePage: function (type, action, dbInstanceData, cloudLocation) {
             var me = this;
 
@@ -242,6 +324,10 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                         'DBInstanceIdentifier',
                         dbInstanceData['DBInstanceIdentifier']
                     );
+
+                    if (!Ext.isEmpty(record)) {
+                        me.updatePendingValues(record, dbInstanceData['PendingModifiedValues']);
+                    }
                 }
 
                 me.setSelectedRecord(record);
@@ -546,7 +632,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             xtype: 'templatecolumn',
             flex: 0.7,
             minWidth: 160,
-            tpl: '{[this.beautifyEngine(values.Engine, values.EngineVersion)]}',
+            tpl: '{[this.beautifyEngine(values.Engine, values.EngineVersion.value)]}',
             sortable: false
         }, {
             text: 'Placement',
@@ -904,16 +990,48 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             return me;
         },
 
+        loadMultiAz: function (record) {
+            var me = this;
+
+            Scalr.Request({
+                processBox: {
+                    type: 'load'
+                },
+                url: '/tools/aws/rds/instances/xGetMultiAz',
+                params: {
+                    cloudLocation: dbInstancesGrid.getCloudLocation(),
+                    instanceId: record.get('DBInstanceIdentifier')
+                },
+                success: function (response) {
+                    if (me.rendered && !me.isDestroyed) {
+                        var multiAz = response.multiAz;
+
+                        record.set('MultiAZ', multiAz);
+                        record.set('isMultiAzLoaded', true);
+
+                        me.down('[name=MultiAZ]').setValue(record.get('MultiAZ'));
+                    }
+                }
+            });
+
+            return true;
+        },
+
         listeners: {
             beforeloadrecord: function (record) {
                 var me = this;
 
                 var engine = record.get('Engine');
+
+                if ((engine === 'sqlserver-ee' || engine === 'sqlserver-se') && !record.get('isMultiAzLoaded')) {
+                    me.loadMultiAz(record);
+                }
+
                 var isAurora = me.isAurora(engine);
 
                 me
                     .hideIopsField(
-                        record.get('Iops') === 0
+                        Ext.isEmpty(record.get('Iops').value)
                     )
                     .hideSourceInstanceField(
                         !record.get('isReplica')
@@ -932,6 +1050,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
 
                 return true;
             },
+
             afterloadrecord: function (record) {
                 var me = this;
 
@@ -965,7 +1084,18 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
             defaults: {
                 xtype: 'displayfield',
                 labelWidth: 200,
-                width: '100%'
+                width: '100%',
+                getPendingValueHtml: function (pendingValue, unit) {
+                    if (Ext.isEmpty(pendingValue)) {
+                        return '';
+                    }
+
+                    pendingValue = !Ext.isEmpty(unit) ? (pendingValue + ' ' + unit) : pendingValue;
+
+                    var template = '<img src="{0}" class="x-grid-icon x-grid-icon-pendingvalue" style="cursor: default; margin-left: 6px;" data-qtip="New value <b>{1}</b> is pending." />';
+
+                    return Ext.String.format(template, Ext.BLANK_IMAGE_URL, pendingValue);
+                }
             }
         },
 
@@ -1013,15 +1143,41 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                 }
             }, {
                 name: 'DBInstanceClass',
-                fieldLabel: 'Type'
+                fieldLabel: 'Type',
+                renderer: function (value) {
+                    var me = this;
+
+                    var type = value.value;
+
+                    if (!Ext.isEmpty(type)) {
+                        return type + me.getPendingValueHtml(value.pendingValue);
+                    }
+
+                    return '&mdash;';
+                }
             }, {
                 name: 'MultiAZ',
                 fieldLabel: 'Multi-AZ Deployment',
                 renderer: function (value) {
-                    // fixme: string to boolean
-                    return value !== 'Enabled'
-                        ? '<span data-qtip="Disabled">&mdash;</span>'
-                        : '<div class="x-grid-icon x-grid-icon-ok" data-qtip="Enabled" style="cursor: default;"></div>';
+                    var me = this;
+
+                    var multiAz = value.value;
+
+                    if (!Ext.isEmpty(multiAz)) {
+                        var html = multiAz === true
+                            ? '<div class="x-grid-icon x-grid-icon-ok" data-qtip="Enabled" style="cursor: default;"></div>'
+                            : '<span data-qtip="Disabled">&mdash;</span>';
+
+                        var pendingValue = value.pendingValue;
+
+                        if (!Ext.isEmpty(pendingValue)) {
+                            pendingValue = pendingValue === true ? 'Enabled' : 'Disabled';
+                        }
+
+                        return html + me.getPendingValueHtml(pendingValue);
+                    }
+
+                    return '&mdash;';
                 }
             }, {
                 name: 'AvailabilityZone',
@@ -1096,16 +1252,28 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                 }
             }, {
                 name: 'Iops',
-                fieldLabel: 'IOPS'
+                fieldLabel: 'IOPS',
+                renderer: function (value) {
+                    var me = this;
+
+                    var iops = value.value;
+
+                    if (!Ext.isEmpty(iops)) {
+                        return iops + me.getPendingValueHtml(value.pendingValue);
+                    }
+
+                    return '&mdash;';
+                }
             }, {
                 name: 'AllocatedStorage',
                 fieldLabel: 'Allocated Storage',
                 renderer: function (value) {
-                    if (!Ext.isEmpty(value)) {
-                        // temp fix: wait for pending values refactoring
-                        return value.indexOf('New value') !== -1
-                            ? value
-                            : value + ' GB';
+                    var me = this;
+
+                    var storageSize = value.value;
+
+                    if (!Ext.isEmpty(storageSize)) {
+                        return storageSize + ' GB' + me.getPendingValueHtml(value.pendingValue, 'GB');
                     }
 
                     return '&mdash;';
@@ -1120,19 +1288,24 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                 name: 'Engine',
                 fieldLabel: 'Engine',
                 renderer: function (engineName) {
-                    var fullEngineName = Scalr.utils.beautifyEngineName(engineName);
-
-                    if (engineName.indexOf('-') !== -1) {
-                        engineName = engineName.substring(0, engineName.indexOf('-'));
-                    }
-
                     return '<img class="x-icon-engine-small x-icon-engine-small-' +
                         engineName + '" src="' + Ext.BLANK_IMAGE_URL + '"/>&nbsp;&nbsp;' +
-                        fullEngineName;
+                        Scalr.utils.beautifyEngineName(engineName);
                 }
             }, {
                 name: 'EngineVersion',
-                fieldLabel: 'Version'
+                fieldLabel: 'Version',
+                renderer: function (value) {
+                    var me = this;
+
+                    var version = value.value;
+
+                    if (!Ext.isEmpty(version)) {
+                        return version + me.getPendingValueHtml(value.pendingValue);
+                    }
+
+                    return '&mdash;';
+                }
             }, {
                 name: 'LicenseModel',
                 fieldLabel: 'Licensing Model'
@@ -1149,7 +1322,15 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                 name: 'Port',
                 fieldLabel: 'Port',
                 renderer: function (value) {
-                    return value !== 0 ? value : '&mdash;';
+                    var me = this;
+
+                    var port = value.value;
+
+                    if (!Ext.isEmpty(port)) {
+                        return port + me.getPendingValueHtml(value.pendingValue);
+                    }
+
+                    return '&mdash;';
                 }
             }]
         }, {
@@ -1188,6 +1369,19 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.view', function (loadParams, mod
                         return '&mdash;';
                     }
                     return value + (value === 1 ? 'day' : 'days');
+                },
+                renderer: function (value) {
+                    var me = this;
+
+                    var period = parseInt(value.value);
+
+                    if (!Ext.isEmpty(period)) {
+                        var pendingValue = value.pendingValue;
+
+                        return period + (value === 1 ? ' day' : ' days') + me.getPendingValueHtml(pendingValue, pendingValue === 1 ? ' day' : ' days');
+                    }
+
+                    return '&mdash;';
                 }
             }]
         }],

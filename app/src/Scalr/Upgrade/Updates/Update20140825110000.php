@@ -20,7 +20,7 @@ class Update20140825110000 extends AbstractUpdate implements SequenceInterface
 
     protected $description = "analytics phase 3 intermediary update";
 
-    protected $ignoreChanges = false;
+    protected $ignoreChanges = true;
 
     protected $dbservice = 'cadb';
 

@@ -21,66 +21,6 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
         + 'System Global Variables will also include information regarding the Server that fired the event '
         + 'that triggered this Orchestration Rule.';
 
-    var editor = {
-
-        layout: 'fit',
-        height: '80%',
-        width: '80%',
-        scrollable: false,
-
-        codeMirrorConfig: {
-            scriptContent: '',
-            readOnly: false
-        },
-
-        listeners: {
-            beforeclose: function (panel) {
-                form.applyScriptContent(
-                    panel.down('codemirror').getValue()
-                );
-            }
-        },
-
-        items: [{
-            xtype: 'codemirror',
-            hideLabel: true,
-            validator: function (value) {
-                return value.substring(0, 2) !== '#!'
-                    ? 'First line must contain shebang (#!/path/to/interpreter)'
-                    : true;
-            },
-            listeners: {
-                boxready: function (field) {
-                    var config = field.up().codeMirrorConfig;
-
-                    field.codeMirror.setValue(
-                        config.scriptContent
-                    );
-
-                    field.setReadOnly(config.readOnly);
-                }
-            }
-        }],
-
-        dockedItems: [{
-            xtype: 'container',
-            dock: 'bottom',
-            cls: 'x-docked-buttons',
-            layout: {
-                type: 'hbox',
-                pack: 'center'
-            },
-            items: [{
-                xtype: 'button',
-                text: 'Close',
-                maxWidth: 140,
-                handler: function (button) {
-                    button.up('panel').close();
-                }
-            }]
-        }]
-    };
-
     var store = Ext.create('Scalr.ui.ContinuousStore', {
 
         fields: [
@@ -398,21 +338,6 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
                 Scalr.scope === 'environment' && Scalr.isAllowed('SCRIPTS_ENVIRONMENT') ||
                 Scalr.scope === 'account' && Scalr.isAllowed('SCRIPTS_ACCOUNT')
             );
-        },
-
-        maximizeEditor: function () {
-            var me = this;
-
-            var codeMirror = me.down('[name=content]');
-
-            Ext.apply(editor.codeMirrorConfig, {
-                scriptContent: codeMirror.getValue(),
-                readOnly: codeMirror.readOnly
-            });
-
-            Scalr.utils.Window(editor);
-
-            return me;
         },
 
         hideForkButton: function (hidden, disabled) {
@@ -873,9 +798,6 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
 
                 var isSourceRemote = visibleFieldName !== 'content';
 
-                me.down('#maximizeEditor').
-                    setDisabled(isSourceRemote);
-
                 Ext.Array.each(
                     me.down('#scriptSource').query(),
                     function (field) {
@@ -1011,15 +933,6 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
                             buttonGroup.up('fieldset').hideFields(state);
                         }
                     }
-                }, {
-                    xtype: 'button',
-                    itemId: 'maximizeEditor',
-                    iconCls: 'x-btn-icon-maximize',
-                    margin: '0 0 0 12',
-                    tooltip: 'Maximize editor',
-                    handler: function () {
-                        form.maximizeEditor();
-                    }
                 }]
             }, {
                 xtype: 'fieldcontainer',
@@ -1043,6 +956,7 @@ Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
                     hidden: true
                 }, {
                     xtype: 'codemirror',
+                    plugins: [{ ptype: 'expandeditor' }],
                     name: 'content',
                     minHeight: 300,
                     hideLabel: true,

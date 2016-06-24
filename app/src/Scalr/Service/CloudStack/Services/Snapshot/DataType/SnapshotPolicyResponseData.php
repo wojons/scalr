@@ -2,7 +2,7 @@
 namespace Scalr\Service\CloudStack\Services\Snapshot\DataType;
 
 use Scalr\Service\CloudStack\DataType\AbstractDataType;
-use \DateTime;
+use DateTime;
 
 /**
  * SnapshotPolicyResponseData

@@ -20,7 +20,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Addfarm extends Scalr_UI_Controller_D
 
     public function getContent($params = array())
     {
-        $this->request->restrictFarmAccess(null, Acl::PERM_FARMS_MANAGE);
+        $this->request->restrictAccess(Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_CREATE);
 
         $projects = [];
         if ($this->getContainer()->analytics->enabled && $this->getEnvironment()->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID)) {

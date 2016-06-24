@@ -36,21 +36,6 @@ class Ec2 extends AbstractService implements ServiceInterface
 {
 
     /**
-     * API Version 20121201
-     */
-    const API_VERSION_20121201 = '20121201';
-
-    /**
-     * API Version 20130201x
-     */
-    const API_VERSION_20130201 = '20130201';
-
-    /**
-     * API Version 20140201
-     */
-    const API_VERSION_20140201 = '20140201';
-
-    /**
      * API Version 20140615
      */
     const API_VERSION_20140615 = '20140615';
@@ -95,9 +80,6 @@ class Ec2 extends AbstractService implements ServiceInterface
     public function getAvailableApiVersions()
     {
         return array(
-            self::API_VERSION_20121201,
-            self::API_VERSION_20130201,
-            self::API_VERSION_20140201,
             self::API_VERSION_20140615,
             self::API_VERSION_20150415,
         );

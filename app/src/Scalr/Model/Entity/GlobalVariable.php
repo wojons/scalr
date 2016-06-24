@@ -2,6 +2,7 @@
 
 namespace Scalr\Model\Entity;
 
+use Scalr\DataType\ScopeInterface;
 use Scalr\Model\AbstractEntity;
 
 /**
@@ -12,7 +13,7 @@ use Scalr\Model\AbstractEntity;
  * @Entity
  * @Table(name="variables")
  */
-class GlobalVariable extends AbstractEntity
+class GlobalVariable extends AbstractEntity implements ScopeInterface
 {
 
     /**
@@ -20,6 +21,7 @@ class GlobalVariable extends AbstractEntity
      *
      * @Id
      * @Column(type="string")
+     *
      * @var string
      */
     public $name;
@@ -28,6 +30,7 @@ class GlobalVariable extends AbstractEntity
      * Variable's value
      *
      * @Column(type="encrypted")
+     *
      * @var string
      */
     public $value;
@@ -45,6 +48,7 @@ class GlobalVariable extends AbstractEntity
      * Validator value
      *
      * @Column(type="string")
+     *
      * @var string
      */
     public $validator;
@@ -53,6 +57,7 @@ class GlobalVariable extends AbstractEntity
      * Variable's format
      *
      * @Column(type="string")
+     *
      * @var string
      */
     public $format;
@@ -61,6 +66,7 @@ class GlobalVariable extends AbstractEntity
      * Flag final
      *
      * @Column(name="flag_final",type="integer")
+     *
      * @var integer
      */
     public $final;
@@ -69,6 +75,7 @@ class GlobalVariable extends AbstractEntity
      * Required scope
      *
      * @Column(name="flag_required",type="string")
+     *
      * @var string
      */
     public $required;
@@ -77,7 +84,26 @@ class GlobalVariable extends AbstractEntity
      * Flag hidden
      *
      * @Column(name="flag_hidden",type="integer")
+     *
      * @var integer
      */
     public $hidden;
+
+    /**
+     * Variable description
+     *
+     * @Column(type="string")
+     *
+     * @var string
+     */
+    public $description;
+
+    /**
+     * {@inheritdoc}
+     * @see ScopeInterface::getScope()
+     */
+    public function getScope()
+    {
+        return ScopeInterface::SCOPE_SCALR;
+    }
 }

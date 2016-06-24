@@ -30,6 +30,35 @@ Scalr.constants.ebsTypes = [
     ['io1', 'Provisioned IOPS (' + Scalr.constants.iopsMin + ' - ' + Scalr.constants.iopsMax + '):']
 ];
 
+Scalr.constants.rdsInstancesTypes = [
+    'db.t1.micro',
+    'db.m1.small',
+    'db.m1.medium',
+    'db.m1.large',
+    'db.m1.xlarge',
+    'db.m2.2xlarge',
+    'db.m2.4xlarge',
+    'db.m3.medium',
+    'db.m3.large',
+    'db.m3.xlarge',
+    'db.m3.2xlarge',
+    'db.m4.large',
+    'db.m4.xlarge',
+    'db.m4.2xlarge',
+    'db.m4.4xlarge',
+    'db.m4.10xlarge',
+    'db.r3.large',
+    'db.r3.xlarge',
+    'db.r3.2xlarge',
+    'db.r3.4xlarge',
+    'db.r3.8xlarge',
+    'db.t2.micro',
+    'db.t2.small',
+    'db.t2.medium',
+    'db.t2.large',
+    'db.cr1.8xlarge'
+];
+
 Scalr.configs = {
     eventsListConfig: {
         cls: 'x-boundlist-alt',
@@ -74,6 +103,10 @@ Ext.define(null, {
             me.hide();
         }
         /*End*/
+    },
+    onEscapeKey: function (keyCode, e) {
+        this.callParent(arguments);
+        e.stopPropagation();
     },
 
     //v5.1.0 fixes deadloop on environments menu
@@ -161,7 +194,10 @@ Ext.define(null, {
         me.mouseMonitor = me.el.monitorMouseLeave(100, me.onMouseLeave, me);
     },
 
-
+    onShow: function () {
+        this.callParent(arguments);
+        this.focus();
+    }
 });
 
 Ext.define(null, {
@@ -189,6 +225,33 @@ Ext.define(null, {
     override: 'Ext.picker.Date',
     shadow: false,
 
+    initComponent: function () {
+        var me = this;
+        me.callParent(arguments);
+
+        me.keyNavConfig =  {
+            forceKeyDown: true,
+            esc: function(e) {
+                var isMonthPickerVisible = me.monthPicker ? me.monthPicker.isVisible() : false;
+                if (isMonthPickerVisible) {
+                    me.monthPicker.onCancelClick();
+                } else {
+                    me.pickerField.collapse();
+                }
+                // stop propagation to prevent close pop-up windows or dropdown pickers
+                e.stopPropagation();
+            },
+            enter: function(e) {
+                var isMonthPickerVisible = me.monthPicker ? me.monthPicker.isVisible() : false;
+                if (isMonthPickerVisible) {
+                    me.monthPicker.onOkClick();
+                } else {
+                    me.handleDateClick(e, me.activeCell.firstChild);
+                }
+            },
+        }
+    },
+
     createMonthPicker: function() {
         var me = this,
             picker = me.monthPicker;
@@ -205,6 +268,7 @@ Ext.define(null, {
                 shadow: false,
                 small: me.showToday === false,
                 /** Added */
+                focusable: false, // prevent datefield blur in Firefox
                 minDate: me.minDate,
                 maxDate: me.maxDate,
                 /** End */
@@ -508,6 +572,7 @@ Ext.define(null, {
 Ext.define(null, {
     override: 'Ext.form.FieldSet',
 
+    // use cls: 'x-transparent-mask' if you want to get transparent mask for disabled form
     maskOnDisable: true,
 
     // fieldset's title is not legend (simple div)
@@ -657,7 +722,9 @@ Ext.define(null, {
 
     setValueOnData: function() {
         var me = this;
-        if (!me.value && me.autoSetSingleValue && me.store.getCount() == 1) {
+        if (!me.value && me.autoSetValue && me.store.getCount() > 0) {
+            me.setValue(me.store.first().get(me.valueField));
+        } else if (!me.value && me.autoSetSingleValue && me.store.getCount() == 1) {
             me.setValue(me.store.first().get(me.valueField));
         } else {
             me.callParent(arguments);
@@ -666,7 +733,9 @@ Ext.define(null, {
 
     setValue: function(value) {
         var me = this;
-        if (!value && me.autoSetSingleValue && me.store.getCount() == 1) {
+        if (!value && me.autoSetValue && me.store.getCount() > 0) {
+            value = me.store.first().get(me.valueField);
+        } else if (!value && me.autoSetSingleValue && me.store.getCount() == 1) {
             value = me.store.first().get(me.valueField);
         }
 
@@ -744,7 +813,7 @@ Ext.define(null, {
         if (me.isExpanded) {
             if (! me.matchFieldWidth) {
                 //picker width shouldn't be smaller then field width when matchFieldWidth==false
-                picker.el.applyStyles('min-width: ' + me.bodyEl.getWidth() + 'px');
+                picker.el.applyStyles('min-width: ' + me.triggerWrap.getWidth() + 'px');
             }
         }
         this.callParent(arguments);
@@ -756,7 +825,7 @@ Ext.define(null, {
             isDelete = key === e.BACKSPACE || key === e.DELETE,
             rawValue = me.inputEl.dom.value,
             len = rawValue.length;
-        if ((rawValue !== me.lastMutatedValue || isDelete) && key !== e.TAB) {
+        if (/*Changed since v5.1.0*/!me.readOnly && /*End*/(rawValue !== me.lastMutatedValue || isDelete) && key !== e.TAB) {//ExtJS bug, fixed in v5.1.1
             me.lastMutatedValue = rawValue;
             me.lastKey = key;
             //don't hide dropdown when removing last character
@@ -853,6 +922,44 @@ Ext.define(null, {
         }
 
         me.callParent();
+    },
+
+    checkValueOnChange: function() {
+        var me = this;
+
+        // If multiselecting and the base store is modified, we may have to remove records from the valueCollection
+        // if they have gone from the base store, or update the rawValue if selected records are mutated.
+        // TODO: 5.1.1: Use a ChainedStore for multiSelect so that selected records are not filtered out of the
+        // base store and are able to be removed.
+        // See https://sencha.jira.com/browse/EXTJS-16096
+        if (me.multiSelect) {
+            // TODO: Implement in 5.1.1 when selected records are available for modification and not filtered out.
+            // valueCollection must be in sync with what's available in the base store, and rendered rawValue/tags
+            // must match any updated data.
+        }
+        else {
+            if (me.forceSelection && !me.changingFilters && !me.findRecordByValue(me.value)) {
+                me.setValue(null);
+                /* changed */
+                me.validate(); // revalidate value after reset
+                /* end of change */
+            }
+        }
+    }
+});
+
+// Fix: do not deselect record on container click (click-and-hold mouse pointer on any item in boundlist and drag mouse down)
+Ext.define(null, {
+    override: 'Ext.view.BoundList',
+
+    initComponent: function () {
+        var me = this;
+
+        me.callParent();
+
+        me.getSelectionModel().deselectOnContainerClick = false;
+
+        return me;
     }
 });
 
@@ -1065,7 +1172,35 @@ Ext.define(null, {
             el.scrollTo('left', scrollPosition.left);
             el.scrollTo('top', scrollPosition.top);
         }
-    }
+    },
+
+    /*
+     * *added in v5.1.0
+     * allow to define defaultFocus as array(order === priority)
+     */
+    getDefaultFocus: function() {
+        /*Changed*/
+        var defaultFocus = this.defaultFocusOrdered || this.defaultFocus,
+            result;
+        if (defaultFocus != undefined) {
+            if (Ext.isArray(defaultFocus)) {
+                Ext.each(defaultFocus, function(query){
+                    var c = this.down(query);
+                    if (c) {
+                        result = c;
+                        return false;
+                    }
+                }, this);
+            } else {
+                result = this.down(defaultFocus);
+            }
+        }
+        /*End*/
+
+        // Returning undefined is ok
+        return result;
+    },
+
 
 
 });
@@ -1397,10 +1532,6 @@ Ext.define(null,{
         var fullEngineText = Scalr.utils.beautifyEngineName(engineName) + '&nbsp;'
             + (Ext.isDefined(engineVersion) ? engineVersion : '');
 
-        if (engineName.indexOf('-') !== -1) {
-            engineName = engineName.substring(0, engineName.indexOf('-'));
-        }
-
         return '<span data-qtip="' + fullEngineText + '"><img class="x-icon-engine-small x-icon-engine-small-' +
             engineName + '" src="' + Ext.BLANK_IMAGE_URL + '"/>&nbsp;&nbsp;' +
             fullEngineText + '</span>';
@@ -1546,7 +1677,19 @@ Ext.override(Ext.form.field.Base, {
             errors = Ext.Array.map(errors, Ext.util.Format.nl2br);
         }
         me.callParent([errors]);
+    },
+
+    /*
+     * added in v5.1.0
+     * fieldicons plugin needs to know about label change
+     */
+    setFieldLabel: function(label) {
+        var opts = {label: label};
+        this.fireEvent('beforefieldlabelchange', this, opts);
+        this.callParent([opts.label]);
+        this.fireEvent('fieldlabelchange', this);
     }
+
 });
 
 Ext.define(null, {
@@ -2036,7 +2179,7 @@ Ext.define(null, {
 
         if (!preventLoading) {
             if (me.isContinuousStore) {
-                me.clearAndLoad();
+                me.clearAndLoad(null, true);
             } else if (proxy.type === 'ajax' || proxy.type === 'cachedrequest') {
                 me.removeAll();
                 me.load();
@@ -2221,8 +2364,10 @@ Ext.define(null, {
 Ext.define(null, {
     override: 'Ext.form.field.Tag',
 
-    listConfig: {
-        navigationModel: 'tagboundlist'
+    config: {
+        listConfig: {
+            navigationModel: 'tagfieldboundlist'
+        }
     },
 
     updateValue: function () {
@@ -2674,19 +2819,19 @@ Ext.define(null, {
     override: 'Ext.form.field.Checkbox',
 
     //prevent to enable disabled checkbox when setting readOnly = false
-	setReadOnly: function(readOnly) {
-		var me = this,
-			inputEl = me.inputEl;
-		if (inputEl) {
-			// Set the button to disabled when readonly
-			inputEl.dom.disabled = readOnly || me.disabled;
-		}
+    setReadOnly: function(readOnly) {
+        var me = this,
+            inputEl = me.inputEl;
+        if (inputEl) {
+            // Set the button to disabled when readonly
+            inputEl.dom.disabled = readOnly || me.disabled;
+        }
         /*Changed*/
-		me[readOnly ? 'addCls' : 'removeCls'](me.readOnlyCls);
-		me.readOnly = readOnly;
+        me[readOnly ? 'addCls' : 'removeCls'](me.readOnlyCls);
+        me.readOnly = readOnly;
         me.fireEvent('writeablechange', me, readOnly);
         /*End*/
-	}
+    }
 });
 
 /**
@@ -2801,15 +2946,15 @@ Ext.define(null, {
     },
 
     expandFlexColumns: function() {
-		var headerCt = this.headerCt,
-			grid = headerCt.ownerCt || null,
+        var headerCt = this.headerCt,
+            grid = headerCt.ownerCt || null,
             currentColumn = this.dragHd,
             columns = [];
 
-		if (!grid || grid.isLocked) return;
+        if (!grid || grid.isLocked) return;
 
-		var columnsWidth = 0,
-			panelWidth = grid.view.getWidth();
+        var columnsWidth = 0,
+            panelWidth = grid.view.getWidth();
 
         Ext.each(this.headerCt.getVisibleGridColumns(), function(col){
             columnsWidth += col.getWidth();
@@ -2822,7 +2967,7 @@ Ext.define(null, {
             columns.push(currentColumn);
         }
 
-		if (columns.length && panelWidth > columnsWidth) {
+        if (columns.length && panelWidth > columnsWidth) {
             var scrollWidth = grid.getView().el.dom.scrollHeight == grid.getView().el.getHeight() ? 0 : Ext.getScrollbarSize().width,
                 deltaWidth = Math.floor((panelWidth - columnsWidth - scrollWidth)/columns.length);
             grid.suspendLayouts();
@@ -2836,7 +2981,7 @@ Ext.define(null, {
                 }
             }
             grid.resumeLayouts(true);
-		}
+        }
     },
 
     //bugfix v5.1: unexpected grid reordering after resizing column
@@ -3115,3 +3260,84 @@ Ext.define(null, {
          return value ? 1 : 0;
      }
  });
+
+/*
+ * added in v5.1.0
+ * If we have disabled fields in form, they don't submit to server, but error from server won't return to them correctly.
+ * Try to find enabled component at first, otherwise return any found component
+ */
+Ext.define(null, {
+    override: 'Ext.form.Basic',
+
+    findField: function (id) {
+        var dItem = null;
+
+        return this.getFields().findBy(function (f) {
+                if (f.id === id || f.name === id || f.dataIndex === id) {
+                    if (f.isDisabled()) {
+                        dItem = f;
+                    } else {
+                        return true;
+                    }
+                }
+            }) || dItem;
+    }
+});
+
+/*
+ * added in v5.1.0
+ * remove after switching to 5.1.1
+ */
+Ext.un('focus', Ext.ComponentManager.onGlobalFocus, Ext.ComponentManager);
+Ext.apply(Ext.ComponentManager, {
+    onGlobalFocus: function(e) {
+        var me = this,
+            toElement = e.toElement,
+            fromElement = e.fromElement,
+            toComponent = me.byElement(toElement),
+            fromComponent = me.byElement(fromElement),
+            commonAncestor = me.getCommonAncestor(fromComponent, toComponent),
+            event, targetComponent;
+        if (fromComponent && /*Changed*/!(fromComponent.isDestroyed || fromComponent.destroying)/*End*/) {//copied from ExtJS 5.1.1
+            if (fromComponent.focusable && fromElement === fromComponent.getFocusEl().dom) {
+                event = new Ext.event.Event(e.event);
+                event.type = 'blur';
+                event.target = fromElement;
+                event.relatedTarget = toElement;
+                fromComponent.onBlur(event);
+            }
+
+            for (targetComponent = fromComponent; targetComponent && targetComponent !== commonAncestor; targetComponent = targetComponent.getRefOwner()) {
+                targetComponent.onFocusLeave({
+                    event: e.event,
+                    type: 'focusleave',
+                    target: fromElement,
+                    relatedTarget: toElement,
+                    fromComponent: fromComponent,
+                    toComponent: toComponent
+                });
+            }
+        }
+        if (toComponent && !toComponent.isDestroyed) {
+
+            if (toComponent.focusable && toElement === toComponent.getFocusEl().dom) {
+                event = new Ext.event.Event(e.event);
+                event.type = 'focus';
+                event.relatedTarget = fromElement;
+                event.target = toElement;
+                toComponent.onFocus(event);
+            }
+            for (targetComponent = toComponent; targetComponent && targetComponent !== commonAncestor; targetComponent = targetComponent.getRefOwner()) {
+                targetComponent.onFocusEnter({
+                    event: e.event,
+                    type: 'focusenter',
+                    relatedTarget: fromElement,
+                    target: toElement,
+                    fromComponent: fromComponent,
+                    toComponent: toComponent
+                });
+            }
+        }
+    }
+});
+Ext.on('focus', Ext.ComponentManager.onGlobalFocus, Ext.ComponentManager);

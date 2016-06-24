@@ -230,6 +230,9 @@ Scalr.regPage('Scalr.ui.bundletasks.view', function (loadParams, moduleParams) {
 
             var request = Scalr.Request({
                 url: '/bundletasks/xListLogs/',
+                headers: {
+                    'Scalr-Autoload-Request': 1
+                },
                 params: {
                     bundleTaskId: bundleTaskId,
                     limit: me.shortLogRecordsCount,

@@ -1,14 +1,9 @@
 <?php
 
-use Scalr\Acl\Acl;
 use Scalr\Model\Entity\Image;
 
 class Scalr_UI_Controller_Tools_Aws_Ec2_Ami extends Scalr_UI_Controller
 {
-    /*public function hasAccess()
-    {
-        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_VOLUMES);
-    }*/
 
     public function defaultAction()
     {

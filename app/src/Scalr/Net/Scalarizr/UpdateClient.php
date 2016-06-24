@@ -12,7 +12,8 @@ class Scalr_Net_Scalarizr_UpdateClient
         $isVPC = false;
 
 
-    public function __construct(DBServer $dbServer, $port = 8008, $timeout = 5) {
+    public function __construct(DBServer $dbServer, $port = 8008, $timeout = 5) 
+    {
         $this->dbServer = $dbServer;
         $this->port = $port;
         $this->timeout = $timeout;
@@ -22,6 +23,15 @@ class Scalr_Net_Scalarizr_UpdateClient
                 $this->isVPC = true;
 
         $this->cryptoTool = \Scalr::getContainer()->srzcrypto($this->dbServer->GetKey(true));
+    }
+    
+    /**
+     * 
+     * @param integer $timeout Timeout in seconds
+     */
+    public function setTimeout($timeout)
+    {
+        $this->timeout = $timeout;
     }
 
     public function configure($repo, $schedule)

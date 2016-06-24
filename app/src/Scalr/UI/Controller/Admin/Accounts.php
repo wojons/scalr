@@ -2,7 +2,6 @@
 use Scalr\UI\Request\Validator;
 use Scalr\UI\Request\RawData;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
-use \Scalr\AuditLogger;
 use Scalr\Model\Entity\Account\User;
 
 
@@ -343,13 +342,9 @@ class Scalr_UI_Controller_Admin_Accounts extends Scalr_UI_Controller
             $envId = null;
         }
 
-        $this->auditLog(
-            "user.auth.login",
-            $user,
-            $envId,
-            $this->request->getRemoteAddr(),
-            $this->user->getId()
-        );
+        $this->getContainer()->auditlogger->setEnvironmentId($envId)->setRuid($this->user->getId());
+
+        $this->auditLog("user.auth.login", $user);
 
         $this->response->success();
     }

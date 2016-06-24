@@ -9,14 +9,14 @@ use InvalidArgumentException;
 use ArrayIterator;
 use OutOfBoundsException;
 use OutOfRangeException;
-use \DBFarm;
+use DBFarm;
 use Scalr\Model\Loader\Field;
 use Scalr\Stats\CostAnalytics\Entity\UsageItemEntity;
 use Scalr\Stats\CostAnalytics\Entity\UsageTypeEntity;
-use \SERVER_PROPERTIES;
-use \Scalr_Environment;
-use \Scalr_Account_User;
-use \Scalr_Account;
+use SERVER_PROPERTIES;
+use Scalr_Environment;
+use Scalr_Account_User;
+use Scalr_Account;
 use Scalr\Stats\CostAnalytics\Entity\TagEntity;
 use Scalr\Stats\CostAnalytics\Entity\UsageHourlyEntity;
 use Scalr\DataType\AggregationCollection;
@@ -600,7 +600,9 @@ class Usage
                 $arr[$col] = $item->$col;
             }
 
-            $arr['period'] = (string)$rec['period'];
+            if (isset($rec['period'])) {
+                $arr['period'] = (string) $rec['period'];
+            }
 
             if ($rawResult) {
                 $ret[] = $arr;
@@ -2784,7 +2786,9 @@ class Usage
                 $arr[$col] = $item->$col;
             }
 
-            $arr['period'] = (string) $rec['period'];
+            if (isset($rec['period'])) {
+                $arr['period'] = (string) $rec['period'];
+            }
 
             if (isset($rec['usageItem'])) {
                 $arr['usageItem'] = (string) $rec['usageItem'];
@@ -3928,22 +3932,26 @@ class Usage
 
         switch ($usageType) {
             case UsageTypeEntity::NAME_COMPUTE_BOX_USAGE:
+            case UsageTypeEntity::NAME_OTHER_SOFTWARE:
                 $measure = 'hours';
                 break;
+
             case UsageTypeEntity::NAME_STORAGE_EBS:
                 $measure = 'GB-hours';
                 break;
+
             case UsageTypeEntity::NAME_STORAGE_EBS_IOPS:
                 $measure = 'operations';
                 break;
+
             case UsageTypeEntity::NAME_STORAGE_EBS_IO:
                 $measure = 'requests';
                 break;
+
             case UsageTypeEntity::NAME_BANDWIDTH_IN:
             case UsageTypeEntity::NAME_BANDWIDTH_OUT:
             case UsageTypeEntity::NAME_BANDWIDTH_REGIONAL:
                 $measure = 'MB';
-                break;
         }
 
         return $measure;

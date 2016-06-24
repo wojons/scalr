@@ -14,7 +14,7 @@ Note that you can pass a complete [`Os`](./../definitions/Os.mkd) object as well
 
 ### `id` (required) ###
 
-
+An ID uniquely identifying this OS in Scalr.
 
 
 Property of type: `string`.
@@ -28,18 +28,19 @@ Property of type: `string`.
 ## Swagger Definition ##
 
     {
+      "properties": {
+        "id": {
+          "description": "An ID uniquely identifying this OS in Scalr.", 
+          "type": "string"
+        }
+      }, 
       "required": [
         "id"
       ], 
-      "x-references": {
-        "$ref": "#/definitions/Os"
-      }, 
       "x-derived": {
         "$ref": "#/definitions/Os"
       }, 
-      "properties": {
-        "id": {
-          "type": "string"
-        }
+      "x-references": {
+        "$ref": "#/definitions/Os"
       }
     }

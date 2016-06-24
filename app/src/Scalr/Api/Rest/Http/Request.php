@@ -198,6 +198,16 @@ class Request
     }
 
     /**
+     * Gets HTTP origin
+     *
+     * @return string|null
+     */
+    public function getOrigin()
+    {
+        return isset($this->env['HTTP_ORIGIN']) ? $this->env['HTTP_ORIGIN'] : null;
+    }
+
+    /**
      * Whether content type is application/x-www-form-urlencoded
      *
      * @return bool Returns true if content type is a form data
@@ -396,7 +406,9 @@ class Request
      */
     public function headers($key = null, $default = null)
     {
-        $key = strtolower($key);
+        if (!is_null($key)) {
+            $key = strtolower($key);
+        }
 
         return $key !== null ? (isset($this->env['request.headers'][$key]) ? $this->env['request.headers'][$key] : $default) :
                $this->env['request.headers'];

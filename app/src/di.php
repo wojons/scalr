@@ -1,9 +1,14 @@
 <?php
 
+use Scalr\DependencyInjection\Container;
 use Scalr\Exception\ScalrException;
+use Scalr\LogCollector\ApiLoggerConfiguration;
+use Scalr\LogCollector\AuditLoggerRetrieveConfigurationInterface;
 use Scalr\System\Config\Yaml;
 use Scalr\Model\Entity;
-use Scalr\AuditLogger;
+use Scalr\LogCollector\AuditLogger;
+use Scalr\LogCollector\UserLogger;
+use Scalr\LogCollector\ApiLogger;
 
 /**
  * Dependency injection container configuration
@@ -59,23 +64,23 @@ $container->user = function ($cont) {
 };
 
 $container->awsAccessKeyId = function ($cont) {
-    return $cont->environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCESS_KEY];
+    return $cont->environment->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCESS_KEY];
 };
 
 $container->awsSecretAccessKey = function ($cont) {
-    return $cont->environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_SECRET_KEY];
+    return $cont->environment->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_SECRET_KEY];
 };
 
 $container->awsAccountNumber = function ($cont) {
-    return $cont->environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID];
+    return $cont->environment->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID];
 };
 
 $container->awsCertificate = function ($cont) {
-    return $cont->environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_CERTIFICATE];
+    return $cont->environment->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_CERTIFICATE];
 };
 
 $container->awsPrivateKey = function ($cont) {
-    return $cont->environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_PRIVATE_KEY];
+    return $cont->environment->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_PRIVATE_KEY];
 };
 
 $container->aws = function ($cont, array $arguments = null) {
@@ -84,7 +89,7 @@ $container->aws = function ($cont, array $arguments = null) {
 
     $traitFetchEnvProperties = function ($env) use (&$params) {
         /* @var $env \Scalr_Environment|Entity\Account\Environment */
-        $ccProps = $env->cloudCredentials(SERVER_PLATFORMS::EC2)->properties;
+        $ccProps = $env->keychain(SERVER_PLATFORMS::EC2)->properties;
 
         $params['accessKeyId'] = $ccProps[Entity\CloudCredentialsProperty::AWS_ACCESS_KEY];
         $params['secretAccessKey'] = $ccProps[Entity\CloudCredentialsProperty::AWS_SECRET_KEY];
@@ -120,13 +125,7 @@ $container->aws = function ($cont, array $arguments = null) {
         $params['secretAccessKey'] = isset($arguments[2]) ? $arguments[2] : null;
         $params['certificate'] = isset($arguments[3]) ? $arguments[3] : null;
         $params['privateKey'] = isset($arguments[4]) ? $arguments[4] : null;
-        $params['environment'] = !isset($arguments[2]) ? $cont->environment : null;
-    }
-
-    $config = $cont->config;
-    $proxySettings = null;
-    if ($config('scalr.aws.use_proxy') && in_array($config('scalr.connections.proxy.use_on'), array('both', 'scalr'))) {
-        $proxySettings = $config('scalr.connections.proxy');
+        $params['environment'] = !isset($arguments[2]) && $cont->initialized('environment') ? $cont->environment : null;
     }
 
     $serviceid = 'aws.' . hash('sha256', sprintf("%s|%s|%s|%s|%s",
@@ -136,6 +135,13 @@ $container->aws = function ($cont, array $arguments = null) {
     ), false);
 
     if (!$cont->initialized($serviceid)) {
+        $config = $cont->config;
+        $proxySettings = null;
+
+        if ($config('scalr.aws.use_proxy') && in_array($config('scalr.connections.proxy.use_on'), array('both', 'scalr'))) {
+            $proxySettings = $config('scalr.connections.proxy');
+        }
+
         $cont->setShared($serviceid, function($cont) use ($params, $proxySettings) {
             if (empty($params['secretAccessKey']) || empty($params['accessKeyId'])) {
                 throw new \Scalr\Exception\InvalidCloudCredentialsException();
@@ -149,15 +155,17 @@ $container->aws = function ($cont, array $arguments = null) {
             if ($proxySettings !== null) {
                 $aws->setProxy(
                     $proxySettings['host'], $proxySettings['port'], $proxySettings['user'],
-                    $proxySettings['pass'], $proxySettings['type']
+                    $proxySettings['pass'], $proxySettings['type'], $proxySettings['authtype']
                 );
             }
 
             $observer = new \Scalr\Service\Aws\Plugin\EventObserver($aws);
             $aws->setEventObserver($observer);
+
             if (isset($params['environment']) && $params['environment'] instanceof \Scalr_Environment) {
                 $aws->setEnvironment($params['environment']);
             }
+
             return $aws;
         });
     }
@@ -197,6 +205,7 @@ $container->openstack = function ($cont, array $arguments = null) {
             $params['region'] = $config->getRegion();
             $params['identityVersion'] = $config->getIdentityVersion();
             $params['proxySettings'] = $config->getProxySettings();
+            $params['requestTimeout'] = $config->getRequestTimeout();
         } else {
             throw new \InvalidArgumentException('Invalid argument type!');
         }
@@ -209,7 +218,7 @@ $container->openstack = function ($cont, array $arguments = null) {
             $env = $cont->environment;
         }
 
-        $ccProps = $env->cloudCredentials($platform)->properties;
+        $ccProps = $env->keychain($platform)->properties;
 
         $params['username'] = $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_USERNAME];
         $params['identityEndpoint'] = $ccProps[Entity\CloudCredentialsProperty::OPENSTACK_KEYSTONE_URL];
@@ -248,24 +257,29 @@ $container->openstack = function ($cont, array $arguments = null) {
         false
     );
 
-    /* @var $config Yaml */
-    $config = $cont->config;
-
-    if (isset($platform) &&
-        $config->defined("scalr.{$platform}.use_proxy") &&
-        $config("scalr.{$platform}.use_proxy") &&
-        in_array($config('scalr.connections.proxy.use_on'), ['both', 'scalr'])) {
-        $params['proxySettings'] = $config('scalr.connections.proxy');
-    }
-
     if (!$cont->initialized($serviceid)) {
+        /* @var $config Yaml */
+        $config = $cont->config;
+
+        if (isset($platform) &&
+            $config->defined("scalr.{$platform}.use_proxy") &&
+            $config("scalr.{$platform}.use_proxy") &&
+            in_array($config('scalr.connections.proxy.use_on'), ['both', 'scalr'])) {
+            $params['proxySettings'] = $config('scalr.connections.proxy');
+        }
+
+        if ($config->defined("scalr.{$platform}.api_client.timeout")) {
+            $params['requestTimeout'] = $config("scalr.{$platform}.api_client.timeout");
+        }
+
         $cont->setShared($serviceid, function ($cont) use ($params) {
             if (!isset($params['config'])) {
                 $params['config'] = new \Scalr\Service\OpenStack\OpenStackConfig(
                     $params['username'], $params['identityEndpoint'], $params['region'], $params['apiKey'],
                     $params['updateTokenCallback'], $params['authToken'], $params['password'], $params['tenantName'],
                     $params['domainName'], $params['identityVersion'],
-                    empty($params['proxySettings']) ? null : $params['proxySettings']
+                    empty($params['proxySettings']) ? null : $params['proxySettings'],
+                    empty($params['requestTimeout']) ? null : $params['requestTimeout']
                 );
             }
 
@@ -286,7 +300,7 @@ $container->cloudstack = function($cont, array $arguments = null) {
 
     $traitFetchEnvProperties = function ($platform, $env) use (&$params) {
         /* @var $env \Scalr_Environment */
-        $ccProps = $env->cloudCredentials($platform)->properties;
+        $ccProps = $env->keychain($platform)->properties;
 
         $params['apiUrl'] = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_API_URL];
         $params['apiKey'] = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_API_KEY];
@@ -311,7 +325,18 @@ $container->cloudstack = function($cont, array $arguments = null) {
     ), false);
 
     if (!$cont->initialized($serviceid)) {
-        $cont->setShared($serviceid, function($cont) use ($params) {
+        $proxySettings = null;
+        /* @var $config Yaml */
+        $config = $cont->config;
+
+        if (isset($platform) &&
+            $config->defined("scalr.{$platform}.use_proxy") &&
+            $config("scalr.{$platform}.use_proxy") &&
+            in_array($config('scalr.connections.proxy.use_on'), ['both', 'scalr'])) {
+            $proxySettings = $config('scalr.connections.proxy');
+        }
+
+        $cont->setShared($serviceid, function($cont) use ($params, $proxySettings) {
             if (empty($params['apiKey']) || empty($params['secretKey'])) {
                 throw new \Scalr\Exception\InvalidCloudCredentialsException();
             }
@@ -319,6 +344,13 @@ $container->cloudstack = function($cont, array $arguments = null) {
             $cloudstack = new \Scalr\Service\CloudStack\CloudStack(
                 $params['apiUrl'], $params['apiKey'], $params['secretKey'], $params['platform']
             );
+
+            if ($proxySettings !== null) {
+                $cloudstack->setProxy(
+                    $proxySettings['host'], $proxySettings['port'], $proxySettings['user'],
+                    $proxySettings['pass'], $proxySettings['type'], $proxySettings['authtype']
+                );
+            }
 
             return $cloudstack;
         });
@@ -332,7 +364,7 @@ $container->azure = function($cont, array $arguments = null) {
 
     $traitFetchEnvProperties = function ($env) use (&$params) {
         /* @var $env \Scalr_Environment */
-        $ccProps = $env->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties;
+        $ccProps = $env->keychain(SERVER_PLATFORMS::AZURE)->properties;
 
         $params['appClientId'] = $env->config("scalr.azure.app_client_id");
         $params['appSecretKey'] = $env->config("scalr.azure.app_secret_key");
@@ -356,7 +388,14 @@ $container->azure = function($cont, array $arguments = null) {
         ), false);
 
     if (!$cont->initialized($serviceId)) {
-        $cont->setShared($serviceId, function($cont) use ($params) {
+        $config = $cont->config;
+        $proxySettings = null;
+
+        if ($config('scalr.azure.use_proxy') && in_array($config('scalr.connections.proxy.use_on'), ['both', 'scalr'])) {
+            $proxySettings = $config('scalr.connections.proxy');
+        }
+
+        $cont->setShared($serviceId, function($cont) use ($params, $proxySettings) {
             if (empty($params['appClientId']) || empty($params['appSecretKey'])) {
                 throw new \Scalr\Exception\InvalidCloudCredentialsException();
             }
@@ -364,7 +403,15 @@ $container->azure = function($cont, array $arguments = null) {
             $azure = new \Scalr\Service\Azure(
                 $params['appClientId'], $params['appSecretKey'], $params['tenantName']
             );
+
             $azure->setEnvironment($params['environment']);
+
+            if ($proxySettings !== null) {
+                $azure->setProxy(
+                    $proxySettings['host'], $proxySettings['port'], $proxySettings['user'],
+                    $proxySettings['pass'], $proxySettings['type'], $proxySettings['authtype']
+                );
+            }
 
             return $azure;
         });
@@ -517,8 +564,7 @@ $container->set('warmup', function($cont, array $arguments = null) {
         $cont->release($srv);
     }
 
-    $cont->release('env_cloud_creds');
-    $cont->release('cloud_creds');
+    $cont->release('keychain');
 
     //Releases platform module static cache
     \Scalr\Modules\PlatformFactory::warmup();
@@ -660,7 +706,7 @@ $container->set('version', function ($cont, array $arguments = []) {
     return $cont->{'version.info'}[$part];
 });
 
-$container->set('cloudCredentials', function ($cont, array $arguments = []) {
+$container->set('keychain', function ($cont, array $arguments = []) {
     /* @var $cont \Scalr\DependencyInjection\Container */
     $cloud = array_shift($arguments);
 
@@ -675,7 +721,7 @@ $container->set('cloudCredentials', function ($cont, array $arguments = []) {
     }
 
     $cloudCredentials = null;
-    $envCloudCredId = "env_cloud_creds.{$envId}.{$cloud}";
+    $envCloudCredId = "keychain.env_cloud_creds.{$envId}.{$cloud}";
 
     /* @var $cloudCredentials Entity\CloudCredentials */
     if (!$cont->initialized($envCloudCredId)) {
@@ -702,7 +748,7 @@ $container->set('cloudCredentials', function ($cont, array $arguments = []) {
     }
 
     $cloudCredId = $cont->get($envCloudCredId);
-    $contCloudCredId = "cloud_creds.{$cloudCredId}";
+    $contCloudCredId = "keychain.cloud_creds.{$cloudCredId}";
 
     if (!$cont->initialized($contCloudCredId)) {
         $cont->setShared($contCloudCredId, function ($cont) use ($envId, $cloud, $cloudCredId, &$cloudCredentials){
@@ -741,22 +787,28 @@ $container->set('saml', function ($cont) {
     return new OneLogin_Saml2_Auth($cont->{'saml.config'});
 });
 
-$container->setShared('auditlogger.metadata', function ($cont) {
-    $uiReq = $cont->initialized('request');
-
-    return (object) [
-        'user'        => $uiReq ? $cont->request->getUser() : null,
-        'envId'       => $uiReq && $cont->request->getEnvironment() ? $cont->request->getEnvironment()->id : null,
-        'remoteAddr'  => $uiReq ? $cont->request->getRemoteAddr() : null,
-        'ruid'        => $uiReq && $cont->request instanceof Scalr_UI_Request ? Scalr_Session::getInstance()->getRealUserId() : null,
-        'requestType' => null,
-        'systemTask'  => null,
-    ];
-});
-
 $container->setShared('auditlogger', function ($cont) {
-    $m = $cont->get('auditlogger.metadata');
+    /* @var $cont Container */
+    $request = $cont->initialized('auditlogger.request');
 
-    return new AuditLogger($m->user, $m->envId, $m->remoteAddr, $m->ruid, $m->requestType, $m->systemTask);
+    if (!$request) {
+        throw new Exception("Audit logger request has not been initialized.");
+    }
+
+    return new AuditLogger($cont->{'auditlogger.request'}->getAuditLoggerConfig());
 });
 
+$container->setShared('apilogger', function ($cont) {
+    /* @var $cont Container */
+    $config = new ApiLoggerConfiguration(ApiLogger::REQUEST_TYPE_API);
+
+    $config->ipAddress = $cont->api->initialized('request') ? $cont->api->request->getIp() : null;
+    $config->requestId = $cont->api->initialized('meta') ? $cont->api->meta->requestId : null;
+
+    return new ApiLogger($config);
+});
+
+
+$container->setShared('userlogger', function ($cont) {
+    return new UserLogger();
+});

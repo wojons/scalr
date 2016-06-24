@@ -3,10 +3,9 @@ LOGS_API_LOGS:
 - /logs/xListApiLogs
 - /logs/apiLogEntryDetails
 
-LOGS_SCRIPTING_LOGS:
-- /logs/scripting
-- /logs/xListScriptingLogs
-- /logs/scriptingMessage
+LOGS_ORCHESTRATION_LOGS:
+- /logs/orchestration
+- /logs/xListOrchestrationLogs
 
 LOGS_SYSTEM_LOGS:
 - /logs/system

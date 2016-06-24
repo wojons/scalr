@@ -3,7 +3,7 @@ Scalr.regPage('Scalr.ui.public.azure', function (loadParams, moduleParams) {
         if (Scalr.user.userId) {
             Scalr.event.fireEvent('redirect', '/public/xAzureToken?code=' + loadParams['code']);
         } else {
-            Scalr.utils.authWindow.show();
+            Scalr.utils.authWindow.showIfHidden();
         }
     } else {
         Scalr.message.Error(Ext.htmlEncode(loadParams['error']) || 'Unknown error');

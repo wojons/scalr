@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\Stats\CostAnalytics\Iterator\ChartPeriodIterator;
+use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 
 class Scalr_UI_Controller_Admin_Analytics extends Scalr_UI_Controller

@@ -53,7 +53,7 @@ class ElbTest extends ElbTestCase
     {
         parent::setUp();
 
-        if (!$this->isSkipFunctionalTests()) {
+        if (!static::isSkippedFunctionalTest()) {
             $this->elb = $this->getEnvironment()->aws(self::REGION)->elb;
             $this->elb->enableEntityManager();
         }
@@ -678,7 +678,9 @@ class ElbTest extends ElbTestCase
                 'reason-code',
                 'state'
             ) as $j) {
-                $name = preg_replace_callback('/(-([a-z]))/', create_function('$a', 'return strtoupper($a[2]);'), $j);
+                $name = preg_replace_callback('/(-([a-z]))/', function ($a) {
+                    return strtoupper($a[2]);
+                }, $j);
                 $this->assertEquals($j . '-' . ($i * 3 + 1), $instanceHealthResult[$i]->{$name});
             }
         }

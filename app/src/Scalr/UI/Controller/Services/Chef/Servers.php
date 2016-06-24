@@ -69,34 +69,6 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
         ]);
     }
 
-    //with governance
-    public function xListServersAction()
-    {
-        $limits = null;
-
-        if (!$this->user->isAdmin()) {
-            $governance = new Scalr_Governance($this->getEnvironmentId(true));
-            $limits = $governance->getValue(Scalr_Governance::CATEGORY_GENERAL, Scalr_Governance::GENERAL_CHEF, null);
-        }
-
-        $list = [];
-
-        foreach ($this->getList() as $server) {
-            if (!$limits || isset($limits['servers'][(string)$server['id']])) {
-                $list[] = [
-                    'id'       => (string)$server['id'],
-                    'url'      => $server['url'],
-                    'username' => $server['username'],
-                    'scope'    => $server['scope']
-                ];
-            }
-        }
-
-        $this->response->data([
-            'data' => $list
-        ]);
-    }
-
     /**
      * @param int $id
      * @throws Exception
@@ -226,7 +198,9 @@ class Scalr_UI_Controller_Services_Chef_Servers extends Scalr_UI_Controller
         if (count($processed) == $num) {
             $this->response->success('Chef servers successfully removed');
         } else {
-            array_walk($errors, function(&$item) { $item = '- ' . $item; });
+            array_walk($errors, function (&$item) {
+                $item = '- ' . $item;
+            });
             $this->response->warning(sprintf("Successfully removed %d from %d chef servers. \nFollowing errors occurred:\n%s", count($processed), $num, join($errors, '')));
         }
 

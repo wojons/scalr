@@ -14,7 +14,7 @@ class Scalr_UI_Controller_Platforms_Azure extends Scalr_UI_Controller
         //Get Resource groups;
         $rGroups = $azure->resourceManager->resourceGroup->getList(
             $this->environment
-                 ->cloudCredentials(SERVER_PLATFORMS::AZURE)
+                 ->keychain(SERVER_PLATFORMS::AZURE)
                  ->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID]
         );
 
@@ -44,7 +44,7 @@ class Scalr_UI_Controller_Platforms_Azure extends Scalr_UI_Controller
 
         //Get virtual networks
         $vNets = $azure->network->virtualNetwork->getList(
-            $this->environment->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+            $this->environment->keychain(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
             $resourceGroup
         );
         foreach ($vNets as $vNet) {
@@ -66,7 +66,7 @@ class Scalr_UI_Controller_Platforms_Azure extends Scalr_UI_Controller
 
         //Get Availability sets
         $availSets = $azure->compute->availabilitySet->getList(
-            $this->environment->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+            $this->environment->keychain(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
             $resourceGroup
         );
 
@@ -82,7 +82,7 @@ class Scalr_UI_Controller_Platforms_Azure extends Scalr_UI_Controller
         }
 
         $storageAccounts = $azure->storage->account->getList(
-            $this->environment->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+            $this->environment->keychain(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
             $resourceGroup
         );
 

@@ -1,8 +1,12 @@
 <?php
 
+use Scalr\Model\Entity\Account\Environment;
+use Scalr\Model\Entity\CloudCredentials;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
 use Scalr\Model\Collections\ArrayCollection;
+use Scalr\Stats\CostAnalytics\Entity\NotificationEntity;
+use Scalr\Stats\CostAnalytics\Entity\ReportEntity;
 
 class Scalr_Account extends Scalr_Model
 {
@@ -114,7 +118,13 @@ class Scalr_Account extends Scalr_Model
             $this->db->Execute("DELETE FROM account_teams WHERE account_id=?", array($this->id));
 
             $this->db->Execute("DELETE FROM account_limits WHERE account_id=?", array($this->id));
-            $this->db->Execute("DELETE FROM client_environments WHERE client_id=?", array($this->id));
+
+            /* @var $environment Environment */
+            foreach (Environment::findByAccountId($this->id) as $environment) {
+                $environment->delete(true);
+            }
+
+            CloudCredentials::deleteByAccountId($this->id);
 
             $this->db->Execute("
                 DELETE account_team_user_acls FROM account_team_user_acls, acl_account_roles
@@ -131,7 +141,6 @@ class Scalr_Account extends Scalr_Model
             foreach ($this->db->Execute("SELECT id FROM farms WHERE clientid=?", [$this->id]) as $farm) {
                 $this->db->Execute("DELETE FROM farms WHERE id=?", array($farm["id"]));
                 $this->db->Execute("DELETE FROM farm_roles WHERE farmid=?", array($farm["id"]));
-                $this->db->Execute("DELETE FROM farm_event_observers WHERE farmid=?", array($farm["id"]));
                 $this->db->Execute("DELETE FROM elastic_ips WHERE farmid=?", array($farm["id"]));
             }
 
@@ -160,6 +169,9 @@ class Scalr_Account extends Scalr_Model
             $this->db->Execute("DELETE FROM ccs WHERE account_id = ?", [$this->id]);
 
             parent::delete();
+
+            ReportEntity::deleteByAccountId($this->id);
+            NotificationEntity::deleteByAccountId($this->id);
 
             $this->db->CompleteTrans();
         } catch (\Exception $e) {

@@ -383,9 +383,12 @@ Scalr.regPage('Scalr.ui.scripts.events.view', function (loadParams, moduleParams
                             if (used['webhooksCount'] > 0) {
                                 text.push((text.length > 1 ? ' and ' : '') + used['webhooksCount'] + '&nbsp;Webhook(s)');
                             }
+                            if (used['accountScriptsCount'] > 0) {
+                                text.push((text.length > 1 ? ' and ' : '') + used['accountScriptsCount'] + '&nbsp;Orchestration(s)');
+                            }
                             text = text.join('');
                         } else {
-                            text = 'This <b>Custom Event</b> is currently not used by any <b>Role</b>, <b>Farm Role</b> or <b>Webhook</b>.';
+                            text = 'This <b>Custom Event</b> is currently not used by any <b>Role</b>, <b>Farm Role</b>, <b>Webhook</b> or <b>Orchestration</b>.';
                         }
 
                     }

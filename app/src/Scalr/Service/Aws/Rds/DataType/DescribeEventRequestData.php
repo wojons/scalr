@@ -2,7 +2,7 @@
 namespace Scalr\Service\Aws\Rds\DataType;
 
 use Scalr\Service\Aws\Rds\AbstractRdsDataType;
-use \DateTime;
+use DateTime;
 
 /**
  * DescribeEventRequestData

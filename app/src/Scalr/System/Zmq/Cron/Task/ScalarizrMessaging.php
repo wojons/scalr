@@ -3,85 +3,82 @@
 namespace Scalr\System\Zmq\Cron\Task;
 
 use ArrayObject, Exception, stdClass;
-use \ADODB_Exception;
-use \DBServer;
-use \DBFarmRole;
-use \BundleTask;
-use \SERVER_PROPERTIES;
-use \EC2_SERVER_PROPERTIES;
-use \CLOUDSTACK_SERVER_PROPERTIES;
-use \OPENSTACK_SERVER_PROPERTIES;
-use \RACKSPACE_SERVER_PROPERTIES;
-use \GCE_SERVER_PROPERTIES;
-use \SERVER_PLATFORMS;
-use \SERVER_STATUS;
-use \SERVER_SNAPSHOT_CREATION_STATUS;
-use \SERVER_SNAPSHOT_CREATION_TYPE;
-use \AMAZON_EBS_STATE;
-use \EC2_EBS_MOUNT_STATUS;
-use \MESSAGE_STATUS;
-use \MYSQL_STORAGE_ENGINE;
-use \MYSQL_BACKUP_TYPE;
-use \SERVER_REPLACEMENT_TYPE;
-use \SZR_KEY_TYPE;
-use \FARM_STATUS;
-use \ROLE_TAGS;
-use \ROLE_BEHAVIORS;
-use \FarmLogMessage;
-use \ServerSnapshotCreateInfo;
-use \Scalr_Db_Msr;
-use \Scalr_Dm_DeploymentTask;
-use \Scalr_Role_Behavior;
-use \Scalr_Role_Behavior_RabbitMQ;
-use \Scalr_Model;
-use \Scalr_Storage_Volume;
-use \Scalr_Storage_Snapshot;
-use \Scalr_Service_Cloud_Rackspace;
-use \Scalr_Net_Scalarizr_UpdateClient;
-use \BeforeHostUpEvent;
-use \CustomEvent;
-use \EBSVolumeAttachedEvent;
-use \EBSVolumeMountedEvent;
-use \HostDownEvent;
-use \HostInitEvent;
-use \HostInitFailedEvent;
-use \HostUpEvent;
-use \MysqlBackupCompleteEvent;
-use \MysqlBackupFailEvent;
-use \NewMysqlMasterUpEvent;
-use \RebootCompleteEvent;
-use \RebootBeginEvent;
-use \RebundleCompleteEvent;
-use \RebundleFailedEvent;
-use \Scalr_Messaging_MsgMeta;
-use \Scalr_Messaging_JsonSerializer;
-use \Scalr_Messaging_XmlSerializer;
-use \Scalr_Messaging_Msg_AmiScriptsMigrationResult;
-use \Scalr_Messaging_Msg_BeforeHostUp;
-use \Scalr_Messaging_Msg_BlockDeviceAttached;
-use \Scalr_Messaging_Msg_BlockDeviceMounted;
-use \Scalr_Messaging_Msg_DbMsr;
-use \Scalr_Messaging_Msg_DeployResult;
-use \Scalr_Messaging_Msg_FireEvent;
-use \Scalr_Messaging_Msg_Hello;
-use \Scalr_Messaging_Msg_HostInit;
-use \Scalr_Messaging_Msg_HostUp;
-use \Scalr_Messaging_Msg_HostUpdate;
-use \Scalr_Messaging_Msg_HostDown;
-use \Scalr_Messaging_Msg_InitFailed;
-use \Scalr_Messaging_Msg_MongoDb;
-use \Scalr_Messaging_Msg_Mysql_CreateDataBundleResult;
-use \Scalr_Messaging_Msg_Mysql_CreateBackupResult;
-use \Scalr_Messaging_Msg_Mysql_CreatePmaUserResult;
-use \Scalr_Messaging_Msg_Mysql_PromoteToMasterResult;
-use \Scalr_Messaging_Msg_OperationResult;
-use \Scalr_Messaging_Msg_RabbitMq_SetupControlPanelResult;
-use \Scalr_Messaging_Msg_RebootStart;
-use \Scalr_Messaging_Msg_RebootFinish;
-use \Scalr_Messaging_Msg_RebundleResult;
-use \Scalr_Messaging_Msg_Win_HostDown;
-use \Scalr_Messaging_Msg_Win_PrepareBundleResult;
-use \Scalr_Messaging_Msg_UpdateControlPorts;
+use ADODB_Exception;
+use DBServer;
+use DBFarmRole;
+use BundleTask;
+use SERVER_PROPERTIES;
+use EC2_SERVER_PROPERTIES;
+use CLOUDSTACK_SERVER_PROPERTIES;
+use OPENSTACK_SERVER_PROPERTIES;
+use GCE_SERVER_PROPERTIES;
+use SERVER_PLATFORMS;
+use SERVER_STATUS;
+use SERVER_SNAPSHOT_CREATION_STATUS;
+use SERVER_SNAPSHOT_CREATION_TYPE;
+use AMAZON_EBS_STATE;
+use EC2_EBS_MOUNT_STATUS;
+use MESSAGE_STATUS;
+use MYSQL_STORAGE_ENGINE;
+use MYSQL_BACKUP_TYPE;
+use SERVER_REPLACEMENT_TYPE;
+use SZR_KEY_TYPE;
+use FARM_STATUS;
+use ROLE_TAGS;
+use ROLE_BEHAVIORS;
+use FarmLogMessage;
+use ServerSnapshotCreateInfo;
+use Scalr_Db_Msr;
+use Scalr_Role_Behavior;
+use Scalr_Role_Behavior_RabbitMQ;
+use Scalr_Model;
+use Scalr_Storage_Volume;
+use Scalr_Storage_Snapshot;
+use Scalr_Net_Scalarizr_UpdateClient;
+use BeforeHostUpEvent;
+use CustomEvent;
+use EBSVolumeAttachedEvent;
+use EBSVolumeMountedEvent;
+use HostDownEvent;
+use HostInitEvent;
+use HostInitFailedEvent;
+use HostUpEvent;
+use MysqlBackupCompleteEvent;
+use MysqlBackupFailEvent;
+use NewMysqlMasterUpEvent;
+use RebootCompleteEvent;
+use RebootBeginEvent;
+use RebundleCompleteEvent;
+use RebundleFailedEvent;
+use Scalr_Messaging_MsgMeta;
+use Scalr_Messaging_JsonSerializer;
+use Scalr_Messaging_XmlSerializer;
+use Scalr_Messaging_Msg_AmiScriptsMigrationResult;
+use Scalr_Messaging_Msg_BeforeHostUp;
+use Scalr_Messaging_Msg_BlockDeviceAttached;
+use Scalr_Messaging_Msg_BlockDeviceMounted;
+use Scalr_Messaging_Msg_DbMsr;
+use Scalr\Modules\Platforms\Openstack\Helpers\OpenstackHelper;
+use Scalr_Messaging_Msg_FireEvent;
+use Scalr_Messaging_Msg_Hello;
+use Scalr_Messaging_Msg_HostInit;
+use Scalr_Messaging_Msg_HostUp;
+use Scalr_Messaging_Msg_HostUpdate;
+use Scalr_Messaging_Msg_HostDown;
+use Scalr_Messaging_Msg_InitFailed;
+use Scalr_Messaging_Msg_MongoDb;
+use Scalr_Messaging_Msg_Mysql_CreateDataBundleResult;
+use Scalr_Messaging_Msg_Mysql_CreateBackupResult;
+use Scalr_Messaging_Msg_Mysql_CreatePmaUserResult;
+use Scalr_Messaging_Msg_Mysql_PromoteToMasterResult;
+use Scalr_Messaging_Msg_OperationResult;
+use Scalr_Messaging_Msg_RabbitMq_SetupControlPanelResult;
+use Scalr_Messaging_Msg_RebootStart;
+use Scalr_Messaging_Msg_RebootFinish;
+use Scalr_Messaging_Msg_RebundleResult;
+use Scalr_Messaging_Msg_Win_HostDown;
+use Scalr_Messaging_Msg_Win_PrepareBundleResult;
+use Scalr_Messaging_Msg_UpdateControlPorts;
 use Scalr\Modules\PlatformFactory;
 use Scalr\System\Zmq\Cron\AbstractTask;
 use Scalr\Exception\ServerNotFoundException;
@@ -89,6 +86,7 @@ use Scalr\Service\Aws\Ec2\DataType\VolumeFilterNameType;
 use Scalr\Modules\Platforms\Cloudstack\Helpers\CloudstackHelper;
 use Scalr\Db\ConnectionPool;
 use Scalr\Model\Entity;
+use Scalr\Service\Aws\Ec2\DataType\CreateVolumeRequestData;
 
 /**
  * ServerTerminate
@@ -223,12 +221,31 @@ class ScalarizrMessaging extends AbstractTask
                     throw new ServerNotFoundException("Farm related to this server has been terminated.");
                 }
             }
+
+            if (!$dbserver->isScalarized) {
+                // Do not process messages from the servers that has disabled/not-installed agent
+                $this->db->Execute("
+                    UPDATE messages
+                    SET status = ?
+                    WHERE server_id = ? AND status = ?
+                ", array(
+                    MESSAGE_STATUS::UNSUPPORTED,
+                    $dbserver->serverId,
+                    MESSAGE_STATUS::PENDING
+                ));
+
+                $this->getLogger()->debug("Server %s has no agent. Aborting", $dbserver->serverId);
+
+                return false;
+            }
         } catch (ServerNotFoundException $e) {
             //By some reason server does not exist
             $this->db->Execute("
                 DELETE m FROM messages m
                 WHERE m.server_id = ? AND m.`type` = ? AND m.`status` = ?
             ", [$serverId, "in", MESSAGE_STATUS::PENDING]);
+
+            $this->getLogger()->debug("Server %s is not found. Aborting", $dbserver->serverId);
 
             return false;
         }
@@ -254,26 +271,34 @@ class ScalarizrMessaging extends AbstractTask
                     $dbserver->SetProperty(SERVER_PROPERTIES::SZR_MESSAGE_FORMAT, 'json');
                 }
 
+                $this->getLogger()->debug("Processing message %s for server %s", $message->messageId, $dbserver->serverId);
+
                 $message->messageIpAddress = $row['ipaddress'];
                 $event = null;
                 $startTime = microtime(true);
 
                 // Update scalarizr package version
-                if ($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION]) {
+                if (array_key_exists(Scalr_Messaging_MsgMeta::SZR_VERSION, $message->meta)) {
                     $dbserver->setScalarizrVersion($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION]);
                 }
 
-                if ($message->meta[Scalr_Messaging_MsgMeta::SZR_UPD_CLIENT_VERSION]) {
+                if (array_key_exists(Scalr_Messaging_MsgMeta::SZR_UPD_CLIENT_VERSION, $message->meta)) {
                     $dbserver->SetProperty(
                         SERVER_PROPERTIES::SZR_UPD_CLIENT_VERSION,
                         $message->meta[Scalr_Messaging_MsgMeta::SZR_UPD_CLIENT_VERSION]);
                 }
 
-                if ($dbserver->GetProperty(SERVER_PROPERTIES::SYSTEM_IGNORE_INBOUND_MESSAGES))
+                if ($dbserver->GetProperty(SERVER_PROPERTIES::SYSTEM_IGNORE_INBOUND_MESSAGES)) {
+                    $this->getLogger()->debug("Ignore inbound message for server %s", $dbserver->serverId);
                     continue;
+                }
 
                 if ($message instanceof \Scalr_Messaging_Msg)
                     $this->log('INFO', "Handling '%s' for '%s' server", $message->getName(), $serverId);
+
+                $doNotProcessMessage = false;
+
+                $update = [];
 
                 try {
                     if ($message instanceof Scalr_Messaging_Msg_OperationResult) {
@@ -318,13 +343,13 @@ class ScalarizrMessaging extends AbstractTask
                                     if ($engine == MYSQL_STORAGE_ENGINE::EBS) {
                                         $dbserver->GetFarmRoleObject()->SetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_SIZE, $volumeConfig->size, Entity\FarmRoleSetting::TYPE_CFG);
                                         $dbserver->GetFarmRoleObject()->SetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_TYPE, $volumeConfig->volumeType, Entity\FarmRoleSetting::TYPE_CFG);
-                                        if ($volumeConfig->volumeType == 'io1') {
+                                        if ($volumeConfig->volumeType == CreateVolumeRequestData::VOLUME_TYPE_IO1) {
                                             $dbserver->GetFarmRoleObject()->SetSetting(Scalr_Db_Msr::DATA_STORAGE_EBS_IOPS, $volumeConfig->iops, Entity\FarmRoleSetting::TYPE_CFG);
                                         }
                                     } elseif ($engine == MYSQL_STORAGE_ENGINE::RAID_EBS) {
                                         $dbserver->GetFarmRoleObject()->SetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_DISK_SIZE, $volumeConfig->size, Entity\FarmRoleSetting::TYPE_CFG);
                                         $dbserver->GetFarmRoleObject()->SetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_EBS_DISK_TYPE, $volumeConfig->volumeType, Entity\FarmRoleSetting::TYPE_CFG);
-                                        if ($volumeConfig->volumeType == 'io1') {
+                                        if ($volumeConfig->volumeType == CreateVolumeRequestData::VOLUME_TYPE_IO1) {
                                             $dbserver->GetFarmRoleObject()->SetSetting(Scalr_Db_Msr::DATA_STORAGE_RAID_EBS_DISK_IOPS, $volumeConfig->iops, Entity\FarmRoleSetting::TYPE_CFG);
                                         }
                                     }
@@ -363,11 +388,11 @@ class ScalarizrMessaging extends AbstractTask
                     	$dbserver->SetProperty(SERVER_PROPERTIES::SZR_IS_INIT_ERROR_MSG, $errorText);
                     	$event = new HostInitFailedEvent($dbserver, $errorText);
                     } elseif ($message instanceof \Scalr_Messaging_Msg_RuntimeError) {
-                        $logger->fatal(new FarmLogMessage(
-                            $dbserver->farmId,
-                            "Scalarizr failed to launch on server '{$dbserver->getNameByConvention()}' with runtime error: {$message->message}",
-                            $dbserver->serverId
-                        ));
+                        //$logger->fatal(new FarmLogMessage($dbserver, "Scalarizr failed to launch on server '{$dbserver->getNameByConvention()}' with runtime error: {$message->message}"));
+                        $logger->fatal(new FarmLogMessage($dbserver, sprintf("Scalarizr failed to launch on server '%s' with runtime error: %s",
+                            $dbserver->getNameByConvention(),
+                            !empty($message->message) ? $message->message : null
+                        )));
                     } elseif ($message instanceof Scalr_Messaging_Msg_UpdateControlPorts) {
                         $apiPort = $message->api;
                         $ctrlPort = $message->messaging;
@@ -376,11 +401,7 @@ class ScalarizrMessaging extends AbstractTask
                         $currentApiPort = $dbserver->GetProperty(SERVER_PROPERTIES::SZR_API_PORT);
                         if (!$currentApiPort) $currentApiPort = 8010;
                         if ($apiPort && $apiPort != $currentApiPort) {
-                            $logger->warn(new FarmLogMessage(
-                                $dbserver->farmId,
-                                "Scalarizr API port was changed from {$currentApiPort} to {$apiPort}",
-                                $dbserver->serverId
-                            ));
+                            $logger->warn(new FarmLogMessage($dbserver, "Scalarizr API port was changed from {$currentApiPort} to {$apiPort}"));
 
                             $dbserver->SetProperty(SERVER_PROPERTIES::SZR_API_PORT, $apiPort);
                         }
@@ -388,11 +409,7 @@ class ScalarizrMessaging extends AbstractTask
                         $currentCtrlPort = $dbserver->GetProperty(SERVER_PROPERTIES::SZR_CTRL_PORT);
                         if (!$currentCtrlPort) $currentCtrlPort = 8013;
                         if ($ctrlPort && $ctrlPort != $currentCtrlPort) {
-                            $logger->warn(new FarmLogMessage(
-                                $dbserver->farmId,
-                                "Scalarizr Control port was changed from {$currentCtrlPort} to {$ctrlPort}",
-                                $dbserver->serverId
-                            ));
+                            $logger->warn(new FarmLogMessage($dbserver, "Scalarizr Control port was changed from {$currentCtrlPort} to {$ctrlPort}"));
 
                             $dbserver->SetProperty(SERVER_PROPERTIES::SZR_CTRL_PORT, $ctrlPort);
                         }
@@ -421,21 +438,6 @@ class ScalarizrMessaging extends AbstractTask
                                     $bundleTask->SnapshotCreationFailed("PrepareBundle procedure failed: {$message->lastError}");
                                 }
                             }
-                        }
-                    } elseif ($message instanceof Scalr_Messaging_Msg_DeployResult) {
-                        try {
-                            $deploymentTask = Scalr_Model::init(Scalr_Model::DM_DEPLOYMENT_TASK)->loadById($message->deployTaskId);
-                        } catch (Exception $e) {
-                        }
-                        if ($deploymentTask) {
-                            if ($message->status == 'error') {
-                                $deploymentTask->status = Scalr_Dm_DeploymentTask::STATUS_FAILED;
-                                $deploymentTask->lastError = $message->lastError;
-                            } else {
-                                $deploymentTask->status = Scalr_Dm_DeploymentTask::STATUS_DEPLOYED;
-                                $deploymentTask->dtDeployed = date("Y-m-d H:i:s");
-                            }
-                            $deploymentTask->save();
                         }
                     } elseif ($message instanceof Scalr_Messaging_Msg_Hello) {
                         $event = $this->onHello($message, $dbserver);
@@ -489,8 +491,10 @@ class ScalarizrMessaging extends AbstractTask
                             $dbserver->updateTimelog('ts_hi', $message->secondsSinceBoot, $message->secondsSinceStart);
                         } catch (Exception $e) {}
 
-                        if (!$event)
+                        if (!$event) {
+                            $this->getLogger()->debug("Could not create HostInitEvent for %s. Aborting...", $dbserver->serverId);
                             continue;
+                        }
                     } elseif ($message instanceof Scalr_Messaging_Msg_HostUp) {
                         $event = $this->onHostUp($message, $dbserver);
 
@@ -502,33 +506,32 @@ class ScalarizrMessaging extends AbstractTask
                     } elseif ($message instanceof Scalr_Messaging_Msg_HostDown) {
                         $event = $this->onHostDown($message, $dbserver);
 
-                        if ($event == false) {
+                        if ($event === false) {
                             $doNotProcessMessage = true;
                         }
                     } elseif ($message instanceof Scalr_Messaging_Msg_RebootStart) {
                         $event = new RebootBeginEvent($dbserver);
                     } elseif ($message instanceof Scalr_Messaging_Msg_RebootFinish) {
                         if ($dbserver->status == \SERVER_STATUS::RESUMING) {
-                            
                             try {
                                 // UPDATE IPs
                                 $p = PlatformFactory::NewPlatform($dbserver->platform);
                                 $ipaddresses = $p->GetServerIPAddresses($dbserver);
                                 if (($ipaddresses['remoteIp'] && !$dbserver->remoteIp) || ($ipaddresses['localIp'] && !$dbserver->localIp)) {
                                     $dbserver->remoteIp = $update['remoteIp'] = $ipaddresses['remoteIp'];
-    
+
                                     if (!$dbserver->localIp) {
                                         $update['localIp'] = $ipaddresses['localIp'] ? $ipaddresses['localIp'] : $message->localIp;
                                     }
                                 }
-                                
+
                                 // Update type after resume on EC2
-                                if ($dbserver->platform == \SERVER_PLATFORMS::EC2) {
+                                if ($dbserver->platform == \SERVER_PLATFORMS::EC2 || $dbserver->platform == \SERVER_PLATFORMS::GCE) {
                                     $cacheKey = sprintf('%s:%s', $dbserver->envId, $dbserver->cloudLocation);
                                     $type = $p->instancesListCache[$cacheKey][$dbserver->GetCloudServerID()]['type'];
-                                
+
                                     if ($type != $dbserver->getType()) {
-                                        $dbserver->setType($type);
+                                        $dbserver->update(['type' => $type, 'instanceTypeName' => $type]);
                                     }
                                 }
                             } catch (Exception $e) {
@@ -538,22 +541,31 @@ class ScalarizrMessaging extends AbstractTask
                                     throw $e;
                                 }
                             }
-                                
+
+                            // For Openstack we need to re-accociate IPs
+                            try {
+                                if ($dbserver->isOpenstack()) {
+                                    OpenstackHelper::setServerFloatingIp($dbserver);
+                                }
+                            } catch (Exception $e) {
+                                //ignore
+                            }
+
                             // Set cloudstack Static IP if needed
                             if (PlatformFactory::isCloudstack($dbserver->platform) && !$dbserver->remoteIp) {
                                 $remoteIp = CloudstackHelper::getSharedIP($dbserver);
-                            
+
                                 if ($remoteIp) {
                                     $dbserver->remoteIp = $update['remoteIp'] = $remoteIp;
                                 }
                             }
-                            
-                            if (!$doNotProcessMessage) {
+
+                            if ($doNotProcessMessage === false) {
                                 if (!empty($update)) {
                                     $dbserver->update($update);
                                     unset($update);
                                 }
-                                
+
                                 $event = new \ResumeCompleteEvent($dbserver);
                             }
                         } elseif ($dbserver->status == \SERVER_STATUS::SUSPENDED) {
@@ -610,15 +622,16 @@ class ScalarizrMessaging extends AbstractTask
                     } elseif ($message instanceof Scalr_Messaging_Msg_BlockDeviceMounted) {
                         // Single volume
                         $ebsinfo = $this->db->GetRow("
-                            SELECT * FROM ec2_ebs WHERE volume_id=? LIMIT 1
+                            SELECT * FROM ec2_ebs WHERE volume_id = ? LIMIT 1
                         ", array(
                             $message->volumeId
                         ));
+
                         if ($ebsinfo) {
                             $this->db->Execute("
                                 UPDATE ec2_ebs
-                                SET mount_status=?, isfsexist='1'
-                                WHERE id=?
+                                SET mount_status = ?, isfsexist = '1'
+                                WHERE id = ?
                             ", array(
                                 EC2_EBS_MOUNT_STATUS::MOUNTED,
                                 $ebsinfo['id']
@@ -635,16 +648,21 @@ class ScalarizrMessaging extends AbstractTask
                                 'os'          => $message->os,
                                 'software'    => $message->software
                             );
+
+                            $tags = [];
+
                             if ($dbserver->platform == SERVER_PLATFORMS::EC2) {
                                 if ($message->aws) {
                                     if ($message->aws->rootDeviceType == 'ebs') {
                                         $tags[] = ROLE_TAGS::EC2_EBS;
                                     }
+
                                     if ($message->aws->virtualizationType == 'hvm') {
                                         $tags[] = ROLE_TAGS::EC2_HVM;
                                     }
                                 } else {
                                     $aws = $dbserver->GetEnvironmentObject()->aws($dbserver);
+
                                     try {
                                         $info = $aws->ec2->image->describe($dbserver->GetProperty(EC2_SERVER_PROPERTIES::AMIID))->get(0);
                                         if ($info->rootDeviceType == 'ebs') {
@@ -658,26 +676,33 @@ class ScalarizrMessaging extends AbstractTask
                                             } catch (Exception $e) {
                                             }
                                         }
+
                                         if ($info->virtualizationType == 'hvm') {
                                             $tags[] = ROLE_TAGS::EC2_HVM;
                                         }
+
                                         unset($info);
                                     } catch (Exception $e) {
                                         $metaData['tagsError'] = $e->getMessage();
+
                                         try {
                                             $bundleTask = BundleTask::LoadById($message->bundleTaskId);
+
                                             if ($bundleTask->bundleType == SERVER_SNAPSHOT_CREATION_TYPE::EC2_EBS) {
                                                 $tags[] = ROLE_TAGS::EC2_EBS;
                                             }
                                         } catch (Exception $e) {
                                         }
                                     }
+
                                     //Releases memory
                                     $dbserver->GetEnvironmentObject()->getContainer()->release('aws');
                                     unset($aws);
                                 }
                             }
-                            $metaData['tags'] = $tags;
+
+                            $metaData['tags'] = !empty($tags) ? $tags : null;
+
                             $event = new RebundleCompleteEvent($dbserver, $message->snapshotId, $message->bundleTaskId, $metaData);
                         } else if ($message->status == Scalr_Messaging_Msg_RebundleResult::STATUS_FAILED) {
                             $event = new RebundleFailedEvent($dbserver, $message->bundleTaskId, $message->lastError);
@@ -785,11 +810,11 @@ class ScalarizrMessaging extends AbstractTask
                     ));
                 }
 
-                if (!$doNotProcessMessage) {
+                if ($doNotProcessMessage === false) {
                     $totalTime = microtime(true) - $startTime;
                     $this->db->Execute("
                         UPDATE messages
-                        SET status = ?, processing_time = ?, dtlasthandleattempt = NOW()
+                        SET status = ?, processing_time = ?, dtlasthandleattempt = UTC_TIMESTAMP()
                         WHERE messageid = ?
                     ", array(
                         $handle_status,
@@ -824,6 +849,9 @@ class ScalarizrMessaging extends AbstractTask
         // and no need to process it again
         if (in_array($dbserver->status, array(\SERVER_STATUS::SUSPENDED, \SERVER_STATUS::TERMINATED)))
             return true;
+
+        $isStopping = false;
+        $isRebooting = false;
 
         $p = PlatformFactory::NewPlatform($dbserver->platform);
         $status = $p->GetServerRealStatus($dbserver);
@@ -862,6 +890,8 @@ class ScalarizrMessaging extends AbstractTask
         } elseif ($isRebooting) {
             $event = new RebootBeginEvent($dbserver);
         } else {
+            $event = false;
+
             if ($dbserver->farmId) {
                 $wasHostDownFired = $this->db->GetOne("SELECT id FROM events WHERE event_server_id = ? AND type = ? AND is_suspend = '0'", array(
                     $dbserver->serverId, 'HostDown'
@@ -880,6 +910,8 @@ class ScalarizrMessaging extends AbstractTask
     private function onHello($message, DBServer $dbserver)
     {
         $logger = \Scalr::getContainer()->logger(__CLASS__);
+
+        $update = [];
 
         if ($dbserver->status == SERVER_STATUS::TEMPORARY) {
             $bundleTask = BundleTask::LoadById($dbserver->GetProperty(SERVER_PROPERTIES::SZR_IMPORTING_BUNDLE_TASK_ID));
@@ -924,8 +956,8 @@ class ScalarizrMessaging extends AbstractTask
                     $env = $dbserver->GetEnvironmentObject();
                     $os = $env->openstack($dbserver->platform, $dbserver->GetProperty(OPENSTACK_SERVER_PROPERTIES::CLOUD_LOCATION));
 
-                    $csServer = null;
                     $list = $os->servers->list(true);
+
                     do {
                         foreach ($list as $_tmp) {
                             $ipaddresses = array();
@@ -999,41 +1031,6 @@ class ScalarizrMessaging extends AbstractTask
 
                             $dbserver->setType($message->{$dbserver->platform}->machineType);
                             break;
-
-                        case SERVER_PLATFORMS::RACKSPACE:
-                            $env = $dbserver->GetEnvironmentObject();
-                            $ccProps = $env->cloudCredentials("{$dbserver->GetProperty(\RACKSPACE_SERVER_PROPERTIES::DATACENTER)}." . SERVER_PLATFORMS::RACKSPACE)->properties;
-                            $cs = Scalr_Service_Cloud_Rackspace::newRackspaceCS(
-                                $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_USERNAME],
-                                $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_API_KEY],
-                                $dbserver->GetProperty(RACKSPACE_SERVER_PROPERTIES::DATACENTER)
-                            );
-                            $csServer = null;
-                            $list = $cs->listServers(true);
-                            if ($list) {
-                                foreach ($list->servers as $_tmp) {
-                                    if ($_tmp->addresses->public && in_array($message->remoteIp, $_tmp->addresses->public)) {
-                                        $csServer = $_tmp;
-                                    }
-                                }
-                            }
-                            if (!$csServer) {
-                                $logger->error(sprintf(
-                                    "Server not found on CloudServers (server_id: %s, remote_ip: %s, local_ip: %s)",
-                                    $dbserver->serverId, $message->remoteIp, $message->localIp
-                                ));
-                                return;
-                            }
-                            $dbserver->SetProperties(array(
-                                RACKSPACE_SERVER_PROPERTIES::SERVER_ID  => $csServer->id,
-                                RACKSPACE_SERVER_PROPERTIES::NAME       => $csServer->name,
-                                RACKSPACE_SERVER_PROPERTIES::IMAGE_ID   => $csServer->imageId,
-                                RACKSPACE_SERVER_PROPERTIES::HOST_ID    => $csServer->hostId,
-                                SERVER_PROPERTIES::ARCHITECTURE         => $message->architecture
-                            ));
-
-                            $dbserver->setType($csServer->flavorId);
-                            break;
                     }
                 }
             }
@@ -1069,12 +1066,14 @@ class ScalarizrMessaging extends AbstractTask
 
     private function onHostInit($message, DBServer $dbserver)
     {
-        $logger = \Scalr::getContainer()->logger(__CLASS__);
+        $update = [];
+        $remoteIp = null;
 
         if ($dbserver->status == SERVER_STATUS::PENDING) {
             $platform = PlatformFactory::NewPlatform($dbserver->platform);
             // Update server crypto key
             $srv_props = array();
+
             if ($message->cryptoKey) {
                 $srv_props[SERVER_PROPERTIES::SZR_KEY] = trim($message->cryptoKey);
                 $srv_props[SERVER_PROPERTIES::SZR_KEY_TYPE] = SZR_KEY_TYPE::PERMANENT;
@@ -1083,6 +1082,7 @@ class ScalarizrMessaging extends AbstractTask
             if ($dbserver->isCloudstack()) {
                 $remoteIp = CloudstackHelper::getSharedIP($dbserver);
             }
+
             if ($dbserver->isOpenstack()) {
                 if ($dbserver->farmRoleId) {
                     $ipPool = $dbserver->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::OPENSTACK_IP_POOL);
@@ -1104,11 +1104,14 @@ class ScalarizrMessaging extends AbstractTask
 
             if (!$remoteIp) {
                 $ips = $platform->GetServerIPAddresses($dbserver);
-                if ($ips['remoteIp'])
+
+                if ($ips['remoteIp']) {
                     $remoteIp = $ips['remoteIp'];
-                else
+                } else {
                     $remoteIp = $message->remoteIp ? $ips['remoteIp'] : '';
+                }
             }
+
             $update['remoteIp'] = $remoteIp;
             $dbserver->update($update);
 
@@ -1159,11 +1162,11 @@ class ScalarizrMessaging extends AbstractTask
             $dbserver->SetProperties($srv_props);
             return new HostInitEvent($dbserver, $message->localIp, $remoteIp, $message->sshPubKey);
         } else {
-            /*
-               $logger->error("Strange situation. Received HostInit message"
-                       . " from server '{$dbserver->serverId}' ({$message->remoteIp})"
-                       . " with state {$dbserver->status}!");
-            */
+            $this->getLogger()->debug(
+                "Strange situation. Received HostInit message"
+              . " from server '{$dbserver->serverId}' ({$message->remoteIp})"
+              . " with state {$dbserver->status}!"
+            );
             //TOOD: Check if instance terminating we probably can cancel termination and continue initialization
         }
     }
@@ -1231,11 +1234,7 @@ class ScalarizrMessaging extends AbstractTask
                                 }
                                 $dbFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_SCALR_VOLUME_ID, $storageVolume->id, Entity\FarmRoleSetting::TYPE_LCL);
                             } catch (Exception $e) {
-                                $logger->error(new FarmLogMessage(
-                                    $event->DBServer->farmId,
-                                    "Cannot save storage volume: {$e->getMessage()}",
-                                    !empty($event->DBServer->serverId) ? $event->DBServer->serverId : null
-                                ));
+                                $logger->error(new FarmLogMessage($event->DBServer, "Cannot save storage volume: {$e->getMessage()}"));
                             }
                         }
                         if ($mysqlData->snapshotConfig) {
@@ -1271,11 +1270,7 @@ class ScalarizrMessaging extends AbstractTask
                                 }
                                 $dbFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_SCALR_SNAPSHOT_ID, $storageSnapshot->id, Entity\FarmRoleSetting::TYPE_LCL);
                             } catch (Exception $e) {
-                                $logger->error(new FarmLogMessage(
-                                    $event->DBServer->farmId,
-                                    "Cannot save storage snapshot: {$e->getMessage()}",
-                                    !empty($event->DBServer->serverId) ? $event->DBServer->serverId : null
-                                ));
+                                $logger->error(new FarmLogMessage($event->DBServer, "Cannot save storage snapshot: {$e->getMessage()}"));
                             }
                         }
                     } else {
@@ -1338,11 +1333,7 @@ class ScalarizrMessaging extends AbstractTask
                             }
                         }
                     } catch (Exception $e) {
-                        $logger->error(new FarmLogMessage(
-                            $dbserver->farmId,
-                            "Cannot save storage volume: {$e->getMessage()}",
-                            !empty($dbserver->serverId) ? $dbserver->serverId : null
-                        ));
+                        $logger->error(new FarmLogMessage($dbserver, "Cannot save storage volume: {$e->getMessage()}"));
                     }
                 }
                 if ($message->snapshotConfig) {
@@ -1364,11 +1355,7 @@ class ScalarizrMessaging extends AbstractTask
                         $dbFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_LOG_FILE, $message->logFile, Entity\FarmRoleSetting::TYPE_LCL);
                         $dbFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_LOG_POS, $message->logPos, Entity\FarmRoleSetting::TYPE_LCL);
                     } catch (Exception $e) {
-                        $logger->error(new FarmLogMessage(
-                            $dbserver->farmId,
-                            "Cannot save storage snapshot: {$e->getMessage()}",
-                            !empty($dbserver->serverId) ? $dbserver->serverId : null
-                        ));
+                        $logger->error(new FarmLogMessage($dbserver, "Cannot save storage snapshot: {$e->getMessage()}"));
                     }
                 }
             } else {

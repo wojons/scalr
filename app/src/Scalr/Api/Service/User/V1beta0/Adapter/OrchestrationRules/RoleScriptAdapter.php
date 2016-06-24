@@ -7,6 +7,7 @@ use Scalr\Api\Rest\Exception\ApiErrorException;
 use Scalr\Api\Service\User\V1beta0\Adapter\OrchestrationRuleAdapter;
 use Scalr\Api\Service\User\V1beta0\Controller\RoleScripts;
 use Scalr\DataType\ScopeInterface;
+use Scalr\Model\Entity\OrchestrationRule;
 use Scalr\Model\Entity\RoleScript;
 
 /**
@@ -38,6 +39,15 @@ class RoleScriptAdapter extends OrchestrationRuleAdapter
 
         //Getting the role initiates check permissions
         $role = $this->controller->getRole($entity->roleId);
+
+        static $agenLessTargets = [
+            self::TARGET_VALUE_NULL => self::TARGET_NAME_NULL,
+            self::TARGET_VALUE_FARM => self::TARGET_NAME_FARM
+        ];
+
+        if (!($role->isScalarized || isset($agenLessTargets[$entity->target]))) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Only targets ['" . implode("', '", $agenLessTargets) . "'] allowed to agent-less roles");
+        }
 
         $this->checkScriptOs($entity, $role->getOs()->family);
     }

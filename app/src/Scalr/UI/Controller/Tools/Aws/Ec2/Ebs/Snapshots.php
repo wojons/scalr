@@ -3,7 +3,6 @@
 use Scalr\Acl\Acl;
 use Scalr\Service\Aws\Ec2\DataType as Ec2DataType;
 use Scalr\Modules\PlatformFactory;
-use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 use Scalr\Model\Entity;
 
 class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controller
@@ -137,6 +136,8 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
 
         $cnt = 0;
         $errcnt = 0;
+        $errmsg = null;
+
         foreach ($this->getParam('snapshotId') as $snapshotId) {
             try {
                 $aws->ec2->snapshot->delete($snapshotId);
@@ -149,8 +150,9 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
 
         $msg = 'Snapshot' . ($cnt > 1 ? 's have' : ' has') . ' been successfully removed.';
 
-        if ($errcnt != 0)
+        if ($errcnt != 0) {
             $msg .= " {$errcnt} snapshots was not removed due to error: {$errmsg}";
+        }
 
         $this->response->success($msg);
     }
@@ -176,7 +178,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
         }
 
         $snaps = [];
-        $nextToken = null;
+        $snapList = $nextToken = null;
 
         do {
             if (isset($snapList)) {
@@ -196,7 +198,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controlle
                     'progress'   => $snapshot->progress
                 ];
 
-                if ($snapshot->ownerId != $this->getEnvironment()->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID]) {
+                if ($snapshot->ownerId != $this->getEnvironment()->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID]) {
                     $item['comment'] = $snapshot->description;
                     $item['owner'] = $snapshot->ownerId;
 

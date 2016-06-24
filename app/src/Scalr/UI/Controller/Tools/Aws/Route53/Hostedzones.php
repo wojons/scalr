@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\Acl\Acl;
+use Scalr\Service\Aws;
 use Scalr\Service\Aws\DataType\MarkerType;
 use Scalr\Service\Aws\Route53\DataType\ChangeRecordSetList;
 use Scalr\Service\Aws\Route53\DataType\ChangeRecordSetsRequestData;
@@ -13,9 +14,19 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
 {
 
     /**
-     * @param string $cloudLocation
+     * Gets Aws object
+     *
+     * @return Aws
      */
-    public function xListAction($cloudLocation)
+    private function getAws()
+    {
+        return $this->environment->aws(Aws::REGION_US_EAST_1);
+    }
+
+    /**
+     * Describes hosted zones
+     */
+    public function xListAction()
     {
         $marker = null;
         $result = [];
@@ -25,7 +36,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
                 $marker = new MarkerType($zonesList->marker);
             }
 
-            $zonesList = $this->environment->aws($cloudLocation)->route53->zone->describe($marker);
+            $zonesList = $this->getAws()->route53->zone->describe($marker);
 
             foreach ($zonesList as $zone) {
                 /* @var $zone ZoneData */
@@ -44,12 +55,11 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
     }
 
     /**
-     * @param string $cloudLocation
      * @param string $zoneId
      */
-    public function infoAction($cloudLocation, $zoneId)
+    public function infoAction($zoneId)
     {
-        $zone = $this->environment->aws($cloudLocation)->route53->zone->fetch($zoneId);
+        $zone = $this->getAws()->route53->zone->fetch($zoneId);
 
         $delegationSet = [];
 
@@ -70,11 +80,10 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
     }
 
     /**
-     * @param string $cloudLocation
      * @param string $domainName
      * @param string $description   optional
      */
-    public function xCreateAction($cloudLocation, $domainName, $description = null)
+    public function xCreateAction($domainName, $description = null)
     {
         $this->request->restrictAccess(Acl::RESOURCE_AWS_ROUTE53, Acl::PERM_AWS_ROUTE53_MANAGE);
 
@@ -82,7 +91,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
         $zoneConfig = new ZoneConfigData($description);
         $config->setZoneConfig($zoneConfig);
 
-        $zone = $this->environment->aws($cloudLocation)->route53->zone->create($config);
+        $zone = $this->getAws()->route53->zone->create($config);
 
         $delegationSet = [];
 
@@ -110,13 +119,12 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
 
     /**
      * @param JsonData $zoneId        JSON encoded structure
-     * @param string   $cloudLocation
      */
-    public function xDeleteAction(JsonData $zoneId, $cloudLocation)
+    public function xDeleteAction(JsonData $zoneId)
     {
         $this->request->restrictAccess(Acl::RESOURCE_AWS_ROUTE53, Acl::PERM_AWS_ROUTE53_MANAGE);
 
-        $aws = $this->environment->aws($cloudLocation);
+        $aws = $this->getAws();
 
         foreach ($zoneId as $id) {
             $customRecordSets = [];
@@ -140,7 +148,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
             } while (!empty($recordsets->isTruncated));
 
             if (!empty($customRecordSets)) {
-                $this->deleteCustomRecordsets($customRecordSets, $id, $cloudLocation);
+                $this->deleteCustomRecordsets($customRecordSets, $id);
             }
 
             $aws->route53->zone->delete($id);
@@ -152,9 +160,8 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
     /**
      * @param JsonData|array $customRecordSets
      * @param string         $zoneId
-     * @param string         $cloudLocation
      */
-    public function deleteCustomRecordsets($customRecordSets, $zoneId, $cloudLocation)
+    public function deleteCustomRecordsets($customRecordSets, $zoneId)
     {
         $this->request->restrictAccess(Acl::RESOURCE_AWS_ROUTE53, Acl::PERM_AWS_ROUTE53_MANAGE);
 
@@ -167,7 +174,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Hostedzones extends \Scalr_UI_Contro
             $rrsRequest->setChange($rrsCnahgeList);
         }
 
-        $this->environment->aws($cloudLocation)->route53->record->update($zoneId, $rrsRequest);
+        $this->getAws()->route53->record->update($zoneId, $rrsRequest);
     }
 
 }

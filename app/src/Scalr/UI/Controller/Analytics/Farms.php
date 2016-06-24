@@ -80,6 +80,10 @@ class Scalr_UI_Controller_Analytics_Farms extends Scalr_UI_Controller
 
             foreach ($collection as $dbFarm) {
                 /* @var $dbFarm \DBFarm */
+                if (!$this->request->hasPermissions($dbFarm->__getNewFarmObject())) {
+                    continue;
+                }
+
                 $totalCost = round((isset($usage['data'][$dbFarm->ID]) ?
                              $usage['data'][$dbFarm->ID]['cost'] : 0), 2);
 

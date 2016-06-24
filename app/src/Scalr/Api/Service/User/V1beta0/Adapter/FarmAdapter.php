@@ -15,6 +15,7 @@ use Scalr\Model\Entity\Account\User;
 use Scalr\Model\Entity\Farm;
 use Scalr\Model\Entity\FarmRole;
 use Scalr\Model\Entity\FarmSetting;
+use Scalr\Model\Entity\FarmTeam;
 use Scalr\Service\Aws;
 use Scalr\Service\Aws\Ec2\DataType\VpcData;
 use SERVER_PLATFORMS;
@@ -43,15 +44,15 @@ class FarmAdapter extends ApiEntityAdapter
         //[entityProperty1 => resultProperty1, ... or  entityProperty1, entityProperty2, ...]
         self::RULE_TYPE_TO_DATA     => [
             'id', 'name', 'comments' => 'description',
-            '_owner' => 'owner', '_teamOwner' => 'teamOwner',
+            '_owner' => 'owner', '_teams' => 'teams',
             '_project' => 'project', '_vpc' => 'vpc', '_timezone' => 'timezone',
             '_launchOrder' => 'launchOrder'
         ],
 
         //The alterable properties
-        self::RULE_TYPE_ALTERABLE   => ['name', 'description', 'owner', 'teamOwner', 'timezone', 'vpc', 'project', 'launchOrder'],
+        self::RULE_TYPE_ALTERABLE   => ['name', 'description', 'owner', 'teams', 'timezone', 'vpc', 'project', 'launchOrder'],
 
-        self::RULE_TYPE_FILTERABLE  => ['id', 'name', 'owner', 'teamOwner', 'vpc', 'project', 'launchOrder'],
+        self::RULE_TYPE_FILTERABLE  => ['id', 'name', 'owner', 'teams', 'timezone', 'vpc', 'project', 'launchOrder'],
         self::RULE_TYPE_SORTING     => [self::RULE_TYPE_PROP_DEFAULT => ['id' => true]],
     ];
 
@@ -65,7 +66,7 @@ class FarmAdapter extends ApiEntityAdapter
         switch ($action) {
             case static::ACT_CONVERT_TO_OBJECT:
                 /* @var $from Farm */
-                $to->owner = ['id' => $from->createdById];
+                $to->owner = ['id' => $from->ownerId];
                 break;
 
             case static::ACT_CONVERT_TO_ENTITY:
@@ -76,7 +77,7 @@ class FarmAdapter extends ApiEntityAdapter
                     throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed owner.id property");
                 }
 
-                if (!empty($to->createdById) && $to->createdById != $owner) {
+                if (!empty($to->ownerId) && $to->ownerId != $owner) {
                     $this->controller->checkPermissions($to, Acl::PERM_FARMS_CHANGE_OWNERSHIP);
 
                     $user = User::findOne([['id' => $owner], ['accountId' => $this->controller->getUser()->getAccountId()]]);
@@ -87,68 +88,79 @@ class FarmAdapter extends ApiEntityAdapter
 
                     $to->createdByEmail = $user->getEmail();
 
-                    $history = unserialize($to->settings[FarmSetting::OWNER_HISTORY]);
-
-                    if (!is_array($history)) {
-                        $history = [];
-                    }
-
-                    $history[] = [
-                        'newId'             => $owner,
-                        'newEmail'          => $to->createdByEmail,
-                        'changedById'       => $this->controller->getUser()->getId(),
-                        'changedByEmail'    => $this->controller->getUser()->getEmail(),
-                        'dt'                => date('Y-m-d H:i:s')
-                    ];
-                    // TODO: move to subclass \Farm\Setting\OwnerHistory
-                    $to->settings[FarmSetting::OWNER_HISTORY] = serialize($history);
+                    FarmSetting::addOwnerHistory($to, $user, $this->controller->getUser());
                 }
 
-                $to->createdById = $owner;
+                $to->ownerId = $owner;
                 break;
 
             case static::ACT_GET_FILTER_CRITERIA:
                 $owner = ApiController::getBareId($from, 'owner');
 
-                return [['createdById' => $owner]];
+                return [['ownerId' => $owner]];
                 break;
         }
     }
 
-    public function _teamOwner($from, $to, $action)
+    public function _teams($from, $to, $action)
     {
         switch ($action) {
             case static::ACT_CONVERT_TO_OBJECT:
                 /* @var $from Farm */
-                $to->teamOwner = ['id' => $from->teamId];
+
+                /* @var $team Team */
+                foreach ($from->getTeams() as $team) {
+                    $to->teams[] = ['id' => $team->id];
+                }
                 break;
 
             case static::ACT_CONVERT_TO_ENTITY:
                 /* @var $to Farm */
-                $teamOwner = ApiController::getBareId($from, 'teamOwner');
+                $newTeams = [];
+                $newTeamIds = [];
 
                 $user = $this->controller->getUser();
 
-                if (!empty($to->createdById) && $to->teamId != $teamOwner) {
-                    $this->controller->checkPermissions($to, Acl::PERM_FARMS_CHANGE_OWNERSHIP);
+                foreach ($from->teams as $teamFk) {
+                    $team = new Team();
+                    $team->id = ApiController::getBareId($teamFk);
+                    $newTeams[] = $team;
+                    $newTeamIds[] = $team->id;
                 }
 
-                if (!empty($teamOwner)) {
-                    $team = Team::findOne([['id' => $teamOwner], ['accountId' => $user->getAccountId()]]);
-                    /* @var $team Team */
-                    if (!($team && ($user->inTeam($teamOwner) || $user->canManageAcl()))) {
-                        throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Requested Team either does not exist or you do not have access to it.");
+                $currentTeamIds = [];
+
+                foreach ($to->getTeams() as $team) {
+                    $currentTeamIds[] = $team->id;
+                }
+
+                sort($newTeamIds);
+                sort($currentTeamIds);
+
+                if ($newTeamIds != $currentTeamIds) {
+                    //filter out the Teams to which the User has no access
+                    $teams = empty($newTeams) ? [] : Team::find([['id' => ['$in' => $newTeamIds]], ['accountId' => $user->getAccountId()]]);
+
+                    if (count($teams) != count($newTeamIds)) {
+                        throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Requested Team(s) either does not exist or Farm has no access to it.");
                     }
-                }
 
-                $to->teamId = $teamOwner;
+                    $to->setTeams($newTeams);
+                }
                 break;
 
             case static::ACT_GET_FILTER_CRITERIA:
-                $teamOwner = ApiController::getBareId($from, 'teamOwner');
+                $team = ApiController::getBareId($from, 'teams');
 
-                return [['teamId' => $teamOwner]];
-                break;
+                $farm = new Farm();
+                $farmTeam = new FarmTeam();
+
+                return [
+                    AbstractEntity::STMT_FROM => "
+                        JOIN {$farmTeam->table('ft')} ON {$farmTeam->columnFarmId('ft')} = {$farm->columnId()}
+                            AND {$farmTeam->columnTeamId('ft')} = " . $farmTeam->qstr('teamId', $team) . "
+                    "
+                ];
         }
     }
 
@@ -184,8 +196,11 @@ class FarmAdapter extends ApiEntityAdapter
                 $projectId = ApiController::getBareId($from, 'project');
 
                 return [
-                    AbstractEntity::STMT_FROM => $farm->table() . " LEFT JOIN " . $farmSetting->table() . " ON {$farmSetting->columnFarmId} = {$farm->columnId}",
-                    AbstractEntity::STMT_WHERE => "({$farmSetting->columnName} = '" . FarmSetting::PROJECT_ID . "' AND {$farmSetting->columnValue} = " . $farmSetting->qstr('value', $projectId) . ")"
+                    AbstractEntity::STMT_FROM => "
+                        JOIN  {$farmSetting->table('fsp')}  ON  {$farmSetting->columnFarmId('fsp')}  =  {$farm->columnId()}
+                            AND  {$farmSetting->columnName('fsp')}  = " . $farmSetting->qstr('name', FarmSetting::PROJECT_ID) . "
+                    ",
+                    AbstractEntity::STMT_WHERE => "{$farmSetting->columnValue('fsp')}  = " . $farmSetting->qstr('value', $projectId)
                 ];
                 break;
         }
@@ -238,8 +253,11 @@ class FarmAdapter extends ApiEntityAdapter
                 $vpcId = ApiController::getBareId($from, 'vpc');
 
                 return [
-                    AbstractEntity::STMT_FROM => $farm->table() . " LEFT JOIN " . $farmSetting->table() . " ON {$farmSetting->columnFarmId} = {$farm->columnId}",
-                    AbstractEntity::STMT_WHERE => "({$farmSetting->columnName} = '" . FarmSetting::EC2_VPC_ID . "' AND {$farmSetting->columnValue} = " . $farmSetting->qstr('value', $vpcId) . ")"
+                    AbstractEntity::STMT_FROM => "
+                        JOIN  {$farmSetting->table('fsv')}  ON  {$farmSetting->columnFarmId('fsv')}  = {$farm->columnId()}
+                            AND  {$farmSetting->columnName('fsv')}  = " . $farmSetting->qstr('name', FarmSetting::EC2_VPC_ID) . "
+                    ",
+                    AbstractEntity::STMT_WHERE => "{$farmSetting->columnValue('fsv')}  = " . $farmSetting->qstr('value', $vpcId)
                 ];
         }
     }
@@ -266,8 +284,11 @@ class FarmAdapter extends ApiEntityAdapter
                 $farmSetting = new FarmSetting();
 
                 return [
-                    AbstractEntity::STMT_FROM => $farm->table() . " LEFT JOIN " . $farmSetting->table() . " ON {$farmSetting->columnFarmId} = {$farm->columnId}",
-                    AbstractEntity::STMT_WHERE => "({$farmSetting->columnName} = '" . FarmSetting::TIMEZONE . "' AND {$farmSetting->columnValue} = " . $farmSetting->qstr('value', $from->timezone) . ")"
+                    AbstractEntity::STMT_FROM => "
+                        JOIN  {$farmSetting->table('fstz')}  ON  {$farmSetting->columnFarmId('fstz')} = {$farm->columnId()}
+                            AND  {$farmSetting->columnName('fstz')}  = " . $farmSetting->qstr('name', FarmSetting::TIMEZONE) . "
+                    ",
+                    AbstractEntity::STMT_WHERE => "{$farmSetting->columnValue('fstz')} = " . $farmSetting->qstr('value', $from->timezone)
                 ];
         }
     }
@@ -332,17 +353,29 @@ class FarmAdapter extends ApiEntityAdapter
                     "Could not find out the Farm with ID: %d", $entity->id
                 ));
             }
-        } else {
-            if (empty($entity->name)) {
-                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property name");
-            }
+        }
 
-            $criteria = $this->controller->getScopeCriteria();
-            $criteria[] = ['name' => $entity->name];
+        $entity->name = trim($entity->name);
 
-            if (count(Farm::find($criteria))) {
-                throw new ApiErrorException(409, ErrorMessage::ERR_UNICITY_VIOLATION, "Farm with name '{$entity->name}' already exists");
-            }
+        if (empty($entity->name)) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property name");
+        }
+
+        $strippedName = str_replace(array('>', '<'), '', strip_tags($entity->name));
+
+        if ($strippedName != $entity->name) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid Farm name");
+        }
+
+        $criteria = $this->controller->getScopeCriteria();
+        $criteria[] = ['name' => $entity->name];
+
+        if (isset($entity->id)) {
+            $criteria[] = ['id' => ['$ne' => $entity->id]];
+        }
+
+        if (count(Farm::find($criteria))) {
+            throw new ApiErrorException(409, ErrorMessage::ERR_UNICITY_VIOLATION, "Farm with name '{$entity->name}' already exists");
         }
 
         if (!empty($entity->settings[FarmSetting::EC2_VPC_REGION])) {
@@ -379,6 +412,7 @@ class FarmAdapter extends ApiEntityAdapter
             foreach ($this->controller->getContainer()->aws($region, $this->controller->getEnvironment())->ec2->vpc->describe() as $vpc) {
                 if ($vpcId == $vpc->vpcId) {
                     $found = $vpc;
+                    break;
                 }
             }
 
@@ -391,17 +425,21 @@ class FarmAdapter extends ApiEntityAdapter
 
         if (\Scalr::config('scalr.analytics.enabled')) {
             if (isset($entity->settings[FarmSetting::PROJECT_ID])) {
-                if (!$this->controller->getContainer()->analytics->projects->get($entity->settings[FarmSetting::PROJECT_ID])) {
+                if (!$this->controller->getContainer()->analytics->projects->get($entity->settings[FarmSetting::PROJECT_ID], true, ['accountId' => $this->controller->getUser()->getAccountId()])) {
                     throw new ApiErrorException(403, ErrorMessage::ERR_PERMISSION_VIOLATION, "The project is not allowed for you");
                 }
+
+                if (isset($entity->id) && Farm::findPk($entity->id)->settings[FarmSetting::PROJECT_ID] != $entity->settings[FarmSetting::PROJECT_ID]) {
+                    $this->controller->checkPermissions($entity, Acl::PERM_FARMS_PROJECTS);
+                }
+
             } else {
                 throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property project");
             }
         }
 
-        if (!$this->controller->hasPermissions($entity, true)) {
-            //Checks entity level write access permissions
-            throw new ApiErrorException(403, ErrorMessage::ERR_PERMISSION_VIOLATION, "Insufficient permissions");
+        if (isset($entity->id) && $entity->isTeamsChanged() && $entity->ownerId != $this->controller->getUser()->id) {
+            $this->controller->checkPermissions($entity, Acl::PERM_FARMS_CHANGE_OWNERSHIP);
         }
     }
 }

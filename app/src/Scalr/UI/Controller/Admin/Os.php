@@ -143,7 +143,9 @@ class Scalr_UI_Controller_Admin_Os extends Scalr_UI_Controller
         if (count($processed) == $num) {
             $this->response->success('All operating systems processed');
         } else {
-            array_walk($errors, function(&$item) { $item = '- ' . $item; });
+            array_walk($errors, function (&$item) {
+                $item = '- ' . $item;
+            });
             $this->response->warning(sprintf("Successfully processed %d from %d operating systems. \nFollowing errors occurred:\n%s", count($processed), $num, join($errors, '')));
         }
 

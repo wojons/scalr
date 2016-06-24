@@ -22,6 +22,9 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
             ],
             proxy: 'object'
         },
+        selModel: {
+            selType: 'selectedmodel'
+        },
         plugins: [{
             ptype: 'selectedrecord',
             disableSelection: false,
@@ -40,24 +43,16 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
                 ptype: 'dynemptytext',
                 emptyText: 'No images found',
                 emptyTextNoItems: 'You have no images added yet.'
-            },
-            listeners: {
-                itemclick: function (view, record, item, index, e) {
-                    if (e.getTarget('img.x-grid-icon-delete')) {
-                        view.store.remove(record);
-                        view.up('roleeditimages').removedImages.push({
-                            platform: record.get('platform'),
-                            cloudLocation: record.get('cloudLocation')
-                        });
-                        return false;
-                    }
-                }
             }
         },
         listeners: {
             viewready: function() {
                 var me = this;
                 me.down('#imagesLiveSearch').store = me.store;
+            },
+            selectionchange: function(selModel, selected) {
+                this.down('#delete').setDisabled(!selected.length);
+                this.down('#replace').setDisabled(selected.length != 1);
             }
         },
         columns: [
@@ -92,13 +87,6 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
                         }
                     }
                 )
-            }, {
-                xtype: 'templatecolumn',
-                tpl: '<img class="x-grid-icon x-grid-icon-delete" title="Delete image" src="'+Ext.BLANK_IMAGE_URL+'"/>',
-                width: 42,
-                sortable: false,
-                dataIndex: 'id',
-                align:'left'
             }
         ],
         dockedItems: [{
@@ -113,29 +101,27 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
                 filterFields: ['imageId', 'cloudLocation', 'platform']
             },{
                 xtype: 'tbfill'
-            },{
+            }, {
                 itemId: 'add',
                 text: 'Add image',
                 cls: 'x-btn-green',
-                handler: function() {
+                addImageHandler: function(replaceImageRecord) {
                     var grid = this.up('grid'),
-                        selModel = grid.getSelectionModel(),
-                        used = {};
+                        os = Scalr.utils.getOsById(grid.imagesCacheParams.osId) || {},
+                        existingLocations = {};
 
-                    selModel.deselectAll();
-
-                    grid.getStore().getUnfiltered().each(function(rec) {
+                    grid.getStore().getUnfiltered().each(function (rec) {
                         var platform = rec.get('platform'), cloudLocation = rec.get('cloudLocation');
 
-                        if (! (platform in used))
-                            used[platform] = [];
+                        if (!(platform in existingLocations))
+                            existingLocations[platform] = {};
 
-                        used[platform].push(cloudLocation);
+                        existingLocations[platform][cloudLocation] = rec;
                     });
 
                     //clouds filter
                     var platforms = [];
-                    Ext.Object.each(Scalr.platforms, function(key, value) {
+                    Ext.Object.each(Scalr.platforms, function (key, value) {
                         if (value.enabled) {
                             platforms.push(key);
                         }
@@ -148,8 +134,9 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
                             url: '/images/xList/',
                             extraParams: {
                                 osId: grid.imagesCacheParams.osId,
-                                hideLocation: Ext.encode(used),
-                                hideNotActive: true
+                                isScalarized: grid.imagesCacheParams.isScalarized,
+                                hideNotActive: true,
+                                useHashAsFilter: true,
                             },
                             reader: {
                                 type: 'json',
@@ -163,9 +150,10 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
 
                     Scalr.utils.Window({
                         xtype: 'panel',
-                        title: 'Add images<div style="font-size: 12px; font-family: OpenSansRegular, arial; text-transform: none; line-height: 22px;">Showing only Images matching Role OS: ' + Scalr.utils.getOsById(grid.imagesCacheParams.osId, 'name') + '.' +
-                            ' Only <a href="https://scalr-wiki.atlassian.net/wiki/x/d4BM" target="_blank">Images registered with Scalr</a> are listed.' +
-                            '</div>',
+                        title: 'Add images' +
+                            '<span style="font-size: 13px; font-family: OpenSansRegular, arial; text-transform: none; line-height: 22px;">' +
+                                ' (Only <a href="https://scalr-wiki.atlassian.net/wiki/x/d4BM" target="_blank">Images registered with Scalr</a> are listed)' +
+                            '</span>',
                         width: '80%',
                         alignTop: true,
                         layout: 'fit',
@@ -191,16 +179,19 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
                                     xtype: 'templatecolumn',
                                     tpl: new Ext.XTemplate('{[this.getScope(values.scope)]}&nbsp;&nbsp;{name}',
                                         {
-                                            getScope: function(scope){
-                                                return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qclass="x-tip-light" data-qtip="' + Scalr.utils.getScopeLegend('image') + '"/>';
+                                            getScope: function (scope) {
+                                                return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-' + scope + '" data-qclass="x-tip-light" data-qtip="' + Scalr.utils.getScopeLegend('image') + '"/>';
                                             }
                                         }
                                     )
                                 }, {
                                     text: 'Image ID', dataIndex: 'id', flex: 1
                                 }, {
-                                    text: "Location", width: 200, dataIndex: 'platform', sortable: true, renderer:
-                                    function(value, meta, record) {
+                                    text: "Location",
+                                    width: 200,
+                                    dataIndex: 'platform',
+                                    sortable: true,
+                                    renderer: function (value, meta, record) {
                                         var platform = record.get('platform'),
                                             location = record.get('cloudLocation'),
                                             res = '<img class="x-icon-platform-small x-icon-platform-small-' + platform + '" data-qtip="' + Scalr.utils.getPlatformName(platform) + '" src="' + Ext.BLANK_IMAGE_URL + '"/>&nbsp;&nbsp;';
@@ -225,17 +216,17 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
                                         }]);
                                     }
                                 },
-                                { text: 'Architecture', dataIndex: 'architecture', width: 120 },
-                                { text: 'Type', dataIndex: 'type', width: 120 },
-                                { text: 'Source', dataIndex: 'source', width: 120 },
-                                { text: 'Created by', dataIndex: 'createdByEmail', width: 160 }
+                                {text: 'Architecture', dataIndex: 'architecture', width: 120},
+                                {text: 'Type', dataIndex: 'type', width: 120},
+                                {text: 'Source', dataIndex: 'source', width: 120},
+                                {text: 'Created by', dataIndex: 'createdByEmail', width: 160}
                             ],
                             listeners: {
                                 selectionchange: function (selModel, selections) {
                                     this.down('#add').setDisabled(!selections.length);
                                 },
 
-                                itemdblclick: function(grid, record) {
+                                itemdblclick: function (grid, record) {
                                     this.down('#add').handler();
                                 }
                             },
@@ -249,24 +240,54 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
                                 },
                                 items: [{
                                     xtype: 'button',
-                                    text: 'Add',
+                                    text: replaceImageRecord ? 'Replace' : 'Add',
                                     itemId: 'add',
                                     disabled: true,
-                                    handler: function() {
-                                        var sel = this.up('grid').getSelectionModel().getSelection();
-                                        grid.getStore().add({
-                                            platform: sel[0].get('platform'),
-                                            cloudLocation: sel[0].get('cloudLocation'),
-                                            name: sel[0].get('name'),
-                                            imageId: sel[0].get('id'),
-                                            extended: sel[0].getData()
-                                        });
-                                        this.up('#box').close();
+                                    handler: function () {
+                                        var me = this,
+                                            record = me.up('grid').getSelectionModel().getSelection()[0],
+                                            platform = record.get('platform'),
+                                            cloudLocation = record.get('cloudLocation'),
+                                            imageId = record.get('id');
+                                        addImage = function (imageToRemove) {
+                                            var store = grid.getStore();
+                                            if (imageToRemove) {
+                                                store.remove(imageToRemove);
+                                            }
+                                            store.add({
+                                                platform: platform,
+                                                cloudLocation: cloudLocation,
+                                                name: record.get('name'),
+                                                imageId: imageId,
+                                                extended: record.getData()
+                                            });
+                                            me.up('#box').close();
+                                        };
+                                        if (existingLocations[platform] !== undefined && existingLocations[platform][cloudLocation] !== undefined) {
+                                            var existingImageId = existingLocations[platform][cloudLocation].get('imageId');
+                                            if (imageId != existingImageId) {
+                                                Scalr.Confirm({
+                                                    type: 'action',
+                                                    msg: 'Are you sure want to replace ' + Scalr.utils.getPlatformName(platform) + ' image <b style="white-space:nowrap">' + existingImageId + '</b> ' +
+                                                    (!Ext.isEmpty(cloudLocation) ? 'in region <b style="white-space:nowrap">' + cloudLocation + '</b> ' : '') + 'with a new image <b style="white-space:nowrap"s>' + imageId + '</b>?',
+                                                    ok: 'Replace',
+                                                    formWidth: 600,
+                                                    success: function (formValues, form) {
+                                                        addImage(existingLocations[platform][cloudLocation]);
+                                                    }
+                                                });
+                                            } else {
+                                                me.up('#box').close();
+                                            }
+                                            return;
+
+                                        }
+                                        addImage();
                                     }
                                 }, {
                                     xtype: 'button',
                                     text: 'Cancel',
-                                    handler: function() {
+                                    handler: function () {
                                         this.up('#box').close();
                                     }
                                 }]
@@ -276,13 +297,14 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
                                 style: 'box-shadow:none;padding-left:0;padding-right:0',
                                 dock: 'top',
                                 defaults: {
-                                    margin: '0 0 0 12'
+                                    margin: '0 0 12 12'
                                 },
                                 items: [{
                                     xtype: 'filterfield',
                                     itemId: 'filterfield',
                                     store: imagesStore,
-                                    width: 280,
+                                    flex: 1,
+                                    maxWidth: 200,
                                     margin: 0,
                                     form: {
                                         items: [{
@@ -296,6 +318,8 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
                                     xtype: 'cloudlocationfield',
                                     cls: 'x-btn-compressed',
                                     platforms: platforms,
+                                    value: replaceImageRecord ? { platform: replaceImageRecord.get('platform'), cloudLocation: replaceImageRecord.get('cloudLocation') } : null,
+                                    disabled: !!replaceImageRecord,
                                     listeners: {
                                         change: function (me, value) {
                                             imagesStore.applyProxyParams(value);
@@ -311,11 +335,11 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
                                     hidden: Scalr.scope == 'scalr',
                                     disabled: Scalr.scope == 'scalr',
                                     cls: 'x-btn-compressed',
-                                    changeHandler: function(comp, item) {
+                                    changeHandler: function (comp, item) {
                                         imagesStore.proxy.extraParams.scope = item.value;
                                         imagesStore.load();
                                     },
-                                    getItemText: function(item) {
+                                    getItemText: function (item) {
                                         return item.value ? 'Scope: &nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" class="' + item.iconCls + '" title="' + item.text + '" />' : item.text;
                                     },
                                     menu: {
@@ -324,15 +348,15 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
                                         items: [{
                                             text: 'All scopes',
                                             value: null
-                                        },{
+                                        }, {
                                             text: 'Scalr scope',
                                             value: 'scalr',
                                             iconCls: 'x-menu-item-icon-scope scalr-scope-scalr'
-                                        },{
+                                        }, {
                                             text: 'Account scope',
                                             value: 'account',
                                             iconCls: 'x-menu-item-icon-scope scalr-scope-account'
-                                        },{
+                                        }, {
                                             text: 'Environment scope',
                                             value: 'environment',
                                             iconCls: 'x-menu-item-icon-scope scalr-scope-environment',
@@ -340,13 +364,58 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
                                             disabled: Scalr.scope !== 'environment'
                                         }]
                                     }
+                                }, {
+                                    xtype: 'displayfield',
+                                    cls: 'x-form-field-filter',
+                                    fieldStyle: 'padding: 6px 0 4px 0', // set smaller padding because icon's height expands component height
+                                    value: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-osfamily-small x-icon-osfamily-small-' + os.family + '"/>&nbsp;' + Scalr.utils.beautifyOsFamily(os.family) + ' ' + (os.version || os.generation || os.id)
+                                }, {
+                                    xtype: 'displayfield',
+                                    cls: 'x-form-field-filter',
+                                    hidden: grid.imagesCacheParams.isScalarized != 1,
+                                    value: '<span data-qtip="Show Images with Scalarizr (or Сloud-init) only">Images with <span class="x-semibold">Scalarizr</span> (or <span class="x-semibold">Сloud-init</span>)</span>'
                                 }]
                             }]
                         }]
                     });
+                },
+
+                handler: function () {
+                    this.up('grid').getSelectionModel().deselectAll();
+                    this.addImageHandler();
+                }
+            }, {
+                itemId: 'replace',
+                iconCls: 'x-btn-icon-replace',
+                disabled: true,
+                margin: '0 0 0 12',
+                tooltip: 'Replace selected image',
+                handler: function() {
+                    var grid = this.up('grid'),
+                        selection = grid.getSelectionModel().getSelection();
+
+                    grid.down('#add').addImageHandler(selection[0]);
+                }
+            }, {
+                itemId: 'delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
+                disabled: true,
+                margin: '0 0 0 12',
+                tooltip: 'Delete selected images',
+                handler: function() {
+                    var grid = this.up('grid'),
+                        selection = grid.getSelectionModel().getSelection();
+                    Ext.each(selection, function(record){
+                        grid.up('roleeditimages').removedImages.push({
+                            platform: record.get('platform'),
+                            cloudLocation: record.get('cloudLocation')
+                        });
+                    });
+                    grid.getStore().remove(selection);
                 }
             }]
-		}]
+        }]
     },{
         xtype: 'container',
         layout: 'fit',
@@ -442,6 +511,21 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
                     fieldLabel: 'Source'
                 }, {
                     xtype: 'displayfield',
+                    name: 'isScalarized',
+                    fieldLabel: 'Scalarizr',
+                    renderer: function(value) {
+                        var record = this.up('form').getForm().getRecord();
+                        return value == 1 ? 'Installed ('+(record.get('agentVersion') || 'Unknown')+')' : 'Not installed';
+                    }
+                }, {
+                    xtype: 'displayfield',
+                    name: 'hasCloudInit',
+                    fieldLabel: 'Cloud-init',
+                    renderer: function(value) {
+                        return value == 1 ? 'Installed' : 'Not installed';
+                    }
+                }, {
+                    xtype: 'displayfield',
                     name: 'createdByEmail',
                     fieldLabel: 'Created by',
                     renderer: function(value) {
@@ -502,7 +586,9 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
                         cloudLocation: record.get('cloudLocation'),
                         imageId: record.get('imageId'),
                         name: record.get('extended')['name'],
-                        hash: record.get('extended')['hash']
+                        hash: record.get('extended')['hash'],
+                        isScalarized: record.get('extended')['isScalarized'],
+                        hasCloudInit: record.get('extended')['hasCloudInit']
                     });
                 });
             }
@@ -512,9 +598,9 @@ Ext.define('Scalr.ui.RoleDesignerTabImages', {
                 fn: function(params){
                     var grid = this.down('grid'),
                         role = params['role'] || {};
-
                     grid.imagesCacheParams = {
-                    	osId: role['osId']
+                        osId: role['osId'],
+                        isScalarized: role['isScalarized']
                     };
                     grid.down('#add').setVisible(Scalr.utils.isAdmin() || Scalr.isAllowed('IMAGES_' + Scalr.scope.toUpperCase()));
                 }

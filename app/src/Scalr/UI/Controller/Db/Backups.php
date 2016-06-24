@@ -51,21 +51,20 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
             LEFT JOIN `farms` f ON b.farm_id = f.id
             WHERE b.status = ? AND b.env_id = ?
             AND DATE_FORMAT(CONVERT_TZ(b.dtcreated, 'SYSTEM', ?), '%Y-%m') = ?
-        ";
+            AND " . $this->request->getFarmSqlQuery();
 
         $userTimezone = $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE);
         if (empty($userTimezone)) {
             $userTimezone = 'SYSTEM';
         }
 
-        $args = array(Scalr_Db_Backup::STATUS_AVAILABLE, $this->getEnvironmentId(), $userTimezone, date('Y-m', $time));
+        $args = [Scalr_Db_Backup::STATUS_AVAILABLE, $this->getEnvironmentId(), $userTimezone, date('Y-m', $time)];
 
         if ($this->getParam('farmId')) {
             $query .= ' AND b.farm_id = ?';
             $args[] = $this->getParam('farmId');
         }
 
-        list($query, $args) = $this->request->prepareFarmSqlQuery($query, $args, 'f');
         $dbBackupResult = $this->db->GetAll($query, $args);
         foreach ($dbBackupResult as $row) {
             $dt = new DateTime($row['time']);
@@ -94,6 +93,7 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
         $data = array(
             'backup_id'      => $backup->id,
             'farm_id'        => $backup->farmId,
+            'behavior'       => $backup->service,
             'type'           => ROLE_BEHAVIORS::GetName($backup->service) ? ROLE_BEHAVIORS::GetName($backup->service) : 'unknown',
             'date'           => Scalr_Util_DateTime::convertTz($backup->dtCreated),
             'size'           => $backup->size ? round($backup->size / 1024 / 1024, 2) : 0,
@@ -111,10 +111,7 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
             if ($data['provider'] == 's3') {
                 $part['link'] = $this->getS3SignedUrl($part['path']);
             } else if ($data['provider'] == 'cf') {
-                if ($backup->platform == SERVER_PLATFORMS::RACKSPACE)
-                    $part['link'] = $this->getCfSignedUrl($part['path'], $data['cloud_location'], $backup->platform);
-                else
-                    $part['link'] = $this->getSwiftSignerUrl($part['path'], $backup->platform, $backup->cloudLocation);
+                $part['link'] = $this->getSwiftSignerUrl($part['path'], $backup->platform, $backup->cloudLocation);
             } else if ($data['provider'] == 'gcs') {
                 $part['link'] = $this->getGcsSignedUrl($part['path']);
             } else
@@ -145,8 +142,8 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
         $resource = substr($path, strpos($path, '/') + 1, strlen($path));
         $expires = time() + 3600;
 
-        $AWSAccessKey = $this->getEnvironment()->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCESS_KEY];
-        $AWSSecretKey = $this->getEnvironment()->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_SECRET_KEY];
+        $AWSAccessKey = $this->getEnvironment()->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCESS_KEY];
+        $AWSSecretKey = $this->getEnvironment()->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_SECRET_KEY];
 
         $stringToSign = "GET\n\n\n{$expires}\n/" . str_replace(".s3.amazonaws.com", "", $bucket) . "/{$resource}";
 
@@ -154,47 +151,41 @@ class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
 
         $authenticationParams = "AWSAccessKeyId={$AWSAccessKey}&Expires={$expires}&Signature={$signature}";
 
-        return $link = "http://{$bucket}.s3.amazonaws.com/{$resource}?{$authenticationParams}";
-    }
-
-    private function getCfSignedUrl($path, $location, $platform)
-    {
-        $expires = time() + 3600;
-
-        $ccProps = $this->environment->cloudCredentials("{$location}." . $platform)->properties;
-
-        $user = $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_USERNAME];
-        $key = $ccProps[Entity\CloudCredentialsProperty::RACKSPACE_API_KEY];
-
-        $cs = Scalr_Service_Cloud_Rackspace::newRackspaceCS($user, $key, $location);
-
-        $auth = $cs->authToReturn();
-
-        $stringToSign = "GET\n\n\n{$expires}\n/{$path}";
-        $signature = urlencode(base64_encode(hash_hmac("sha1", utf8_encode($stringToSign), $key, true)));
-
-        $authenticationParams = "temp_url_sig={$signature}&temp_url_expires={$expires}";
-
-        $link = "{$auth['X-Cdn-Management-Url']}/{$path}?{$authenticationParams}";
-
-        return $link;
+        return $link = "https://{$bucket}.s3.amazonaws.com/{$resource}?{$authenticationParams}";
     }
 
     public function getGcsSignedUrl($path)
     {
         $expires = time() + 3600;
+
         $stringToSign = "GET\n\n\n{$expires}\n/{$path}";
+
         $link = "http://storage.googleapis.com/{$path}";
-        $googleAccessId = str_replace('.apps.googleusercontent.com', '@developer.gserviceaccount.com', $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_CLIENT_ID]);
 
-        $signer = new Google_Signer_P12(
-            base64_decode($this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_KEY]),
-            $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_JSON_KEY] ? null : 'notasecret'
+        $googleAccessId = str_replace(
+            '.apps.googleusercontent.com',
+            '@developer.gserviceaccount.com',
+            $this->environment->keychain(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_CLIENT_ID]
         );
-        $signature = $signer->sign($stringToSign);
-        $signature = urlencode(base64_encode($signature));
 
-        return "{$link}?GoogleAccessId={$googleAccessId}&Expires={$expires}&Signature={$signature}";
+        $ccGce = $this->environment->keychain(SERVER_PLATFORMS::GCE);
+        $key = base64_decode($ccGce->properties[Entity\CloudCredentialsProperty::GCE_KEY]);
+        $signature = $certs = '';
+
+        // If it's not a json key we need to convert PKCS12 to PEM
+        if (empty($ccGce->properties[Entity\CloudCredentialsProperty::GCE_JSON_KEY])) {
+            @openssl_pkcs12_read($key, $certs, 'notasecret');
+            $key = $certs['pkey'];
+        }
+
+        openssl_sign($stringToSign, $signature, openssl_pkey_get_private($key), OPENSSL_ALGO_SHA256);
+
+        return sprintf("%s?GoogleAccessId=%s&Expires=%s&Signature=%s",
+            $link,
+            $googleAccessId,
+            $expires,
+            urlencode(base64_encode($signature))
+        );
     }
 
     public function getSwiftSignerUrl($path, $platform, $cloudLocation)

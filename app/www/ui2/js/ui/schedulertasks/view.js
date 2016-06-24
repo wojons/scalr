@@ -11,7 +11,6 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
             'targetType',
             'startTime',
             'config',
-            'endTime',
             'lastStartTime',
             'timezone',
             'restartEvery',
@@ -567,6 +566,7 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                 down('#farmRoles').
                     setTitle(fireEvent ? 'Event context' : 'Target').
                     optionChange(terminateFarm || launchFarm ? 'add' : 'remove', 'disabledFarmRole').
+                    optionChange(fireEvent ? 'remove' : 'add', 'isScalarizedOnly').
                     show();
 
             return me;
@@ -846,6 +846,17 @@ Scalr.regPage('Scalr.ui.schedulertasks.view', function (loadParams, moduleParams
                 listeners: {
                     change: function (field, value) {
                         form.hideFieldSets(value);
+                    },
+                    beforeselect: function(comp, record) {
+                        var field = this.up('form').down('[name="farmRoleId"]');
+                        if (record.get('field1') == 'script_exec' && comp.getPicker().isVisible() && field.isVisible()) {
+                            var rec = field.findRecordByValue(field.getValue());
+                            if (rec && rec.get('isScalarized') == '0') {
+                                Scalr.message.InfoTip('Script execution is not available for agentless roles.', comp.inputEl, {anchor: 'bottom'});
+                                return false;
+                            }
+                        }
+                        
                     }
                 }
             }, {

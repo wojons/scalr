@@ -112,22 +112,25 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Scripting', {
         rolescripting.setCurrentRoleOptions({
             farmRoleAlias: record.get('alias'),
             osFamily: roleOsFamily,
-            chefAvailable: record.hasBehavior('chef')
+            chefAvailable: record.hasBehavior('chef'),
+            isScalarized: record.get('isScalarized')
         });
 
         //load farm roles
         var farmRoles = [],
             farmRolesStore = record.store;
         farmRolesStore.getUnfiltered().each(function(item){
-            farmRoles.push({
-                farm_role_id: item.get('farm_role_id'),
-                platform: item.get('platform'),
-                cloud_location: item.get('cloud_location'),
-                role_id: item.get('role_id'),
-                name: item.get('name'),
-                alias: item.get('alias'),
-                current: item === record
-            });
+            if (item.get('isScalarized') == 1) {
+                farmRoles.push({
+                    farm_role_id: item.get('farm_role_id'),
+                    platform: item.get('platform'),
+                    cloud_location: item.get('cloud_location'),
+                    role_id: item.get('role_id'),
+                    name: item.get('name'),
+                    alias: item.get('alias'),
+                    current: item === record
+                });
+            }
         });
         rolescripting.loadRoles(farmRoles);
 

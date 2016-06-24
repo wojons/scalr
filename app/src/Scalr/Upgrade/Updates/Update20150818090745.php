@@ -116,19 +116,28 @@ class Update20150818090745 extends AbstractUpdate implements SequenceInterface
 
                 if ($this->isPlatformEnabled($envs[$row["env_id"]], $row["platform"])) {
                     try {
-                        $instanceTypeEntity = $platforms[$row["platform"]]->getInstanceType(
+                        $instanceTypeInfo = $platforms[$row["platform"]]->getInstanceType(
                             $row["type"],
                             $envs[$row["env_id"]],
                             $row["cloud_location"]
                         );
-                        /* @var $instanceTypeEntity CloudInstanceType */
-                        if ($instanceTypeEntity && (int) $instanceTypeEntity->vcpus > 0) {
+
+                        if ($instanceTypeInfo instanceof CloudInstanceType) {
+                            $vcpus = $instanceTypeInfo->vcpus;
+                        } else if (isset($instanceTypeInfo['vcpus'])) {
+                            $vcpus = $instanceTypeInfo['vcpus'];
+                        } else {
+                            trigger_error("Value of vcpus for instance type " . $row["type"] . " is missing for platform " . $row["platform"], E_USER_WARNING);
+                            $vcpus = 0;
+                        }
+
+                        if ((int) $vcpus > 0) {
                             $this->db->Execute("
                                 INSERT IGNORE INTO server_properties (`server_id`, `name`, `value`) VALUES (?, ?, ?)
                             ", [
                                 $row["server_id"],
                                 Server::INFO_INSTANCE_VCPUS,
-                                $instanceTypeEntity->vcpus
+                                $vcpus
                             ]);
                         }
                     } catch (\Exception $e) {

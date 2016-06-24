@@ -2,14 +2,12 @@
 
 namespace Scalr\Api\Rest;
 
-use Scalr\Api\ApiLogger;
 use Scalr\Api\Rest\Routing\Router;
 use Scalr\Api\Rest\Routing\Route;
 use Scalr\Api\Rest\Http\Request;
 use Scalr\Api\Rest\Http\Response;
 use Scalr\Api\Rest\Exception\StopException;
 use Scalr\Api\Rest\Environment as AppEnvironment;
-use Scalr\Exception\LoggerException;
 
 /**
  * REST API Framework
@@ -59,13 +57,6 @@ class Application
      * @var callable
      */
     private $error;
-
-    /**
-     * API logger
-     *
-     * @var ApiLogger
-     */
-    protected $apiLogger;
 
     /**
      * Preprocess request method and path
@@ -149,13 +140,6 @@ class Application
 
             return $apiContainer->get($serviceid);
         });
-
-        try {
-            $this->apiLogger = new ApiLogger(\Scalr::getContainer()->config->{'scalr.system.api.logger'});
-        } catch (LoggerException $e) {
-            \Scalr::getContainer()->logger(__CLASS__)->error("Wrong API Logger configuration: " . $e->getMessage());
-        }
-
     }
 
     public function __get($name)
@@ -426,9 +410,6 @@ class Application
         } else {
             $this->response->setStatus(500);
             $this->response->setBody($this->callErrorHandler($e));
-
-            $this->apiLogger->logError($this->request, $this->response);
-
             $this->stop();
         }
     }

@@ -16,8 +16,6 @@ class EnvironmentProperty extends AbstractEntity
 {
     const SETTING_CC_ID    = 'cc_id';
 
-    const RACKSPACE_LOCATIONS = 'rackspace.locations';
-
     /**
      * The identifier of the client's environment
      *

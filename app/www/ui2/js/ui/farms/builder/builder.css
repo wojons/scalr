@@ -142,7 +142,8 @@
     width: auto;
 }
 
-.x-farmrole-editor-tab .x-container .x-mask{
+.x-farmrole-editor-tab .x-container .x-mask,
+.x-farmrole-editor-tab .x-fieldset .x-mask{
     background: transparent;
 }
 

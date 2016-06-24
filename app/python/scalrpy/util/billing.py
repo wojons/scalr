@@ -76,33 +76,29 @@ class Billing(object):
         records = self.analytics.remove_existing_records_with_record_id(records)
         return records
 
-    def fill_farm_usage_d(self, force=False):
+    def fill_farm_usage_d(self, platform=None, force=False):
         with self.analytics.farm_usage_d_lock:
             try:
                 for date in sorted(list(self.farm_usage_d_dates)):
+                    if date == datetime.datetime.utcnow().date():
+                        hour = (datetime.datetime.utcnow() - datetime.timedelta(hours=1)).hour
+                    else:
+                        hour = 23
                     try:
                         if not force:
                             utcnow = datetime.datetime.utcnow()
                             two_weeks_ago = (utcnow + datetime.timedelta(days=-14)).date()
                             if date < two_weeks_ago:
                                 raise Exception('dtime-from more than two weeks ago')
-                        if date == datetime.datetime.utcnow().date():
-                            hour = (datetime.datetime.utcnow() - datetime.timedelta(hours=1)).hour
-                        else:
-                            hour = 23
                         msg = 'fill_farm_usage_d date: {}'.format(date)
                         LOG.debug(msg)
-                        self.analytics.fill_farm_usage_d(date, hour)
+                        self.analytics.fill_farm_usage_d(date, hour, platform=platform)
                     except:
                         msg = 'Unable to fill farm_usage_d table for date {}, hour {}'
                         msg = msg.format(date, hour)
                         helper.handle_error(message=msg)
             finally:
                 self.farm_usage_d_dates = set()
-
-    def on_insert_record(self, record):
-        with self.analytics.farm_usage_d_lock:
-            self.farm_usage_d_dates.add(record['dtime'].date())
 
     def on_insert_records(self, records):
         with self.analytics.farm_usage_d_lock:
@@ -111,6 +107,10 @@ class Billing(object):
 
 
 class AWSBilling(Billing):
+
+    period = 60 * 60
+    timeout = 60 * 60 * 6
+
     usage_start_dtime_format = "%Y-%m-%d %H:%M:%S"
     last_modified_format = "%a, %d %b %Y %H:%M:%S %Z"
 
@@ -154,10 +154,10 @@ class AWSBilling(Billing):
                                                           credentials_env['ec2.access_key']),
             'aws_secret_access_key': cryptotool.decrypt_scalr(self.config['crypto_key'],
                                                               credentials_env['ec2.secret_key']),
-            'proxy': self.config['aws_proxy'].get('host'),
-            'proxy_port': self.config['aws_proxy'].get('port'),
-            'proxy_user': self.config['aws_proxy'].get('user'),
-            'proxy_pass': self.config['aws_proxy'].get('pass'),
+            'proxy': self.config['proxy'].get('aws', {}).get('host'),
+            'proxy_port': self.config['proxy'].get('aws', {}).get('port'),
+            'proxy_user': self.config['proxy'].get('aws', {}).get('user'),
+            'proxy_pass': self.config['proxy'].get('aws', {}).get('pass'),
         }
         default_region_map = {
             'regular': 'us-east-1',
@@ -249,41 +249,82 @@ class AWSBilling(Billing):
             msg = msg.format(file_name, bucket_name, helper.exc_info())
             raise Exception, Exception(msg), sys.exc_info()[2]
 
+    def filter_compute(self, rows):
+        rows = [row for row in rows
+                if ('BoxUsage' in row['UsageType'] or 'HeavyUsage' in row['UsageType'])
+                and 'RunInstances' in row['Operation']]
+        return rows
+
+    def restore_scalr_meta(self, rows):
+        instances_ids = list(set([str(row['ResourceId']) for row in self.filter_compute(rows)]))
+        if not instances_ids:
+            return
+        query = (
+            "SELECT sh.env_id, sh.farm_id, sh.farm_roleid farm_role_id, sh.server_id, "
+            " sh.cloud_server_id instance_id "
+            "FROM servers_history sh "
+            "WHERE sh.platform='ec2' "
+            "AND sh.cloud_server_id IN ({instances_ids}) "
+        ).format(instances_ids=str(instances_ids)[1:-1])
+        results = self.analytics.scalr_db.execute(query, retries=1)
+        scalr_meta = {
+            r['instance_id']: 'v1:{env_id}:{farm_id}:{farm_role_id}:{server_id}'.format(**r)
+            for r in results
+        }
+        for row in rows:
+            if row['ResourceId'] in scalr_meta:
+                row['user:scalr-meta'] = scalr_meta[row['ResourceId']]
+
     def csv_reader(self, csv_file, envs, dtime_from=None, dtime_to=None):
         envs_ids = [int(env['id']) for env in envs]
         aws_account_id = envs[0]['ec2.account_id']
         dtime_to = dtime_to or datetime.datetime.utcnow()
-        chunk_size = 500
+
+        def check_quantity(row):
+            try:
+                return float(row['UsageQuantity']) != 0.0
+            except:
+                return False
+
         with open(csv_file, 'r') as f:
-            i = 0
-            rows = []
-            reader = csv.DictReader(f)
-            for row in reader:
-                try:
-                    if not row.get('user:scalr-meta'):
-                        continue
-                    row['scalr_meta'] = helper.get_scalr_meta(row['user:scalr-meta'])
-                    if envs_ids and row['scalr_meta'].get('env_id'):
-                        if row['scalr_meta']['env_id'] not in envs_ids:
-                            continue
-                    if aws_account_id and row['LinkedAccountId'] != aws_account_id:
-                        continue
-                    start_dtime = datetime.datetime.strptime(row['UsageStartDate'],
-                                                             self.usage_start_dtime_format)
-                    if dtime_from and start_dtime < dtime_from:
-                        continue
-                    if start_dtime > dtime_to:
-                        break
-                    i += 1
+
+            def reader(chunk_size=1000):
+                rows = []
+                for row in csv.DictReader(f):
                     rows.append(row)
-                    if i >= chunk_size:
+                    if len(rows) >= chunk_size:
                         yield rows
-                        i = 0
                         rows = []
-                except:
-                    helper.handle_error(message='CSV reader error')
-            if rows:
-                yield rows
+                if rows:
+                    yield rows
+
+            for rows in reader():
+                rows = [row for row in rows
+                        if check_quantity(row) and row['RecordType'] == 'LineItem']
+                if rows and 'user:scalr-meta' not in rows[0]:
+                    self.restore_scalr_meta(rows)
+                rows_for_yield = []
+                for row in rows:
+                    try:
+                        if not row.get('user:scalr-meta'):
+                            continue
+                        row['scalr_meta'] = helper.get_scalr_meta(row['user:scalr-meta'])
+                        if envs_ids and row['scalr_meta'].get('env_id'):
+                            if row['scalr_meta']['env_id'] not in envs_ids:
+                                continue
+                        if aws_account_id and row['LinkedAccountId'] != aws_account_id:
+                            continue
+                        start_dtime = datetime.datetime.strptime(row['UsageStartDate'],
+                                                                 self.usage_start_dtime_format)
+                        if dtime_from and start_dtime < dtime_from:
+                            continue
+                        if start_dtime > dtime_to:
+                            break
+                        rows_for_yield.append(row)
+                    except:
+                        helper.handle_error(message='CSV reader error')
+                if rows_for_yield:
+                    yield rows_for_yield
 
     aws_pattern_1 = re.compile(r"^.*Usage:(?P<item_name>.*)$")
     aws_pattern_2 = re.compile(r"^.*VolumeUsage.(?P<item_name>.*)$")
@@ -291,11 +332,12 @@ class AWSBilling(Billing):
     aws_pattern_3_out = re.compile(r"^(?P<item_name>.*)-Out-Bytes$")
     aws_pattern_3_reg = re.compile(r"^(?P<item_name>.*)-Regional-Bytes$")
 
-    def get_record(self, row):
+    @classmethod
+    def get_record(cls, row):
         record = row['scalr_meta']
         record['aws_record_id'] = row['RecordId']
         record['dtime'] = datetime.datetime.strptime(row['UsageStartDate'],
-                                                     self.usage_start_dtime_format)
+                                                     cls.usage_start_dtime_format)
         record['record_date'] = record['dtime'].date()
         record['instance_id'] = row['ResourceId']
         record['platform'] = 'ec2'
@@ -315,7 +357,7 @@ class AWSBilling(Billing):
                 and 'RunInstances' in row['Operation']:
             cost_distr_type = 1
             usage_type_name = 'BoxUsage'
-            match = self.aws_pattern_1.match(row['UsageType'])
+            match = cls.aws_pattern_1.match(row['UsageType'])
             if match:
                 usage_item_name = match.group('item_name')
 
@@ -323,7 +365,7 @@ class AWSBilling(Billing):
         elif 'EBS:VolumeUsage' in row['UsageType'] and 'CreateVolume' in row['Operation']:
             cost_distr_type = 2
             usage_type_name = 'EBS'
-            match = self.aws_pattern_2.match(row['UsageType'])
+            match = cls.aws_pattern_2.match(row['UsageType'])
             if match:
                 usage_item_name = match.group('item_name')
             else:
@@ -341,19 +383,19 @@ class AWSBilling(Billing):
         elif '-In-Bytes' in row['UsageType']:
             cost_distr_type = 3
             usage_type_name = 'In'
-            match = self.aws_pattern_3_in.match(row['UsageType'])
+            match = cls.aws_pattern_3_in.match(row['UsageType'])
             if match:
                 usage_item_name = match.group('item_name')
         elif '-Out-Bytes' in row['UsageType']:
             cost_distr_type = 3
             usage_type_name = 'Out'
-            match = self.aws_pattern_3_out.match(row['UsageType'])
+            match = cls.aws_pattern_3_out.match(row['UsageType'])
             if match:
                 usage_item_name = match.group('item_name')
         elif 'DataTransfer-Regional-Bytes' in row['UsageType']:
             cost_distr_type = 3
             usage_type_name = 'Regional'
-            match = self.aws_pattern_3_reg.match(row['UsageType'])
+            match = cls.aws_pattern_3_reg.match(row['UsageType'])
             if match:
                 usage_item_name = match.group('item_name')
         # Unsupported type
@@ -380,10 +422,11 @@ class AWSBilling(Billing):
 
         record['num'] = round(record['num'], 2)
 
-        record['record_id'] = self.get_record_id(record)
+        record['record_id'] = cls.get_record_id(record)
         return record
 
-    def get_record_id(self, record):
+    @classmethod
+    def get_record_id(cls, record):
         return record['aws_record_id']
 
     def fix_records_with_missing_server_id(self, records):
@@ -534,6 +577,8 @@ class AWSBilling(Billing):
 
 class RecalculateAWSBilling(AWSBilling):
 
+    timeout = 60 * 60 * 12
+
     def __init__(self, *args, **kwds):
         super(RecalculateAWSBilling, self).__init__(*args, **kwds)
         self.delete_lock = threading.Lock()
@@ -654,6 +699,9 @@ class RecalculateAWSBilling(AWSBilling):
 
 class PollerBilling(Billing):
 
+    period = 60 * 30
+    timeout = period - 5
+
     def get_billing_interval(self):
         dtime_hour_ago = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
         dtime_from = self.config['dtime_from'] or dtime_hour_ago.replace(minute=0,
@@ -704,6 +752,8 @@ class PollerBilling(Billing):
 
 class RecalculatePollerBilling(PollerBilling):
 
+    timeout = 60 * 60 * 6
+
     def __call__(self):
         try:
             dtime_from, dtime_to = self.get_billing_interval()
@@ -727,7 +777,7 @@ class RecalculatePollerBilling(PollerBilling):
                                 record['cost'] = float(cost) * int(record['num'])
                                 self.pool.apply_async(self.analytics.update_record,
                                                           (record,),
-                                                          {'callback': self.on_insert_record})
+                                                          {'callback': self.on_insert_records})
                                 gevent.sleep(0)  # force switch
                     except:
                         msg = "Scalr Poller billing unable to recalculate date {}, hour {}, platform '{}'"
@@ -787,6 +837,9 @@ class RecalculatePollerBilling(PollerBilling):
 
 class AzureBilling(Billing):
 
+    period = 60 * 60 * 2
+    timeout = period - 5
+
     ratecard_url = 'https://management.azure.com/subscriptions/{subscription_id}/providers/Microsoft.Commerce/RateCard'
     usage_url = 'https://management.azure.com/subscriptions/{subscription_id}/providers/Microsoft.Commerce/UsageAggregates'
     token_url = 'https://login.windows.net/{tenant_id}/oauth2/token'
@@ -798,6 +851,12 @@ class AzureBilling(Billing):
         self.meters_rates = {}
         self.max_simultaneously_envs = 50
         self.pool_factor = 5 / 10.0
+        self.proxy = None
+        if self.config['proxy'].get('azure'):
+            self.proxy = {
+                'http': self.config['proxy']['azure']['url'],
+                'https': self.config['proxy']['azure']['url']
+            }
 
     def load_access_token(self, env):
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
@@ -809,7 +868,7 @@ class AzureBilling(Billing):
                 'resource': 'https://management.azure.com/',
                 'client_secret': self.config['azure_app_secret_key'],
         }
-        resp = requests.post(url, headers=headers, data=data)
+        resp = requests.post(url, headers=headers, data=data, proxies=self.proxy)
         resp.raise_for_status()
         env['azure.access_token'] = str(resp.json()['access_token'])
 
@@ -829,7 +888,7 @@ class AzureBilling(Billing):
             'Content-Type': 'application/json',
             'Authorization': 'Bearer %s' % access_token,
         }
-        resp = requests.get(url, params=params, headers=headers)
+        resp = requests.get(url, params=params, headers=headers, proxies=self.proxy)
         resp.raise_for_status()
         for meter in resp.json()['Meters']:
             self.meters_rates[meter['MeterId']] = meter
@@ -866,12 +925,14 @@ class AzureBilling(Billing):
                     non_free_quantity -= (rate_quantity - 1)
                 current_rate = quantity_rate
 
-    def get_record_id(self, record):
+    @classmethod
+    def get_record_id(cls, record):
         unique = '{dtime};{resource_id};{meter_id};{cost_distr_type};{usage_type_name}'
         unique = unique.format(**record)
         return uuid.uuid5(analytics.UUID, unique).hex
 
-    def get_record(self, row):
+    @classmethod
+    def get_record(cls, row):
         record = {}
         properties = row['properties']
 
@@ -886,21 +947,28 @@ class AzureBilling(Billing):
             return
         record.update(helper.get_scalr_meta(tags['scalr-meta']))
 
-        # Compute
-        if properties['meterCategory'] == 'Virtual Machines' and \
-                properties['meterName'] == 'Compute Hours':
-            cost_distr_type = 1
-            usage_type_name = 'BoxUsage'
-            usage_item_name = instance_data['Microsoft.Resources']['additionalInfo']['ServiceType']
-            record['instance_type'] = usage_item_name
-            record['num'] = 1.0
-            record['meter_id'] = properties['meterId']
+        additional_info = instance_data['Microsoft.Resources'].get('additionalInfo', {})
+
+        meter_category = properties['meterCategory']
+        meter_name = properties['meterName']
+
+        if meter_category == 'Virtual Machines' and meter_name == 'Compute Hours':
+            if additional_info.get('UsageType') == 'ComputeHR':
+                cost_distr_type = 1
+                usage_type_name = 'BoxUsage'
+                usage_item_name = additional_info['ServiceType']
+            elif additional_info.get('UsageType') == 'ComputeHR_SW':
+                usage_type_name = 'Software'
+                usage_item_name = properties['meterSubCategory']
+            else:
+                return
+            record['instance_type'] = additional_info['ServiceType']
             record['resource_id'] = instance_data['Microsoft.Resources']['resourceUri'].split('/')[-1]
             record['instance_id'] = record['resource_id']
+            record['num'] = 1.0
             if not record['server_id']:
                 record['server_id'] = record['resource_id']
         else:
-            # Unsupported type
             return
 
         record['meter_id'] = properties['meterId']
@@ -918,7 +986,8 @@ class AzureBilling(Billing):
         if 'num' not in record:
             record['num'] = record['quantity']
         record['record_date'] = row['reported_date']
-        record['record_id'] = self.get_record_id(record)
+        record['record_id'] = cls.get_record_id(record)
+
         return record
 
     def get_usage(self, subscription_id, access_token, dtime_from, dtime_to, resolution='Hourly'):
@@ -932,40 +1001,57 @@ class AzureBilling(Billing):
         if reported_dtime_from == reported_dtime_to:
             return
         while reported_dtime_to <= dtime_to:
-            msg = 'Request Azure billing for subscription {}, reported dtime: {} - {}'
-            msg = msg.format(subscription_id, reported_dtime_from, reported_dtime_to)
-            LOG.debug(msg)
-            params = {
-                'api-version': self.api_version,
-                'reportedStartTime': reported_dtime_from.strftime('%Y-%m-%dT%H:%S:%M+00:00'),
-                'reportedEndTime': reported_dtime_to.strftime('%Y-%m-%dT%H:%M:%S+00:00'),
-                'aggregationGranularity': resolution,
-                'showDetails': 'true',
-            }
-            headers = {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer %s' % access_token,
-            }
-            session = requests.Session()
-            next_link = requests.Request(method='get', url=url, params=params).prepare().url
-            while next_link:
-                resp = session.get(next_link, headers=headers)
-                resp.raise_for_status()
-                jsoned_resp = resp.json()
-                assert 'value' in jsoned_resp, resp.text
-                rows = []
-                for row in jsoned_resp['value']:
-                    properties = row['properties']
-                    if 'instanceData' not in properties:
-                        # skip old format
-                        continue
-                    if properties['subscriptionId'] != subscription_id:
-                        continue
-                    row['reported_date'] = reported_dtime_from.date()
-                    rows.append(row)
-                if rows:
-                    yield rows
-                next_link = jsoned_resp.get('nextLink')
+            try:
+                msg = 'Request Azure billing for subscription {}, reported dtime: {} - {}'
+                msg = msg.format(subscription_id, reported_dtime_from, reported_dtime_to)
+                LOG.debug(msg)
+                params = {
+                    'api-version': self.api_version,
+                    'reportedStartTime': reported_dtime_from.strftime('%Y-%m-%dT%H:%S:%M+00:00'),
+                    'reportedEndTime': reported_dtime_to.strftime('%Y-%m-%dT%H:%M:%S+00:00'),
+                    'aggregationGranularity': resolution,
+                    'showDetails': 'true',
+                }
+                headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer %s' % access_token,
+                }
+                session = requests.Session()
+
+                def request():
+                    next_link = requests.Request(method='get', url=url, params=params).prepare().url
+
+                    @helper.retry(2, 2, requests.exceptions.RequestException)
+                    def get():
+                        return session.get(next_link, headers=headers, proxies=self.proxy)
+
+                    while next_link:
+                        resp = get()
+                        resp.raise_for_status()
+                        jsoned_resp = resp.json()
+                        yield jsoned_resp
+                        next_link = jsoned_resp.get('nextLink')
+
+                for response in request():
+                    assert 'value' in response, response
+                    rows = []
+                    for row in response['value']:
+                        properties = row['properties']
+                        if 'instanceData' not in properties:
+                            # skip old format
+                            continue
+                        if properties['subscriptionId'] != subscription_id:
+                            continue
+                        row['reported_date'] = reported_dtime_from.date()
+                        rows.append(row)
+                    if rows:
+                        yield rows
+
+            except:
+                msg = 'Azure get usage failed, subscription: {}, dtime: {} - {}'
+                msg = msg.format(subscription_id, dtime_from, dtime_to)
+                helper.handle_error(message=msg)
+
             if reported_dtime_to == dtime_to or resolution == 'Daily':
                 break
             reported_dtime_from = reported_dtime_to
@@ -994,7 +1080,10 @@ class AzureBilling(Billing):
 
     def get_billing_interval(self):
         utcnow = datetime.datetime.utcnow()
-        _dtime_from = utcnow - datetime.timedelta(days=1)
+        if hasattr(self, 'task_info') and self.task_info.get('iteration_number') == 1:
+            _dtime_from = utcnow - datetime.timedelta(days=14)
+        else:
+            _dtime_from = utcnow - datetime.timedelta(days=2)
         _dtime_to = utcnow - datetime.timedelta(hours=3)
         dtime_from = self.config['dtime_from'] or _dtime_from.replace(minute=0, second=0, microsecond=0)
         dtime_to = self.config['dtime_to'] or _dtime_to.replace(minute=0, second=0, microsecond=0)
@@ -1023,10 +1112,10 @@ class AzureBilling(Billing):
                     self.set_cost(record, subscription_id, access_token,
                                   meters_ids_usage[record['meter_id']][record['dtime'].month])
                     meters_ids_usage[record['meter_id']][record['dtime'].month] += record['quantity']
-                for chunk in helper.chunks(records, insert_chunk_size):
+
                     self.pool.wait()
-                    self.pool.apply_async(self.analytics.insert_records,
-                                          (chunk,),
+                    self.pool.apply_async(self.analytics.insert_record,
+                                          (record,),
                                           {'callback': self.on_insert_records})
                     gevent.sleep(0)  # force switch
         except:

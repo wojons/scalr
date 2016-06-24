@@ -6,6 +6,7 @@ use Scalr\Service\Aws\Ec2\DataType\CreateVolumeRequestData;
 use Scalr\Model\Entity;
 use DBFarmRole;
 use Scalr\Observer\AbstractEventObserver;
+use FarmLogMessage;
 
 class EbsObserver extends AbstractEventObserver
 {
@@ -42,12 +43,10 @@ class EbsObserver extends AbstractEventObserver
                 $createEbs = ($isMaster && !$farmMasterVolId);
 
                 if ($createEbs) {
-                    \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(
-                        new \FarmLogMessage($event->DBServer->farmId, sprintf(
-                            _("Need EBS volume for MySQL %s instance..."),
-                            ($isMaster ? "Master" : "Slave")
-                        ))
-                    );
+                    \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(new FarmLogMessage(
+                        $event->DBServer,
+                        sprintf("Need EBS volume for MySQL %s instance...", ($isMaster ? "Master" : "Slave"))
+                    ));
 
                     $req = new CreateVolumeRequestData(
                         $event->DBServer->GetProperty(\EC2_SERVER_PROPERTIES::AVAIL_ZONE),
@@ -58,13 +57,10 @@ class EbsObserver extends AbstractEventObserver
 
                     if (!empty($res->volumeId)) {
                         $DBFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_MASTER_EBS_VOLUME_ID, $res->volumeId, Entity\FarmRoleSetting::TYPE_LCL);
-                        \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(
-                            new \FarmLogMessage($event->DBServer->farmId, sprintf(
-                                _("MySQL %S volume created. Volume ID: %s..."),
-                                ($isMaster ? "Master" : "Slave"),
-                                $res->volumeId
-                            ))
-                        );
+                        \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(new FarmLogMessage(
+                            $event->DBServer,
+                            sprintf("MySQL %S volume created. Volume ID: %s...", ($isMaster ? "Master" : "Slave"), !empty($res->volumeId) ? $res->volumeId : null)
+                        ));
                     }
                 }
             }
@@ -116,11 +112,11 @@ class EbsObserver extends AbstractEventObserver
     {
         try {
             $DBEBSVolume = \DBEBSVolume::loadByVolumeId($event->VolumeID);
-    
+
             $DBEBSVolume->mountStatus = \EC2_EBS_MOUNT_STATUS::MOUNTED;
             $DBEBSVolume->deviceName = $event->DeviceName;
             $DBEBSVolume->isFsExists = 1;
-    
+
             $DBEBSVolume->save();
         } catch (\Exception $e) {}
     }
@@ -142,17 +138,24 @@ class EbsObserver extends AbstractEventObserver
             $event->DBServer->index
         ));
 
-        $this->Logger->info(new \FarmLogMessage($this->FarmID, sprintf(
-            _("Found %s volumes for server: %s"), count($volumes), $event->DBServer->serverId
-        )));
+        $this->Logger->info(new FarmLogMessage(
+            !empty($this->FarmID) ? $this->FarmID : null,
+            sprintf(_("Found %s volumes for server: %s"), count($volumes), $event->DBServer->serverId),
+            !empty($event->DBServer->serverId) ? $event->DBServer->serverId : null,
+            !empty($event->DBServer->envId) ? $event->DBServer->envId : null,
+            !empty($event->DBServer->farmRoleId) ? $event->DBServer->farmRoleId : null
+        ));
 
         foreach ($volumes as $volume) {
             if ($volume['volume_id']) {
 
-                $this->Logger->info(new \FarmLogMessage($this->FarmID, sprintf(
-                    _("Preparing volume #%s for attaching to server: %s."),
-                    $volume['volume_id'], $event->DBServer->serverId
-                )));
+                $this->Logger->info(new FarmLogMessage(
+                    !empty($this->FarmID) ? $this->FarmID : null,
+                    sprintf(_("Preparing volume #%s for attaching to server: %s."), $volume['volume_id'], $event->DBServer->serverId),
+                    !empty($event->DBServer->serverId) ? $event->DBServer->serverId : null,
+                    !empty($event->DBServer->envId) ? $event->DBServer->envId : null,
+                    !empty($event->DBServer->farmRoleId) ? $event->DBServer->farmRoleId : null
+                ));
 
                 try {
                     $DBEBSVolume = \DBEBSVolume::loadByVolumeId($volume['volume_id']);
@@ -192,7 +195,13 @@ class EbsObserver extends AbstractEventObserver
                     $event->DBServer->index
                 ))) {
 
-                if (in_array($DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_TYPE), array('standard','io1', 'gp2'))) {
+                if (in_array($DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_TYPE), [
+                    CreateVolumeRequestData::VOLUME_TYPE_IO1,
+                    CreateVolumeRequestData::VOLUME_TYPE_STANDARD,
+                    CreateVolumeRequestData::VOLUME_TYPE_GP2,
+                    CreateVolumeRequestData::VOLUME_TYPE_ST1,
+                    CreateVolumeRequestData::VOLUME_TYPE_SC1
+                ])) {
                     $type = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_TYPE);
                 } else {
                     $type = 'standard';

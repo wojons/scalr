@@ -18,6 +18,16 @@ class RoleCategory extends AbstractEntity implements ScopeInterface, AccessPermi
 {
 
     /**
+     * Regex for name validation
+     */
+    const NAME_REGEXP = '[[:alnum:]][[:alnum:]- ]*[[:alnum:]]';
+
+    /**
+     * Allowed name length
+     */
+    const NAME_LENGTH = 18;
+
+    /**
      * Identifier of the Role Category
      *
      * @Id
@@ -27,6 +37,14 @@ class RoleCategory extends AbstractEntity implements ScopeInterface, AccessPermi
      */
     public $id;
 
+    /**
+     * The identifier of the client's account
+     *
+     * @Column(type="integer")
+     * @var integer
+     */
+    public $accountId;
+    
     /**
      * The identifier of the Environment
      *
@@ -47,8 +65,26 @@ class RoleCategory extends AbstractEntity implements ScopeInterface, AccessPermi
      */
     public function getScope()
     {
-        return !empty($this->envId) ? self::SCOPE_ENVIRONMENT : self::SCOPE_SCALR;
+        return !empty($this->envId) ? self::SCOPE_ENVIRONMENT : (!empty($this->accountId) ? self::SCOPE_ACCOUNT : self::SCOPE_SCALR);
     }
+    
+    /**
+     * Returns category usage
+     * @return int|false Number of roles using this category or false
+     * @throws \Scalr\Exception\ModelException
+     */
+    public function getUsed()
+    {
+        $query = "SELECT COUNT(*) 
+                  FROM roles
+                  WHERE cat_id = ?";
+        $params[] = $this->id;
+
+        $rolesCount = $this->db()->GetOne($query, $params);
+
+        return $rolesCount ? $rolesCount : false;
+    }
+    
 
     /**
      * {@inheritdoc}
@@ -59,14 +95,18 @@ class RoleCategory extends AbstractEntity implements ScopeInterface, AccessPermi
         switch ($this->getScope()) {
             case static::SCOPE_ENVIRONMENT:
                 return $environment
-                    ? $this->envId == $environment->id
-                    : $user->hasAccessToEnvironment($this->envId);
+                     ? $this->envId == $environment->id
+                     : $user->hasAccessToEnvironment($this->envId);
+
+            case static::SCOPE_ACCOUNT:
+                return $this->accountId == $user->accountId && (empty($environment) || !$modify);
 
             case static::SCOPE_SCALR:
-                return !$modify;
+                return !$modify || $user->isScalrAdmin();
 
             default:
                 return false;
         }
     }
+    
 }

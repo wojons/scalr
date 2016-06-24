@@ -7,7 +7,7 @@ Parameter of type: `{{ parameter["type"] }}`.
 {% endif %}
 
 {% if "schema" in parameter %}
-An object of type: {{ parameter["schema"]|link_to_ref }}.
+{% include "include/schema_param.mkd" %}
 {% endif %}
 
 {% if "enum" in parameter %}{{ unsupported.unsupported }}{% endif %}

@@ -1,9 +1,12 @@
 <?php
 
 use Scalr\Acl\Acl;
+use Scalr\Service\Aws\Ec2\DataType\InstanceData;
+use Scalr\Service\Aws\Ec2\DataType\ReservationData;
 use Scalr\Service\Aws\Ec2\DataType\SecurityGroupData;
 use Scalr\Service\Aws\Elb\DataType\AttributesData;
 use Scalr\Service\Aws\Elb\DataType\CrossZoneLoadBalancingData;
+use Scalr\Service\Aws\Elb\DataType\InstanceStateData;
 use Scalr\Service\Aws\Elb\DataType\ListenerData;
 use Scalr\Service\Aws\Elb\DataType\LoadBalancerDescriptionData;
 use Scalr\Service\Aws\Elb\DataType\ListenerList;
@@ -22,7 +25,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
 
     public function hasAccess()
     {
-        return parent::hasAccess();
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_ELB);
     }
 
     public function defaultAction()
@@ -106,11 +109,9 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_AWS_ELB);
-
         $this->response->page(
             ['ui/tools/aws/ec2/elb/view.js', 'ui/security/groups/sgeditor.js'], array(
-                'accountId'     => $this->environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
+                'accountId'     => $this->environment->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
                 'remoteAddress' => $this->request->getRemoteAddr(),
             ), ['ui/tools/aws/ec2/elb/create.js']
         );
@@ -331,20 +332,11 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
         $elb = $this->getEnvironment()->aws($cloudLocation)->elb;
         $elb->loadBalancer->deregisterInstances($elbName, $awsInstanceId);
 
-        $instances = $elb->loadBalancer->describe($elbName)->get(0)->getInstances();
-
-        $data = [];
-
-        foreach ($instances as $instance) {
-            /* @var $instance \Scalr\Service\Aws\Elb\DataType\InstanceData */
-            $data[] = $instance->instanceId;
-        }
-
         $this->response->data([
-            'instances' => $data
+            'instanceId' => $awsInstanceId
         ]);
 
-        $this->response->success(_("Instance successfully deregistered from the load balancer"));
+        $this->response->success(_("Instance has been successfully removed from the Load Balancer"));
     }
 
     /**
@@ -354,8 +346,6 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
      */
     public function xGetInstanceHealthAction($cloudLocation, $elbName, $awsInstanceId)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_AWS_ELB);
-
         $elb = $this->getEnvironment()->aws($cloudLocation)->elb;
         $info = $elb->loadBalancer->describeInstanceHealth($elbName, $awsInstanceId)->get(0);
 
@@ -372,8 +362,6 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
      */
     public function xGetDetailsAction($cloudLocation, $elbName)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_AWS_ELB);
-
         $this->response->data([
             'elb' => $this->getDetails($cloudLocation, $elbName)
         ]);
@@ -431,6 +419,39 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
             $arrLb['securityGroups'] = $securityGroups;
         }
 
+        if (!empty($arrLb['instances'])) {
+            $instanceIds = [];
+
+            foreach ($arrLb['instances'] as $instance) {
+                $instanceIds[] = $instance['instanceId'];
+            }
+
+            $instancesList = $aws->ec2->instance->describe($instanceIds);
+            $instancesHealthStatus = $lb->describeInstanceHealth($instanceIds);
+
+            $instanceStates = [];
+
+            foreach ($instancesHealthStatus as $instanceHealth) {
+                /* @var $instanceHealth InstanceStateData */
+                $instanceStates[$instanceHealth->instanceId] = $instanceHealth->state;
+            }
+
+            $instances = [];
+
+            foreach ($instancesList as $instance) {
+                /* @var $instance ReservationData */
+                $instanceData = $instance->instancesSet->get();
+
+                $instances[] = [
+                    'instanceId'       => $instanceData->instanceId,
+                    'availabilityZone' => $instanceData->placement->availabilityZone,
+                    'status'           => $instanceStates[$instanceData->instanceId]
+                ];
+            }
+
+            $arrLb['instances'] = $instances;
+        }
+
         $arrLb['policies'] = $policies;
 
         return $arrLb;
@@ -439,16 +460,23 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
     /**
      * @param string    $cloudLocation      Ec2 region
      * @param string    $placement          optional Placement
+     * @throws Exception
+     * @throws Scalr_Exception_Core
+     */
+    public function xListElasticLoadBalancersAction($cloudLocation, $placement = null)
+    {
+        $data = $this->getElasticLoadBalancersList($cloudLocation, $placement);
+        $this->response->data($this->buildResponseFromData($data, ['name', 'dnsname', 'farmName', 'roleName']));
+    }
+    /**
+     * @param string    $cloudLocation      Ec2 region
+     * @param string    $placement          optional Placement
      * @param int       $limit              optional Limit
      * @throws Exception
      * @throws Scalr_Exception_Core
      */
-    public function xListElasticLoadBalancersAction($cloudLocation, $placement = null, $limit = null)
+    public function getElasticLoadBalancersList($cloudLocation, $placement = null)
     {
-        // We're using this method in dropdown in farm settings to get list of available ELBs
-        // We need to ignore limit, because otherwise only first 20 ELBs are available in farm
-        $ignoreLimit = (!isset($limit) || !$limit) ? true : false;
-
         $elb = $this->getEnvironment()->aws($cloudLocation)->elb;
 
         if ($placement == 'ec2') {
@@ -474,7 +502,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
 
             $info = [
                 "name"		 => $lb->loadBalancerName,
-                "dtcreated"	 => $lb->createdTime->format('c'),
+                "dtcreated"	 => Scalr_Util_DateTime::convertTz($lb->createdTime->format('c')),
                 "dnsName"	 => $lb->dnsName,
                 "availZones" => $lb->availabilityZones,
                 "subnets"    => $lb->subnets,
@@ -497,18 +525,13 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
                 $info['farmId'] = $dbFarmRole->FarmID;
                 $info['roleName'] = $dbFarmRole->GetRoleObject()->name;
                 $info['farmName'] = $dbFarmRole->GetFarmObject()->Name;
+                $info['farmRoleAlias'] = $dbFarmRole->Alias;
             }
 
             $rowz1[] = $info;
         }
 
-        $response = $this->buildResponseFromData($rowz1, ['name', 'dnsname', 'farmName', 'roleName'], $ignoreLimit);
-
-        foreach($response['data'] as $k => $row) {
-            $response['data'][$k]['dtcreated'] = Scalr_Util_DateTime::convertTz($row['dtcreated']);
-        }
-
-        $this->response->data($response);
+        return $rowz1;
     }
 
     /**
@@ -527,5 +550,19 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Elb extends Scalr_UI_Controller
             throw new InvalidArgumentException(sprintf("Elastic Load Balancer with name %s does not exist", $elbName));
         }
     }
+
+    /**
+     * Lists security groups
+     *
+     * @param string   $platform    Platform
+     * @param string   $cloudLocation Cloud location
+     * @param JsonData $filters
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function xListSecurityGroupsAction($platform, $cloudLocation, JsonData $filters = null)
+    {
+        $this->response->data(self::loadController('Groups', 'Scalr_UI_Controller_Security')->listGroups($platform, $cloudLocation, (array)$filters));
+    }
+
 
 }

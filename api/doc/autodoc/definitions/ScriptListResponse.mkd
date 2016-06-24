@@ -57,23 +57,13 @@ objects of type [`Script`](./../definitions/Script.mkd).
 
 ## Used in ##
 
+  + [`/scripts/`](./../rest/api/v1beta0/account/scripts/)
   + [`/{envId}/scripts/`](./../rest/api/v1beta0/user/{envId}/scripts/)
 
 ## Swagger Definition ##
 
     {
-      "x-usedIn": [
-        "/{envId}/scripts/"
-      ], 
       "properties": {
-        "pagination": {
-          "readOnly": true, 
-          "$ref": "#/definitions/ApiPagination"
-        }, 
-        "meta": {
-          "readOnly": true, 
-          "$ref": "#/definitions/ApiMetaContainer"
-        }, 
         "data": {
           "items": {
             "$ref": "#/definitions/Script"
@@ -88,6 +78,14 @@ objects of type [`Script`](./../definitions/Script.mkd).
           "readOnly": true, 
           "type": "array"
         }, 
+        "meta": {
+          "$ref": "#/definitions/ApiMetaContainer", 
+          "readOnly": true
+        }, 
+        "pagination": {
+          "$ref": "#/definitions/ApiPagination", 
+          "readOnly": true
+        }, 
         "warnings": {
           "items": {
             "$ref": "#/definitions/ApiMessage"
@@ -98,5 +96,9 @@ objects of type [`Script`](./../definitions/Script.mkd).
       }, 
       "x-derived": {
         "$ref": "#/definitions/Script"
-      }
+      }, 
+      "x-usedIn": [
+        "/scripts/", 
+        "/{envId}/scripts/"
+      ]
     }

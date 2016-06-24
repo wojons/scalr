@@ -13,7 +13,6 @@ use Scalr\Model\Collections\SettingsCollection;
 use Scalr\Model\Entity\Farm;
 use Scalr\Model\Entity\FarmRole;
 use Scalr\Model\Entity\FarmRoleSetting;
-use Scalr\Model\Entity\FarmSetting;
 use Scalr\Model\Entity\Role;
 use Scalr\Service\Aws;
 use Scalr\Service\Aws\Ec2\DataType\VpcData;
@@ -22,13 +21,17 @@ use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectPropertyEntity;
+use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 use Scalr\Tests\Functional\Api\ApiTestCase;
 use Scalr\Tests\Functional\Api\ApiTestResponse;
 use SERVER_PLATFORMS;
 use Scalr_Governance;
 use FarmTerminatedEvent;
 use DBServer;
-use Scalr\AuditLogger;
+use Scalr\Observer\AbstractEventObserver;
+use Scalr_Scaling_Manager;
+use LOG_CATEGORY;
+use Scalr\Logger;
 
 /**
  * Farms test
@@ -38,12 +41,26 @@ use Scalr\AuditLogger;
 class FarmsTest extends ApiTestCase
 {
 
+    const TEST_TYPE = ApiTestCase::TEST_TYPE_CLOUD_DEPENDENT;
+
     /**
      * @see Aws::REGION_US_EAST_1
      */
     const TEST_REGION = 'us-east-1';
 
     public $uuid;
+
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Tests\Functional\Api\ApiTestCase::$loggerConfiguration
+     */
+    protected static $loggerConfiguration = [
+        LOG_CATEGORY::FARM           => Logger::LEVEL_ERROR,
+        LOG_CATEGORY::SCALING        => Logger::LEVEL_ERROR,
+        Scalr_Scaling_Manager::class => Logger::LEVEL_ERROR,
+        AbstractEventObserver::class => Logger::LEVEL_ERROR
+    ];
+
 
     /**
      * {@inheritdoc}
@@ -60,51 +77,39 @@ class FarmsTest extends ApiTestCase
 
     public static function tearDownAfterClass()
     {
-        ksort(static::$testData, SORT_REGULAR);
-        foreach (static::$testData as $priority => $data) {
-            foreach ($data as $class => $ids) {
-                if ($class === 'Scalr\Model\Entity\Farm') {
-                    $ids = array_unique($ids, SORT_REGULAR);
+        //We have to remove CostCenter properties as they don't have foreign keys
+        foreach (static::$testData as $rec) {
+            if ($rec['class'] === Farm::class) {
+                $entry = $rec['pk'];
 
-                    foreach ($ids as $entry) {
-                        if (!empty($entry)) {
-                            /* @var $farm Farm */
-                            $farm = call_user_func_array([$class, 'findPk'], is_object($entry) ? [$entry] : (array) $entry);
+                $farm = Farm::findPk(...$entry);
 
-                            if (!empty($farm)) {
-                                try {
-                                    $farm->checkLocked();
+                if (!empty($farm)) {
+                    try {
+                        $farm->checkLocked();
 
-                                    \Scalr::FireEvent($farm->id, new FarmTerminatedEvent(
-                                        false,
-                                        false,
-                                        false,
-                                        false,
-                                        true,
-                                        static::$user->id
-                                    ));
+                        \Scalr::FireEvent($farm->id, new FarmTerminatedEvent(
+                            false,
+                            false,
+                            false,
+                            false,
+                            true,
+                            static::$user->id
+                        ));
 
-                                    foreach ($farm->servers as $server) {
-                                        try {
-                                            $DBServer = DBServer::LoadByID($server->id);
-                                            $DBServer->terminate(\DBServer::TERMINATE_REASON_FARM_TERMINATED, true, static::$user->id);
-                                        } catch (Exception $e) {
-                                            error_log("{$class}:\t" . $e->getMessage());
-                                            error_log(print_r($entry, true));
-                                        }
-
-                                        $server->delete();
-                                    }
-                                    $farm->delete();
-                                } catch (Exception $e) {
-                                    error_log("{$class}:\t" . $e->getMessage());
-                                    error_log(print_r($entry, true));
-                                }
+                        foreach ($farm->servers as $server) {
+                            try {
+                                $DBServer = DBServer::LoadByID($server->id);
+                                $DBServer->terminate(DBServer::TERMINATE_REASON_FARM_TERMINATED, true, static::$user->id);
+                            } catch (Exception $e) {
+                                \Scalr::logException($e);
                             }
-                        }
-                    }
 
-                    unset(static::$testData[$priority][$class]);
+                            $server->delete();
+                        }
+                    } catch (Exception $e) {
+                        \Scalr::logException($e);
+                    }
                 }
             }
         }
@@ -121,7 +126,7 @@ class FarmsTest extends ApiTestCase
 
     public function farmToDelete($farmId)
     {
-        static::toDelete('Scalr\Model\Entity\Farm', $farmId);
+        static::toDelete(Farm::class, [$farmId]);
     }
 
     public function createTestProject()
@@ -134,11 +139,14 @@ class FarmsTest extends ApiTestCase
             'name' => $this->getTestName(),
             'createdById' => $user->id,
             'createdByEmail' => $user->email
-        ], 2);
-
+        ]);
         $cc->setProperty(CostCentrePropertyEntity::NAME_BILLING_CODE, $this->getTestName());
-
         $cc->save();
+
+        $this->createEntity(new AccountCostCenterEntity(), [
+            'ccId'      => $cc->ccId,
+            'accountId' => $user->getAccountId()
+        ]);
 
         /* @var $project ProjectEntity */
         $project = $this->createEntity(new ProjectEntity(), [
@@ -147,14 +155,13 @@ class FarmsTest extends ApiTestCase
             'envId' => $this->getEnvironment()->id,
             'createdById' => $user->id,
             'createdByEmail' => $user->email,
+            'shared' => ProjectEntity::SHARED_WITHIN_ACCOUNT,
             'ccId' => $cc->ccId
-        ], 1);
+        ]);
 
         $project->setCostCenter($cc);
         $project->setProperty(ProjectPropertyEntity::NAME_BILLING_CODE, $this->getTestName());
-
         $project->save();
-
         return $project;
     }
 
@@ -174,10 +181,10 @@ class FarmsTest extends ApiTestCase
         $farm = static::createEntity(new Farm(), [
             'changedById' => $user->getId(),
             'name' => "{$this->uuid}-{$name}-farm",
-            'description' => "{$this->uuid}-description",
+            'comments' => "{$this->uuid}-description",
             'envId' => $this->getEnvironment()->id,
             'accountId' => $user->getAccountId(),
-            'createdById' => $user->getId()
+            'ownerId' => $user->getId()
         ]);
 
         foreach ($rolesNames as $roleName) {
@@ -200,7 +207,7 @@ class FarmsTest extends ApiTestCase
             /* @var $settings SettingsCollection */
             $settings = $farmRole->settings;
             $settings->saveSettings([
-                FarmRoleSetting::AWS_INSTANCE_TYPE => 't1.micro',
+                FarmRoleSetting::INSTANCE_TYPE => 't1.micro',
                 FarmRoleSetting::AWS_AVAIL_ZONE => '',
                 FarmRoleSetting::SCALING_ENABLED => true,
                 FarmRoleSetting::SCALING_MIN_INSTANCES => 1,
@@ -212,8 +219,9 @@ class FarmsTest extends ApiTestCase
     }
 
     /**
-     * @param int $farmId
+     * Gets Farm by ID
      *
+     * @param  int    $farmId
      * @return ApiTestResponse
      */
     public function getFarm($farmId)
@@ -224,8 +232,9 @@ class FarmsTest extends ApiTestCase
     }
 
     /**
-     * @param array $filters
+     * Lists Farms by filters
      *
+     * @param array $filters
      * @return array
      */
     public function listFarms(array $filters = [])
@@ -257,8 +266,7 @@ class FarmsTest extends ApiTestCase
     }
 
     /**
-     * @param array $farmData
-     *
+     * @param  array $farmData
      * @return ApiTestResponse
      */
     public function postFarm(array &$farmData)
@@ -272,9 +280,8 @@ class FarmsTest extends ApiTestCase
     }
 
     /**
-     * @param int $farmId
-     * @param array $farmData
-     *
+     * @param  int $farmId
+     * @param  array $farmData
      * @return ApiTestResponse
      */
     public function modifyFarm($farmId, $farmData)
@@ -286,7 +293,6 @@ class FarmsTest extends ApiTestCase
 
     /**
      * @param int $farmId
-     *
      * @return ApiTestResponse
      */
     public function deleteFarm($farmId)
@@ -298,7 +304,6 @@ class FarmsTest extends ApiTestCase
 
     /**
      * @param $farmId
-     *
      * @return ApiTestResponse
      */
     public function launchFarm($farmId)
@@ -327,9 +332,7 @@ class FarmsTest extends ApiTestCase
      */
     public function testComplex()
     {
-        $user = $this->getUser();
         $environment = $this->getEnvironment();
-        $fictionController = new ApiController();
 
         //test farm post without required field
         $data = [
@@ -359,7 +362,7 @@ class FarmsTest extends ApiTestCase
         $this->assertErrorMessageContains($response, 400, ErrorMessage::ERR_INVALID_VALUE);
 
         $data = [
-            'name' => ['foo' => (object) ['foo' => 'bar', 'bar' => ['foo', 'bar']]],
+            'name'    => ['foo' => (object) ['foo' => 'bar', 'bar' => ['foo', 'bar']]],
             'project' => [ 'id' => $testProject->projectId ]
         ];
 
@@ -383,6 +386,7 @@ class FarmsTest extends ApiTestCase
         ];
 
         $region = self::TEST_REGION;
+
         /* @var $vpc VpcData */
         $vpc = \Scalr::getContainer()->aws($region, $environment)->ec2->vpc->describe()->current();
 
@@ -539,8 +543,6 @@ class FarmsTest extends ApiTestCase
     public function testFarmLaunch()
     {
         $user = $this->getUser();
-        $environment = $this->getEnvironment();
-        $fictionController = new ApiController();
 
         /* @var $farm Farm */
         $farm = $this->createTestFarm('launch', [ 'base-ubuntu1404' ]);
@@ -576,8 +578,6 @@ class FarmsTest extends ApiTestCase
     public function testFarmTerminate()
     {
         $user = $this->getUser();
-        $environment = $this->getEnvironment();
-        $fictionController = new ApiController();
 
         /* @var $farm Farm */
         $farm = $this->createTestFarm('terminate', [ 'base-ubuntu1404' ]);
@@ -656,7 +656,7 @@ class FarmsTest extends ApiTestCase
             foreach ($variables->data as $variable) {
                 $this->assertVariableObjectNotEmpty($variable);
 
-                if (empty($declaredNotInRole) && $variable->declaredIn !== ScopeInterface::SCOPE_ROLE) {
+                if (empty($declaredNotInRole) && $variable->declaredIn !== ScopeInterface::SCOPE_ROLE && !$variable->hidden) {
                     $declaredNotInRole = $variable->name;
                 }
 

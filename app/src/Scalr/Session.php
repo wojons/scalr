@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\Util\CryptoTool;
+use Scalr\Model\Entity\Account\User;
 
 /**
  * Scalr Session class
@@ -31,12 +32,9 @@ class Scalr_Session
      */
     private $ruid;
 
-    /**
-     * Identifier of the environment
-     *
-     * @var int
-     */
-    private $envId;
+    private $initTime;
+
+    private $lastTime;
 
     private $sault;
 
@@ -62,7 +60,9 @@ class Scalr_Session
      */
     const SESSION_USER_ID = 'userId';
 
-    const SESSION_ENV_ID  = 'envId';
+    const SESSION_INIT_TIME = 'initTime';
+
+    const SESSION_LAST_TIME = 'lastTime';
 
     const SESSION_HASH    = 'hash';
 
@@ -80,9 +80,11 @@ class Scalr_Session
     const SESSION_DEBUG_MODE = 'debugMode'; // internal debug property
 
     /**
-     * @return Scalr_Session
+     *
+     * @param   bool    $isAutomaticRequest
+     * @return  Scalr_Session
      */
-    public static function getInstance()
+    public static function getInstance($isAutomaticRequest = false)
     {
         if (self::$_session === null) {
             self::$_session = new Scalr_Session();
@@ -90,9 +92,9 @@ class Scalr_Session
             ini_set('session.cookie_httponly', true);
 
             if (!filter_has_var(INPUT_COOKIE, session_name()) || !preg_match('/^[-,a-z\d]{1,128}$/i', filter_input(INPUT_COOKIE, session_name()))) {
-                self::sessionLog('session is not valid, regenerate');
+                self::sessionLog('session is not valid, regenerate:' . __LINE__);
                 session_id(uniqid());
-                session_start();
+                static::startSession();
                 session_regenerate_id();
                 session_write_close();
             }
@@ -100,7 +102,7 @@ class Scalr_Session
 
         if (!self::$_session->restored) {
             self::$_session->restored = true;
-            self::restore();
+            self::restore(true, $isAutomaticRequest);
 
             $token = self::$_session->getToken();
             if (empty($token)) {
@@ -113,7 +115,7 @@ class Scalr_Session
                         }
                     } else {
                         $id = session_id();
-                        self::sessionLog("session_id():84");
+                        self::sessionLog("session_id():" . __LINE__);
                         if (CryptoTool::hash("{$id}:{$hash}") === $cookieToken) {
                             self::$_session->setToken($cookieToken);
                         }
@@ -126,6 +128,18 @@ class Scalr_Session
     }
 
     /**
+     * Starts session suppressing warnings and notices
+     */
+    private static function startSession()
+    {
+        //Avoids annoying: E_WARNING session_start(): Memcached: Failed to read session data: NOT FOUND
+        $errorLevel = error_reporting(E_ERROR);
+        session_start();
+        //Restores original error reporting level
+        error_reporting($errorLevel);
+    }
+
+    /**
      * Creates a session
      *
      * @param   int  $userId  The effective identifier of the user
@@ -133,13 +147,15 @@ class Scalr_Session
      */
     public static function create($userId, $ruid = null)
     {
-        session_start();
+        static::startSession();
         session_regenerate_id(true);
 
-        self::sessionLog("session_start():101");
+        self::sessionLog("session_start():" . __LINE__);
 
         $_SESSION[__CLASS__][self::SESSION_USER_ID] = $userId;
         $_SESSION[__CLASS__][self::SESSION_RUID] = $ruid;
+        $_SESSION[__CLASS__][self::SESSION_INIT_TIME] = time();
+        $_SESSION[__CLASS__][self::SESSION_LAST_TIME] = time();
 
         $sault = CryptoTool::sault();
 
@@ -149,7 +165,7 @@ class Scalr_Session
         if (!$ruid) {
             $id = session_id();
 
-            self::sessionLog("session_id():112");
+            self::sessionLog("session_id():" . __LINE__);
 
             $hash = self::getInstance()->hashpwd;
 
@@ -163,18 +179,30 @@ class Scalr_Session
 
             session_write_close();
 
-            self::sessionLog("session_write_close():119");
+            self::sessionLog("session_write_close():" . __LINE__);
         }
 
         self::restore(false);
     }
 
-    protected static function getUserPassword($userId)
+    /**
+     * Return user's hash (id:email:password)
+     *
+     * @param   int     $userId
+     * @return  string
+     */
+    protected static function getUserHash($userId)
     {
         $db = \Scalr::getDb();
-        return $db->GetOne('SELECT `password` FROM `account_users` WHERE id = ? LIMIT 1', array($userId));
+        return $db->GetOne('SELECT CONCAT_WS(":", `id`, `email`, `password`) FROM `account_users` WHERE id = ? LIMIT 1', [$userId]);
     }
 
+    /**
+     * Return account's hash. It's used for reseting keepSession on a whole account
+     *
+     * @param   int     $userId
+     * @return  string
+     */
     protected static function getAccountHash($userId)
     {
         $db = \Scalr::getDb();
@@ -199,31 +227,51 @@ class Scalr_Session
         return $hash;
     }
 
+    /**
+     * @param   $userId
+     * @param   $sault
+     * @return  string
+     */
     protected static function createHash($userId, $sault)
     {
-        $pass = self::getUserPassword($userId);
-        return CryptoTool::hash("{$userId}:{$pass}:" . self::getInstance()->hashpwd . ":{$sault}");
+        $hash = self::getUserHash($userId);
+        return CryptoTool::hash("{$hash}:" . self::getInstance()->hashpwd . ":{$sault}");
     }
 
-    protected static function createCookieHash($userId, $sault, $hash)
+    /**
+     * @param   int     $userId     ID of user
+     * @param   int     $expire     Timestamp when cookie will be expired
+     * @param   string  $sault
+     * @param   string  $hash
+     * @return  string
+     */
+    protected static function createCookieHash($userId, $expire, $sault, $hash)
     {
-        $pass = self::getUserPassword($userId);
-        $userHash = self::getAccountHash($userId);
-        return CryptoTool::hash("{$sault}:{$hash}:{$userId}:{$userHash}:{$pass}:" . self::getInstance()->hashpwd);
+        $userHash = self::getUserHash($userId);
+        $accountHash = self::getAccountHash($userId);
+        return CryptoTool::hash("{$sault}:{$expire}:{$hash}:{$userHash}:{$accountHash}:" . self::getInstance()->hashpwd);
     }
 
-    protected static function restore($checkKeepSessionCookie = true)
+    /**
+     * Check if session is valid and is not expired. If no valid session, check cookie keepSession.
+     *
+     * @param bool $checkKeepSessionCookie  If true check cookie keepSession
+     * @param bool $isAutomaticRequest      If true don't update sessionLastTime
+     */
+    protected static function restore($checkKeepSessionCookie = true, $isAutomaticRequest = false)
     {
         $session = self::getInstance();
 
         if (session_status() != PHP_SESSION_ACTIVE) {
-            session_start();
-            self::sessionLog("session_start():171");
+            static::startSession();
+            self::sessionLog("session_start():" . __LINE__);
         }
 
         $refClass = self::getReflectionClass();
         foreach ($refClass->getConstants() as $constname => $constvalue) {
-            if (substr($constname, 0, 8) !== 'SESSION_') continue;
+            if (substr($constname, 0, 8) !== 'SESSION_') {
+                continue;
+            }
             $session->{$constvalue} = isset($_SESSION[__CLASS__][$constvalue]) ?
                 $_SESSION[__CLASS__][$constvalue] : null;
         }
@@ -231,43 +279,114 @@ class Scalr_Session
         $newhash = self::createHash($session->userId, $session->sault);
         if (! ($newhash == $session->hash && !empty($session->hash))) {
             // reset session (invalid)
+            self::sessionLog("invalid hash:" . __LINE__);
             $session->userId = 0;
             $session->hash = '';
 
             if ($checkKeepSessionCookie && self::isCookieKeepSession()) {
-                self::restore(false);
+                self::restore(false, $isAutomaticRequest);
 
                 if ($session->userId) {
                     // we've recovered session, update last login
-                    /* @var Scalr\Model\Entity\Account\User $user */
-                    if (($user = Scalr\Model\Entity\Account\User::findPk($session->userId))) {
-                        $user->lastLogin = new DateTime();
-                        $user->save();
-                    }
+                    $u = new User();
+                    Scalr::getDb()->Execute("UPDATE {$u->table()} SET {$u->columnLastLogin} = NOW() WHERE {$u->columnId} = ?", [$session->userId]);
                 }
+            }
+        } else {
+            if (strtotime(Scalr::config('scalr.security.user.session.timeout'), $session->lastTime) < time()) {
+                self::sessionLog("session timeout was expired:" . __LINE__);
+
+                if ($checkKeepSessionCookie) {
+                    $_SESSION[__CLASS__][self::SESSION_USER_ID] = 0;
+                    $_SESSION[__CLASS__][self::SESSION_HASH] = '';
+
+                    self::restore($checkKeepSessionCookie, $isAutomaticRequest);
+                } else {
+                    $session->userId = 0;
+                    $session->hash = '';
+                }
+                return;
+            }
+
+            if (!$isAutomaticRequest) {
+                $_SESSION[__CLASS__][self::SESSION_LAST_TIME] = $session->lastTime = time();
+            }
+
+            if (strtotime(Scalr::config('scalr.security.user.session.lifetime'), $session->initTime) < time()) {
+                self::sessionLog("session lifetime was expired:" . __LINE__);
+
+                if ($checkKeepSessionCookie) {
+                    $_SESSION[__CLASS__][self::SESSION_USER_ID] = 0;
+                    $_SESSION[__CLASS__][self::SESSION_HASH] = '';
+
+                    self::restore($checkKeepSessionCookie, $isAutomaticRequest);
+                } else {
+                    $session->userId = 0;
+                    $session->hash = '';
+                }
+                return;
             }
         }
 
         session_write_close();
-        self::sessionLog("session_write_close():190");
+        self::sessionLog("session_write_close():" . __LINE__);
     }
 
+    /**
+     * Set special cookies. We could re-create session based on that cookies.
+     */
+    public static function keepSession()
+    {
+        $session = self::getInstance();
+
+        $tm = strtotime(Scalr::config('scalr.security.user.session.cookie_lifetime'));
+
+        $setHttpsCookie = filter_has_var(INPUT_SERVER, 'HTTPS');
+        $signature = self::createCookieHash($session->userId, $tm, $session->sault, $session->hash);
+        $token = CryptoTool::hash("{$signature}:" . $session->hashpwd);
+
+        setcookie('scalr_user_id', $session->userId, $tm, "/", null, $setHttpsCookie, true);
+        setcookie('scalr_sault', $session->sault, $tm, "/", null, $setHttpsCookie, true);
+        setcookie('scalr_hash', $session->hash, $tm, "/", null, $setHttpsCookie, true);
+        setcookie('scalr_expire', $tm, $tm, "/", null, $setHttpsCookie, true);
+        setcookie('scalr_signature', $signature, $tm, "/", null, $setHttpsCookie, true);
+        setcookie('scalr_token', $token, $tm, "/", null, $setHttpsCookie, false);
+        $session->setToken($token);
+    }
+
+    /**
+     * Check if cookies is valid and isn't expired
+     *
+     * @return bool
+     */
     public static function isCookieKeepSession()
     {
+        self::sessionLog("check cookieKeepSession:" . __LINE__);
+
         // check for session restore
         if (isset($_COOKIE['scalr_user_id']) &&
+            isset($_COOKIE['scalr_expire']) &&
             isset($_COOKIE['scalr_sault']) &&
             isset($_COOKIE['scalr_hash']) &&
             isset($_COOKIE['scalr_signature'])
         ) {
-            $signature = self::createCookieHash($_COOKIE['scalr_user_id'], $_COOKIE['scalr_sault'], $_COOKIE['scalr_hash']);
+            $signature = self::createCookieHash($_COOKIE['scalr_user_id'], $_COOKIE['scalr_expire'], $_COOKIE['scalr_sault'], $_COOKIE['scalr_hash']);
             $hash = self::createHash($_COOKIE['scalr_user_id'], $_COOKIE['scalr_sault']);
 
+            if ($_COOKIE['scalr_expire'] < time()) {
+                self::sessionLog("cookie KeepSession was expired:" . __LINE__);
+                return false;
+            }
+
             if ($signature == $_COOKIE['scalr_signature'] && $hash == $_COOKIE['scalr_hash']) {
+                self::sessionLog("restore session from cookie:" . __LINE__);
+
                 $_SESSION[__CLASS__][self::SESSION_USER_ID] = $_COOKIE['scalr_user_id'];
                 $_SESSION[__CLASS__][self::SESSION_SAULT] = $_COOKIE['scalr_sault'];
                 $_SESSION[__CLASS__][self::SESSION_HASH] = $_COOKIE['scalr_hash'];
                 $_SESSION[__CLASS__][self::SESSION_TOKEN] = $_COOKIE['scalr_token'];
+                $_SESSION[__CLASS__][self::SESSION_INIT_TIME] = time();
+                $_SESSION[__CLASS__][self::SESSION_LAST_TIME] = time();
 
                 return true;
             }
@@ -276,12 +395,16 @@ class Scalr_Session
         return false;
     }
 
+    /**
+     * Destroy session (including cookies). If session was created by admin, who logged into user
+     * (cookie auth is not equal to session auth), then destroy only session and re-create from cookie
+     */
     public static function destroy()
     {
-        session_start();
+        static::startSession();
         session_regenerate_id(true);
         session_destroy();
-        self::sessionLog("session_start/destroy():220");
+        self::sessionLog("session_start/destroy():" . __LINE__);
 
         if (\Scalr::config('scalr.ui.tender_api_key') != '') {
             @setcookie("tender_email", "", time()-86400, "/");
@@ -295,11 +418,12 @@ class Scalr_Session
         $clearKeepSession = true;
 
         if (isset($_COOKIE['scalr_user_id']) &&
+            isset($_COOKIE['scalr_expire']) &&
             isset($_COOKIE['scalr_sault']) &&
             isset($_COOKIE['scalr_hash']) &&
             isset($_COOKIE['scalr_signature'])
         ) {
-            $signature = self::createCookieHash($_COOKIE['scalr_user_id'], $_COOKIE['scalr_sault'], $_COOKIE['scalr_hash']);
+            $signature = self::createCookieHash($_COOKIE['scalr_user_id'], $_COOKIE['scalr_expire'], $_COOKIE['scalr_sault'], $_COOKIE['scalr_hash']);
             $hash = self::createHash($_COOKIE['scalr_user_id'], $_COOKIE['scalr_sault']);
 
             if ($signature == $_COOKIE['scalr_signature'] && $hash == $_COOKIE['scalr_hash'] && self::getInstance()->getUserId() != $_COOKIE['scalr_user_id']) {
@@ -311,6 +435,7 @@ class Scalr_Session
             $setHttpsCookie = filter_has_var(INPUT_SERVER, 'HTTPS');
 
             @setcookie("scalr_user_id", "", time() - 86400, "/", null, $setHttpsCookie, true);
+            @setcookie("scalr_expire", "", time() - 86400, "/", null, $setHttpsCookie, true);
             @setcookie("scalr_hash", "", time() - 86400, "/", null, $setHttpsCookie, true);
             @setcookie("scalr_sault", "", time() - 86400, "/", null, $setHttpsCookie, true);
             @setcookie("scalr_signature", "", time() - 86400, "/", null, $setHttpsCookie, true);
@@ -318,30 +443,12 @@ class Scalr_Session
         }
 
         session_write_close();
-        self::sessionLog("session_write_close():258");
+        self::sessionLog("session_write_close():" . __LINE__);
     }
 
     public static function sessionLog($log)
     {
         //@file_put_contents("/var/log/scalr/session.log", "[".microtime(true)."][{$_SERVER['REQUEST_URI']}]" . $log . "\n", FILE_APPEND);
-    }
-
-    public static function keepSession()
-    {
-        $session = self::getInstance();
-
-        $tm = time() + 86400 * 30;
-
-        $setHttpsCookie = filter_has_var(INPUT_SERVER, 'HTTPS');
-        $signature = self::createCookieHash($session->userId, $session->sault, $session->hash);
-        $token = CryptoTool::hash("{$signature}:" . $session->hashpwd);
-
-        setcookie('scalr_user_id', $session->userId, $tm, "/", null, $setHttpsCookie, true);
-        setcookie('scalr_sault', $session->sault, $tm, "/", null, $setHttpsCookie, true);
-        setcookie('scalr_hash', $session->hash, $tm, "/", null, $setHttpsCookie, true);
-        setcookie('scalr_signature', $signature, $tm, "/", null, $setHttpsCookie, true);
-        setcookie('scalr_token', $token, $tm, "/", null, $setHttpsCookie, false);
-        $session->setToken($token);
     }
 
     public function isAuthenticated()
@@ -364,29 +471,40 @@ class Scalr_Session
      *
      * @param   string     $name
      * @param   array      $params
+     * @return  string|Scalr_Session
      * @throws  \BadMethodCallException
      */
     public function __call($name, $params)
     {
         if (preg_match('#^(get|set)(.+)$#', $name, $m)) {
             $ref = self::getReflectionClass();
+
             $property = lcfirst($m[2]);
+
             $constant = 'SESSION_' . strtoupper(preg_replace('/(?!^)[[:upper:]]+/', '_' . '$0', $property));
+
             if ($ref->hasConstant($constant)) {
                 if ($m[1] == 'get') {
                     return $this->{$property};
                 } elseif ($m[1] == 'set') {
                     //set are expected to be here
-                    session_start();
-                    self::sessionLog("session_start():311");
+                    self::startSession();
+
+                    self::sessionLog("session_start():" . __LINE__);
+
                     $this->{$property} = $params[0];
+
                     $_SESSION[__CLASS__][$property] = $this->{$property};
+
                     session_write_close();
-                    self::sessionLog("session_write_close():316");
+
+                    self::sessionLog("session_write_close():" . __LINE__);
+
                     return $this;
                 }
             }
         }
+
         throw new \BadMethodCallException(sprintf(
             'Method "%s" does not exist for the class %s', $name, get_class($this)
         ));

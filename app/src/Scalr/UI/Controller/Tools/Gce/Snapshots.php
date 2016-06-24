@@ -45,7 +45,7 @@ class Scalr_UI_Controller_Tools_Gce_Snapshots extends Scalr_UI_Controller
 
         foreach ($this->getParam('snapshotId') as $snapId) {
             $client->snapshots->delete(
-                $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
+                $this->environment->keychain(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
                 $snapId
             );
         }
@@ -65,7 +65,7 @@ class Scalr_UI_Controller_Tools_Gce_Snapshots extends Scalr_UI_Controller
         $retval = array();
 
         $snaps = $client->snapshots->listSnapshots(
-            $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
+            $this->environment->keychain(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
             $snapshotId ? ['filter' => "name eq {$snapshotId}"] : []
         );
 

@@ -30,14 +30,18 @@ class DBFarm
         $ScalarizrCertificate,
         $TermOnSyncFail,
 
-        $createdByUserId,
-        $createdByUserEmail,
+        $ownerId,
+        $createdByUserEmail, // deprecated
         $changedByUserId,
-        $changedTime,
-        $teamId;
+        $changedTime;
 
     private $DB,
             $environment;
+
+    /**
+     * @var Entity\Farm
+     */
+    private $__newFarmObject;
 
     private $SettingsCache = array();
 
@@ -53,11 +57,10 @@ class DBFarm
         'farm_roles_launch_order'	=> 'RolesLaunchOrder',
         'term_on_sync_fail'	=> 'TermOnSyncFail',
 
-        'created_by_id' 	=> 'createdByUserId',
+        'created_by_id' 	=> 'ownerId',
         'created_by_email'	=> 'createdByUserEmail',
         'changed_by_id'     => 'changedByUserId',
-        'changed_time'      => 'changedTime',
-        'team_id'     => 'teamId',
+        'changed_time'      => 'changedTime'
     );
 
     /**
@@ -82,6 +85,24 @@ class DBFarm
     }
 
     /**
+     * @return Entity\Farm
+     * @throws Exception
+     */
+    public function __getNewFarmObject()
+    {
+        if (! $this->__newFarmObject) {
+            if ($this->ID) {
+                $this->__newFarmObject = Entity\Farm::findPk($this->ID);
+            }
+
+            if (! $this->__newFarmObject)
+                throw new Exception('Farm object is not found');
+        }
+
+        return $this->__newFarmObject;
+    }
+
+    /**
      * Initializes a new farm
      *
      * TODO: Rewrite this terrible code.
@@ -101,8 +122,7 @@ class DBFarm
         $dbFarm->ClientID = $account->id;
         $dbFarm->EnvID = $envId;
 
-        $dbFarm->createdByUserId = $user->getId();
-        $dbFarm->createdByUserEmail = $user->getEmail();
+        $dbFarm->ownerId = $user->getId();
         $dbFarm->changedByUserId = $user->getId();
         $dbFarm->changedTime = microtime();
 
@@ -113,6 +133,8 @@ class DBFarm
         $dbFarm->save();
 
         $dbFarm->SetSetting(Entity\FarmSetting::CRYPTO_KEY, Scalr::GenerateRandomKey(40));
+        $dbFarm->SetSetting(Entity\FarmSetting::CREATED_BY_ID, $user->getId());
+        $dbFarm->SetSetting(Entity\FarmSetting::CREATED_BY_EMAIL, $user->getEmail());
 
         return $dbFarm;
     }
@@ -120,7 +142,7 @@ class DBFarm
     /**
      * Creates clone for the farm
      *
-     * @param   string             $name   The name of the farm
+     * @param   string|bool        $name   The name of the farm
      * @param   Scalr_Account_User $user   The user object
      * @param   int                $envId  The identifier of the environment
      * @return  DBFarm             Returns clone
@@ -150,10 +172,7 @@ class DBFarm
 
         $dbFarm = self::create($name, $user, $envId);
 
-        $dbFarm->createdByUserId = $user->id;
-        $dbFarm->createdByUserEmail = $user->getEmail();
         $dbFarm->RolesLaunchOrder = $definition->rolesLaunchOrder;
-        $dbFarm->teamId = $definition->teamId;
 
         $dbFarm->SetSetting(Entity\FarmSetting::TIMEZONE, $definition->settings[Entity\FarmSetting::TIMEZONE]);
         $dbFarm->SetSetting(Entity\FarmSetting::EC2_VPC_ID, $definition->settings[Entity\FarmSetting::EC2_VPC_ID]);
@@ -168,8 +187,31 @@ class DBFarm
         $variables = new Scalr_Scripting_GlobalVariables($dbFarm->ClientID, $envId, ScopeInterface::SCOPE_FARM);
         $variables->setValues($definition->globalVariables, 0, $dbFarm->ID, 0);
 
-        foreach ($definition->roles as $index => $role) {
-            $dbFarmRole = $dbFarm->AddRole(DBRole::loadById($role->roleId), $role->platform, $role->cloudLocation, $role->launchIndex, $role->alias);
+        $this->cloneFarmRoles($dbFarm);
+
+        $this->DB->Execute("
+            INSERT INTO farm_teams (farm_id, team_id)
+            SELECT ? AS farm_id, team_id
+            FROM `farm_teams`
+            WHERE farm_id = ?
+        ", [$dbFarm->ID, $this->ID]);
+
+        $dbFarm->save();
+
+        return $dbFarm;
+    }
+
+    /**
+     * Clones FarmRoles with settings from this Farm to a new Farm
+     *
+     * @param   DBFarm  $newFarm    A Farm into which Roles be cloned
+     *
+     * @throws  Exception
+     */
+    public function cloneFarmRoles(DBFarm $newFarm)
+    {
+        foreach ($this->getDefinition()->roles as $idx => $role) {
+            $dbFarmRole = $newFarm->AddRole(DBRole::loadById($role->roleId), $role->platform, $role->cloudLocation, $role->launchIndex, $role->alias);
             $oldRoleSettings = $dbFarmRole->GetAllSettings();
             $dbFarmRole->applyDefinition($role, true);
             $newSettings = $dbFarmRole->GetAllSettings();
@@ -184,14 +226,7 @@ class DBFarm
             if (in_array($dbFarmRole->Platform, array(SERVER_PLATFORMS::IDCF, SERVER_PLATFORMS::CLOUDSTACK))) {
                 CloudstackHelper::farmUpdateRoleSettings($dbFarmRole, $oldRoleSettings, $newSettings);
             }
-
-            $dbFarmRolesList[] = $dbFarmRole;
-            $usedPlatforms[$role->platform] = 1;
         }
-
-        $dbFarm->save();
-
-        return $dbFarm;
     }
 
     public function applyGlobalVarsToValue($value)
@@ -199,10 +234,17 @@ class DBFarm
         if (empty($this->globalVariablesCache)) {
             $formats = \Scalr::config("scalr.system.global_variables.format");
 
+            $at = new Entity\Account\Team();
+            $ft = new Entity\FarmTeam();
+            $teams = Entity\Account\Team::find([
+                \Scalr\Model\AbstractEntity::STMT_FROM => "{$at->table()} JOIN {$ft->table()} ON {$ft->columnTeamId} = {$at->columnId}",
+                \Scalr\Model\AbstractEntity::STMT_WHERE => "{$ft->columnFarmId} = '{$this->ID}'",
+            ])->map(function($t) { return $t->name; });
+
             $systemVars = array(
                 'env_id'		=> $this->EnvID,
                 'env_name'		=> $this->GetEnvironmentObject()->name,
-                'farm_team'     => $this->teamId ? (new Scalr_Account_Team())->loadById($this->teamId)->name : '',
+                'farm_team'     => join(",", $teams),
                 'farm_id'       => $this->ID,
                 'farm_name'     => $this->Name,
                 'farm_hash'     => $this->Hash,
@@ -253,8 +295,9 @@ class DBFarm
 
         //Parse variable
         $keys = array_keys($this->globalVariablesCache);
-        $f = create_function('$item', 'return "{".$item."}";');
-        $keys = array_map($f, $keys);
+        $keys = array_map(function ($item) {
+            return '{' . $item . '}';
+        }, $keys);
         $values = array_values($this->globalVariablesCache);
 
         $retval = str_replace($keys, $values, $value);
@@ -268,7 +311,6 @@ class DBFarm
         $farmDefinition = new stdClass();
         $farmDefinition->name = $this->Name;
         $farmDefinition->rolesLaunchOrder = $this->RolesLaunchOrder;
-        $farmDefinition->teamId = $this->teamId;
 
         // Farm Roles
         $farmDefinition->roles = array();
@@ -707,7 +749,7 @@ class DBFarm
         $this->SetSetting(Entity\FarmSetting::LOCK_COMMENT, $comment);
         $this->SetSetting(Entity\FarmSetting::LOCK_UNLOCK_BY, '');
 
-        if ($this->createdByUserId && $restrict) {
+        if ($this->ownerId && $restrict) {
             $this->SetSetting(Entity\FarmSetting::LOCK_RESTRICT, $restrict);
         }
     }
@@ -748,7 +790,7 @@ class DBFarm
      * @param $id
      * @return DBFarm
      */
-    static public function LoadByID($id)
+    public static function LoadByID($id)
     {
         $db = \Scalr::getDb();
 
@@ -769,7 +811,7 @@ class DBFarm
         return $DBFarm;
     }
 
-    static public function LoadByIDOnlyName($id)
+    public static function LoadByIDOnlyName($id)
     {
         $db = \Scalr::getDb();
 
@@ -818,7 +860,6 @@ class DBFarm
                     created_by_email = ?,
                     changed_by_id = ?,
                     changed_time = ?,
-                    team_id = ?,
                     dtadded = NOW(),
                     farm_roles_launch_order = ?,
                     comments = ?
@@ -828,11 +869,10 @@ class DBFarm
                 $this->ClientID,
                 $this->EnvID,
                 $this->Hash,
-                $this->createdByUserId,
+                $this->ownerId,
                 $this->createdByUserEmail,
                 $this->changedByUserId,
                 $this->changedTime,
-                $this->teamId,
                 $this->RolesLaunchOrder,
                 $this->Comments
             ));
@@ -849,8 +889,7 @@ class DBFarm
                     created_by_id = ?,
                     created_by_email = ?,
                     changed_by_id = ?,
-                    changed_time = ?,
-                    team_id = ?
+                    changed_time = ?
                 WHERE id = ?
                 LIMIT 1
             ", array(
@@ -859,11 +898,10 @@ class DBFarm
                 $this->RolesLaunchOrder,
                 $this->TermOnSyncFail,
                 $this->Comments,
-                $this->createdByUserId,
+                $this->ownerId,
                 $this->createdByUserEmail,
                 $this->changedByUserId,
                 $this->changedTime,
-                $this->teamId,
                 $this->ID
             ));
         }
@@ -875,7 +913,7 @@ class DBFarm
             );
             //Farm owner tag
             Scalr::getContainer()->analytics->tags->syncValue(
-                $this->ClientID, \Scalr\Stats\CostAnalytics\Entity\TagEntity::TAG_ID_FARM_OWNER, $this->ID, $this->createdByUserId
+                $this->ClientID, \Scalr\Stats\CostAnalytics\Entity\TagEntity::TAG_ID_FARM_OWNER, $this->ID, $this->ownerId
             );
         }
     }

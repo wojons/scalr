@@ -63,14 +63,18 @@ class RestClient implements ClientInterface, CallbackInterface
     protected function createHttpRequest()
     {
         $req = new Request();
-        $req->setOptions(array(
+
+        $req->setOptions([
             'redirect'       => 10,
-            'verifypeer'     => false,
-            'verifyhost'     => false,
-            'timeout'        => \Scalr::config('scalr.openstack.api_client.timeout'),
-            'connecttimeout' => 30,
-            'cookiesession' => true
-        ));
+            'timeout'        => $this->getConfig()->getRequestTimeout(),
+            'connecttimeout' => $this->getConfig()->getRequestTimeout(),
+            'cookiesession'  => true
+        ]);
+
+        $req->setSslOptions([
+            'verifypeer' => false,
+            'verifyhost' => false
+        ]);
 
         $proxySettings = $this->getConfig()->getProxySettings();
 

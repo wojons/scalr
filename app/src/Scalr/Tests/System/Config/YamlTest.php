@@ -94,7 +94,7 @@ class YamlTest extends TestCase
         $this->assertEquals('scalruser', $config->get('scalr.connections.mysql.user'));
         $this->assertEquals('scalrpassword', $config->get('scalr.connections.mysql.pass'));
 
-        $this->assertEquals(true, $config->get('scalr.phpunit.skip_functional_tests'));
+        $this->assertEquals(false, $config->get('scalr.phpunit.functional_tests'));
         $this->assertEquals(100001, $config->get('scalr.phpunit.test_userid'));
         $this->assertEquals(200002, $config->get('scalr.phpunit.test_envid'));
 

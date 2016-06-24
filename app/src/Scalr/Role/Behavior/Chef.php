@@ -93,22 +93,19 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
             $status = $chefClient->removeNode($nodeName);
             if ($status) {
                 \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
-                    $dbServer->farmId,
-                    sprintf("Chef node '%s' removed from chef server", $nodeName),
-                    $dbServer->serverId
+                    $dbServer,
+                    sprintf("Chef node '%s' removed from chef server", $nodeName)
                 ));
             } else {
                 \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
-                    $dbServer->farmId,
-                    sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $status),
-                    $dbServer->serverId
+                    $dbServer,
+                    sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $status)
                 ));
             }
         } catch (Exception $e) {
             \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
-                $dbServer->farmId,
-                sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $e->getMessage()),
-                $dbServer->serverId
+                $dbServer,
+                sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $e->getMessage())
             ));
         }
 
@@ -116,22 +113,19 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
             $status2 = $chefClient->removeClient($nodeName);
             if ($status2) {
                 \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
-                    $dbServer->farmId,
-                    sprintf("Chef client '%s' removed from chef server", $nodeName),
-                    $dbServer->serverId
+                    $dbServer,
+                    sprintf("Chef client '%s' removed from chef server", $nodeName)
                 ));
             } else {
                 \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
-                    $dbServer->farmId,
-                    sprintf("Unable to remove chef client '%s' from chef server: %s", $nodeName, $status2),
-                    $dbServer->serverId
+                    $dbServer,
+                    sprintf("Unable to remove chef client '%s' from chef server: %s", $nodeName, $status2)
                 ));
             }
         } catch (Exception $e) {
             \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
-                $dbServer->farmId,
-                sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $e->getMessage()),
-                $dbServer->serverId
+                $dbServer,
+                sprintf("Unable to remove chef node '%s' from chef server: %s", $nodeName, $e->getMessage())
             ));
         }
     }
@@ -145,7 +139,7 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
     {
         parent::handleMessage($message, $dbServer);
 
-        if (!$message->chef)
+        if (empty($message->chef))
             return;
 
         switch (get_class($message))
@@ -220,16 +214,19 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
         return $configuration;
     }
 
+    /**
+     * {@inheritdoc}
+     * @see Scalr_Role_Behavior::extendMessage()
+     */
     public function extendMessage(Scalr_Messaging_Msg $message, DBServer $dbServer)
     {
         $message = parent::extendMessage($message, $dbServer);
 
-        switch (get_class($message))
-        {
-            case "Scalr_Messaging_Msg_HostInitResponse":
-
+        switch (get_class($message)) {
+            case 'Scalr_Messaging_Msg_HostInitResponse':
                 $config = $this->getConfiguration($dbServer);
-                if ($config->serverUrl || $config->cookbookUrl) {
+
+                if (!empty($config->serverUrl) || !empty($config->cookbookUrl)) {
                     $message->chef = $config;
 
                     $message->chef->scriptName = '[Scalr built-in] Chef bootstrap';
@@ -242,9 +239,10 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
 
         return $message;
     }
-    
+
     /**
      * Merges two chef runlists
+     *
      * @param   string  $runlist1 runlist 1
      * @param   string  $runlist2 runlist 2
      * @return  string  resulting runlist
@@ -258,7 +256,7 @@ class Scalr_Role_Behavior_Chef extends Scalr_Role_Behavior implements Scalr_Role
         } else {
             $result = (!empty($runlist1) ? $runlist1 : '') . (!empty($runlist2) ? $runlist2 : '');
         }
-        
+
         return $result;
     }
 }

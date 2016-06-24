@@ -1,5 +1,8 @@
 <?php
+
 namespace Scalr;
+
+use FarmLogMessage;
 
 /**
  * Logger
@@ -182,35 +185,43 @@ class Logger
             $level = constant('static::LEVEL_' . $level);
         }
 
-        if ($message instanceof \FarmLogMessage) {
+        if ($message instanceof FarmLogMessage) {
             $time = time();
             $tm = date('YmdH');
             $hash = md5(":{$message->Message}:{$message->FarmID}:{$this->name}:{$tm}", true);
+
+            $logLevelName = self::$logLevelName[$level];
 
             try {
                 \Scalr::getDb()->Execute("
                     INSERT INTO logentries SET
                         `id` = ?,
                         `serverid` = ?,
-                        `message`  = ?,
+                        `message` = ?,
                         `severity` = ?,
-                        `time`     = ?,
-                        `source`   = ?,
-                        `farmid`   = ?
+                        `time` = ?,
+                        `source` = ?,
+                        `farmid` = ?,
+                        `env_id` = ?,
+                        `farm_role_id` = ?
                     ON DUPLICATE KEY UPDATE cnt = cnt + 1, `time` = ?", [
                         $hash,
                         $message->ServerID,
                         $message->Message,
-                        self::$severities[self::$logLevelName[$level]],
+                        self::$severities[$logLevelName],
                         $time,
                         $this->name,
                         $message->FarmID,
+                        $message->envId,
+                        $message->farmRoleId,
                         $time
                     ]
                 );
             } catch (\Exception $e) {
                 trigger_error($e->getMessage(), E_USER_WARNING);
             }
+
+            \Scalr::getContainer()->userlogger->log('user.log', $message, $logLevelName);
 
             $message = "[FarmID: {$message->FarmID}] {$message->Message}";
         }

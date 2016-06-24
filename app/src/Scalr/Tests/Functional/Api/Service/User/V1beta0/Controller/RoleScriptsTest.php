@@ -3,7 +3,6 @@
 namespace Scalr\Tests\Functional\Api\Service\User\V1beta0\Controller;
 
 use Scalr\Api\DataType\ErrorMessage;
-use Scalr\Api\Rest\Controller\ApiController;
 use Scalr\Api\Rest\Http\Request;
 use Scalr\Api\Service\User\V1beta0\Adapter\OrchestrationRules\RoleScriptAdapter;
 use Scalr\Model\Entity\Role;
@@ -48,7 +47,7 @@ class RoleScriptsTest extends ScriptsTestCase
 
     public function ruleToDelete($ruleId)
     {
-        static::toDelete('Scalr\Model\Entity\RoleScript', $ruleId);
+        static::toDelete(RoleScript::class, [$ruleId]);
     }
 
     /**
@@ -143,8 +142,6 @@ class RoleScriptsTest extends ScriptsTestCase
     public function testComplex()
     {
         $user = $this->getUser();
-        $environment = $this->getEnvironment();
-        $fictionController = new ApiController();
         $adapter = $this->getAdapter('OrchestrationRules\RoleScript');
 
         //foreach iterates through values in order of ads
@@ -171,8 +168,7 @@ class RoleScriptsTest extends ScriptsTestCase
         /* @var $script Script */
         $script = static::createEntity(new Script(), [
             'name'        => 'test-role-scripts',
-            'description' => 'test-role-scripts',
-            ''
+            'description' => 'test-role-scripts'
         ]);
 
         $isWindows = $role->getOs()->family == 'windows';

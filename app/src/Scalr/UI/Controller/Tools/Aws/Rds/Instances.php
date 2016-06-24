@@ -17,6 +17,7 @@ use Scalr\Service\Aws\Rds\DataType\DBParameterGroupData;
 use Scalr\Service\Aws\Rds\DataType\DescribeDBEngineVersionsData;
 use Scalr\Service\Aws\Rds\DataType\DescribeOrderableDBInstanceOptionsData;
 use Scalr\Service\Aws\Rds\DataType\ModifyDBInstanceRequestData;
+use Scalr\Service\Aws\Rds\DataType\OptionData;
 use Scalr\Service\Aws\Rds\DataType\OptionGroupData;
 use Scalr\Service\Aws\Rds\DataType\RestoreDBInstanceFromDBSnapshotRequestData;
 use Scalr\Service\Aws\Rds\DataType\OrderableDBInstanceOptionsData;
@@ -71,9 +72,9 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
     {
         $this->request->restrictAccess(Acl::RESOURCE_AWS_RDS, Acl::PERM_AWS_RDS_MANAGE);
 
-        $this->response->page(['ui/tools/aws/rds/instances/create.js', 'ui/security/groups/sgeditor.js'], [
+        $this->response->page(['ui/tools/aws/rds/instances/create.js', 'ui/tools/aws/rds/instances/form.js', 'ui/security/groups/sgeditor.js'], [
             'locations'     => self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false),
-            'accountId'     => $this->environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
+            'accountId'     => $this->environment->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
             'remoteAddress' => $this->request->getRemoteAddr(),
             'farms'         => self::loadController('Farms')->getList()
         ]);
@@ -94,9 +95,9 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
 
         $aws = $this->getAwsClient($cloudLocation);
 
-        $dbinstance = $aws->rds->dbInstance->describe($instanceId)->get(0);
-
-        if (empty($dbinstance)) {
+        $dbInstance = $aws->rds->dbInstance->describe($instanceId)->get(0);
+        /* @var $dbInstance DBInstanceData */
+        if (empty($dbInstance)) {
             throw new Exception(sprintf('Db instance with name %s was not found.', $instanceId));
         }
 
@@ -111,13 +112,18 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
             $vpcSglist = $aws->ec2->securityGroup->describe(null, null, $filter);
         }
 
-        $dbInstanceData = $this->getDbInstanceData($aws, $dbinstance, $vpcSglist);
+        $dbInstanceData = $this->getDbInstanceData($aws, $dbInstance, $vpcSglist);
 
-        $this->response->page([ 'ui/tools/aws/rds/instances/edit.js', 'ui/security/groups/sgeditor.js' ], [
+        if (in_array($dbInstance->engine, [DBInstanceData::ENGINE_SQL_SERVER_SE, DBInstanceData::ENGINE_SQL_SERVER_EE])) {
+            $dbInstanceData['MultiAZ'] = $this->getMultiAz($aws, $dbInstance);
+        }
+
+        $this->response->page([ 'ui/tools/aws/rds/instances/edit.js', 'ui/tools/aws/rds/instances/form.js', 'ui/security/groups/sgeditor.js' ], [
             'locations'     => self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false),
             'instance'      => $dbInstanceData,
-            'accountId'     => $this->environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
-            'remoteAddress' => $this->request->getRemoteAddr()
+            'accountId'     => $this->environment->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
+            'remoteAddress' => $this->request->getRemoteAddr(),
+            'farms'         => self::loadController('Farms')->getList()
         ]);
     }
 
@@ -210,7 +216,6 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
 
             $request->dBClusterIdentifier  = $instance->dBClusterIdentifier;
             $request->storageEncrypted     = $instance->storageEncrypted;
-            $request->kmsKeyId             = $instance->kmsKeyId;
             $request->availabilityZone     = $instance->availabilityZone;
             $request->characterSetName     = $instance->characterSetName;
             $request->dBParameterGroupName = $instance->dBParameterGroups->get()->dBParameterGroupName;
@@ -232,6 +237,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
             $request->optionGroupName = $instance->optionGroupMembership->get()->optionGroupName;
 
             $dbSgIds = [];
+
             foreach ($instance->dBSecurityGroups as $dbSecurityGroup) {
                 $dbSgIds[] = $dbSecurityGroup->dBSecurityGroupName;
             }
@@ -377,6 +383,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
         }
 
         $dbSgIds = [];
+
         foreach ($DBSecurityGroups as $DBSecurityGroup) {
             $dbSgIds[] = $DBSecurityGroup;
         }
@@ -386,6 +393,8 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
         $clusters = null;
 
         if (empty($instance->dBClusterIdentifier)) {
+            $isMirror = in_array($instance->engine, [DBInstanceData::ENGINE_SQL_SERVER_SE, DBInstanceData::ENGINE_SQL_SERVER_EE]);
+
             $optionList = $aws->rds->optionGroup->describe();
 
             foreach ($optionList as $option) {
@@ -398,6 +407,8 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
 
             if (isset($optionGroup)) {
                 $request->optionGroupName = $optionGroup->optionGroupName;
+            } else if ($isMirror) {
+                $request->optionGroupName = $OptionGroupName;
             }
 
             $request->preferredMaintenanceWindow = $PreferredMaintenanceWindow ?: null;
@@ -405,7 +416,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
             $request->allocatedStorage           = $AllocatedStorage;
             $request->backupRetentionPeriod      = $BackupRetentionPeriod ?: null;
             $request->preferredBackupWindow      = $PreferredBackupWindow ?: null;
-            $request->multiAZ                    = $MultiAZ;
+            $request->multiAZ                    = $isMirror ? null : $MultiAZ;
             $request->storageType                = $StorageType;
             $request->licenseModel               = $LicenseModel;
 
@@ -468,6 +479,10 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
             }
 
             $data = $this->getDbInstanceData($aws, $instance, $vpcSglist, $clusters);
+
+            if (!empty($isMirror) && $MultiAZ) {
+                $data['MultiAZ'] = true;
+            }
 
             $this->response->success("DB Instance successfully modified");
             $this->response->data([
@@ -547,7 +562,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
         }
 
         if ($StorageEncrypted) {
-            $request->storageEncrypted = true;
+            $request->storageEncrypted = $Engine != 'aurora' ? true : null;
 
             if ($KmsKeyId) {
                 $kmsKey = $aws->kms->key->describe($KmsKeyId);
@@ -576,7 +591,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
                     throw new ScalrException("A KMS Policy is active in this Environment, access to '{$kmsKey->keyId}' has been restricted by account owner.");
                 }
 
-                $request->kmsKeyId = $KmsKeyId;
+                $request->kmsKeyId = $Engine != 'aurora' ? $KmsKeyId : null;
             }
         }
 
@@ -614,6 +629,8 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
             $request->dBParameterGroupName = $paramGroup->dBParameterGroupName;
         }
 
+        $isMirror = $MultiAZ && in_array($Engine, [DBInstanceData::ENGINE_SQL_SERVER_SE, DBInstanceData::ENGINE_SQL_SERVER_EE]);
+
         $optionList = $aws->rds->optionGroup->describe($Engine);
 
         foreach ($optionList as $option) {
@@ -626,9 +643,12 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
 
         if (isset($optionGroup)) {
             $request->optionGroupName = $optionGroup->optionGroupName;
+        } else if ($isMirror) {
+            $request->optionGroupName = $OptionGroupName;
         }
 
         $dbSgIds = [];
+
         foreach ($DBSecurityGroups as $DBSecurityGroup) {
             $dbSgIds[] = $DBSecurityGroup;
         }
@@ -638,7 +658,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
         $request->availabilityZone           = $AvailabilityZone ?: null;
         $request->backupRetentionPeriod      = $BackupRetentionPeriod ?: null;
         $request->preferredMaintenanceWindow = $PreferredMaintenanceWindow ?: null;
-        $request->multiAZ                    = $MultiAZ;
+        $request->multiAZ                    = $isMirror ? false : $MultiAZ;
         $request->storageType                = $StorageType;
         $request->dBSubnetGroupName          = $DBSubnetGroupName ?: null;
         $request->licenseModel               = $LicenseModel;
@@ -676,7 +696,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
                     $MasterUserPassword, $VpcId, $Port, $DBName, $request->characterSetName,
                     $request->dBParameterGroupName, $request->optionGroupName, new JsonData([$request->availabilityZone]),
                     $request->backupRetentionPeriod, $PreferredBackupWindow, $request->preferredMaintenanceWindow,
-                    $request->dBSubnetGroupName, $request->engineVersion, $farmId, $VpcSecurityGroups, $SubnetIds
+                    $request->dBSubnetGroupName, $request->engineVersion, $farmId, $VpcSecurityGroups, $SubnetIds, $StorageEncrypted, $KmsKeyId
                 );
             }
 
@@ -722,6 +742,10 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
             $data = $this->getDbInstanceData($aws, $instance, $vpcSglist, $clusters);
 
             $data['isReplica'] = false;
+
+            if ($isMirror) {
+                $data['MultiAZ'] = true;
+            }
 
             $this->response->success("DB Instance successfully created");
             $this->response->data([
@@ -1200,8 +1224,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
     {
         $majorVersion = null;
 
-        $mirroringEngines = ['sqlserver-se', 'sqlserver-ee'];
-        $isMirror = $multiAz && in_array($engine, $mirroringEngines);
+        $isMirror = $multiAz && in_array($engine, [DBInstanceData::ENGINE_SQL_SERVER_SE, DBInstanceData::ENGINE_SQL_SERVER_EE]);
 
         $aws = $this->getAwsClient($cloudLocation);
 
@@ -1213,37 +1236,39 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
         $resultOptionGroups = [];
 
         foreach ($optionGroups as $optionGroup) {
-            /* @var $optionGroup \Scalr\Service\Aws\Rds\DataType\OptionGroupData */
-            if (strpos($optionGroup->optionGroupName, 'default:') === 0) {
-                if ($isMirror) {
-                    $default = $optionGroup->toArray();
+            /* @var $optionGroup OptionGroupData */
+            $mirroredOptions = [];
+
+            foreach ($optionGroup->options as $option) {
+                /* @var $option OptionData */
+                if ($option->optionName == 'Mirroring') {
+                    $mirroredOptions[] = $option;
                 }
             }
 
-            if ($isMirror) {
-                foreach ($optionGroup->options as $option) {
-                    /* @var $option Scalr\Service\Aws\Rds\DataType\OptionData */
-                    if ($option->optionName == 'Mirroring') {
-                        $resultOptionGroups[] = $optionGroup->toArray();
-                    }
-                }
-            } else {
+            if ($isMirror && count($mirroredOptions) > 0) {
                 $resultOptionGroups[] = $optionGroup->toArray();
+
+                if (strpos($optionGroup->optionGroupName, 'default:') === 0) {
+                    $default = $optionGroup->toArray();
+                }
+            } else if (!$isMirror && empty($mirroredOptions)) {
+                $resultOptionGroups[] = $optionGroup->toArray();
+
+                if (strpos($optionGroup->optionGroupName, 'default:') === 0) {
+                    $default = $optionGroup->toArray();
+                }
             }
         }
 
         $defaultName = 'default:' . $engine . '-' . str_replace('.', '-', $majorVersion);
 
         if ($isMirror) {
-            $defaultName .= '-mirroring';
-        }
-
-        if (empty($resultOptionGroups)) {
-            $resultOptionGroups[] = ['optionGroupName' => $defaultName];
-            $default['optionGroupName'] = $defaultName;
+            $defaultName .= '-mirrored';
         }
 
         if (empty($default)) {
+            $resultOptionGroups[] = ['optionGroupName' => $defaultName];
             $default['optionGroupName'] = $defaultName;
         }
 
@@ -1268,7 +1293,12 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
 
         $arr = explode('.', $engineVersion);
         $majorVersion = implode('.', [$arr[0], $arr[1]]);
-        $paramGroupName = 'default.' . strtolower($engine);
+
+        if (in_array($engine, [DBInstanceData::ENGINE_SQL_SERVER_SE, DBInstanceData::ENGINE_SQL_SERVER_EE, DBInstanceData::ENGINE_SQL_SERVER_WEB, DBInstanceData::ENGINE_SQL_SERVER_EX])) {
+            $majorVersion = substr($majorVersion, 0, -1);
+        }
+
+        $default = 'default.' . strtolower($engine);
         $delimiter = ($engine == 'mysql' || $engine == 'postgres') ? '' : '-';
         $paramGroups = $aws->rds->dbParameterGroup->describe();
 
@@ -1276,24 +1306,19 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
 
         foreach ($paramGroups as $group) {
             /* @var $group \Scalr\Service\Aws\Rds\DataType\DBParameterGroupData */
-            if ($group->dBParameterGroupName == $paramGroupName . $delimiter . $majorVersion) {
-                $paramGroup = $group->dBParameterGroupName;
-            }
+            if ($group->dBParameterGroupFamily == $engine . $delimiter . $majorVersion) {
+                $groups[] = $group->toArray();
 
-            if (strpos($group->dBParameterGroupName, $paramGroupName . $delimiter . $majorVersion) === 0) {
-                $groups[] = $group->toArray();
-            } else if ($group->dBParameterGroupFamily == $engine . $delimiter . $majorVersion) {
-                $groups[] = $group->toArray();
+                if ($group->dBParameterGroupName == $default . $delimiter . $majorVersion) {
+                    $paramGroup = $group->dBParameterGroupName;
+                }
             }
         }
 
         $defaultName = 'default.' . $engine . $delimiter . $majorVersion;
 
-        if (empty($groups)) {
-            $groups[] = ['dBParameterGroupName' => $defaultName];
-        }
-
         if (empty($paramGroup)) {
+            $groups[] = ['dBParameterGroupName' => $defaultName];
             $paramGroup = $defaultName;
         }
 
@@ -1427,15 +1452,9 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
         }
 
         $dbinstance['Address']               = $dbinstance['Endpoint']['Address'];
-        $dbinstance['EngineVersion']         = isset($dbinstance['PendingModifiedValues']) && !empty($dbinstance['PendingModifiedValues']['EngineVersion']) ? $dbinstance['EngineVersion']. ' <i><font color="red">New value (' . $dbinstance['PendingModifiedValues']['EngineVersion'] . ') is pending</font></i>' : $dbinstance['EngineVersion'];
-        $dbinstance['Port'] = isset($dbinstance['PendingModifiedValues']) && !empty($dbinstance['PendingModifiedValues']['Port']) ?
-            (string) $dbinstance['Endpoint']['Port'] . ' <i><font color="red">New value (' . $dbinstance['PendingModifiedValues']['Port'] . ') is pending</font></i>' : (string)$dbinstance['Endpoint']['Port'];
+        $dbinstance['Port'] = (string)$dbinstance['Endpoint']['Port'];
         $dbinstance['InstanceCreateTime']    = Scalr_Util_DateTime::convertTz($createdTime);
-        $dbinstance['DBInstanceClass']       = isset($dbinstance['PendingModifiedValues']) && $dbinstance['PendingModifiedValues']['DBInstanceClass'] ?
-            $dbinstance['DBInstanceClass'] . ' <i><font color="red">New value ('. $dbinstance['PendingModifiedValues']['DBInstanceClass'].') is pending</font></i>' : $dbinstance['DBInstanceClass'];
-        $dbinstance['AllocatedStorage']      = isset($dbinstance['PendingModifiedValues']) && $dbinstance['PendingModifiedValues']['AllocatedStorage'] ? (string) $dbinstance['AllocatedStorage'] . ' GB' . ' <i><font color="red">New value (' . $dbinstance['PendingModifiedValues']['AllocatedStorage'] . ') is pending</font></i>' : (string) $dbinstance['AllocatedStorage'];
-        $dbinstance['BackupRetentionPeriod'] = isset($dbinstance['PendingModifiedValues']) && !empty($dbinstance['PendingModifiedValues']['BackupRetentionPeriod']) ?
-            $dbinstance['PendingModifiedValues']['BackupRetentionPeriod']. ' <i><font color="red">(Pending Modified)</font></i>' : $dbinstance['BackupRetentionPeriod'];
+        $dbinstance['AllocatedStorage']      = (string)$dbinstance['AllocatedStorage'];
 
         if ($dbinstance['StorageEncrypted']) {
             /* @var $key Aws\Kms\DataType\AliasData */
@@ -1459,16 +1478,13 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
                         }
                     }
 
-                    $dbinstance['MultiAZ'] = 'Enabled';
+                    $dbinstance['MultiAZ'] = true;
                     break;
                 }
             }
         } else {
             $dbinstance['isReplica'] = !empty($dbinstance['ReadReplicaSourceDBInstanceIdentifier']) ? true : false;
-
-            $dbinstance['MultiAZ'] = ($dbinstance['MultiAZ'] ? 'Enabled' : 'Disabled') .
-                (isset($dbinstance['PendingModifiedValues']) && isset($dbinstance['PendingModifiedValues']['MultiAZ']) ?
-                    ' <i><font color="red">New value(' . ($dbinstance['PendingModifiedValues']['MultiAZ'] ? 'Enabled' : 'Disabled') . ') is pending</font></i>' : '');
+            $dbinstance['MultiAZ'] = $dbinstance['MultiAZ'];
         }
 
         /* @var $cloudResource CloudResource */
@@ -1517,6 +1533,11 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
             if (isset($updatedInstances[$dbInstanceId])) {
                 if ($status != $updatedInstances[$dbInstanceId]->dBInstanceStatus) {
                     $instanceData = $this->getDbInstanceData($aws, $updatedInstances[$dbInstanceId], $vpcSglist, $clusters);
+
+                    if (in_array($updatedInstances[$dbInstanceId]->engine, [DBInstanceData::ENGINE_SQL_SERVER_SE, DBInstanceData::ENGINE_SQL_SERVER_EE])) {
+                        $instanceData['MultiAZ'] = $this->getMultiAz($aws, $updatedInstances[$dbInstanceId]);
+                    }
+
                     $data[$dbInstanceId] = $instanceData;
                 }
             } else {
@@ -1527,6 +1548,63 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Instances extends Scalr_UI_Controller
         $this->response->data([
             'dbInstances' => $data
         ]);
+    }
+
+    /**
+     * Gets MultiAz value for instances with Microsoft Sql server engine
+     *
+     * @param string $cloudLocation     Aws Region
+     * @param string $instanceId        Db instance identifier
+     *
+     * @return bool Returns true if instance is mirrored. False otherwise.
+     */
+    public function xGetMultiAzAction($cloudLocation, $instanceId)
+    {
+        $aws = $this->getAwsClient($cloudLocation);
+
+        $instance = $aws->rds->dbInstance->describe($instanceId)->get();
+        /* @var $instance DBInstanceData */
+        $this->response->data(['multiAz' => $this->getMultiAz($aws, $instance)]);
+    }
+
+    /**
+     * Gets MultiAz value for instances with Microsoft Sql server engine
+     *
+     * @param Aws            $aws        Aws object
+     * @param DBInstanceData $instance   Db instance object
+     *
+     * @return bool Returns true if instance is mirrored. False otherwise.
+     */
+    private function getMultiAz(Aws $aws, DBInstanceData $instance)
+    {
+        $multiAz = false;
+
+        $instanceOptionGroups = [];
+
+        foreach ($instance->optionGroupMembership as $optionGroup) {
+            /* @var $optionGroup OptionGroupData*/
+            $instanceOptionGroups[] = $optionGroup->optionGroupName;
+        }
+
+        $arr = explode('.', $instance->engineVersion);
+        $majorVersion = implode('.', [$arr[0], $arr[1]]);
+
+        $optionGroups = $aws->rds->optionGroup->describe($instance->engine, $majorVersion);
+
+        foreach ($optionGroups as $optionGroup) {
+            /* @var $optionGroup OptionGroupData*/
+            if (in_array($optionGroup->optionGroupName, $instanceOptionGroups)) {
+                foreach ($optionGroup->options as $option) {
+                    /* @var $option OptionData */
+                    if ($option->optionName == 'Mirroring') {
+                        $multiAz = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return $multiAz;
     }
 
 }

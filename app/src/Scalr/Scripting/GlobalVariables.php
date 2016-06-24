@@ -5,6 +5,8 @@ use Scalr\DataType\ScopeInterface;
 
 class Scalr_Scripting_GlobalVariables
 {
+    const FORMAT_JSON = 'json';
+
     private
         $accountId,
         $envId,
@@ -302,9 +304,16 @@ class Scalr_Scripting_GlobalVariables
 
             if (array_key_exists($lowerName, $existedNames) && $existedNames[$lowerName] != $name) {
                 if ($this->doNotValidateNameCaseSensitivity) {
-                    \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->warn(
-                        new \FarmLogMessage($farmId, sprintf('Variable "%s" has been already defined as "%s"', $name, $existedNames[$lowerName]), $serverId)
-                    );
+                    \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->warn(new \FarmLogMessage(
+                        !empty($farmId) ? $farmId : null,
+                        sprintf('Variable "%s" has been already defined as "%s"',
+                            !empty($name) ? $name : null,
+                            !empty($existedNames[$lowerName]) ? $existedNames[$lowerName] : null
+                        ),
+                        !empty($serverId) ? $serverId : null,
+                        null,
+                        !empty($farmRoleId) ? $farmRoleId : null
+                    ));
                 } else {
                     $this->setError($name, 'name', sprintf("Name has been already defined as \"%s\"", $existedNames[$lowerName]));
                 }
@@ -315,7 +324,7 @@ class Scalr_Scripting_GlobalVariables
                 !array_key_exists($name, $this->configurationVars) ||
                 array_key_exists($name, $this->configurationVars) && !in_array($this->scope, [ScopeInterface::SCOPE_SCALR, ScopeInterface::SCOPE_ACCOUNT, ScopeInterface::SCOPE_ENVIRONMENT])
             ) {
-                $this->setError($name, 'name', "'SCALR_' prefix is reserved and cannot be used for user GVs");
+                $this->setError($name, 'name', "Prefix 'SCALR_' is reserved and cannot be used for user GVs");
             }
 
             if (array_key_exists($name, $this->configurationVars) && empty($currentValues[$name]['default'])) {
@@ -393,9 +402,16 @@ class Scalr_Scripting_GlobalVariables
                 }
 
                 if (!empty($variable['format'])) {
-                    $cnt = count_chars($variable['format']);
-                    if ($cnt[ord('%')] != 1) {
-                        $this->setError($name, 'format', "Format isn't valid");
+                    if ($variable['format'] == self::FORMAT_JSON) {
+                        json_decode($variable['value']);
+                        if (json_last_error() !== JSON_ERROR_NONE) {
+                            $this->setError($name, 'value', "The value is not valid JSON");
+                        }
+                    } else {
+                        $cnt = count_chars($variable['format']);
+                        if ($cnt[ord('%')] != 1) {
+                            $this->setError($name, 'format', "Format isn't valid");
+                        }
                     }
                 }
 
@@ -419,6 +435,13 @@ class Scalr_Scripting_GlobalVariables
                     $validator = $currentValues[$name]['locked']['validator'];
                     if (preg_match($validator, $variable['value']) != 1) {
                         $this->setError($name, 'value', "Value isn't valid because of validation pattern");
+                    }
+                }
+
+                if ($currentValues[$name]['locked']['format'] == self::FORMAT_JSON) {
+                    json_decode($variable['value']);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        $this->setError($name, 'value', "The value is not valid JSON");
                     }
                 }
             }

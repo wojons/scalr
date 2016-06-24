@@ -65,7 +65,9 @@ Scalr.regPage('Scalr.ui.farms.roles.replaceRole', function (loadParams, modulePa
                     renderBehaviors: function(behaviors) {
                         var res = [];
                         Ext.Array.each(behaviors, function(behavior){
-                            res.push('<img style="margin:0 3px 0 0" title="' + Scalr.utils.beautifyBehavior(behavior) + '" src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-role-small x-icon-role-small-' + behavior + '"/>');
+                            if (!Ext.isEmpty(behavior)) {
+                                res.push('<img style="margin:0 3px 0 0" title="' + Scalr.utils.beautifyBehavior(behavior) + '" src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-role-small x-icon-role-small-' + behavior + '"/>');
+                            }
                         });
                         return res.join('&nbsp;');
                     }

@@ -77,9 +77,6 @@ class Scalr_UI_Controller_Tools_Openstack_Networks extends Scalr_UI_Controller
                 if ($this->getParam('networkId') && $this->getParam('networkId') != $pv->id)
                     continue;
 
-
-                var_dump($pv);
-
                 $item = array(
                     'snapshotId'	=> $pv->id,
                     'size'	        => $pv->size,

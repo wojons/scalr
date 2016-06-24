@@ -2,7 +2,7 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
     var instanceTypeDescription = 'Limit the types of instances that can be configured in Farm Designer.';
     var configOptions = {
         openstack: [{
-            name: 'openstack.flavor-id',
+            name: 'instance_type',
             title: 'Instance type',
             type: 'instancetype',
             defaults: {value: []},
@@ -46,7 +46,7 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
             icons: ['globalvars']
         }],
         cloudstack: [{
-            name: 'cloudstack.service_offering_id',
+            name: 'instance_type',
             title: 'Instance type',
             type: 'instancetype',
             defaults: {value: []},
@@ -111,7 +111,7 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                 },
                 subheader: 'Limit locations, internet access and subnets for Virtual Private Clouds.'
             },{
-                name: 'aws.instance_type',
+                name: 'instance_type',
                 title: 'Instance types',
                 group: 'EC2',
                 type: 'instancetype',
@@ -193,6 +193,16 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                 subheader: 'Define tags that should be automatically assigned to every EC2 instance and EBS volume. Enforcing this policy will prevent users from adding additional tags.',
                 warning: 'Global Variable Interpolation is supported for tag values <img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-globalvars" style="vertical-align:top;position:relative;top:2px" />'
             },{
+                name: 'aws.storage',
+                title: 'Storage',
+                group: 'EC2',
+                type: 'awsStorage',
+                defaults: {
+                    value: '',
+                    require_encryption: 0
+                },
+                subheader: 'EBS storage restrictions.'
+            },{
                 name: 'aws.rds',
                 title: 'Farm association',
                 group: 'RDS',
@@ -215,6 +225,16 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                 },
                 subheader: 'Set security groups list that will be applied to all RDS instances.',
                 warning: 'Please ensure that the security groups that you list already exist within your EC2 setup. Scalr WILL NOT create these groups and instances will fail to launch otherwise.'
+            },{
+                name: 'aws.rds_storage',
+                title: 'Storage',
+                group: 'RDS',
+                type: 'awsStorage',
+                defaults: {
+                    value: '',
+                    require_encryption: 0
+                },
+                subheader: 'EBS storage restrictions.'
             },{
                 name: 'aws.kms_keys',
                 title: 'KMS keys',
@@ -244,11 +264,20 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                 defaults: {value: []},
                 subheader: 'Limit resource groups'
             },{
-                name: 'azure.vm-size',
+                name: 'instance_type',
                 title: 'Instance types',
                 type: 'instancetypebyregion',
                 defaults: {value: {}},
                 subheader: instanceTypeDescription
+            },{
+                name: 'azure.network',
+                title: 'Network',
+                type: 'azureNetwork',
+                defaults: {
+                    value: '',
+                    use_public_ips: 1
+                },
+                subheader: 'Azure network restrictions.'
             },{
                 name: 'azure.tags',
                 title: 'Tagging',
@@ -296,23 +325,23 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
     var governanceSettings = Ext.isObject(moduleParams['values']) ? moduleParams['values'] : {};
     var maxFormWidth = 820;
 
-	var panel = Ext.create('Ext.panel.Panel', {
-		scalrOptions: {
-			maximize: 'all',
+    var panel = Ext.create('Ext.panel.Panel', {
+        scalrOptions: {
+            maximize: 'all',
             menuTitle: 'Governance',
             menuHref: '#/core/governance',
             menuFavorite: true
-		},
+        },
         stateId: 'panel-core-governance-edit',
         plugins: {
             ptype: 'localcachedrequest',
             crscope: 'governance'
         },
-		layout: {
-			type: 'hbox',
-			align: 'stretch'
-		},
-		items:[{
+        layout: {
+            type: 'hbox',
+            align: 'stretch'
+        },
+        items:[{
             xtype: 'grid',
             flex: 1,
             maxWidth: 400,
@@ -974,6 +1003,73 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                         xtype: 'checkbox',
                         name: 'db_instance_requires_farm_association',
                         boxLabel: 'Require Farm association for new database instances'
+                    }]
+                },{
+                    xtype: 'container',
+                    hidden: true,
+                    tab: true,
+                    itemId: 'awsStorage',
+                    layout: 'anchor',
+                    maxWidth: maxFormWidth,
+                    defaults: {
+                        anchor: '100%'
+                    },
+                    setValues: function(data){
+                        var limits = data.settings.limits;
+                        this.setFieldValues(limits);
+                    },
+                    getValues: function(){
+                        var result = this.isValidFields() ? this.getFieldValues() : null;
+                        if (result) {
+                            result['require_encryption'] = result['require_encryption'] ? 1 : 0;
+                        }
+                        return result;
+                    },
+                    items: [{
+                        xtype: 'checkbox',
+                        name: 'require_encryption',
+                        boxLabel: 'Require EBS volume encryption'
+                    }]
+                },{
+                    xtype: 'container',
+                    hidden: true,
+                    tab: true,
+                    itemId: 'azureNetwork',
+                    layout: 'anchor',
+                    maxWidth: maxFormWidth,
+                    defaults: {
+                        anchor: '100%'
+                    },
+                    setValues: function(data){
+                        var limits = data.settings.limits;
+                        this.down('[name="use_public_ips"]').setValue(limits['use_public_ips'] !== undefined ? limits['use_public_ips'] : 2);
+
+                    },
+                    getValues: function(){
+                        var result = this.isValidFields() ? this.getFieldValues() : null;
+                        if (result['use_public_ips'] == 2) {
+                            delete result['use_public_ips'];
+                        }
+                        return result;
+                    },
+                    items: [{
+                        xtype: 'buttongroupfield',
+                        name: 'use_public_ips',
+                        fieldLabel: 'Public IP usage',
+                        labelWidth: 120,
+                        defaults: {
+                            width: 130
+                        },
+                        items: [{
+                            text: 'Always ON',
+                            value: 1
+                        },{
+                            text: 'Always OFF',
+                            value: 0
+                        },{
+                            text: 'User defined',
+                            value: 2
+                        }]
                     }]
                 },{
                     xtype: 'container',
@@ -1900,7 +1996,7 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                                 };
                             }
                         });
-                        Scalr.CachedRequestManager.get().setExpired({url: '/services/chef/servers/xListServers/'});
+                        Scalr.CachedRequestManager.get().setExpired({url: '/services/chef/xListServers/'});
                         return value;
                     },
                     items: [{
@@ -2077,7 +2173,7 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                 }]
             }]
         }],
-		dockedItems: [{
+        dockedItems: [{
             xtype: 'container',
             itemId: 'tabs',
             dock: 'left',
@@ -2102,11 +2198,11 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
             },
             items: platformsTabs
         }],
-		listeners: {
-			boxready: function () {
-				this.getDockedComponent('tabs').items.first().toggle(true);
-			},
-			selectplatform: function(platform) {
+        listeners: {
+            boxready: function () {
+                this.getDockedComponent('tabs').items.first().toggle(true);
+            },
+            selectplatform: function(platform) {
                 var grid = panel.getComponent('options');
                 grid.getSelectionModel().deselectAll();
                 grid.view.getFeature('grouping')[platform !== 'ec2' ? 'disable' : 'enable']();
@@ -2125,10 +2221,10 @@ Scalr.regPage('Scalr.ui.core.governance.edit', function (loadParams, moduleParam
                         settings: governanceSettings[platform][optionConfig.name]
                     }
                 }));
-			}
-		}
-	});
-	return panel;
+            }
+        }
+    });
+    return panel;
 });
 
 Ext.define('Scalr.ui.InstanceTypesGrid', {

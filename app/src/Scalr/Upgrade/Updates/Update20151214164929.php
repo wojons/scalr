@@ -28,20 +28,21 @@ class Update20151214164929 extends AbstractUpdate implements SequenceInterface
 
     protected function isApplied1($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_CLOUD_CREDENTIALS_ACCOUNT') && $this->db->GetOne("
-            SELECT `granted` FROM `acl_role_resources`
-            WHERE `resource_id` = ? AND `role_id` = ?
-            LIMIT 1
-        ", array(
-            Acl::RESOURCE_CLOUD_CREDENTIALS_ACCOUNT,
-            Acl::ROLE_ID_FULL_ACCESS,
-        )) == 1;
+        return defined('Scalr\\Acl\\Acl::RESOURCE_CLOUD_CREDENTIALS_ACCOUNT') &&
+               $this->db->GetOne("
+                   SELECT `granted` FROM `acl_role_resources`
+                   WHERE `resource_id` = ? AND `role_id` = ?
+                   LIMIT 1
+               ", array(
+                   Acl::RESOURCE_CLOUD_CREDENTIALS_ACCOUNT,
+                   Acl::ROLE_ID_FULL_ACCESS,
+               )) == 1;
     }
 
     protected function validateBefore1($stage)
     {
         return defined('Scalr\\Acl\\Acl::RESOURCE_CLOUD_CREDENTIALS_ACCOUNT') &&
-        Definition::has(Acl::RESOURCE_CLOUD_CREDENTIALS_ACCOUNT);
+               Definition::has(Acl::RESOURCE_CLOUD_CREDENTIALS_ACCOUNT);
     }
 
     protected function run1($stage)
@@ -58,20 +59,21 @@ class Update20151214164929 extends AbstractUpdate implements SequenceInterface
 
     protected function isApplied2($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_CLOUD_CREDENTIALS_ENVIRONMENT') && $this->db->GetOne("
-            SELECT `granted` FROM `acl_role_resources`
-            WHERE `resource_id` = ? AND `role_id` = ?
-            LIMIT 1
-        ", array(
-            Acl::RESOURCE_CLOUD_CREDENTIALS_ENVIRONMENT,
-            Acl::ROLE_ID_FULL_ACCESS,
-        )) == 1;
+        return defined('Scalr\\Acl\\Acl::RESOURCE_CLOUD_CREDENTIALS_ENVIRONMENT') &&
+               $this->db->GetOne("
+                   SELECT `granted` FROM `acl_role_resources`
+                   WHERE `resource_id` = ? AND `role_id` = ?
+                   LIMIT 1
+               ", array(
+                   Acl::RESOURCE_CLOUD_CREDENTIALS_ENVIRONMENT,
+                   Acl::ROLE_ID_FULL_ACCESS,
+               )) == 1;
     }
 
     protected function validateBefore2($stage)
     {
         return defined('Scalr\\Acl\\Acl::RESOURCE_CLOUD_CREDENTIALS_ENVIRONMENT') &&
-        Definition::has(Acl::RESOURCE_CLOUD_CREDENTIALS_ENVIRONMENT);
+               Definition::has(Acl::RESOURCE_CLOUD_CREDENTIALS_ENVIRONMENT);
     }
 
     protected function run2($stage)
@@ -94,7 +96,7 @@ class Update20151214164929 extends AbstractUpdate implements SequenceInterface
     protected function validateBefore3($stage)
     {
         return defined('Scalr\\Acl\\Acl::RESOURCE_CLOUD_CREDENTIALS_ENVIRONMENT') &&
-        Definition::has(Acl::RESOURCE_CLOUD_CREDENTIALS_ENVIRONMENT);
+               Definition::has(Acl::RESOURCE_CLOUD_CREDENTIALS_ENVIRONMENT);
     }
 
     protected function run3($stage)

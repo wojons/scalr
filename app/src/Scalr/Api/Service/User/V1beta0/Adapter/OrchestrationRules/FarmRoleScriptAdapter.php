@@ -110,12 +110,26 @@ class FarmRoleScriptAdapter extends OrchestrationRuleAdapter
 
         $this->checkScriptOs($entity, $farmRole->role->getOs()->family);
 
+        static $agenLessTargets = [
+            self::TARGET_VALUE_NULL                => self::TARGET_NAME_NULL,
+            self::TARGET_VALUE_FARM                => self::TARGET_NAME_FARM,
+            self::TARGET_VALUE_SPECIFIED_FARM_ROLE => self::TARGET_NAME_SPECIFIED_FARM_ROLE
+        ];
+
+        if (!($farmRole->role->isScalarized || isset($agenLessTargets[$entity->target]))) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Only targets ['" . implode("', '", $agenLessTargets) . "'] are allowed to agent-less roles");
+        }
+
         if ($entity->target == static::TARGET_VALUE_SPECIFIED_FARM_ROLE) {
             foreach ($entity->targets as $farmRoleId => $target) {
                 $farmRole = $this->controller->getFarmRole($farmRoleId);
 
                 if ($farmRole->farmId != $entity->farmId) {
                     throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Invalid target. Farm Role '{$farmRole->id}' not found in Farm '{$entity->farmId}'");
+                }
+
+                if (!$farmRole->role->isScalarized) {
+                    throw new ApiErrorException(409, ErrorMessage::ERR_INVALID_VALUE, "Invalid target. Only roles that use Scalr Agent are allowed as targets for " . static::TARGET_NAME_SPECIFIED_FARM_ROLE);
                 }
 
                 $this->checkScriptOs($entity, $farmRole->role->getOs()->family);

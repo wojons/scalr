@@ -134,7 +134,7 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
 
         }
 
-        $response = $aws->ec2->snapshot->describe(null, [$this->getEnvironment()->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID]], $filters, null, $query ? null : $nextToken, $query ? null : $limit);
+        $response = $aws->ec2->snapshot->describe(null, [$this->getEnvironment()->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID]], $filters, null, $query ? null : $nextToken, $query ? null : $limit);
 
         $data = array();
         $count = 0;
@@ -381,7 +381,7 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
             }
 
             $servers = $dbFarmRole->GetServersByFilter();
-            for ($i = 0; $i < count($servers); $i++) {
+            for ($i = 0, $c = count($servers); $i < $c; $i++) {
                 if ($servers[$i]->status != SERVER_STATUS::TERMINATED && $servers[$i]->index) {
                     $map[$servers[$i]->index - 1]['serverIndex'] = $servers[$i]->index;
                     $map[$servers[$i]->index - 1]['serverId'] = $servers[$i]->serverId;
@@ -391,7 +391,7 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
             }
 
             $ips = $this->db->GetAll('SELECT ipaddress, instance_index FROM elastic_ips WHERE farm_roleid = ?', array($dbFarmRole->ID));
-            for ($i = 0; $i < count($ips); $i++) {
+            for ($i = 0, $c = count($ips); $i < $c; $i++) {
                 $map[$ips[$i]['instance_index'] - 1]['elasticIp'] = $ips[$i]['ipaddress'];
                 if (!isset($map[$ips[$i]['instance_index'] - 1]['serverIndex'])) {
                     $map[$ips[$i]['instance_index'] - 1]['serverIndex'] = (int)$ips[$i]['instance_index'];
@@ -423,7 +423,7 @@ class Scalr_UI_Controller_Platforms_Ec2 extends Scalr_UI_Controller
                     if ($info['server_id'] && $itm['instanceId']) {
                         $dbServer = DBServer::LoadByID($info['server_id']);
                         if ($dbServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID) != $itm['instanceId']) {
-                            for ($i = 0; $i < count($map); $i++) {
+                            for ($i = 0, $c = count($map); $i < $c; $i++) {
                                 if ($map[$i]['elasticIp'] == $itm['ipAddress'])
                                     $map[$i]['warningInstanceIdDoesntMatch'] = true;
                             }

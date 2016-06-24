@@ -13,7 +13,7 @@ Ext.define('Scalr.ui.VariableField', {
 
     currentScope: 'environment',
 
-    scalrDefaultsCategoryName: 'SCALR_UI_DEFAULTS',
+    scalrDefaultsCategoryName: 'scalr_ui_defaults',
 
     encodeParams: true,
 
@@ -63,23 +63,6 @@ Ext.define('Scalr.ui.VariableField', {
         validator: '^(stop|terminate)$'
     }],
 
-    initCategories: function () {
-        var me = this;
-
-        me.storedCategories = me.getUsedCategories();
-        me.storedCategories.push(me.scalrDefaultsCategoryName);
-
-        var categoriesStore = me.getCategoriesStore();
-        categoriesStore.removeAll();
-        categoriesStore.add(
-            Ext.Array.map(me.storedCategories, function (category) {
-                return [ category ];
-            })
-        );
-
-        return me;
-    },
-
     initRequiredScopes: function () {
         var me = this;
 
@@ -90,9 +73,7 @@ Ext.define('Scalr.ui.VariableField', {
 
         me.getForm().down('[name=requiredScope]').getMenu().items.each(function (menuItem) {
             if (!Ext.Array.contains(me.availableRequiredScopes, menuItem.value)) {
-                menuItem
-                    .disable()
-                    .hide();
+                menuItem.disable().hide();
             }
         });
 
@@ -130,8 +111,6 @@ Ext.define('Scalr.ui.VariableField', {
 
         me.initField();
 
-        me.setTitle(me.title);
-
         me.grid = me.down('grid');
         me.grid.variableField = me;
         me.store = me.grid.getStore();
@@ -146,12 +125,6 @@ Ext.define('Scalr.ui.VariableField', {
             me.getGridPanel().down('#showLocked')
                 .disable()
                 .setTooltip('All variables are visible on the Scalr scope');
-        }
-
-        if (me.removeTopSeparator) {
-            Ext.apply(me.down('[name=title]'), {
-                style: 'box-shadow: none'
-            });
         }
 
         if (!Ext.Array.contains(['scalr', 'account', 'environment'], me.getScope())) {
@@ -184,8 +157,6 @@ Ext.define('Scalr.ui.VariableField', {
             datachanged: me.onDataChanged,
             removevariable: me.onVariableRemove,
             addvariable: me.onVariableAdd,
-            addcategory: me.addStoredCategory,
-            removecategory: me.removeStoredCategory,
             scope: me
         });
 
@@ -240,14 +211,13 @@ Ext.define('Scalr.ui.VariableField', {
         //me.getGridPanel().resumeLayouts(true);
         me.getGridPanel().enableGrouping();
 
-        me.tryRemoveCategory(category);
+        me.refreshCategories();
 
         return true;
     },
 
     onVariableAdd: function (me, record) {
-        me.getGridPanel()
-            .down('#add').toggle(false, true);
+        me.getGridPanel().down('#add').toggle(false, true);
 
         var validationErrors = me.validationErrors;
         validationErrors.variables[record.get('name')] = validationErrors.newVariable;
@@ -256,80 +226,52 @@ Ext.define('Scalr.ui.VariableField', {
         return true;
     },
 
-    tryRemoveCategory: function (category) {
+    beforeCategoryChanged: function (category) {
         var me = this;
 
-        if (!Ext.Array.contains(me.getUsedCategories(), category)) {
-            var categoriesStore = me.getCategoriesStore();
-            var record = categoriesStore.findRecord(
-                'category', category, 0, false, false, true
-            );
+        if (Ext.Array.contains(me.categories, category)) {
+            me.getGridPanel().expandGroup(category);
+        }
 
-            if (Ext.isEmpty(record)) {
-                categoriesStore.on('datachanged', function (store) {
-                    me.tryRemoveCategory(category);
-                }, me, {
-                    single: true
-                });
-                return false;
+        return true;
+    },
+
+    refreshCategories: function () {
+        var me = this;
+
+        var categories = me.categories = [];
+
+        me.getStore().getGroups().eachKey(function (category) {
+            Ext.Array.push(categories, category);
+        });
+
+        var categoriesField = me.getForm().down('#category');
+        var categoriesStore = me.getForm().down('#category').getStore();
+
+        categoriesStore.clearFilter();
+        categoriesStore.addFilter({
+            filterFn: function (record) {
+                var category = record.get('category');
+
+                return category !== '' && category !== 'scalr_ui_defaults';
             }
+        });
 
-            categoriesStore.remove(
-                categoriesStore.findRecord('category', category)
-            );
+        categoriesStore.loadRawData(me.categories);
 
-            me.fireEvent('removecategory', me, category);
+        var value = categoriesField.getRawValue();
 
-            return true;
+        if (!Ext.isEmpty(value)) {
+            categoriesField.setValue(value.toLowerCase());
         }
 
-        return false;
-    },
-
-    addCategory: function (category) {
-        var me = this;
-
-        me.getCategoriesStore().add(
-            [ [ category ] ]
-        );
-
-        me.fireEvent('addcategory', me, category);
-
-        return true;
-    },
-
-    beforeCategoryChanged: function (newCategory) {
-        var me = this;
-
-        var hasCategory = Ext.Array.contains(
-            me.getStoredCategories(),
-            newCategory
-        );
-
-        if (hasCategory || newCategory === '') {
-            me.getGridPanel().expandGroup(newCategory);
-        }
-
-        return true;
+        return me;
     },
 
     onCategoryChanged: function (newCategory, oldCategory) {
         var me = this;
 
-        //me.getGridPanel().refreshView();
-
-        if (!Ext.isEmpty(oldCategory)) {
-            me.tryRemoveCategory(oldCategory);
-        }
-
-        var hasCategory = Ext.isEmpty(newCategory) || Ext.Array.equals(
-            me.getUsedCategories(true).sort(),
-            me.getStoredCategories(true).sort()
-        );
-
-        if (!hasCategory) {
-            me.addCategory(newCategory);
-        }
+        me.refreshCategories();
 
         return true;
     },
@@ -363,12 +305,6 @@ Ext.define('Scalr.ui.VariableField', {
         return me.store || me.down('grid').getStore();
     },
 
-    getCategoriesStore: function () {
-        var me = this;
-
-        return me.getForm().down('#category').getStore();
-    },
-
     getForm: function () {
         var me = this;
 
@@ -379,46 +315,6 @@ Ext.define('Scalr.ui.VariableField', {
         var me = this;
 
         return me.currentScope;
-    },
-
-    getUsedCategories: function (lowerCase) {
-        var me = this;
-
-        var categories = [];
-
-        me.getStore().getGroups().eachKey(function (key) {
-            if (!Ext.isEmpty(key)) {
-                categories.push(!lowerCase ? key : key.toLowerCase());
-            }
-        });
-
-        return Ext.Array.unique(categories);
-    },
-
-    addStoredCategory: function (variableField, category) {
-        var me = this;
-
-        me.storedCategories.push(category);
-
-        return me;
-    },
-
-    removeStoredCategory: function (variableField, category) {
-        var me = this;
-
-        Ext.Array.remove(me.storedCategories, category);
-
-        return me;
-    },
-
-    getStoredCategories: function (lowerCase) {
-        var me = this;
-
-        return !lowerCase
-            ? me.storedCategories
-            : Ext.Array.map(me.storedCategories, function (category) {
-                return category.toLowerCase();
-            });
     },
 
     saveScrollState: function () {
@@ -497,16 +393,6 @@ Ext.define('Scalr.ui.VariableField', {
         var me = this;
 
         me.dirty = true;
-
-        return me;
-    },
-
-    setTitle: function (title) {
-        var me = this;
-
-        if (title) {
-            me.down('[name=title]').setText(title);
-        }
 
         return me;
     },
@@ -591,7 +477,7 @@ Ext.define('Scalr.ui.VariableField', {
         me
             .showForm(false)
             .markRequiredVariables()
-            .initCategories();
+            .refreshCategories();
 
         me.getGridPanel()
             .refreshGrouping()
@@ -954,558 +840,532 @@ Ext.define('Scalr.ui.VariableField', {
     },
 
     items: [{
-        xtype: 'container',
+        xtype: 'grid',
+        cls: 'x-form-variablefield-grid',
+        style: 'box-shadow: none',
+        padding: '0 15 15',
         flex: 1,
-        layout: {
-            type: 'vbox',
-            align: 'stretch'
-        },
-        items: [{
-            name: 'title',
-            padding: '1 0 0 12',
-            setText: function (text) {
-                var me = this;
 
-                me.update('<div style="padding-top: 9px" class="x-fieldset-header-text">' + text + '</div>');
-
-                return me;
+        viewConfig: {
+            preserveScrollOnRefresh: true,
+            markDirty: false,
+            plugins: {
+                ptype: 'dynemptytext',
+                emptyText: 'No variables found.',
+                emptyTextNoItems: 'You have no variables added yet.'
+            },
+            loadingText: 'Loading variables...',
+            deferEmptyText: false,
+            getRowClass: function (record) {
+                return !Ext.isEmpty(record.get('validationErrors')) ? 'x-grid-row-color-red' : '';
             }
-        }, {
-            xtype: 'grid',
-            cls: 'x-form-variablefield-grid',
-            style: 'box-shadow: none',
-            padding: '0 12 12 12',
-            flex: 1,
+        },
 
-            viewConfig: {
-                preserveScrollOnRefresh: true,
-                markDirty: false,
-                plugins: {
-                    ptype: 'dynemptytext',
-                    emptyText: 'No variables found.',
-                    emptyTextNoItems: 'You have no variables added yet.'
-                },
-                loadingText: 'Loading variables ...',
-                deferEmptyText: false,
-                getRowClass: function (record) {
-                    return !Ext.isEmpty(record.get('validationErrors'))
-                        ? 'x-grid-row-color-red'
-                        : '';
+        features: [{
+            ftype: 'grouping',
+            id: 'categoriesGrouping',
+            hideGroupedHeader: true,
+            groupHeaderTpl: [
+                '<tpl if="name">',
+                    '{name}',
+                '<tpl else>',
+                    'Uncategorized',
+                '</tpl>',
+                ' ({rows.length})'
+            ]
+        }],
+
+        plugins: [{
+            ptype: 'focusedrowpointer',
+            pluginId: 'focusedrowpointer'
+        }, {
+            ptype: 'rowtooltip',
+            pluginId: 'rowtooltip',
+            cls: 'x-tip-form-invalid',
+            anchor: 'top',
+            minWidth: 330,
+            beforeShow: function (tooltip) {
+                var invalidText = tooltip.owner.getVariableField().beforeTooltipShow(tooltip.triggerElement);
+
+                if (Ext.isObject(invalidText)) {
+                    tooltip.setTitle(invalidText.title);
+                    tooltip.update(invalidText.msg);
+                    return true;
+                }
+
+                return false;
+            }
+        }],
+
+        store: {
+            fields: [
+                'name',
+                'newValue',
+                'value',
+                'current',
+                'default',
+                'locked',
+                'flagDelete',
+                'scopes',
+                'validationErrors',
+                'category'
+            ],
+            reader: 'object',
+            groupField: 'category',
+            filters: [{
+                id: 'deletedVariableFilter',
+                filterFn: function (record) {
+                    return !record.get('flagDelete');
+                }
+            }],
+            finalVariableFilter: {
+                id: 'finalVariableFilter',
+                filterFn: function (record) {
+                    var locked = record.get('locked') || {};
+                    return !(record.get('default') && parseInt(locked.flagFinal) === 1);
                 }
             },
+            createSearchFilter: function (value) {
+                return {
+                    id: 'searchFilter',
+                    anyMatch: true,
+                    property: 'name',
+                    value: value
+                };
+            },
+            search: function (text) {
+                var me = this;
 
-            features: [{
-                ftype: 'grouping',
-                id: 'categoriesGrouping',
-                hideGroupedHeader: true,
-                groupHeaderTpl: [
-                    '<tpl if="name">',
-                        '{[Ext.String.capitalize(values.name.toLowerCase())]}',
-                    '<tpl else>',
-                        'Uncategorized',
-                    '</tpl>',
-                    ' ({rows.length})'
-                ]
-            }],
-
-            plugins: [{
-                ptype: 'focusedrowpointer',
-                pluginId: 'focusedrowpointer'
-            }, {
-                ptype: 'rowtooltip',
-                pluginId: 'rowtooltip',
-                cls: 'x-tip-form-invalid',
-                anchor: 'top',
-                minWidth: 330,
-                beforeShow: function (tooltip) {
-                    var invalidText = tooltip.owner.getVariableField()
-                        .beforeTooltipShow(tooltip.triggerElement);
-
-                    if (Ext.isObject(invalidText)) {
-                        tooltip.setTitle(invalidText.title);
-                        tooltip.update(invalidText.msg);
-                        return true;
-                    }
-
-                    return false;
-                }
-            }],
-
-            store: {
-                fields: [
-                    'name',
-                    'newValue',
-                    'value',
-                    'current',
-                    'default',
-                    'locked',
-                    'flagDelete',
-                    'scopes',
-                    'validationErrors', {
-                        name: 'category',
-                        convert: function (value) {
-                            return Ext.isString(value)
-                                ? Ext.String.capitalize(value.toLowerCase())
-                                : '';
-                        }
-                }],
-                reader: 'object',
-                groupField: 'category',
-                filters: [{
-                    id: 'deletedVariableFilter',
-                    filterFn: function (record) {
-                        return !record.get('flagDelete');
-                    }
-                }],
-                finalVariableFilter: {
-                    id: 'finalVariableFilter',
-                    filterFn: function (record) {
-                        var locked = record.get('locked') || {};
-                        return !(record.get('default') && parseInt(locked.flagFinal) === 1);
-                    }
-                },
-                createSearchFilter: function (value) {
-                    return {
-                        id: 'searchFilter',
-                        anyMatch: true,
-                        property: 'name',
-                        value: value
-                    };
-                },
-                search: function (text) {
-                    var me = this;
-
-                    if (text) {
-                        me.addFilter(me.createSearchFilter(text));
-                        return me;
-                    }
-
-                    me.removeFilter('searchFilter');
+                if (text) {
+                    me.addFilter(me.createSearchFilter(text));
                     return me;
                 }
-                /**
-                todo: variable names event based updating
-                listeners: {
-                    update: function (me, record, operation, modifiedFieldNames) {
-                        if (modifiedFieldNames && modifiedFieldNames[0] === 'flagDelete') {
-                        }
-                    }
-                }
-                */
-            },
 
+                me.removeFilter('searchFilter');
+                return me;
+            }
+            /**
+            todo: variable names event based updating
             listeners: {
-                select: function (me, record) {
-                    var grid = me.view.panel;
+                update: function (me, record, operation, modifiedFieldNames) {
+                    if (modifiedFieldNames && modifiedFieldNames[0] === 'flagDelete') {
+                    }
+                }
+            }
+            */
+        },
 
-                    var variableField = grid.variableField;
-                    variableField.fireEvent('beforeselect', variableField);
+        listeners: {
+            select: function (me, record) {
+                var grid = me.view.panel;
 
-                    var variableName = record.get('name');
-                    var isVariableNew = variableField.isNewVariableExist()
-                        && variableField.newVariable.get('name') === variableName;
+                var variableField = grid.variableField;
+                variableField.fireEvent('beforeselect', variableField);
 
-                    grid.down('#add').toggle(Ext.isEmpty(variableName) || isVariableNew, true);
+                var variableName = record.get('name');
+                var isVariableNew = variableField.isNewVariableExist()
+                    && variableField.newVariable.get('name') === variableName;
 
-                    variableField.getForm()
-                        .setFormVisible(true)
-                        .setValue(record);
+                grid.down('#add').toggle(Ext.isEmpty(variableName) || isVariableNew, true);
+
+                variableField.getForm()
+                    .setFormVisible(true)
+                    .setValue(record);
+            },
+
+            deselect: function (row, record) {
+                var variableField = row.view.panel.getVariableField();
+                var newVariable = variableField.newVariable;
+
+                if (record === newVariable) {
+                    variableField.maybeRemoveNewVariable();
+                    return;
+                }
+            }
+
+            /*itemkeydown: function (me, record, item, index, e) {
+                var form = me.panel.variableField.getForm();
+
+                if (e.getKey() === e.TAB && !form.down('[name=newName]').isVisible()) {
+                    form.down('[name=flagHidden]').focus();
+                }
+            }*/
+        },
+
+        getVariableField: function () {
+            return this.variableField;
+        },
+
+        getGrouping: function () {
+            return this.getView().getFeature('categoriesGrouping');
+        },
+
+        enableGrouping: function () {
+            var me = this;
+
+            me.getGrouping().enable();
+
+            return me;
+        },
+
+        disableGrouping: function () {
+            var me = this;
+
+            me.getGrouping().disable();
+
+            return me;
+        },
+
+        refreshGrouping: function () {
+            var me = this;
+
+            me.suspendLayouts();
+
+            var feature = me.getGrouping();
+            feature.disable();
+            feature.enable();
+
+            me.resumeLayouts(true);
+
+            return me;
+        },
+
+        // temp solution
+        refreshView: function () {
+            var me = this;
+
+            var store = me.getStore();
+
+            store.addFilter({
+                id: 'refreshGroups',
+                filterFn: function () {
+                    return true;
+                }
+            });
+
+            store.removeFilter('refreshGroups');
+
+            return me;
+        },
+
+        expandGroup: function (groupName) {
+            var me = this;
+
+            me.getGrouping().expand(groupName);
+
+            return me;
+        },
+
+        expandAllGroups: function () {
+            var me = this;
+
+            me.getGrouping().expandAll();
+
+            return me;
+        },
+
+        getScopeMarkerHtml: function (scope) {
+            var me = this;
+            me.currentScope = me.currentScope || me.getVariableField().currentScope;
+
+            return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-' + scope +
+                '" data-qclass="x-tip-light" data-qtip="' + Scalr.utils.getScopeLegend('variable', false, me.currentScope) + '" />';
+        },
+
+        getEmptyNameHtml: function (scope) {
+            var me = this;
+
+            return me.getScopeMarkerHtml(scope) +
+                '<span style="font-style: italic; color: #999; padding-left: 10px">no name</span>';
+        },
+
+        getLockedNameHtml: function (name, scope) {
+            var me = this;
+
+            return '<div data-qtip="' + me.getVariableField().getScopeName(scope) +
+                '"class="x-form-variablefield-variable-locked-scope-' +
+                scope + '"></div><span style="color: #999; padding-left: 6px">' + name + '</span>';
+        },
+
+        startsWithScalrUiDefault: function (string) {
+            return string.toLowerCase().substring(0, 16) === 'scalr_ui_default';
+        },
+
+        getNameHtml: function (name, scope, isLocked) {
+            var me = this;
+
+            if (Ext.isEmpty(name)) {
+                return me.getEmptyNameHtml(scope);
+            }
+
+            name = me.startsWithScalrUiDefault(name) ? name.substring(17) : name;
+
+            if (isLocked) {
+                return me.getLockedNameHtml(name, scope);
+            }
+
+            return me.getScopeMarkerHtml(scope) + '<span style="padding-left: 10px">' + name + '</span>';
+        },
+
+        getValueColor: function (value) {
+            return !value ? '#999' : '#224164';
+        },
+
+        getValueLengthHtml: function (length) {
+            return '<div style="float: right; color: #999; padding-left: 6px">(' + length + ' chars)</div>';
+        },
+
+        getPureValueHtml: function (value, color) {
+            return '<span style="font-family: DroidSansMono; color: ' +
+                color + '">' + value + '</span>';
+        },
+
+        getLongValueHtml: function (valueHtml, valueLengthHtml) {
+            return valueLengthHtml +
+                '<div class="x-form-variablefield-grid-variable-value-long">' + valueHtml + '</div>';
+        },
+
+        getValueHtml: function (value, color) {
+            var me = this;
+
+            var valueLength = value.length;
+            var valueLengthHtml = me.getValueLengthHtml(valueLength);
+            var linebreakIndex = value.indexOf('\n');
+            var valueHtml = me.getPureValueHtml(value, color);
+
+            if (linebreakIndex > 6) {
+                valueHtml = me.getPureValueHtml(value.substring(0, linebreakIndex), color);
+
+                return me.getLongValueHtml(valueHtml, valueLengthHtml);
+            }
+
+            if (valueLength > 60) {
+                return me.getLongValueHtml(valueHtml, valueLengthHtml);
+            }
+
+            return valueHtml;
+        },
+
+        getFlagFinalClass: function (flagFinal) {
+            return 'x-form-variablefield-grid-flag-final-' + (!flagFinal ? 'off' : 'on');
+        },
+
+        getFlagRequiredClass: function (flagRequired) {
+            return !flagRequired ?
+                '' : 'x-form-variablefield-grid-flag-required-scope-' + flagRequired;
+        },
+
+        getFlagRequiredTip: function (flagRequired) {
+            var me = this;
+
+            return flagRequired ? '<img src="' + Ext.BLANK_IMAGE_URL +
+                '" class="scalr-scope-' + flagRequired + '" /><span style="margin-left: 6px">' +
+                me.getVariableField().getScopeName(flagRequired) + '</span>' :
+                '<span style="font-style: italic">not required</span>';
+        },
+
+        getFlagHiddenClass: function (flagHidden) {
+            return 'x-form-variablefield-grid-flag-hidden-' + (!flagHidden ? 'off' : 'on');
+        },
+
+        getFlagFinalHtml: function (flagFinal) {
+            var me = this;
+
+            return '<div class="' + me.getFlagFinalClass(flagFinal) + '" data-qtip="Locked variable"></div>';
+        },
+
+        getFlagRequiredHtml: function (flagRequired) {
+            var me = this;
+
+            return '<div class="x-form-variablefield-grid-flag-required ' +
+                me.getFlagRequiredClass(flagRequired) +
+                '" data-qtip=\'<div style="float: left; margin-right: 6px">Required in:</div>' +
+                me.getFlagRequiredTip(flagRequired) + '\'></div>';
+        },
+
+        getFlagHiddenHtml: function (flagHidden) {
+            var me = this;
+
+            return '<div class="' + me.getFlagHiddenClass(flagHidden) + '" data-qtip="Hidden variable"></div>';
+        },
+
+        getFlagsHtml: function (flagFinal, flagRequired, flagHidden) {
+            var me = this;
+
+            return '<div class="x-form-variablefield-grid-cell-flags">' +
+                me.getFlagHiddenHtml(flagHidden) +
+                me.getFlagFinalHtml(flagFinal) +
+                me.getFlagRequiredHtml(flagRequired) +
+                '</div>';
+        },
+
+        focusOn: function (record) {
+            var me =  this;
+
+            var view = me.getView();
+            view.focusRow(record);
+            view.scrollBy(0, me.getHeight(), false);
+            view.saveScrollState();
+
+            return me;
+        },
+
+        dockedItems: [{
+            xtype: 'toolbar',
+            dock: 'top',
+            ui: 'simple',
+            padding: '15 0',
+            defaults: {
+                flex: 1
+            },
+            items: [{
+                xtype: 'filterfield',
+                maxWidth: 200,
+                handler: function (field, value) {
+                    var variableField = field.up('variablefield');
+                    var grid = variableField.getGridPanel();
+
+                    grid.getSelectionModel().deselectAll();
+                    variableField.getForm().setFormVisible(false);
+                    grid.down('#add').toggle(false, true);
+
+                    grid
+                        .expandAllGroups()
+                        .getStore().search(value);
+                }
+            }, {
+                xtype: 'button',
+                itemId: 'showLocked',
+                margin: '0 0 0 12',
+                maxWidth: 190,
+                enableToggle: true,
+                text: 'Show locked variables',
+                isLockedVariable: function (record) {
+                    var locked = record.get('locked') || {};
+                    return record.get('default') && parseInt(locked.flagFinal) === 1;
                 },
-
-                deselect: function (row, record) {
-                    var variableField = row.view.panel.getVariableField();
-                    var newVariable = variableField.newVariable;
-
-                    if (record === newVariable) {
-                        variableField.maybeRemoveNewVariable();
-                        return;
-                    }
-                }
-
-                /*itemkeydown: function (me, record, item, index, e) {
-                    var form = me.panel.variableField.getForm();
-
-                    if (e.getKey() === e.TAB && !form.down('[name=newName]').isVisible()) {
-                        form.down('[name=flagHidden]').focus();
-                    }
-                }*/
-            },
-
-            getVariableField: function () {
-                return this.variableField;
-            },
-
-            getGrouping: function () {
-                return this.getView().getFeature('categoriesGrouping');
-            },
-
-            enableGrouping: function () {
-                var me = this;
-
-                me.getGrouping().enable();
-
-                return me;
-            },
-
-            disableGrouping: function () {
-                var me = this;
-
-                me.getGrouping().disable();
-
-                return me;
-            },
-
-            refreshGrouping: function () {
-                var me = this;
-
-                me.suspendLayouts();
-
-                var feature = me.getGrouping();
-                feature.disable();
-                feature.enable();
-
-                me.resumeLayouts(true);
-
-                return me;
-            },
-
-            // temp solution
-            refreshView: function () {
-                var me = this;
-
-                var store = me.getStore();
-
-                store.addFilter({
-                    id: 'refreshGroups',
-                    filterFn: function () {
-                        return true;
-                    }
-                });
-
-                store.removeFilter('refreshGroups');
-
-                return me;
-            },
-
-            expandGroup: function (groupName) {
-                var me = this;
-
-                me.getGrouping().expand(groupName);
-
-                return me;
-            },
-
-            expandAllGroups: function () {
-                var me = this;
-
-                me.getGrouping().expandAll();
-
-                return me;
-            },
-
-            getScopeMarkerHtml: function (scope) {
-                var me = this;
-                me.currentScope = me.currentScope || me.getVariableField().currentScope;
-
-                return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-' + scope +
-                    '" data-qclass="x-tip-light" data-qtip="' + Scalr.utils.getScopeLegend('variable', false, me.currentScope) + '" />';
-            },
-
-            getEmptyNameHtml: function (scope) {
-                var me = this;
-
-                return me.getScopeMarkerHtml(scope) +
-                    '<span style="font-style: italic; color: #999; padding-left: 10px">no name</span>';
-            },
-
-            getLockedNameHtml: function (name, scope) {
-                var me = this;
-
-                return '<div data-qtip="' + me.getVariableField().getScopeName(scope) +
-                    '"class="x-form-variablefield-variable-locked-scope-' +
-                    scope + '"></div><span style="color: #999; padding-left: 6px">' + name + '</span>';
-            },
-
-            startsWithScalrUiDefault: function (string) {
-                return string.toLowerCase().substring(0, 16) === 'scalr_ui_default';
-            },
-
-            getNameHtml: function (name, scope, isLocked) {
-                var me = this;
-
-                if (Ext.isEmpty(name)) {
-                    return me.getEmptyNameHtml(scope);
-                }
-
-                name = me.startsWithScalrUiDefault(name) ? name.substring(17) : name;
-
-                if (isLocked) {
-                    return me.getLockedNameHtml(name, scope);
-                }
-
-                return me.getScopeMarkerHtml(scope) + '<span style="padding-left: 10px">' + name + '</span>';
-            },
-
-            getValueColor: function (value) {
-                return !value ? '#999' : '#224164';
-            },
-
-            getValueLengthHtml: function (length) {
-                return '<div style="float: right; color: #999; padding-left: 6px">(' + length + ' chars)</div>';
-            },
-
-            getPureValueHtml: function (value, color) {
-                return '<span style="font-family: DroidSansMono; color: ' +
-                    color + '">' + value + '</span>';
-            },
-
-            getLongValueHtml: function (valueHtml, valueLengthHtml) {
-                return valueLengthHtml +
-                    '<div class="x-form-variablefield-grid-variable-value-long">' + valueHtml + '</div>';
-            },
-
-            getValueHtml: function (value, color) {
-                var me = this;
-
-                var valueLength = value.length;
-                var valueLengthHtml = me.getValueLengthHtml(valueLength);
-                var linebreakIndex = value.indexOf('\n');
-                var valueHtml = me.getPureValueHtml(value, color);
-
-                if (linebreakIndex > 6) {
-                    valueHtml = me.getPureValueHtml(value.substring(0, linebreakIndex), color);
-
-                    return me.getLongValueHtml(valueHtml, valueLengthHtml);
-                }
-
-                if (valueLength > 60) {
-                    return me.getLongValueHtml(valueHtml, valueLengthHtml);
-                }
-
-                return valueHtml;
-            },
-
-            getFlagFinalClass: function (flagFinal) {
-                return 'x-form-variablefield-grid-flag-final-' + (!flagFinal ? 'off' : 'on');
-            },
-
-            getFlagRequiredClass: function (flagRequired) {
-                return !flagRequired ?
-                    '' : 'x-form-variablefield-grid-flag-required-scope-' + flagRequired;
-            },
-
-            getFlagRequiredTip: function (flagRequired) {
-                var me = this;
-
-                return flagRequired ? '<img src="' + Ext.BLANK_IMAGE_URL +
-                    '" class="scalr-scope-' + flagRequired + '" /><span style="margin-left: 6px">' +
-                    me.getVariableField().getScopeName(flagRequired) + '</span>' :
-                    '<span style="font-style: italic">not required</span>';
-            },
-
-            getFlagHiddenClass: function (flagHidden) {
-                return 'x-form-variablefield-grid-flag-hidden-' + (!flagHidden ? 'off' : 'on');
-            },
-
-            getFlagFinalHtml: function (flagFinal) {
-                var me = this;
-
-                return '<div class="' + me.getFlagFinalClass(flagFinal) + '" data-qtip="Locked variable"></div>';
-            },
-
-            getFlagRequiredHtml: function (flagRequired) {
-                var me = this;
-
-                return '<div class="x-form-variablefield-grid-flag-required ' +
-                    me.getFlagRequiredClass(flagRequired) +
-                    '" data-qtip=\'<div style="float: left; margin-right: 6px">Required in:</div>' +
-                    me.getFlagRequiredTip(flagRequired) + '\'></div>';
-            },
-
-            getFlagHiddenHtml: function (flagHidden) {
-                var me = this;
-
-                return '<div class="' + me.getFlagHiddenClass(flagHidden) + '" data-qtip="Hidden variable"></div>';
-            },
-
-            getFlagsHtml: function (flagFinal, flagRequired, flagHidden) {
-                var me = this;
-
-                return '<div class="x-form-variablefield-grid-cell-flags">' +
-                    me.getFlagHiddenHtml(flagHidden) +
-                    me.getFlagFinalHtml(flagFinal) +
-                    me.getFlagRequiredHtml(flagRequired) +
-                    '</div>';
-            },
-
-            focusOn: function (record) {
-                var me =  this;
-
-                var view = me.getView();
-                view.focusRow(record);
-                view.scrollBy(0, me.getHeight(), false);
-                view.saveScrollState();
-
-                return me;
-            },
-
-            dockedItems: [{
-                xtype: 'toolbar',
-                dock: 'top',
-                ui: 'simple',
-                padding: '12 0',
-                defaults: {
-                    flex: 1
-                },
-                items: [{
-                    xtype: 'filterfield',
-                    maxWidth: 200,
-                    handler: function (field, value) {
-                        var variableField = field.up('variablefield');
-                        var grid = variableField.getGridPanel();
-
-                        grid.getSelectionModel().deselectAll();
-                        variableField.getForm().setFormVisible(false);
-                        grid.down('#add').toggle(false, true);
-
-                        grid
-                            .expandAllGroups()
-                            .getStore().search(value);
-                    }
-                }, {
-                    xtype: 'button',
-                    itemId: 'showLocked',
-                    margin: '0 0 0 12',
-                    maxWidth: 190,
-                    enableToggle: true,
-                    text: 'Show locked variables',
-                    isLockedVariable: function (record) {
-                        var locked = record.get('locked') || {};
-                        return record.get('default') && parseInt(locked.flagFinal) === 1;
+                listeners: {
+                    afterrender: function (button) {
+                        button.up('variablefield').showLockedVariables(false);
                     },
-                    listeners: {
-                        afterrender: function (button) {
-                            button.up('variablefield').showLockedVariables(false);
-                        },
-                        toggle: function (button, pressed) {
-                            var variableField = button.up('variablefield');
-                            variableField.showLockedVariables(pressed);
-
-                            if (!pressed) {
-                                var grid = variableField.getGridPanel();
-                                var selectedRecord = grid.getSelectionModel().getSelection()[0];
-
-                                if (!Ext.isEmpty(selectedRecord) && button.isLockedVariable(selectedRecord)) {
-                                    grid.setSelection();
-                                    grid.updateLayout();
-                                    variableField.getForm().setFormVisible(false);
-                                }
-                            }
-                        }
-                    }
-                }, {
-                    xtype: 'tbfill',
-                    flex: 0.1
-                }, {
-                    itemId: 'refresh',
-                    iconCls: 'x-btn-icon-refresh',
-                    maxWidth: 42,
-                    tooltip: 'Refresh',
-                    handler: function () {
-                        Scalr.event.fireEvent('refresh');
-                    }
-                }, {
-                    xtype: 'button',
-                    itemId: 'add',
-                    text: 'New variable',
-                    cls: 'x-btn-green',
-                    margin: '0 0 0 12',
-                    maxWidth: 115,
-                    enableToggle: true,
-                    toggleHandler: function (button, state) {
+                    toggle: function (button, pressed) {
                         var variableField = button.up('variablefield');
-                        var grid = variableField.getGridPanel();
-                        var form = variableField.getForm();
+                        variableField.showLockedVariables(pressed);
 
-                        variableField.resetFilter();
+                        if (!pressed) {
+                            var grid = variableField.getGridPanel();
+                            var selectedRecord = grid.getSelectionModel().getSelection()[0];
 
-                        if (state) {
-                            if (variableField.isNewVariableExist()) {
-                                grid.expandGroup(
-                                    variableField.newVariable.get('category')
-                                );
-                            } else if (grid.getGrouping().getGroup('').isCollapsed) {
-                                grid.expandGroup('');
+                            if (!Ext.isEmpty(selectedRecord) && button.isLockedVariable(selectedRecord)) {
+                                grid.setSelection();
+                                grid.updateLayout();
+                                variableField.getForm().setFormVisible(false);
                             }
+                        }
+                    }
+                }
+            }, {
+                xtype: 'tbfill',
+                flex: 0.1
+            }, {
+                itemId: 'refresh',
+                iconCls: 'x-btn-icon-refresh',
+                maxWidth: 42,
+                tooltip: 'Refresh',
+                handler: function () {
+                    Scalr.event.fireEvent('refresh');
+                }
+            }, {
+                xtype: 'button',
+                itemId: 'add',
+                text: 'New variable',
+                cls: 'x-btn-green',
+                margin: '0 0 0 12',
+                maxWidth: 115,
+                enableToggle: true,
+                toggleHandler: function (button, state) {
+                    var variableField = button.up('variablefield');
+                    var grid = variableField.getGridPanel();
+                    var form = variableField.getForm();
 
-                            form.expandFieldSets();
-                            variableField.addVariable();
-                        } else {
-                            grid.setSelection();
-                            grid.updateLayout();
+                    variableField.resetFilter();
+
+                    if (state) {
+                        if (variableField.isNewVariableExist()) {
+                            grid.expandGroup(
+                                variableField.newVariable.get('category')
+                            );
+                        } else if (grid.getGrouping().getGroup('').isCollapsed) {
+                            grid.expandGroup('');
                         }
 
-                        form.setFormVisible(state);
+                        form.expandFieldSets();
+                        variableField.addVariable();
+                    } else {
+                        grid.setSelection();
+                        grid.updateLayout();
                     }
-                }]
-            }],
 
-            columns: [{
-                text: 'Variable',
-                name: 'name',
-                dataIndex: 'name',
-                flex: 0.35,
-                minWidth: 100,
-                renderer: function (value, meta, record) {
-                    var me = this;
-
-                    var current = record.get('current') || {};
-                    var def = record.get('default') || {};
-                    var locked = record.get('locked') || {};
-                    var validationErrors = record.get('validationErrors') || [];
-                    var description = locked.description || current.description;
-
-                    return (description ? '<img src="'+Ext.BLANK_IMAGE_URL+'" style="float:right;cursor:default" class="x-grid-icon x-grid-icon-info" data-qtip="'+Ext.String.htmlEncode(Ext.String.htmlEncode(description))+'"/>' + '<span style="cursor:default" data-qtip="'+Ext.String.htmlEncode(Ext.String.htmlEncode(description))+'">' : '') + me.getNameHtml(
-                        Ext.String.htmlEncode(record.get('name')),
-                        current && (current.value || Ext.Object.isEmpty(def)) ? current.scope : def.scope,
-                        parseInt(locked.flagFinal) === 1
-                    ) + (description ? '</span>' : '');
-                }
-            }, {
-                text: 'Value',
-                flex: 0.65,
-                sortable: false,
-                renderer: function (value, meta, record) {
-                    var me = this;
-
-                    var current = record.get('current') || {};
-                    var def = record.get('default') || {};
-                    var locked = record.get('locked') || {};
-                    var currentValue = current.value;
-
-                    return me.getValueHtml(
-                        Ext.String.htmlEncode(currentValue || def.value || ''),
-                        me.getValueColor(currentValue)
-                    );
-                }
-            }, {
-                text: 'Flags',
-                width: 120,
-                sortable: false,
-                align: 'center',
-                renderer: function (value, meta, record) {
-                    var me = this;
-
-                    var current = record.get('current') || {};
-                    var locked = record.get('locked') || {};
-
-                    return me.getFlagsHtml(
-                        parseInt(current.flagFinal) === 1 || parseInt(locked.flagFinal) === 1,
-                        current.flagRequired || locked.flagRequired,
-                        parseInt(current.flagHidden) === 1 || parseInt(locked.flagHidden) === 1
-                    );
+                    form.setFormVisible(state);
                 }
             }]
+        }],
+
+        columns: [{
+            text: 'Variable',
+            name: 'name',
+            dataIndex: 'name',
+            flex: 0.35,
+            minWidth: 100,
+            renderer: function (value, meta, record) {
+                var me = this;
+
+                var current = record.get('current') || {};
+                var def = record.get('default') || {};
+                var locked = record.get('locked') || {};
+                var validationErrors = record.get('validationErrors') || [];
+                var description = locked.description || current.description;
+
+                return (description ? '<img src="'+Ext.BLANK_IMAGE_URL+'" style="float:right;cursor:default" class="x-grid-icon x-grid-icon-info" data-qtip="'+Ext.String.htmlEncode(Ext.String.htmlEncode(description))+'"/>' + '<span style="cursor:default" data-qtip="'+Ext.String.htmlEncode(Ext.String.htmlEncode(description))+'">' : '') + me.getNameHtml(
+                    Ext.String.htmlEncode(record.get('name')),
+                    current && (current.value || Ext.Object.isEmpty(def)) ? current.scope : def.scope,
+                    parseInt(locked.flagFinal) === 1
+                ) + (description ? '</span>' : '');
+            }
+        }, {
+            text: 'Value',
+            flex: 0.65,
+            sortable: false,
+            renderer: function (value, meta, record) {
+                var me = this;
+
+                var current = record.get('current') || {};
+                var def = record.get('default') || {};
+                var locked = record.get('locked') || {};
+                var currentValue = current.value;
+
+                return me.getValueHtml(
+                    Ext.String.htmlEncode(currentValue || def.value || ''),
+                    me.getValueColor(currentValue)
+                );
+            }
+        }, {
+            text: 'Flags',
+            width: 120,
+            sortable: false,
+            align: 'center',
+            renderer: function (value, meta, record) {
+                var me = this;
+
+                var current = record.get('current') || {};
+                var locked = record.get('locked') || {};
+
+                return me.getFlagsHtml(
+                    parseInt(current.flagFinal) === 1 || parseInt(locked.flagFinal) === 1,
+                    current.flagRequired || locked.flagRequired,
+                    parseInt(current.flagHidden) === 1 || parseInt(locked.flagHidden) === 1
+                );
+            }
         }]
     }, {
         xtype: 'form',
@@ -1626,22 +1486,44 @@ Ext.define('Scalr.ui.VariableField', {
 
         setVariableFormat: function (format, readOnly) {
             var me = this;
+            var formatTypeField = me.down('[name=formatType]');
+            var formatField = me.down('[name=format]');
 
-            me.down('[name=format]').
-                setValue(format).
-                setDisabled(readOnly).
-                validate();
+            // silent = true to prevent recursive call form.setValue func
+            formatTypeField[readOnly ? 'disable' : 'enable'](true);
+            if (format === 'json') {
+                formatField.
+                    setDisabled(readOnly).
+                    validate();
+
+                formatTypeField.setValue('json');
+            } else {
+                formatField.
+                    setValue(format).
+                    setDisabled(readOnly).
+                    validate();
+
+                formatTypeField.setValue('');
+            }
 
             return me;
         },
 
         setVariableValidator: function (validator, readOnly) {
             var me = this;
+            var formatTypeField = me.down('[name=formatType]');
+            var validatorField = me.down('[name=validator]');
 
-            me.down('[name=validator]').
-                setValue(validator).
-                setDisabled(readOnly).
-                validate();
+            if (formatTypeField.getValue() === 'json') {
+                validatorField.
+                    setDisabled(true).
+                    validate();
+            } else {
+                validatorField.
+                    setValue(validator).
+                    setDisabled(readOnly).
+                    validate();
+            }
 
             return me;
         },
@@ -1729,6 +1611,7 @@ Ext.define('Scalr.ui.VariableField', {
             me.down('[name=description]').setReadOnly(enabled);
 
             if (enabled) {
+                me.down('[name=formatType]').disable();
                 me.down('[name=format]').disable();
                 me.down('[name=validator]').disable();
 
@@ -1991,8 +1874,7 @@ Ext.define('Scalr.ui.VariableField', {
 
             if (!Ext.isEmpty(record)) {
                 var locked = record.get('locked');
-                var readOnly = !Ext.Object.isEmpty(record.get('default')) ||
-                    !Ext.Object.isEmpty(locked);
+                var readOnly = !Ext.Object.isEmpty(record.get('default')) || !Ext.Object.isEmpty(locked);
                 var current = record.get('current');
                 var oldCategory = (readOnly ? locked.category : current.category) || '';
 
@@ -2014,14 +1896,6 @@ Ext.define('Scalr.ui.VariableField', {
                     var variableField = me.getVariableField();
                     variableField.fireEvent('datachanged', variableField, record);
                 }
-
-                /*var categoryField = me.down('#category');
-
-                if (categoryField.editable) {
-                    categoryField.setHideTrigger(
-                        categoryField.getStore().getCount() === 0
-                    );
-                }*/
             }
 
             return me;
@@ -2298,21 +2172,6 @@ Ext.define('Scalr.ui.VariableField', {
                 fieldLabel: 'Category',
                 itemId: 'category',
                 name: 'category',
-                store: {
-                    type: 'array',
-                    fields: [{
-                        name: 'category',
-                        convert: function (value) {
-                            return Ext.String.capitalize(value.toLowerCase());
-                        }
-                    }],
-                    filters: [{
-                        id: 'excludeScalrUiDefaults',
-                        filterFn: function (record) {
-                            return record.get('category') !== 'Scalr_ui_defaults';
-                        }
-                    }],
-                },
                 valueField: 'category',
                 displayField: 'category',
                 queryMode: 'local',
@@ -2322,24 +2181,51 @@ Ext.define('Scalr.ui.VariableField', {
                 isFormField: false,
                 disabled: true,
                 hideInputOnReadOnly: true,
-                /*vtype: 'rolename',
-                vtypeText: 'Category should start and end with letter or number and contain only letters, numbers and dashes.',
-                minLength: 2,
-                minLengthText: 'Category must be a minimum of 2 characters.',
-                maxLength: 32,
-                maxLengthText: 'Category must be a maximum of 32 characters.',*/
+                store: {
+                    type: 'array',
+                    fields: [{
+                        name: 'category',
+                        type: 'string'
+                    }],
+                    proxy: {
+                        reader: {
+                            transform: function (data) {
+                                return Ext.Array.map(data, function (item) {
+                                    return [item];
+                                });
+                            }
+                        }
+                    },
+                    filters: [{
+                        filterFn: function (record) {
+                            var category = record.get('category');
+
+                            return category !== '' && category !== 'scalr_ui_defaults';
+                        }
+                    }]
+                },
                 displayTpl: [
                     '<tpl for=".">',
-                        '<tpl if="values.category === \'Scalr_ui_defaults\'">',
+                        '<tpl if="values.category === this.scalrDefaultsCategoryName">',
                             'SCALR_UI_DEFAULTS',
                         '<tpl else>',
-                            '{[Ext.String.capitalize(values.category.toLowerCase())]}',
+                            '{[Ext.String.capitalize(values.category)]}',
                         '</tpl>',
-                    '</tpl>'
+                    '</tpl>', {
+                        scalrDefaultsCategoryName: 'scalr_ui_defaults'
+                    }
                 ],
                 listConfig: {
+                    cls: 'x-boundlist-alt',
                     deferEmptyText: false,
-                    emptyText: '<div style="margin:8px;font-style:italic;color:#999">You have no categories created yet</div>'
+                    emptyText: '<div style="margin: 8px; font-style: italic; color: #999;">You have no categories created yet</div>',
+                    tpl: [
+                        '<tpl for=".">',
+                            '<div class="x-boundlist-item" style="height: auto; width: auto;">',
+                                '{[Ext.String.capitalize(values.category)]}',
+                            '</div>',
+                        '</tpl>'
+                    ]
                 },
                 validator: function (value) {
                     var me = this;
@@ -2364,24 +2250,16 @@ Ext.define('Scalr.ui.VariableField', {
                     },
                     select: function (me, record) {
                         var value = me.getValue();
-                        me.up('form').applyCategory(
-                            value,
+
+                        me.up('form').applyCategory(value,
                             !me.isValid() ? me.getErrors(value) : true
                         );
                     },
                     blur: function (me) {
                         if (!me.readOnly) {
-                            var value = me.getRawValue();
-                            var record = me.getStore().findRecord('category', value, 0, false, false, true);
+                            var value = me.getRawValue().toLowerCase();
 
-                            value = !Ext.isEmpty(record)
-                                ? record.get('category')
-                                : Ext.String.capitalize(value.toLowerCase());
-
-                            me.setRawValue(value);
-
-                            me.up('form').applyCategory(
-                                value,
+                            me.up('form').applyCategory(value,
                                 !me.isValid() ? me.getErrors(value) : true
                             );
                         }
@@ -2566,6 +2444,7 @@ Ext.define('Scalr.ui.VariableField', {
                 }]
             }, {
                 xtype: 'textarea',
+                plugins: [{ ptype: 'expandeditor' }],
                 name: 'value',
                 flex: 1,
                 width: '100%',
@@ -2653,40 +2532,102 @@ Ext.define('Scalr.ui.VariableField', {
                 disabled: true
             },
             items: [{
-                xtype: 'textfield',
-                name: 'format',
+                xtype: 'fieldcontainer',
                 fieldLabel: 'Format',
-                style: 'padding: 0 6px 0 0',
-                isFormField: false,
-                isBrowserFirefox: Ext.browser.is('firefox'),
-                validator: function (value) {
-                    var test = value.match(/\%/g);
+                layout: 'hbox',
+                disabled: false,
+                items: [{
+                    xtype: 'cyclealt',
+                    name: 'formatType',
+                    flex: 1,
+                    changeHandler: function (me, menuItem) {
+                        if (me.disabled) {
+                            return;
+                        }
 
-                    if (!value || (test && test.length === 1)) {
-                        return true;
-                    }
+                        var format = me.getValue();
+                        var form = this.up('form');
+                        var current = form.variable.data.current || {};
 
-                    return 'Format isn\'t valid.';
-                },
-                listeners: {
-                    focus: function (me) {
-                        if (me.isBrowserFirefox) {
-                            me.resumeEvent('blur');
+                        // prevent any actions if format is equal in active record and current button
+                        // because format already set in setVariableFormat
+                        if (current.format == format) {
+                            return;
+                        }
+
+                        var fieldset = this.up('fieldset');
+                        var formatField = fieldset.down('[name=format]');
+                        var validatorField = fieldset.down('[name=validator]');
+
+                        if (format === 'json') {
+                            formatField.setValue('').disable();
+                            validatorField.disable();
+
+                            if (!Ext.isEmpty( validatorField.getValue() )) {
+                                validatorField.setValue('');
+                                form.applyValidator('', '', true)
+                                    .setValidationError('value', true)
+                                    .down('[name=value]').clearInvalid();
+                            }
+
+                            form.applyFormat('json', true);
+                        }
+
+                        if (format === '') {
+                            formatField.enable();
+                            validatorField.enable();
+
+                            form.applyFormat(formatField.getValue(), true);
                         }
                     },
-                    blur: function (me) {
-                        if (me.isBrowserFirefox) {
-                            me.suspendEvent('blur');
+                    menu: {
+                        items: [{
+                            text: 'JSON',
+                            value: 'json',
+                        },{
+                            text: 'CUSTOM',
+                            value: '',
+                        }]
+                    }
+                },{
+                    xtype: 'textfield',
+                    name: 'format',
+                    style: {
+                        padding: '0 6px 0 0',
+                        marginLeft: '12px'
+                    },
+                    flex: 1,
+                    isFormField: false,
+                    isBrowserFirefox: Ext.browser.is('firefox'),
+                    validator: function (value) {
+                        var test = value.match(/\%/g);
+
+                        if (!value || (test && test.length === 1)) {
+                            return true;
                         }
 
-                        var value = me.getValue();
+                        return 'Format isn\'t valid.';
+                    },
+                    listeners: {
+                        focus: function (me) {
+                            if (me.isBrowserFirefox) {
+                                me.resumeEvent('blur');
+                            }
+                        },
+                        blur: function (me) {
+                            if (me.isBrowserFirefox) {
+                                me.suspendEvent('blur');
+                            }
 
-                        me.up('form').applyFormat(
-                            value,
-                            !me.isValid() ? me.getErrors(value) : true
-                        );
+                            var value = me.getValue();
+
+                            me.up('form').applyFormat(
+                                value,
+                                !me.isValid() ? me.getErrors(value) : true
+                            );
+                        }
                     }
-                }
+                }]
             }, {
                 xtype: 'validatorfield',
                 name: 'validator',

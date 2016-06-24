@@ -27,7 +27,7 @@ class AwsTest extends AwsTestCase
     {
         parent::setUp();
 
-        if (!$this->isSkipFunctionalTests()) {
+        if (!static::isSkippedFunctionalTest()) {
             $this->aws = $this->getEnvironment()->aws(self::REGION);
             $this->assertInstanceOf(self::CLASS_AWS, $this->aws);
         }

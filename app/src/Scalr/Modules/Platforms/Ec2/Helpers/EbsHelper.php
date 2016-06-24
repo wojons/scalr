@@ -3,8 +3,9 @@
 namespace Scalr\Modules\Platforms\Ec2\Helpers;
 
 use Scalr\Model\Entity;
-use \DBRole;
-use \DBFarmRole;
+use DBRole;
+use DBFarmRole;
+use Scalr\Service\Aws\Ec2\DataType\CreateVolumeRequestData;
 
 class EbsHelper
 {
@@ -33,7 +34,13 @@ class EbsHelper
             {
                 if (!$db->GetRow("SELECT id FROM ec2_ebs WHERE server_id=? AND ismanual='0' LIMIT 1", array($DBServer->serverId)))
                 {
-                    if (in_array($DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_TYPE), array('standard', 'io1', 'gp2')))
+                    if (in_array($DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_TYPE), [
+                        CreateVolumeRequestData::VOLUME_TYPE_IO1,
+                        CreateVolumeRequestData::VOLUME_TYPE_STANDARD,
+                        CreateVolumeRequestData::VOLUME_TYPE_GP2,
+                        CreateVolumeRequestData::VOLUME_TYPE_ST1,
+                        CreateVolumeRequestData::VOLUME_TYPE_SC1
+                    ]))
                         $type = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_EBS_TYPE);
                     else
                         $type = 'standard';

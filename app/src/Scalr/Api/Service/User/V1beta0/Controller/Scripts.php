@@ -11,11 +11,13 @@ use Scalr\Api\Rest\Http\Request;
 use Scalr\Api\Service\User\V1beta0\Adapter\ScriptAdapter;
 use Scalr\DataType\ScopeInterface;
 use Scalr\Exception\ModelException;
+use Scalr\Exception\ObjectInUseException;
 use Scalr\Model\Entity\Script;
 use Scalr\UI\Request\Validator;
+use Scalr_Exception_Core;
 
 /**
- * User/Version-1beta0/Scripts API Controller
+ * User/Scripts API Controller
  *
  * @author N.V.
  */
@@ -103,6 +105,9 @@ class Scripts extends ApiController
         //Pre validates the request object
         $scriptAdapter->validateObject($object, Request::METHOD_POST);
 
+        //Read only property. It is needed before toEntity() call to set envId and accountId properties properly
+        $object->scope = $this->getScope();
+
         $script = $scriptAdapter->toEntity($object);
 
         $script->id = null;
@@ -174,7 +179,11 @@ class Scripts extends ApiController
 
         $script = $this->getScript($scriptId, true);
 
-        $script->delete();
+        try {
+            $script->delete();
+        } catch (ObjectInUseException $e) {
+            throw new ApiErrorException(409, ErrorMessage::ERR_OBJECT_IN_USE, $e->getMessage(), $e->getCode(), $e);
+        }
 
         return $this->result(null);
     }

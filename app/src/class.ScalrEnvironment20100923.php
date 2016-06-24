@@ -41,41 +41,8 @@ class ScalrEnvironment20100923 extends ScalrEnvironment20090305
     {
         $ResponseDOMDocument = $this->CreateResponse();
 
-        $dbFarmRole = $this->DBServer->GetFarmRoleObject();
-
-        $dbRole = $dbFarmRole->GetRoleObject();
-
-        if ($dbFarmRole->GetSetting(Entity\FarmRoleSetting::SYSTEM_NEW_PRESETS_USED) != 1) {
-            foreach ($dbRole->getBehaviors() as $behavior)
-            {
-                $settingsNode = $ResponseDOMDocument->createElement("settings");
-
-                $serviceConfiguration = $dbFarmRole->GetServiceConfiguration($behavior);
-                if ($serviceConfiguration instanceOf Scalr_ServiceConfiguration)
-                {
-                    $settingsNode->setAttribute("preset-name", $serviceConfiguration->name);
-                    $settingsNode->setAttribute("restart-service", 1);
-                    $settingsNode->setAttribute("behaviour", $behavior);
-                    foreach ($serviceConfiguration->getParameters() as $param)
-                    {
-                        $setting = $ResponseDOMDocument->createElement("setting", $param->getValue());
-                        $setting->setAttribute("key", $param->getName());
-                        $settingsNode->appendChild($setting);
-                    }
-                }
-                else
-                {
-                    $settingsNode->setAttribute("preset-name", "default");
-                    $settingsNode->setAttribute("restart-service", "0");
-                    $settingsNode->setAttribute("behaviour", $behavior);
-                }
-
-                $ResponseDOMDocument->documentElement->appendChild($settingsNode);
-            }
-        } else {
-            $node = $ResponseDOMDocument->createElement("newPresetsUsed", 1);
-            $ResponseDOMDocument->documentElement->appendChild($node);
-        }
+        $node = $ResponseDOMDocument->createElement("newPresetsUsed", 1);
+        $ResponseDOMDocument->documentElement->appendChild($node);
 
         return $ResponseDOMDocument;
     }

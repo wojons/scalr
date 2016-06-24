@@ -125,9 +125,8 @@ class OpenstackCloudCredentialsAdapter extends CloudCredentialsAdapter
             /* @var $config Yaml */
             $config = $this->controller->getContainer()->config;
 
-            if (isset($platform) &&
-                $config->defined("scalr.{$platform}.use_proxy") &&
-                $config("scalr.{$platform}.use_proxy") &&
+            if ($config->defined("scalr.{$entity->cloud}.use_proxy") &&
+                $config("scalr.{$entity->cloud}.use_proxy") &&
                 in_array($config('scalr.connections.proxy.use_on'), ['both', 'scalr'])) {
                 $proxySettings = $config('scalr.connections.proxy');
             } else {

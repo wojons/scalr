@@ -2,14 +2,20 @@
 namespace Scalr\Service\Aws\DataType;
 
 use Scalr\Service\Aws\AbstractDataType;
+use Iterator;
+use Countable;
+use ArrayAccess;
 
 /**
  * List data type
  *
+ * @property string requestId
+ *           The identifier of the Request associated with the list to set
+ *
  * @author    Vitaliy Demidov   <vitaliy@scalr.com>
  * @since     23.09.2012
  */
-class ListDataType extends AbstractDataType implements \Iterator, \Countable, \ArrayAccess
+class ListDataType extends AbstractDataType implements Iterator, Countable, ArrayAccess
 {
 
     /**

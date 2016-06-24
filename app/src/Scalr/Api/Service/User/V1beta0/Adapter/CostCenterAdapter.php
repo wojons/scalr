@@ -60,8 +60,11 @@ class CostCenterAdapter extends ApiEntityAdapter
                 $property = new CostCentrePropertyEntity();
 
                 return [
-                    AbstractEntity::STMT_FROM => $cc->table() . " LEFT JOIN " . $property->table() . " ON {$property->columnCcId} = {$cc->columnCcId}",
-                    AbstractEntity::STMT_WHERE => "{$property->columnName} = '" . CostCentrePropertyEntity::NAME_BILLING_CODE . "' AND {$property->columnValue} = " . $property->qstr('value', $from->billingCode)
+                    AbstractEntity::STMT_FROM => "
+                        JOIN  {$property->table()}  ON {$property->columnCcId} = {$cc->columnCcId}
+                            AND {$property->columnName} = " . $property->qstr('name', CostCentrePropertyEntity::NAME_BILLING_CODE) . "
+                    ",
+                    AbstractEntity::STMT_WHERE => "{$property->columnValue} = " . $property->qstr('value', $from->billingCode)
                 ];
         }
     }

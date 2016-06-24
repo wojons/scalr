@@ -3,19 +3,19 @@
 namespace Scalr\Modules\Platforms\Cloudstack\Helpers;
 
 use Scalr\Modules\PlatformFactory;
-use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
 use Scalr\Service\CloudStack\DataType\ListIpAddressesData;
 use Scalr\Service\CloudStack\DataType\AssociateIpAddressData;
 use Scalr\Service\CloudStack\CloudStack;
 use Scalr\Model\Entity;
-use \DBFarm;
-use \DBFarmRole;
+use DBFarm;
+use DBFarmRole;
+use Exception;
 
 class CloudstackHelper
 {
     public static function farmSave(DBFarm $DBFarm, array $roles)
     {
-        
+
     }
 
     public static function getSharedIP(\DBServer $dbServer)
@@ -38,7 +38,7 @@ class CloudstackHelper
                     if (!$useStaticNat && $networkId != 'SCALR_MANUAL') {
                         $sharedIp = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::CLOUDSTACK_SHARED_IP_ADDRESS);
                         if (!$sharedIp) {
-                            $dbServer->GetEnvironmentObject()->cloudCredentials($dbServer->platform)->properties[
+                            $dbServer->GetEnvironmentObject()->keychain($dbServer->platform)->properties[
                                 Entity\CloudCredentialsProperty::CLOUDSTACK_SHARED_IP . ".{$dbServer->GetProperty(\CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION)}"
                             ];
                         } else {
@@ -48,16 +48,16 @@ class CloudstackHelper
                 }
             }
         }
-        
+
         return $remoteIp;
     }
-    
+
     /**
      * Associates IP Address to the server
      *
      * @param   \DBServer           $dbServer  \DBServer object
      * @param   string             $ipAddress Public IP address to associate with server.
-     * @throws  \Exception
+     * @throws  Exception
      */
     private static function associateIpAddress(\DBServer $dbServer, $ipAddress, $allocationId = null)
     {
@@ -79,7 +79,7 @@ class CloudstackHelper
                     $cs->firewall->disableStaticNat($info->id);
                     \Scalr::getContainer()->logger('Cloudstack_Helper')->warn("[STATIC_NAT] Removed old IP static NAT from IP: {$info->id}");
                 }
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                 \Scalr::getContainer()->logger('Cloudstack_Helper')->error("[STATIC_NAT] Unable to disable old static NAT: {$e->getMessage()}");
             }
         }
@@ -105,34 +105,34 @@ class CloudstackHelper
                             $ips = $platform->GetServerIPAddresses($oldDbServer);
                             $oldDbServer->remoteIp = $ips['remoteIp'];
                             $oldDbServer->save();
-                        } catch (\Exception $e) {}
+                        } catch (Exception $e) {}
 
                         break;
                     }
                     sleep(2);
                 }
 
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                 \Scalr::getContainer()->logger('Cloudstack_Helper')->error("[STATIC_NAT] Unable to disable static NAT: {$e->getMessage()}");
             }
         }
 
         $assignRetries = 0;
+
         while (true) {
             try {
                 $assignRetries++;
                 $cs->firewall->enableStaticNat(array('ipaddressid' => $allocationId, 'virtualmachineid' => $dbServer->GetCloudServerID()));
                 $retval = true;
                 break;
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                 if (!stristr($e->getMessage(), "already assigned to antoher vm") || $assignRetries == 3) {
                     \Scalr::getContainer()->logger('Cloudstack_Helper')->error("[STATIC_NAT] Unable to enable static NAT ({$assignRetries}): {$e->getMessage()}");
-                    throw new \Exception($e->getMessage());
+                    throw new Exception($e->getMessage());
                 } else {
                     sleep(1);
                 }
             }
-            //break;
         }
 
         return $retval;
@@ -159,7 +159,7 @@ class CloudstackHelper
             else {
                 return false;
             }
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return false;
         }
     }
@@ -176,12 +176,14 @@ class CloudstackHelper
             }
             $cs = $dbFarm->GetEnvironmentObject()->cloudstack($dbFarmRole->Platform);
 
-        } catch (\Exception $e) {
-            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(
-            new \FarmLogMessage($dbServer->farmId, sprintf(
-                _("Cannot allocate elastic ip address for instance %s on farm %s (0)"),
-                $dbServer->serverId, isset($dbFarm->Name) ? $dbFarm->Name : ''
-            )));
+        } catch (Exception $e) {
+            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(new \FarmLogMessage(
+                $dbServer,
+                sprintf(_("Cannot allocate elastic ip address for instance %s on farm %s (0)"),
+                    !empty($dbServer->serverId) ? $dbServer->serverId : null,
+                    !empty($dbFarm->Name) ? $dbFarm->Name : null
+                )
+            ));
 
             return false;
         }
@@ -200,9 +202,12 @@ class CloudstackHelper
 
         if ($ip['ipaddress']) {
             if (!self::checkStaticNatIp($ip['ipaddress'], $cs)) {
-                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->warn(new \FarmLogMessage($dbServer->farmId, sprintf(
-                    _("Static NAT IP '%s' does not belong to you. Allocating new one."), $ip['ipaddress']
-                )));
+                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->warn(new \FarmLogMessage(
+                    $dbServer,
+                    sprintf(_("Static NAT IP '%s' does not belong to you. Allocating new one."),
+                        !empty($ip['ipaddress']) ? $ip['ipaddress'] : null
+                    )
+                ));
 
                 $db->Execute("DELETE FROM elastic_ips WHERE ipaddress=?", array($ip['ipaddress']));
                 $ip = false;
@@ -234,7 +239,7 @@ class CloudstackHelper
                             $ipInfo = count($ipInfo) > 0 ? $ipInfo[0] : null;
 
                             if (!$ipInfo) {
-                                throw new \Exception("Cannot allocate IP address: listPublicIpAddresses -> failed");
+                                throw new Exception("Cannot allocate IP address: listPublicIpAddresses -> failed");
                             }
                             if ($ipInfo->state == 'Allocated') {
                                 break;
@@ -243,20 +248,22 @@ class CloudstackHelper
                                 sleep(1);
                             }
                             else {
-                                throw new \Exception("Cannot allocate IP address: ipAddress->state = {$ipInfo->state}");
+                                throw new Exception("Cannot allocate IP address: ipAddress->state = {$ipInfo->state}");
                             }
                         }
                     }
                     else {
-                        throw new \Exception("Cannot allocate IP address: associateIpAddress -> failed");
+                        throw new Exception("Cannot allocate IP address: associateIpAddress -> failed");
                     }
 
-                } catch (\Exception $e) {
-                    \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(new \FarmLogMessage($dbServer->farmId, sprintf(
-                        _("Cannot allocate new elastic ip for instance '%s': %s"),
-                        $dbServer->serverId,
-                        $e->getMessage()
-                    )));
+                } catch (Exception $e) {
+                    \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(new \FarmLogMessage(
+                        $dbServer,
+                        sprintf(_("Cannot allocate new elastic ip for instance '%s': %s"),
+                            !empty($dbServer->serverId) ? $dbServer->serverId : null,
+                            $e->getMessage()
+                        )
+                    ));
                     return false;
                 }
 
@@ -285,9 +292,7 @@ class CloudstackHelper
                     'allocation_id' => $ipId
                 );
 
-                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(
-                    new \FarmLogMessage($dbServer->farmId, sprintf(_("Allocated new IP: %s"), $ip['ipaddress']))
-                );
+                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(new \FarmLogMessage($dbServer, sprintf(_("Allocated new IP: %s"), $ip['ipaddress'])));
                 // Waiting...
                 sleep(5);
             } else
@@ -306,11 +311,13 @@ class CloudstackHelper
                 $dbServer, $ip['ipaddress'], $dbServer->localIp
             ));
         } else {
-            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(
-            new \FarmLogMessage($dbServer->farmId, sprintf(
-                _("Cannot allocate elastic ip address for instance %s on farm %s (2)"),
-                $dbServer->serverId, $dbFarm->Name
-            )));
+            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(new \FarmLogMessage(
+                $dbServer,
+                sprintf(_("Cannot allocate elastic ip address for instance %s on farm %s (2)"),
+                    !empty($dbServer->serverId) ? $dbServer->serverId : null,
+                    !empty($dbFarm->Name) ? $dbFarm->Name : null
+                )
+            ));
             return false;
         }
 
@@ -346,7 +353,7 @@ class CloudstackHelper
             while ($eip = $eips->FetchRow()) {
                 try {
                     $cs->disassociateIpAddress($eip['allocation_id']);
-                } catch (\Exception $e) { }
+                } catch (Exception $e) { }
             }
 
             $db->Execute("DELETE FROM elastic_ips WHERE farm_roleid = ?", array(
@@ -380,7 +387,7 @@ class CloudstackHelper
                         $dbFarmRole->ID,
                         $serverIndex
                     ));
-                } catch (\Exception $e) {}
+                } catch (Exception $e) {}
 
                 // Allocate new IP if needed
                 if ($ipAddress == "" || $ipAddress == '0.0.0.0') {
@@ -434,8 +441,6 @@ class CloudstackHelper
                             $ipAddress
                         ));
 
-                        $update = false;
-
                         if ($dbServer->remoteIp != $ipAddress) {
                             if ($dbServer && $dbServer->status == \SERVER_STATUS::RUNNING) {
                                 $fireEvent = self::associateIpAddress($dbServer, $ipAddress, $ipInfo['allocation_id']);
@@ -446,7 +451,8 @@ class CloudstackHelper
                             $event = new \IPAddressChangedEvent($dbServer, $ipAddress, $dbServer->localIp);
                             \Scalr::FireEvent($dbServer->farmId, $event);
                         }
-                    } catch (\Exception $e) {}
+                    } catch (Exception $e) {
+                    }
                 }
             }
         }

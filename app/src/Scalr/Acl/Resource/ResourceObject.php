@@ -2,6 +2,7 @@
 
 namespace Scalr\Acl\Resource;
 
+use Scalr\Acl\Acl;
 use Scalr\Acl\Exception;
 
 /**

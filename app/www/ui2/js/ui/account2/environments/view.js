@@ -114,9 +114,12 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                             '<td width="120">',
                                 '<span class="x-dataview-tab-param-value">{id}</span>',
                             '</td>',
-                            '<td colspan="2">',
+                            '<td>',
                                 '<div class="x-form-item-label-default x-dataview-tab-status-{[values.status == "Active" ? "active" : "inactive"]}">{[values.status == \'Active\' ? \'Managed\' : \'Suspended\']}</div>',
                             '</td>',
+                            '<tpl if="defaultPriority &gt; 0"><td>',
+                                '<div class="x-form-item-label-default" style="color:#249FDB">Default</div>',
+                            '</td></tpl>',
                         '</tr>',
                         '<tr>',
                             '<td>',
@@ -220,11 +223,6 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                     Scalr.flags['authMode'] == 'ldap' ? 'Accessible by LDAP groups' : 'Team access' + (!isNewRecord && Scalr.utils.canManageAcl() ? ' (<a href="#/account/environments/accessmap?envId=' + record.get('id') + '">view summary</a>)' : '')
                 , false);
 
-                var rackspaceBtn = this.down('button[platform="rackspace"]');
-                if (rackspaceBtn) {
-                    rackspaceBtn.setVisible(Ext.Array.contains(record.get('platforms') || [], 'rackspace'));
-                }
-
                 if (moduleParams['ccs']) {
                     var ccs = moduleParams['ccs'];
                     if (!isNewRecord && moduleParams['unassignedCcs'][record.get('id')]) {
@@ -287,41 +285,97 @@ Scalr.regPage('Scalr.ui.account2.environments.view', function (loadParams, modul
                         value: 'Inactive'
                     }]
                 }]
-            },{
-                xtype: 'combo',
-                store: {
-                    fields: [ 'ccId', 'name' ],
-                    proxy: 'object'
-                },
-                anchor: '50%',
-                maxWidth: 370,
-                margin: '12 20 0 0',
-                editable: false,
-                autoSetSingleValue: true,
-                hidden: !Scalr.flags['analyticsEnabled'],
-                allowBlank: !Scalr.flags['analyticsEnabled'],
-                valueField: 'ccId',
-                displayField: 'name',
-                fieldLabel: 'Cost center',
-                labelWidth: 110,
-                name: 'ccId',
-                readOnly: !isAccountOwner && !isAccountSuperAdmin,
-                listeners: {
-                    beforeselect: function(field, newRecord) {
-                        var text, oldName,
-                            isNewEnvironment = !field.up('form').getForm().getRecord().store,
-                            oldRecord = field.findRecordByValue(field.getValue());
-                        if (!isNewEnvironment && oldRecord && field.getPicker().isVisible()) {
-                            oldName = oldRecord ? oldRecord.get('name') : field.getValue()
-                            text = 'Switching to <b>' + newRecord.get('name') + '</b> will prevent new Farms in <b>' + field.up('form').down('[name="name"]').getValue() +
-                                   '</b> from being associated with any Projects in <b>' + oldName + '</b>. This will not automatically affect any existing farm.<br/>' +
-                                   'However, users will need to manually change the Project associated with existing Farms next time any Farm is edited.<br/>' +
-                                   'Please ensure that at least 1 Project exists in <b>' + newRecord.get('name') + '</b>, otherwise, users will not be able to save their Farms.'
-                            Scalr.message.WarningTip(text, field.inputEl);
+            }, {
+                xtype: 'container',
+                margin: '12 0 0 0',
+                layout: 'hbox',
+                items: [{
+                    xtype: 'combo',
+                    store: {
+                        fields: [ 'ccId', 'name' ],
+                        proxy: 'object'
+                    },
+                    anchor: '50%',
+                    width: 370,
+                    editable: false,
+                    autoSetSingleValue: true,
+                    hidden: !Scalr.flags['analyticsEnabled'],
+                    allowBlank: !Scalr.flags['analyticsEnabled'],
+                    valueField: 'ccId',
+                    displayField: 'name',
+                    fieldLabel: 'Cost center',
+                    labelWidth: 110,
+                    name: 'ccId',
+                    readOnly: !isAccountOwner && !isAccountSuperAdmin,
+                    listeners: {
+                        beforeselect: function(field, newRecord) {
+                            var text, oldName,
+                                isNewEnvironment = !field.up('form').getForm().getRecord().store,
+                                oldRecord = field.findRecordByValue(field.getValue());
+                            if (!isNewEnvironment && oldRecord && field.getPicker().isVisible()) {
+                                oldName = oldRecord ? oldRecord.get('name') : field.getValue()
+                                text = 'Switching to <b>' + newRecord.get('name') + '</b> will prevent new Farms in <b>' + field.up('form').down('[name="name"]').getValue() +
+                                    '</b> from being associated with any Projects in <b>' + oldName + '</b>. This will not automatically affect any existing farm.<br/>' +
+                                    'However, users will need to manually change the Project associated with existing Farms next time any Farm is edited.<br/>' +
+                                    'Please ensure that at least 1 Project exists in <b>' + newRecord.get('name') + '</b>, otherwise, users will not be able to save their Farms.'
+                                Scalr.message.WarningTip(text, field.inputEl);
+                            }
                         }
                     }
-                }
+                }, {
+                    xtype: 'buttongroupfield',
+                    fieldLabel: 'Default',
+                    readOnly: !Scalr.utils.canManageAcl(),
+                    margin: '0 0 0 40',
+                    width: 263,
+                    labelWidth: 150,
+                    name: 'isDefault',
+                    itemId: 'isDefault',
+                    value: false,
+                    layout: 'hbox',
+                    defaults: {
+                        maxWidth: 120,
+                        flex: 1
+                    },
+                    listeners: {
+                        change: function (me, newValue) {
+                            var defaultPriorityField = form.down('#defaultPriority');
+                            var defaultPriority = defaultPriorityField.getValue();
 
+                            if (newValue) {
+                                if (defaultPriority < 1) {
+                                    defaultPriority = 1;
+                                }
+                            } else {
+                                defaultPriority = 0;
+                            }
+
+                            defaultPriorityField.setValue(defaultPriority);
+                        }
+                    },
+                    items: [{
+                        text: 'Yes',
+                        value: true
+                    }, {
+                        text: 'No',
+                        value: false
+                    }]
+                }, {
+                    xtype: 'numberfield',
+                    name: 'defaultPriority',
+                    readOnly: !Scalr.utils.canManageAcl(),
+                    itemId: 'defaultPriority',
+                    width: 97,
+                    margin: '0 0 0 10',
+                    value: 0,
+                    maxValue: 50,
+                    minValue: 0,
+                    listeners: {
+                        change: function (me, newValue) {
+                            form.down('#isDefault').setValue(newValue > 0);
+                        }
+                    }
+                }]
             }]
 		}, {
 			xtype: 'container',

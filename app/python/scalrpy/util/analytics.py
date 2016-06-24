@@ -14,10 +14,12 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import sys
 import uuid
 import json
 import datetime
 import threading
+import pymysql.err
 
 from scalrpy.util import helper
 from scalrpy import LOG
@@ -161,7 +163,6 @@ class Analytics(object):
             assert cloud_location
             assert envs_ids
         instances_ids = list(set([str(server['instance_id']) for server in servers]))
-        instances_ids = map(str, instances_ids)
         if not instances_ids:
             return tuple()
         if url:
@@ -762,7 +763,7 @@ class Analytics(object):
             record = record.copy()
             self.set_usage_item(record)
 
-            LOG.debug('Insert record: %s' % record)
+            LOG.debug('Insert record: {}'.format(record))
 
             if record['platform'] == 'gce':
                 record['instance_id'] = record['server_id']
@@ -828,14 +829,27 @@ class Analytics(object):
                 raise
             finally:
                 self.analytics_db.autocommit(True)
-        except:
-            msg = "Unable to insert record: {}"
-            msg = msg.format(record=record)
-            helper.handle_error(message=msg)
-            raise
 
-        if callable(callback):
-            callback(record)
+            if callable(callback):
+                callback([record])
+
+        except:
+            msg = "Unable to insert record: {}".format(record)
+
+            try:
+                # DEBUG
+                e = sys.exc_info()[1]
+                if isinstance(e, pymysql.err.IntegrityError) and e.args[0] == 1062 and record.get('record_id'):
+                    query = (
+                        "SELECT * FROM aws_billing_records "
+                        "WHERE record_id='{}'"
+                    ).format(record['record_id'])
+                    results = self.analytics_db.execute(query)
+                    msg = '{}. aws_billing_records: {}'.format(msg, results)
+            except:
+                pass
+
+            helper.handle_error(message=msg)
 
     def remove_existing_records_with_record_id(self, records):
         records_ids = [record['record_id'] for record in records if record.get('record_id')]
@@ -869,10 +883,15 @@ class Analytics(object):
                     records_with_record_id.append(record)
                 record['date'] = record['dtime'].date()
 
-            # remove dulplicate records
-            records = {'%s;%s' % (r['usage_id'], r['server_id']): r for r in records}.values()
+            # remove dulplicate records from cost_distr_type_1_records
+            cost_distr_type_1_records = {
+                    '%s;%s' % (record['usage_id'], record['server_id']): record
+                    for record in cost_distr_type_1_records
+            }.values()
+            records = cost_distr_type_1_records + [record for record in records
+                                                   if record['cost_distr_type'] != 1]
 
-            LOG.debug('Insert {} records'.format(len(records)))
+            LOG.debug('Insert records: {}'.format(records))
 
             with self.lock:
                 try:
@@ -939,7 +958,11 @@ class Analytics(object):
             if callable(callback):
                 callback(records)
         except:
-            helper.handle_error('Unable to insert records')
+            msg = 'Unable to insert records: {}'.format(records)
+            helper.handle_error(message=msg)
+            # DEBUG
+            for record in records:
+                self.insert_record(record, callback=callback)
 
     def _find_subject_id(self, record):
         nm_subjects_h = NM_subjects_h(record)
@@ -1065,12 +1088,12 @@ class Analytics(object):
             query = Usage_h(record).update_query()
             self.analytics_db.execute(query, retries=1)
         except:
-            msg = 'Unable to update usage_h record: {record}'
-            msg = msg.format(record=record)
+            msg = 'Unable to update usage_h record: {}'
+            msg = msg.format(record)
             helper.handle_error(message=msg, level='error')
             raise
         if callable(callback):
-            callback(record)
+            callback([record])
 
 
 class QuartersCalendar(object):
@@ -1411,9 +1434,11 @@ class Account_tag_values(Table):
 
     @classmethod
     def insert_many_query(cls, records):
-        values = ','.join([(
-            "({account_id}, {tag_id}, {value_id})"
-        ).format(**Account_tag_values(record).format()) for record in records])
+        values = set()
+        for record in records:
+            tpl = '({account_id}, {tag_id}, {value_id})'
+            values.add(tpl.format(**Account_tag_values(record).format()))
+        values = ','.join(values)
         query = (
             "INSERT IGNORE INTO account_tag_values "
             "(account_id, tag_id, value_id) "

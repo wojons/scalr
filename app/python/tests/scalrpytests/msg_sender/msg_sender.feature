@@ -15,7 +15,7 @@ Feature: Message sender
 
         Database has servers records
             | server_id                              | farm_id | client_id | env_id | status    | index | remote_ip   |
-            | 'a0000000-0000-0000-0000-000000000001' | 1       | 1         | 1      | 'running' | 1     | '127.0.0.1' |
+            | 'a0000000-0000-0000-0000-000000000001' | 1       | 1         | 1      | 'Running' | 1     | '127.0.0.1' |
 
         Database has server_properties records
             | server_id                              | name                  | value                                                      |
@@ -26,7 +26,7 @@ Feature: Message sender
         White Rabbit starts wsgi server on port 8013
         White Rabbit waits 1 seconds
         White Rabbit starts script with options '-c ../../../tests/etc/config.yml -v DEBUG'
-        White Rabbit waits 3 seconds
+        White Rabbit waits 6 seconds
         White Rabbit stops script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         White Rabbit stops wsgi server on port 8013
 
@@ -49,7 +49,7 @@ Feature: Message sender
         
         Database has servers records
             | server_id                              | farm_id | client_id | env_id | status    | index | remote_ip   |
-            | 'a0000000-0000-0000-0000-000000000001' | 1       | 1         | 1      | 'running' | 1     | '127.0.0.1' |
+            | 'a0000000-0000-0000-0000-000000000001' | 1       | 1         | 1      | 'Running' | 1     | '127.0.0.1' |
         
         Database has server_properties records
             | server_id                              | name                  | value                                                      |
@@ -58,13 +58,13 @@ Feature: Message sender
         
         White Rabbit waits 1 seconds
         White Rabbit starts script with options '-c ../../../tests/etc/config.yml -v DEBUG'
-        White Rabbit waits 2 seconds
+        White Rabbit waits 6 seconds
         
         White Rabbit checks messages table
             | messageid                              | status | message | handle_attempts |
             | 'b0000000-0000-0000-0000-000000000001' | 0      | 'text'  | 1               |
 
-        White Rabbit waits 370 seconds
+        White Rabbit waits 360 seconds
         White Rabbit stops script with options '-c ../../../tests/etc/config.yml -v DEBUG'
         White Rabbit checks messages table
             | messageid                              | status | message | handle_attempts |
@@ -84,7 +84,7 @@ Feature: Message sender
         
         Database has servers records
             | server_id                              | farm_id | client_id | env_id | status    | index | remote_ip   |
-            | 'a0000000-0000-0000-0000-000000000001' | 1       | 1         | 1      | 'running' | 1     | '127.0.0.1' |
+            | 'a0000000-0000-0000-0000-000000000001' | 1       | 1         | 1      | 'Running' | 1     | '127.0.0.1' |
         
         Database has server_properties records
             | server_id                              | name                  | value                                                      |
@@ -132,9 +132,9 @@ Feature: Message sender
         
         Database has servers records
             | server_id                              | farm_id | farm_roleid | client_id | env_id | status    | index | remote_ip   | local_ip    | platform |
-            | 'a0000000-0000-0000-0000-000000000001' | 1       | 1           | 1         | 1      | 'running' | 1     | '127.0.0.1' | '127.0.0.1' | 'ec2'    |
-            | 'a0000000-0000-0000-0000-000000000002' | 1       | 2           | 1         | 1      | 'running' | 1     | '127.0.0.1' | '127.0.0.1' | 'gce'    |
-            | 'a0000000-0000-0000-0000-000000000003' | 1       | 3           | 1         | 1      | 'running' | 1     | NULL        | '127.0.0.1' | 'idcf'   |
+            | 'a0000000-0000-0000-0000-000000000001' | 1       | 1           | 1         | 1      | 'Running' | 1     | '127.0.0.1' | '127.0.0.1' | 'ec2'    |
+            | 'a0000000-0000-0000-0000-000000000002' | 1       | 2           | 1         | 1      | 'Running' | 1     | '127.0.0.1' | '127.0.0.1' | 'gce'    |
+            | 'a0000000-0000-0000-0000-000000000003' | 1       | 3           | 1         | 1      | 'Running' | 1     | NULL        | '127.0.0.1' | 'idcf'   |
         
         Database has server_properties records
             | server_id                              | name                  | value                                                      |
@@ -186,9 +186,9 @@ Feature: Message sender
         
         Database has servers records
             | server_id                              | farm_id | farm_roleid | client_id | env_id | status    | index | remote_ip   | local_ip    | platform |
-            | 'a0000000-0000-0000-0000-000000000001' | 1       | 1           | 1         | 1      | 'running' | 1     | NULL        | '127.0.0.1' | 'ec2'    |
-            | 'a0000000-0000-0000-0000-000000000002' | 1       | 2           | 1         | 1      | 'running' | 1     | '127.0.0.1' | '127.0.0.1' | 'gce'    |
-            | 'a0000000-0000-0000-0000-000000000003' | 1       | 3           | 1         | 1      | 'running' | 1     | NULL        | '127.0.0.1' | 'idcf'   |
+            | 'a0000000-0000-0000-0000-000000000001' | 1       | 1           | 1         | 1      | 'Running' | 1     | NULL        | '127.0.0.1' | 'ec2'    |
+            | 'a0000000-0000-0000-0000-000000000002' | 1       | 2           | 1         | 1      | 'Running' | 1     | '127.0.0.1' | '127.0.0.1' | 'gce'    |
+            | 'a0000000-0000-0000-0000-000000000003' | 1       | 3           | 1         | 1      | 'Running' | 1     | NULL        | '127.0.0.1' | 'idcf'   |
         
         Database has server_properties records
             | server_id                              | name                  | value                                                      |
@@ -242,7 +242,7 @@ Feature: Message sender
 
         Database has servers records
             | server_id                              | farm_id | client_id | env_id | status    | index | remote_ip   | local_ip    |
-            | 'a0000000-0000-0000-0000-000000000001' | 1       | 1         | 1      | 'running' | 1     | NULL        | '127.0.0.1' |
+            | 'a0000000-0000-0000-0000-000000000001' | 1       | 1         | 1      | 'Running' | 1     | NULL        | '127.0.0.1' |
 
         Database has server_properties records
             | server_id                              | name                  | value                                                      |
@@ -252,7 +252,7 @@ Feature: Message sender
         White Rabbit starts wsgi server on port 8013
         White Rabbit waits 1 seconds
         White Rabbit starts script with options '-c ../../../tests/etc/config-local.yml -v DEBUG'
-        White Rabbit waits 2 seconds
+        White Rabbit waits 6 seconds
         White Rabbit stops script with options '-c ../../../tests/etc/config-local.yml -v DEBUG'
         White Rabbit stops wsgi server on port 8013
 
@@ -269,7 +269,7 @@ Feature: Message sender
         White Rabbit drops scalr_test database
         White Rabbit creates scalr_test database
         
-        Database has 3000 messages
+        Database has 5000 messages
         
         White Rabbit starts wsgi server on port 8010
         White Rabbit starts wsgi server on port 8011
@@ -281,6 +281,12 @@ Feature: Message sender
         White Rabbit starts wsgi server on port 8017
         White Rabbit starts wsgi server on port 8018
         White Rabbit starts wsgi server on port 8019
+        White Rabbit starts wsgi server on port 8020
+        White Rabbit starts wsgi server on port 8021
+        White Rabbit starts wsgi server on port 8022
+        White Rabbit starts wsgi server on port 8023
+        White Rabbit starts wsgi server on port 8024
+        White Rabbit starts wsgi server on port 8025
         White Rabbit waits 1 seconds
         White Rabbit starts script with options '-c ../../../tests/etc/config.yml -v WARNING'
         White Rabbit waits 20 seconds
@@ -295,6 +301,12 @@ Feature: Message sender
         White Rabbit stops wsgi server on port 8017
         White Rabbit stops wsgi server on port 8018
         White Rabbit stops wsgi server on port 8019
+        White Rabbit stops wsgi server on port 8020
+        White Rabbit stops wsgi server on port 8021
+        White Rabbit stops wsgi server on port 8022
+        White Rabbit stops wsgi server on port 8023
+        White Rabbit stops wsgi server on port 8024
+        White Rabbit stops wsgi server on port 8025
         White Rabbit checks all messages were tried to send
         White Rabbit checks all messages has status 1
         

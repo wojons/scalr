@@ -6,8 +6,6 @@ use CheckFailedEvent;
 use CheckRecoveredEvent;
 use MysqlBackupCompleteEvent;
 use MysqlBackupFailEvent;
-use MySQLReplicationFailEvent;
-use MySQLReplicationRecoveredEvent;
 use NewMysqlMasterUpEvent;
 use HostInitFailedEvent;
 use InstanceLaunchFailedEvent;
@@ -26,10 +24,6 @@ use IPAddressChangedEvent;
 use EBSVolumeMountedEvent;
 use BeforeInstanceLaunchEvent;
 use BeforeHostTerminateEvent;
-use DNSZoneUpdatedEvent;
-use RoleOptionChangedEvent;
-use EBSVolumeAttachedEvent;
-use ServiceConfigurationPresetChangedEvent;
 use BeforeHostUpEvent;
 
 interface EventObserverInterface
@@ -165,26 +159,6 @@ interface EventObserverInterface
      * @param IPAddressChangedEvent $event
      */
     public function OnIPAddressChanged(IPAddressChangedEvent $event);
-
-    /**
-     * Triggers when replication was broken on slave
-     *
-     * @param MySQLReplicationFailEvent $event
-     */
-    public function OnMySQLReplicationFail(MySQLReplicationFailEvent $event);
-
-    /**
-     * Triggers when replication was recovered on slave
-     *
-     * @param MySQLReplicationRecoveredEvent $event
-     */
-    public function OnMySQLReplicationRecovered(MySQLReplicationRecoveredEvent $event);
-
-    /**
-     *
-     * @param DNSZoneUpdatedEvent $event
-     */
-    public function OnDNSZoneUpdated(DNSZoneUpdatedEvent $event);
 
     /**
      *

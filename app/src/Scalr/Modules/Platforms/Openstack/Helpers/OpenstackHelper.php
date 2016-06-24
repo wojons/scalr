@@ -4,6 +4,8 @@ namespace Scalr\Modules\Platforms\Openstack\Helpers;
 
 use Scalr\Model\Entity;
 use Scalr\Modules\PlatformFactory;
+use FarmLogMessage;
+use Exception;
 
 class OpenstackHelper
 {
@@ -35,6 +37,10 @@ class OpenstackHelper
                 $ipAddress = false;
                 $ipInfo = false;
                 foreach ($ips as $ip) {
+                    if ($ip->floating_network_id != $ipPool) {
+                        continue;
+                    }
+                    
                     if ($ip->fixed_ip_address == $serverIps['localIp'] && $ip->port_id) {
                         $ipAssigned = true;
                         $ipInfo = $ip;
@@ -49,11 +55,10 @@ class OpenstackHelper
                     }
                 }
 
-                if ($ipInfo) {
-                    \Scalr::getContainer()->logger("Openstack")->warn(new \FarmLogMessage($DBServer->farmId,
-                        "Found free floating IP: {$ipInfo->floating_ip_address} for use",
-                        $DBServer->serverId
-                    ));
+                if ($ipInfo && !$ipAssigned) {
+                    \Scalr::getContainer()->logger("Openstack")->warn(new FarmLogMessage($DBServer, sprintf("Found free floating IP: %s for use",
+                        !empty($ipInfo->floating_ip_address) ? $ipInfo->floating_ip_address : null
+                    )));
                 }
 
                 if (!$ipInfo || !$ipAssigned) {
@@ -69,11 +74,7 @@ class OpenstackHelper
                     }
 
                     if (empty($serverNetworkPort)) {
-                        \Scalr::getContainer()->logger("Openstack")->error(new \FarmLogMessage(
-                            $DBServer->farmId,
-                            "Unable to identify network port of instance",
-                            $DBServer->serverId
-                        ));
+                        \Scalr::getContainer()->logger("Openstack")->error(new FarmLogMessage($DBServer, "Unable to identify network port of instance"));
                     } else {
                         $publicNetworkId = $ipPool;
 
@@ -84,25 +85,17 @@ class OpenstackHelper
                                 if (!$ipInfo) {
                                     $ipInfo = $osClient->network->floatingIps->create($publicNetworkId, $port->id);
 
-                                    \Scalr::getContainer()->logger("Openstack")->warn(new \FarmLogMessage(
-                                        $DBServer->farmId,
-                                        "Allocated new IP {$ipInfo->floating_ip_address} for port: {$port->id}",
-                                        $DBServer->serverId
-                                    ));
+                                    \Scalr::getContainer()->logger("Openstack")->warn(new FarmLogMessage($DBServer, sprintf("Allocated new IP %s for port: %s",
+                                        !empty($ipInfo->floating_ip_address) ? $ipInfo->floating_ip_address : null,
+                                        !empty($port->id) ? $port->id : null
+                                    )));
                                 } else {
-                                    /*
-                                     $port = $port->id;
-                                     if (count($port->fixed_ips) > 1)
-                                         $port = $port->id . "_" . $serverIps['localIp'];
-                                    */
+                                    $osClient->network->floatingIps->update($ipInfo->id, $port->id);
 
-                                     $osClient->network->floatingIps->update($ipInfo->id, $port->id);
-
-                                     \Scalr::getContainer()->logger("Openstack")->warn(new \FarmLogMessage(
-                                         $DBServer->farmId,
-                                        "Existing floating IP {$ipInfo->floating_ip_address} was used for port: {$port->id}",
-                                        $DBServer->serverId
-                                     ));
+                                    \Scalr::getContainer()->logger("Openstack")->warn(new FarmLogMessage($DBServer, sprintf("Existing floating IP %s was used for port: %s",
+                                        !empty($ipInfo->floating_ip_address) ? $ipInfo->floating_ip_address : null,
+                                        !empty($port->id) ? $port->id : null
+                                    )));
                                 }
 
                                 $DBServer->SetProperties(array(
@@ -113,7 +106,7 @@ class OpenstackHelper
                                 $ipAddress = $ipInfo->floating_ip_address;
 
                                 break;
-                            } catch (\Exception $e) {
+                            } catch (Exception $e) {
                                 \Scalr::getContainer()->logger("OpenStackObserver")->error(sprintf(
                                     "Farm: %d, Server: %s - Could not allocate/update floating IP: %s (%s, %s)",
                                     $DBServer->farmId,
@@ -126,11 +119,10 @@ class OpenstackHelper
                         }
                     }
                 } else {
-                    \Scalr::getContainer()->logger("Openstack")->warn(new \FarmLogMessage(
-                        $DBServer->farmId,
-                        "IP: {$ipInfo->floating_ip_address} already assigned",
-                        $DBServer->serverId
-                    ));
+                    \Scalr::getContainer()->logger("Openstack")->warn(new FarmLogMessage($DBServer, sprintf("Server '%s' already has IP '%s' assigned",
+                        $DBServer->serverId,
+                        !empty($ipInfo->floating_ip_address) ? $ipInfo->floating_ip_address : null
+                    )));
 
                     $ipAddress = $ipInfo->floating_ip_address;
                 }
@@ -210,7 +202,7 @@ class OpenstackHelper
                     \OPENSTACK_SERVER_PROPERTIES::FLOATING_IP_ID => null
                 ));
             }
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             \Scalr::getContainer()->logger("OpenStackObserver")->fatal("OpenStackObserver observer failed: " . $e->getMessage());
         }
     }

@@ -20,7 +20,7 @@ abstract class Scalr_Scaling_Sensor
      */
     public static function get($metricAlias)
     {
-        if (!self::$sensors[$metricAlias]) {
+        if (empty(self::$sensors[$metricAlias])) {
             switch ($metricAlias) {
                 case "la":
                     self::$sensors[$metricAlias] = new Scalr_Scaling_Sensors_LoadAverage();
@@ -48,7 +48,7 @@ abstract class Scalr_Scaling_Sensor
             }
         }
 
-        return self::$sensors[$metricAlias];
+        return isset(self::$sensors[$metricAlias]) ? self::$sensors[$metricAlias] : null;
     }
 
     /**

@@ -3,7 +3,7 @@
 namespace Scalr\Tests\Util;
 
 use Scalr\Tests\TestCase;
-use \Scalr_Util_Network;
+use Scalr_Util_Network;
 
 class NetworkTest extends TestCase
 {

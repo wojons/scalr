@@ -1,0 +1,169 @@
+# `ScalingMetric` #
+
+
+
+
+
+
+
+## Properties ##
+
+### `retrieveMethod` (required, filterable) ###
+
+The operation on the File that should be performed to obtain the value of the Metric.
+
+
+Property of type: `string`.
+
+ 
+The following are valid values for the `retrieveMethod` property:
+  + `read`
+  + `execute`
+  + `url-request`
+
+To filter on this field, use: `retrieveMethod=...`.
+
+
+### `name` (required, filterable) ###
+
+
+
+
+Property of type: `string`.
+
+
+To filter on this field, use: `name=...`.
+
+
+### `function` (required, filterable) ###
+
+Aggregate function to use when executing decision logic.
+
+
+Property of type: `string`.
+
+ 
+The following are valid values for the `function` property:
+  + `average`
+  + `sum`
+  + `min`
+  + `max`
+
+To filter on this field, use: `function=...`.
+
+
+### `filePath` (required) ###
+
+
+
+
+Property of type: `string`.
+
+
+
+
+### `inverted` (optional, filterable) ###
+
+Whether this metric uses inverted logic. In case of the inversion it scales up when the value goes under instead of scaling down.
+
+
+Property of type: `boolean`.
+
+
+To filter on this field, use: `inverted=...`.
+
+
+### `scope` (read-only, filterable) ###
+
+
+
+
+Property of type: `string`.
+
+ 
+The following are valid values for the `scope` property:
+  + `scalr`
+  + `account`
+  + `environment`
+  + `farm`
+  + `farmrole`
+  + `role`
+  + `server`
+
+To filter on this field, use: `scope=...`.
+
+
+
+
+## Used in ##
+
+  + [`/{envId}/scaling-metrics/`](./../rest/api/v1beta0/user/{envId}/scaling-metrics/)
+  + [`/{envId}/scaling-metrics/{metricName}/`](./../rest/api/v1beta0/user/{envId}/scaling-metrics/{metricName}/)
+
+## Swagger Definition ##
+
+    {
+      "properties": {
+        "filePath": {
+          "descritpion": "Path to the File", 
+          "type": "string"
+        }, 
+        "function": {
+          "description": "Aggregate function to use when executing decision logic.", 
+          "enum": [
+            "average", 
+            "sum", 
+            "min", 
+            "max"
+          ], 
+          "type": "string"
+        }, 
+        "inverted": {
+          "description": "Whether this metric uses inverted logic. In case of the inversion it scales up when the value goes under instead of scaling down.", 
+          "type": "boolean"
+        }, 
+        "name": {
+          "descritpion": "The name of the Scaling Metric.", 
+          "type": "string"
+        }, 
+        "retrieveMethod": {
+          "description": "The operation on the File that should be performed to obtain the value of the Metric.", 
+          "enum": [
+            "read", 
+            "execute", 
+            "url-request"
+          ], 
+          "type": "string"
+        }, 
+        "scope": {
+          "enum": [
+            "scalr", 
+            "account", 
+            "environment", 
+            "farm", 
+            "farmrole", 
+            "role", 
+            "server"
+          ], 
+          "readOnly": true, 
+          "type": "string"
+        }
+      }, 
+      "required": [
+        "filePath", 
+        "function", 
+        "name", 
+        "retrieveMethod"
+      ], 
+      "x-filterable": [
+        "function", 
+        "inverted", 
+        "name", 
+        "retrieveMethod", 
+        "scope"
+      ], 
+      "x-usedIn": [
+        "/{envId}/scaling-metrics/", 
+        "/{envId}/scaling-metrics/{metricName}/"
+      ]
+    }

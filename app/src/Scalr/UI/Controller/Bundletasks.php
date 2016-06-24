@@ -94,7 +94,9 @@ class Scalr_UI_Controller_Bundletasks extends Scalr_UI_Controller
             SELECT bt.*, (SELECT EXISTS (SELECT 1 FROM servers WHERE server_id = bt.server_id)) as server_exists
             FROM bundle_tasks AS bt
             LEFT JOIN farms AS f ON f.id = bt.farm_id
-            WHERE bt.env_id = ? AND :FILTER:
+            WHERE bt.env_id = ?
+            AND :FILTER:
+            AND (bt.farm_id IS NULL OR bt.farm_id IS NOT NULL AND {$this->request->getFarmSqlQuery()})
         ";
 
         $args = [$this->getEnvironmentId()];
@@ -102,22 +104,6 @@ class Scalr_UI_Controller_Bundletasks extends Scalr_UI_Controller
         if ($id) {
             $sql .= " AND bt.id = ?";
             $args[] = $id;
-        }
-
-        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS)) {
-            $q = [ "f.id IS NULL" ];
-            if ($this->request->isAllowed(Acl::RESOURCE_TEAM_FARMS)) {
-                $t = array_map(function($t) { return $t['id']; }, $this->user->getTeams());
-                if (count($t))
-                    $q[] = "f.team_id IN(" . join(',', $t) . ")";
-            }
-
-            if ($this->request->isAllowed(Acl::RESOURCE_OWN_FARMS)) {
-                $q[] = "f.created_by_id = ?";
-                $args[] = $this->user->getId();
-            }
-
-            $sql .= ' AND (' . join(' OR ', $q) . ')';
         }
 
         $response = $this->buildResponseFromSql2(

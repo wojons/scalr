@@ -80,6 +80,8 @@ Scalr.regPage('Scalr.ui.admin.accounts.view', function (loadParams, moduleParams
                 tpl: '{farms}/{limitFarms}'
             },
             { header: "DNS Zones", width:  100, align:'center', dataIndex: 'dnsZones', sortable: false, xtype: 'templatecolumn',
+                hidden: !Scalr.flags['dnsGlobalEnabled'],
+                hideable: Scalr.flags['dnsGlobalEnabled'],
                 tpl: '{dnsZones}'
             },
             {

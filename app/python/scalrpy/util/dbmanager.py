@@ -93,7 +93,12 @@ class DB(object):
                 self._local.connection.autocommit(self._autocommit)
                 self._local.cursor = self._connection.cursor()
                 start_time = time.time()
-                LOG.debug('Execute query: %s...' % query[:500])
+                if len(query) > 2000:
+                    msg = '%s...' % query[:2000]
+                else:
+                    msg = query
+
+                LOG.debug(msg)
                 try:
                     self._local.cursor.execute(query)
                     results = self._local.cursor.fetchall()
@@ -246,7 +251,8 @@ class ScalrDB(DB):
         self.load_farm_settings(farms, names)
         for server in servers:
             server.update({k: v for farm in farms for k, v in farm.items()
-                          if farm['id'] == server['farm_id'] and k not in server})
+                          if farm['id'] == server['farm_id']
+                          and k not in server and k != 'id'})
 
         # 2. router_role_id
         # 2.1 get router_role_id from farm_role_settings

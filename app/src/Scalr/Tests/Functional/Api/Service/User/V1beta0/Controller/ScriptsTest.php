@@ -23,7 +23,7 @@ class ScriptsTest extends ScriptsTestCase
 
     public function scriptToDelete($scriptId)
     {
-        static::toDelete('Scalr\Model\Entity\Script', $scriptId);
+        static::toDelete(Script::class, [$scriptId]);
     }
 
     /**
@@ -128,7 +128,6 @@ class ScriptsTest extends ScriptsTestCase
             'timeoutDefault' => 1000,
             'blockingDefault' => true,
             'osType' => 'linux',
-            'scope' => ScopeInterface::SCOPE_ENVIRONMENT
         ];
         $response = $this->postScript($data);
 
@@ -180,13 +179,15 @@ class ScriptsTest extends ScriptsTestCase
 
         $this->assertNotEquals($data['id'], $scriptId);
 
-        //post script with name already exists in current (environment) scope
         unset($data['id']);
-        $envScript = $this->createEntity(new Script(), array_merge($data, [
-            'accountId' => $user->getAccountId(),
-            'envId' => $environment->id
-        ]));
+        $scriptData = $data;
+        $scriptData['accountId'] = $user->getAccountId();
+        $scriptData['envId'] = $environment->id;
+        $scriptData['os'] = $data['osType'];
+        unset($scriptData['osType'], $scriptData['scope']);
+        $envScript = $this->createEntity(new Script(), $scriptData);
 
+        //post script with name already exists in current (environment) scope
         $data['name'] = 'test-post-existing';
         $response = $this->postScript($data);
 
@@ -194,63 +195,25 @@ class ScriptsTest extends ScriptsTestCase
 
         $envScript->delete();
 
-        //post script with name already exists in other scope
-        //NOTE: ignored until the introduction of account-scope scripts API
-//        $data['scope'] = 'account';
-//        $data['name'] = 'test-post-existing';
-//        $accScript = $this->createEntity(new Script(), array_merge($data, ['accountId' => $user->getAccountId()]));
-//
-//        $data['name'] = 'test-post-existing';
-//        $response = $this->postScript($data);
-//
-//        $this->assertErrorMessageContains($response, 409, ErrorMessage::ERR_UNICITY_VIOLATION);
-//
-//        $accScript->delete();
-
         //post script with properties that not existing
         $data = [
             'name' => 'test-post-not-existing-field',
             'description' => 'test-post-not-existing-field',
             'foo' => 'bar',
             'osType' => 'linux',
-            'scope' => ScopeInterface::SCOPE_ENVIRONMENT
         ];
         $response = $this->postScript($data);
 
         $this->assertErrorMessageContains($response, 400, ErrorMessage::ERR_INVALID_STRUCTURE);
 
-        //post scalr-scoped script
-        $data = [
-            'name' => 'test-post-scalr-scoped',
-            'description' => 'test-post-scalr-scoped',
-            'scope' => ScopeInterface::SCOPE_SCALR,
-            'osType' => 'linux'
-        ];
-        $response = $this->postScript($data);
-
-        $this->assertErrorMessageContains($response, 403, ErrorMessage::ERR_SCOPE_VIOLATION);
-
         //post script without required fields
         $data = [
-            'name' => 'test-post-no-scope',
+            'name' => 'foobar',
             'description' => 'test-post-no-scope',
-            'osType' => 'linux'
         ];
         $response = $this->postScript($data);
 
-        $this->assertErrorMessageContains($response, 403, ErrorMessage::ERR_SCOPE_VIOLATION);
-
-        //post script with invalid field
-        $data['scope'] = 'foobar';
-        $response = $this->postScript($data);
-
-        $this->assertErrorMessageContains($response, 400, ErrorMessage::ERR_INVALID_VALUE);
-
-        //post account script to environment
-        $data['scope'] = 'account';
-        $response = $this->postScript($data);
-
-        $this->assertErrorMessageContains($response, 403, ErrorMessage::ERR_SCOPE_VIOLATION);
+        $this->assertErrorMessageContains($response, 400, ErrorMessage::ERR_INVALID_STRUCTURE);
 
         //test script fetch
         $response = $this->getScript($script->id);

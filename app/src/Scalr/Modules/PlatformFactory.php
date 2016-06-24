@@ -1,8 +1,8 @@
 <?php
 namespace Scalr\Modules;
 
-use \SERVER_PLATFORMS;
-use \Exception;
+use SERVER_PLATFORMS;
+use Exception;
 
 class PlatformFactory
 {
@@ -141,7 +141,6 @@ class PlatformFactory
             SERVER_PLATFORMS::EC2,
             SERVER_PLATFORMS::IDCF,
             SERVER_PLATFORMS::GCE,
-            SERVER_PLATFORMS::RACKSPACE,
             SERVER_PLATFORMS::RACKSPACENG_UK,
             SERVER_PLATFORMS::RACKSPACENG_US,
             SERVER_PLATFORMS::AZURE

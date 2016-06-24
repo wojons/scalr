@@ -44,7 +44,7 @@ class Scalr_UI_Controller_Tools_Azure_VirtualNetworks extends Scalr_UI_Controlle
         $vnProperties->addressSpace = ["addressPrefixes" => [$addressPrefix]];
 
         $vn = $azure->network->virtualNetwork->create(
-            $this->environment->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+            $this->environment->keychain(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
             $resourceGroup,
             new CreateVirtualNetwork($name, $cloudLocation, $vnProperties)
         );
@@ -83,7 +83,7 @@ class Scalr_UI_Controller_Tools_Azure_VirtualNetworks extends Scalr_UI_Controlle
                     ->virtualNetwork
                     ->getInfo(
                         $this->environment
-                             ->cloudCredentials(SERVER_PLATFORMS::AZURE)
+                             ->keychain(SERVER_PLATFORMS::AZURE)
                              ->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
                         $resourceGroup,
                         $virtualNetwork
@@ -98,7 +98,7 @@ class Scalr_UI_Controller_Tools_Azure_VirtualNetworks extends Scalr_UI_Controlle
                         ->subnet
                         ->create(
                             $this->environment
-                                 ->cloudCredentials(SERVER_PLATFORMS::AZURE)
+                                 ->keychain(SERVER_PLATFORMS::AZURE)
                                  ->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
                             $resourceGroup,
                             $virtualNetwork,

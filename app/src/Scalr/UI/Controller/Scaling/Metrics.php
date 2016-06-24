@@ -51,14 +51,14 @@ class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
      * @throws Scalr_Exception_InsufficientPermissions
      * @throws \Scalr\Exception\ModelException
      */
-    public function xSaveAction($name, $retrieveMethod, $calcFunction, $metricId = null, $filePath = null, $isInvert = false)
+    public function xSaveAction($name, $retrieveMethod, $calcFunction = null, $metricId = null, $filePath = null, $isInvert = false)
     {
         $this->request->restrictAccess(Acl::RESOURCE_GENERAL_CUSTOM_SCALING_METRICS, Acl::PERM_GENERAL_CUSTOM_SCALING_METRICS_MANAGE);
 
         $validator = new Validator;
 
         if ($metricId) {
-            /* @var \Scalr\Model\Entity\ScalingMetric $metric */
+            /* @var $metric Entity\ScalingMetric */
             $metric = Entity\ScalingMetric::findPk($metricId);
 
             if (!$metric) {
@@ -74,8 +74,14 @@ class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
             $metric->algorithm = Entity\ScalingMetric::ALGORITHM_SENSOR;
         }
 
-        if (!preg_match('/^[A-Za-z0-9]{5,}$/', $name)) {
+        if (!preg_match('/^' . Entity\ScalingMetric::NAME_REGEXP . '$/', $name)) {
             $validator->addError('name', 'Metric name should be both alphanumeric and greater than 5 chars');
+        }
+
+        if ($retrieveMethod == Entity\ScalingMetric::RETRIEVE_METHOD_URL_REQUEST) {
+            $validator->addErrorIf($validator->validateUrl($filePath) !== true, 'filePath', 'Invalid URL');
+        } else {
+            $validator->addErrorIf($validator->validateNotEmpty($calcFunction) !== true, 'calcFunction', 'Calculation function is required');
         }
 
         $criteria = [];
@@ -120,7 +126,7 @@ class Scalr_UI_Controller_Scaling_Metrics extends Scalr_UI_Controller
         foreach ($metrics as $metricId) {
             try {
                 if (!$this->db->GetOne("SELECT id FROM farm_role_scaling_metrics WHERE metric_id=? LIMIT 1", [$metricId])) {
-                    /* @var \Scalr\Model\Entity\ScalingMetric $metric */
+                    /* @var $metric Entity\ScalingMetric */
                     $metric = Entity\ScalingMetric::findOne([['id' => $metricId], ['envId' => $this->getEnvironmentId()]]);
 
                     if (!$metric) {

@@ -160,9 +160,11 @@ class Scalr_Role_Behavior_MongoDB extends Scalr_Role_Behavior implements Scalr_R
             $indexes = $this->getMongoClusterIndexes($dbServer->GetFarmRoleObject());
 
             \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->info(new FarmLogMessage(
-                $dbServer->farmId,
-                sprintf("MongoDB Scaling: Launching server %s-%s for mongo cluster", $indexes['shardIndex'], $indexes['replicaSetIndex']),
-                $dbServer->serverId
+                $dbServer,
+                sprintf("MongoDB Scaling: Launching server %s-%s for mongo cluster",
+                    !empty($indexes['shardIndex']) ? $indexes['shardIndex'] : null,
+                    !empty($indexes['replicaSetIndex']) ? $indexes['replicaSetIndex'] : null
+                )
             ));
 
             $dbServer->SetProperty(self::SERVER_SHARD_INDEX, $indexes['shardIndex']);
@@ -423,9 +425,11 @@ class Scalr_Role_Behavior_MongoDB extends Scalr_Role_Behavior implements Scalr_R
                 ));
             } catch (Exception $e) {
                 $this->logger->error(new FarmLogMessage(
-                    $dbFarmRole->FarmID,
+                    !empty($dbFarmRole->FarmID) ? $dbFarmRole->FarmID : null,
                     "Cannot save storage volume: {$e->getMessage()}",
-                    !empty($dbServer->serverId) ? $dbServer->serverId : null
+                    !empty($dbServer->serverId) ? $dbServer->serverId : null,
+                    !empty($dbServer->envId) ? $dbServer->envId : null,
+                    !empty($dbServer->farmRoleId) ? $dbServer->farmRoleId : null
                 ));
             }
         }
@@ -500,9 +504,11 @@ class Scalr_Role_Behavior_MongoDB extends Scalr_Role_Behavior implements Scalr_R
                 }
             } catch (Exception $e) {
                 $this->logger->error(new FarmLogMessage(
-                    $dbFarmRole->FarmID,
+                    !empty($dbFarmRole->FarmID) ? $dbFarmRole->FarmID : null,
                     "Cannot save storage volume: {$e->getMessage()}",
-                    !empty($dbServer->serverId) ? $dbServer->serverId : null
+                    !empty($dbServer->serverId) ? $dbServer->serverId : null,
+                    !empty($dbServer->envId) ? $dbServer->envId : null,
+                    !empty($dbServer->farmRoleId) ? $dbServer->farmRoleId : null
                 ));
             }
         }
@@ -538,32 +544,31 @@ class Scalr_Role_Behavior_MongoDB extends Scalr_Role_Behavior implements Scalr_R
         public function getVolumeConfig(DBFarmRole $dbFarmRole, DBServer $dbServer)
         {
             $volumeId  = $this->getVolumeIdByServer($dbServer);
-            if ($volumeId)
-            {
+            if ($volumeId) {
                 try {
                     $volume = Scalr_Storage_Volume::init()->loadById($volumeId);
                     $volumeConfig = $volume->getConfig();
-                } catch (Exception $e) {}
+                } catch (Exception $e) {
+                }
             }
 
-            if (!$volumeConfig)
-            {
+            if (!$volumeConfig) {
                 $volumeConfig = new stdClass();
                 $volumeConfig->type = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_ENGINE);
-                //$volumeConfig->fstype = 'xfs';
 
                 if (in_array($volumeConfig->type, array(MYSQL_STORAGE_ENGINE::EBS, MYSQL_STORAGE_ENGINE::CSVOL, MYSQL_STORAGE_ENGINE::CINDER, MYSQL_STORAGE_ENGINE::GCE_PERSISTENT))) {
                     $volumeConfig->size = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_SIZE);
+
                     if ($volumeConfig->type == MYSQL_STORAGE_ENGINE::EBS) {
-
                         $volumeConfig->tags = $dbServer->getAwsTags();
-                        $volumeConfig->volumeType = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_TYPE);
-                        if ($volumeConfig->volumeType == 'io1')
-                            $volumeConfig->iops = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_IOPS);
-                    }
-                }
-                elseif ($volumeConfig->type == MYSQL_STORAGE_ENGINE::RAID_EBS) {
 
+                        $volumeConfig->volumeType = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_TYPE);
+
+                        if ($volumeConfig->volumeType == 'io1') {
+                            $volumeConfig->iops = $dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_EBS_IOPS);
+                        }
+                    }
+                } elseif ($volumeConfig->type == MYSQL_STORAGE_ENGINE::RAID_EBS) {
                     $volumeConfig->type = 'raid';
                     $volumeConfig->vg = $this->behavior;
                     $volumeConfig->level = $dbFarmRole->GetSetting(self::DATA_STORAGE_RAID_LEVEL);
@@ -582,16 +587,14 @@ class Scalr_Role_Behavior_MongoDB extends Scalr_Role_Behavior implements Scalr_R
                     $volumeConfig->snapPv->type = 'ebs';
                     $volumeConfig->snapPv->size = 1;
 
-                }
-                // For RackSpace
-                //TODO:
-                elseif ($dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_ENGINE) == MYSQL_STORAGE_ENGINE::EPH) {
+                } elseif ($dbFarmRole->GetSetting(static::ROLE_DATA_STORAGE_ENGINE) == MYSQL_STORAGE_ENGINE::EPH) {
                     $volumeConfig->snap_backend = sprintf("cf://scalr-%s-%s/data-bundles/%s/%s",
                         $dbServer->envId,
                         $dbServer->GetCloudLocation(),
                         $dbFarmRole->FarmID,
                         $this->behavior
                     );
+
                     $volumeConfig->vg = $this->behavior;
                     $volumeConfig->disk = new stdClass();
                     $volumeConfig->disk->type = 'loop';
@@ -605,19 +608,20 @@ class Scalr_Role_Behavior_MongoDB extends Scalr_Role_Behavior implements Scalr_R
         public function getSnapshotConfig(DBFarmRole $dbFarmRole, DBServer $dbServer)
         {
             $snapshotId  = $this->getSnapshotIdByServer($dbServer);
-            if ($snapshotId)
-            {
+            if ($snapshotId) {
                 try {
                     $snapshot = Scalr_Storage_Snapshot::init()->loadById($snapshotId);
 
                     return $snapshot->getConfig();
-                } catch (Exception $e) {}
+                } catch (Exception $e) {
+                }
             }
 
             return null;
         }
 
-        public function getConfiguration(DBServer $dbServer) {
+        public function getConfiguration(DBServer $dbServer)
+        {
             $configuration = new stdClass();
 
             $configuration->keyfile = $dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_KEYFILE);
@@ -633,6 +637,7 @@ class Scalr_Role_Behavior_MongoDB extends Scalr_Role_Behavior implements Scalr_R
             $configuration->cfgServerStorageSize = 5;
 
             $mmsApiKey = $dbServer->GetFarmRoleObject()->GetSetting(self::ROLE_MMS_API_KEY);
+
             if ($mmsApiKey) {
                 $configuration->mms = new stdClass();
                 $configuration->mms->apiKey = $mmsApiKey;
@@ -648,11 +653,10 @@ class Scalr_Role_Behavior_MongoDB extends Scalr_Role_Behavior implements Scalr_R
                 $configuration->ssl->privateKeyPassword = $cert->privateKeyPassword;
             }
 
-            $configServers = $this->db->GetAll("SELECT * FROM services_mongodb_config_servers WHERE
-                `farm_role_id` = ?
-            ", array(
-                $dbServer->farmRoleId
-            ));
+            $configServers = $this->db->GetAll("
+                SELECT * FROM services_mongodb_config_servers WHERE `farm_role_id` = ?
+            ", [$dbServer->farmRoleId]);
+
             if (count($configServers) > 0) {
                 $configuration->config_servers = array();
                 foreach ($configServers as $cs) {

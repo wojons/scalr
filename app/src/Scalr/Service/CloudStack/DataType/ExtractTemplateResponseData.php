@@ -1,7 +1,7 @@
 <?php
 namespace Scalr\Service\CloudStack\DataType;
 
-use \DateTime;
+use DateTime;
 
 /**
  * ExtractTemplateResponseData

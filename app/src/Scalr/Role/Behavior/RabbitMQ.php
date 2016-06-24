@@ -219,9 +219,11 @@ class Scalr_Role_Behavior_RabbitMQ extends Scalr_Role_Behavior implements Scalr_
                 }
             } catch (Exception $e) {
                 $this->logger->error(new FarmLogMessage(
-                    $dbFarmRole->FarmID,
+                    !empty($dbFarmRole->FarmID) ? $dbFarmRole->FarmID : null,
                     "Cannot save storage volume: {$e->getMessage()}",
-                    !empty($dbServer->serverId) ? $dbServer->serverId : null
+                    !empty($dbServer->serverId) ? $dbServer->serverId : null,
+                    !empty($dbServer->envId) ? $dbServer->envId : null,
+                    !empty($dbServer->farmRoleId) ? $dbServer->farmRoleId : null
                 ));
             }
         }
@@ -245,13 +247,7 @@ class Scalr_Role_Behavior_RabbitMQ extends Scalr_Role_Behavior implements Scalr_
 
                 switch ($volumeConfig->type) {
                     case MYSQL_STORAGE_ENGINE::EPH:
-                        if ($dbFarmRole->Platform == SERVER_PLATFORMS::RACKSPACE) {
-                            $storageProvider = 'cf';
-
-                            $volumeConfig->disk = new stdClass();
-                            $volumeConfig->disk->type = 'loop';
-                            $volumeConfig->disk->size = '75%root';
-                        } elseif ($dbFarmRole->isOpenstack()) {
+                        if ($dbFarmRole->isOpenstack()) {
                             $storageProvider = 'swift';
 
                             $volumeConfig->disk = new stdClass();

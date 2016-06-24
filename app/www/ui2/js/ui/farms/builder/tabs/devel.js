@@ -11,7 +11,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Devel', {
         'base.custom_user_data': '',
         'base.devel_repository': '',
         'openstack.boot_from_volume': 0,
-        'openstack.keep_fip_on_suspend': 0
+        'openstack.keep_fip_on_suspend': 0,
+        'scalr-labs.fatmouse_update': 0
     },
 
     isEnabled: function (record) {
@@ -29,6 +30,9 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Devel', {
         this.down('[name="base.custom_user_data"]').setValue(settings['base.custom_user_data'] || '');
         this.down('[name="base.devel_repository"]').setValue(settings['base.devel_repository'] || '');
         this.down('[name="openstack.boot_from_volume"]').setValue(settings['openstack.boot_from_volume'] || 0);
+        
+        this.down('[name="scalr-labs.fatmouse_update"]').setValue(settings['scalr-labs.fatmouse_update'] || 0);
+        
         this.down('[name="openstack.keep_fip_on_suspend"]').setValue(settings['openstack.keep_fip_on_suspend'] || 0);
 
         this.down('[name="base.union_script_executor"]').setValue(settings['base.union_script_executor'] || 1);
@@ -40,7 +44,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Devel', {
         var settings = record.get('settings'),
             userDataEnabled = !this.down('[name="user-data.enabled"]').collapsed;
 
-        settings['user-data.scm_branch'] = userDataEnabled ? this.down('[name="user-data.scm_branch"]').getValue() : '';
+        settings['user-data.scm_branch'] = userDataEnabled ? Ext.String.trim(this.down('[name="user-data.scm_branch"]').getValue()) : '';
         settings['user-data.szr_version'] = userDataEnabled ? this.down('[name="user-data.szr_version"]').getValue() : '';
         settings['base.devel_repository'] = userDataEnabled ? this.down('[name="base.devel_repository"]').getValue() : '';
 
@@ -48,6 +52,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Devel', {
         settings['openstack.boot_from_volume'] = this.down('[name="openstack.boot_from_volume"]').getValue();
         settings['openstack.keep_fip_on_suspend'] = this.down('[name="openstack.keep_fip_on_suspend"]').getValue();
         settings['base.union_script_executor'] = this.down('[name="base.union_script_executor"]').getValue() ? 1 : 0;
+        settings['scalr-labs.fatmouse_update'] = this.down('[name="scalr-labs.fatmouse_update"]').getValue() ? 1 : 0;
 
         record.set('settings', settings);
     },
@@ -110,6 +115,10 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Devel', {
             xtype: 'checkbox',
             name: 'base.union_script_executor',
             boxLabel: 'Union script executor'
+        }, {
+            xtype: 'checkbox',
+            name: 'scalr-labs.fatmouse_update',
+            boxLabel: 'Fatmouse managed agent update'
         }]
     }]
 });

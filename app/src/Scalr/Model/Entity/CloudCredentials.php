@@ -132,19 +132,20 @@ class CloudCredentials extends AbstractEntity implements ScopeInterface, AccessP
      */
     public function __clone()
     {
+        $this->_properties = clone $this->properties;
+
         $unref = null;
         $this->id = &$unref;
 
-        if (isset($this->_properties)) {
-            $this->_properties = clone $this->_properties;
+        $this->name = "{$this->envId}-{$this->accountId}-{$this->cloud}-" . \Scalr::GenerateUID(true);
 
-            $this->_properties->setCriteria([[ 'cloudCredentialsId' => &$this->id ]]);
-            $this->_properties->setDefaultProperties([ 'cloudCredentialsId' => &$this->id ]);
-        }
+        $this->_properties->setCriteria([[ 'cloudCredentialsId' => &$this->id ]]);
+        $this->_properties->setDefaultProperties([ 'cloudCredentialsId' => &$this->id ]);
     }
 
     /**
-     * Magic getter for initialized properties
+     * Magic getter.
+     * Gets the values of the properties that require initialization.
      *
      * @param   string  $name   Property name
      *
@@ -235,10 +236,14 @@ class CloudCredentials extends AbstractEntity implements ScopeInterface, AccessP
         }
 
         /* @var $previousCloudCreds CloudCredentials */
-        $previousCloudCreds = $environment->cloudCredentials($this->cloud);
+        $previousCloudCreds = $environment->keychain($this->cloud);
 
-        if (!empty($previousCloudCreds->id) && $previousCloudCreds->id == $this->id) {
-            return $this;
+        if (!empty($previousCloudCreds->id)) {
+            if ($previousCloudCreds->id == $this->id) {
+                return $this;
+            } else {
+                $previousCloudCreds->release();
+            }
         }
 
         $envCloudCreds = EnvironmentCloudCredentials::findPk($environment->id, $this->cloud);
@@ -257,11 +262,6 @@ class CloudCredentials extends AbstractEntity implements ScopeInterface, AccessP
             $envCloudCreds->cloudCredentialsId = $this->id;
             $envCloudCreds->save();
 
-            //NOTE: temporary
-            if (!empty($previousCloudCreds) && empty(EnvironmentCloudCredentials::findByCloudCredentialsId($previousCloudCreds->id))) {
-                $previousCloudCreds->delete();
-            }
-
             $db->CommitTrans();
         } catch (Exception $e) {
             $db->RollbackTrans();
@@ -277,7 +277,9 @@ class CloudCredentials extends AbstractEntity implements ScopeInterface, AccessP
     /**
      * Sets environment binding
      *
-     * @param   int $envId  Environment identifier
+     * @param   int $envId Environment identifier
+     *
+     * @return  EnvironmentCloudCredentials Returns new binding
      */
     public function bindEnvironment($envId)
     {
@@ -291,38 +293,44 @@ class CloudCredentials extends AbstractEntity implements ScopeInterface, AccessP
         $envCloudCreds->cloud = $this->cloud;
 
         $this->_envBinds[$envCloudCreds->envId] = $envCloudCreds;
+
+        return $envCloudCreds;
     }
 
     /**
      * Releases cached self in DI
-     *
-     * @param   BaseContainer   $container
      */
-    public function release(BaseContainer $container)
+    public function release()
     {
-        $container->release("cloud_creds.{$this->id}");
+        $container = \Scalr::getContainer();
+
+        $container->release("keychain.cloud_creds.{$this->id}");
 
         if (isset($this->_envBinds)) {
             foreach ($this->_envBinds as $envCloudCreds) {
-                $container->release("env_cloud_creds.{$envCloudCreds->envId}.{$envCloudCreds->cloud}");
+                $container->release("keychain.env_cloud_creds.{$envCloudCreds->envId}.{$envCloudCreds->cloud}");
             }
         }
     }
 
     /**
      * Cache self in specified container
-     *
-     * @param   BaseContainer   $container
      */
-    public function cache(BaseContainer $container)
+    public function cache()
     {
-        $contCloudCredId = "cloud_creds.{$this->id}";
-        $container->set($contCloudCredId, $this);
+        $container = \Scalr::getContainer();
+
+        $contCloudCredId = "keychain.cloud_creds.{$this->id}";
+        $container->setShared($contCloudCredId, function () {
+            return $this;
+        });
 
         if (isset($this->_envBinds)) {
             foreach ($this->_envBinds as $envCloudCreds) {
-                $envCloudCredId = "env_cloud_creds.{$envCloudCreds->envId}.{$this->cloud}";
-                $container->set($envCloudCredId, $this->id);
+                $envCloudCredId = "keychain.env_cloud_creds.{$envCloudCreds->envId}.{$this->cloud}";
+                $container->setShared($envCloudCredId, function () {
+                    return $this->id;
+                });
             }
         }
     }
@@ -389,16 +397,20 @@ class CloudCredentials extends AbstractEntity implements ScopeInterface, AccessP
     {
         $cloudCredentialsProperty = new CloudCredentialsProperty();
 
-        $join = "JOIN {$cloudCredentialsProperty->table('ccp')} ON {$this->columnId()} = {$cloudCredentialsProperty->columnCloudCredentialsId('ccp')} AND {$cloudCredentialsProperty->columnName('ccp')} = {$cloudCredentialsProperty->qstr('name', $name)}";
+        $alias = "ccp_" . trim($this->db()->qstr($name), "'");
+
+        $join = "
+            JOIN {$cloudCredentialsProperty->table($alias)} ON {$this->columnId()} = {$cloudCredentialsProperty->columnCloudCredentialsId($alias)}
+                AND {$cloudCredentialsProperty->columnName($alias)} = {$cloudCredentialsProperty->qstr('name', $name)}";
 
         if (isset($criteria[AbstractEntity::STMT_FROM])) {
             $criteria[AbstractEntity::STMT_FROM] .= " {$join}";
         } else {
-            $criteria[AbstractEntity::STMT_FROM] = "{$this->table()} {$join}";
+            $criteria[AbstractEntity::STMT_FROM] = " {$join}";
         }
 
         if (isset($value)) {
-            $where = "{$cloudCredentialsProperty->columnValue('ccp')} = {$cloudCredentialsProperty->qstr('value', $value)}";
+            $where = "{$cloudCredentialsProperty->columnValue($alias)} = {$cloudCredentialsProperty->qstr('value', $value)}";
 
             if (isset($criteria[AbstractEntity::STMT_WHERE])) {
                 $criteria[AbstractEntity::STMT_WHERE] .= " AND ($where)";

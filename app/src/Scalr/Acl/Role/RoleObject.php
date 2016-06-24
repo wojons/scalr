@@ -150,10 +150,12 @@ class RoleObject
         }
 
         if (!empty($permissionId) && !$resourceDefinition->hasPermission($permissionId)) {
-            throw new Exception\RoleObjectException(sprintf(
-                "Unknown permission (%s) for resource '%s' (0x%x).",
-                $permissionId, $resourceDefinition->getName(), intval($resourceId)
-            ));
+            if (!($resourceId == Acl::RESOURCE_OWN_FARMS && $permissionId == Acl::PERM_FARMS_CHANGE_OWNERSHIP)) {
+                throw new Exception\RoleObjectException(sprintf(
+                    "Unknown permission (%s) for resource '%s' (0x%x).",
+                    $permissionId, $resourceDefinition->getName(), intval($resourceId)
+                ));
+            }
         }
 
         //Checks if resource is defined for the role

@@ -2,9 +2,9 @@
 
 namespace Scalr\Upgrade;
 
-use \Iterator;
-use \ReflectionClass;
-use \ReflectionProperty;
+use Iterator;
+use ReflectionClass;
+use ReflectionProperty;
 
 /**
  * EntityPropertiesIterator

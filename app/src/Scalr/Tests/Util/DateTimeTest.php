@@ -3,6 +3,7 @@
 namespace Scalr\Tests\Util;
 
 use Scalr\Tests\WebTestCase;
+use DateTime;
 
 /**
  * DateTimeTest
@@ -48,5 +49,29 @@ class DateTimeTest extends WebTestCase
         $db = \Scalr::getDb();
         $expected = $db->GetOne("SELECT YEARWEEK(?, 0)", [$date]);
         $this->assertEquals($expected, \Scalr_Util_DateTime::yearweek($date));
+    }
+
+    public function providerIncrescentTimeInterval()
+    {
+        return [
+            ['2016-02-15 15:10:10', '2016-02-15 15:10:12', 'just now'],
+            ['2016-02-15 15:10:10', '2016-02-15 15:15:55', '5 min ago'],
+            ['2016-02-15 15:10:10', '2016-02-15 16:10:10', '3:10 PM'],
+            ['2016-02-15 15:10:10', '2016-02-16 16:10:10', 'Yesterday, 3:10 PM'],
+            ['2016-02-15 15:10:10', '2016-02-17 16:10:10', 'Feb. 15, 3:10 PM'],
+            ['2016-02-15 15:10:10', '2017-02-17 16:10:10', 'Feb. 15, 2016, 3:10 PM']
+        ];
+    }
+
+    /**
+     * @test
+     * @dataProvider providerIncrescentTimeInterval
+     */
+    public function testIncrescentTimeInterval($date, $curDate, $expected)
+    {
+        $this->assertEquals($expected, \Scalr_Util_DateTime::getIncrescentTimeInterval($date, $curDate));
+        $date = DateTime::createFromFormat('Y-m-d H:i:s', $date);
+        $curDate = DateTime::createFromFormat('Y-m-d H:i:s', $curDate);
+        $this->assertEquals($expected, \Scalr_Util_DateTime::getIncrescentTimeInterval($date, $curDate));
     }
 }

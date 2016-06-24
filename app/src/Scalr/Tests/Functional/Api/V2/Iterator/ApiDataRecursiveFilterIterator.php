@@ -9,7 +9,7 @@ use RecursiveArrayIterator;
  * Filtering data for api call
  *
  * @author Andrii Penchuk <a.penchuk@scalr.com>
- * @since 5.6.14 (15.12.2015)
+ * @since 5.11 (15.12.2015)
  */
 class ApiDataRecursiveFilterIterator extends RecursiveFilterIterator
 {
@@ -29,6 +29,8 @@ class ApiDataRecursiveFilterIterator extends RecursiveFilterIterator
     protected $part;
 
     /**
+     * Api specifications type
+     *
      * @var string
      */
     protected $type;
@@ -47,7 +49,8 @@ class ApiDataRecursiveFilterIterator extends RecursiveFilterIterator
      * ApiDataRecursiveFilterIterator constructor.
      *
      * @param RecursiveArrayIterator $recursiveIter recursive iterator for Api data
-     * @param array $parts array of the parts of the path
+     * @param array                  $parts         array of the parts of the path
+     * @param string                 $type          optional api specifications type
      */
     public function __construct(RecursiveArrayIterator $recursiveIter, $parts, $type = null)
     {
@@ -73,9 +76,7 @@ class ApiDataRecursiveFilterIterator extends RecursiveFilterIterator
             $result = true;
             //check scope
             $obj = $this->current();
-            if (!is_null($this->type) && array_key_exists('scope', $obj) && in_array($obj['scope'],
-                    self::$notAllowedScope[$this->type])
-            ) {
+            if (!is_null($this->type) && array_key_exists('scope', $obj) && in_array($obj['scope'], self::$notAllowedScope[$this->type])) {
                 $result = false;
             }
         }

@@ -8,6 +8,7 @@ Scalr.ui.getFarmRoleModel = function() {
             'platform',
             'generation',
             'osId',
+            'isScalarized',
             'farm_role_id',
             'cloud_location',
             'image',
@@ -23,7 +24,6 @@ Scalr.ui.getFarmRoleModel = function() {
             'scripting',
             'scripting_params',
             'storages',
-            'config_presets',
             'variables',
             {name: 'securityGroupsEnabled', defaultValue: true},
             {name: 'running_servers', defaultValue: 0},
@@ -44,7 +44,7 @@ Scalr.ui.getFarmRoleModel = function() {
 
         watchList: {
             launch_index: true,
-            settings: ['scaling.enabled', 'scaling.min_instances', 'scaling.max_instances', 'aws.instance_type', 'db.msr.data_storage.engine', 'gce.machine-type'],
+            settings: ['scaling.enabled', 'scaling.min_instances', 'scaling.max_instances', 'instance_type', 'db.msr.data_storage.engine'],
             scaling: true
         },
 
@@ -100,7 +100,7 @@ Scalr.ui.getFarmRoleModel = function() {
         },
 
         getInstanceTypeLimits: function() {
-            var limits = Scalr.getGovernance(this.get('platform'), this.getInstanceTypeParamName());
+            var limits = Scalr.getGovernance(this.get('platform'), 'instance_type');
 
             if (this.get('platform') === 'azure') {
                 if (limits !== undefined && limits.value[this.get('cloud_location')]) {//azure has location based instance type limits
@@ -115,6 +115,7 @@ Scalr.ui.getFarmRoleModel = function() {
         getInstanceType: function(availableInstanceTypes, vpcEnabled) {
             var me = this,
                 limits = me.getInstanceTypeLimits(),
+                ebsStorageEncryptionRequired = (Scalr.getGovernance('ec2', 'aws.storage') || {})['require_encryption'],
                 settings = me.get('settings', true),
                 image = me.get('image', true),
                 typeString = image['type'] || '',
@@ -127,7 +128,7 @@ Scalr.ui.getFarmRoleModel = function() {
                     }
                 },
                 platform = me.get('platform'),
-                instanceType = settings[me.getInstanceTypeParamName()],
+                instanceType = settings['instance_type'],
                 defaultInstanceType,
                 defaultInstanceTypeAllowed,
                 firstAllowedInstanceType,
@@ -168,8 +169,14 @@ Scalr.ui.getFarmRoleModel = function() {
             Ext.each(availableInstanceTypes, function(item) {
                 var allowed,
                     clonedItem = Ext.clone(item);
-                if (instanceType !== item.id && limits && limits['value'] !== undefined && !Ext.Array.contains(limits['value'], item.id)) {
-                    return;
+                if (instanceType !== item.id) {
+                    if (limits && limits['value'] !== undefined && !Ext.Array.contains(limits['value'], item.id)) {
+                        return;
+                    }
+                    if (platform === 'ec2' && ebsStorageEncryptionRequired && !item['ebsencryption']) {
+                        return;
+                    }
+
                 }
 
                 instanceTypes.push(clonedItem);
@@ -229,41 +236,12 @@ Scalr.ui.getFarmRoleModel = function() {
             this.set('settings', settings);
         },
 
-        getInstanceTypeParamName: function(platform) {
-            var name;
-            platform = platform || this.get('platform');
-            switch (platform) {
-                case 'ec2':
-                    name = 'aws.instance_type';
-                break;
-                case 'gce':
-                    name = 'gce.machine-type';
-                break;
-                case 'rackspace':
-                    name = 'rs.flavor-id';
-                break;
-                case 'azure':
-                    name = 'azure.vm-size';
-                break;
-                default:
-                    if (Scalr.isOpenstack(platform)) {
-                        name = 'openstack.flavor-id';
-                    } else if (Scalr.isCloudstack(platform)) {
-                        name = 'cloudstack.service_offering_id';
-                    }
-                break;
-            }
-            return name;
-        },
-
         getDefaultStorageEngine: function() {
             var engine = '',
                 platform = this.get('platform', true);
 
             if (platform === 'ec2') {
                 engine = 'ebs';
-            } else if (platform === 'rackspace') {
-                engine = 'eph';
             } else if (Scalr.isOpenstack(platform)) {
                 engine = this.isMySql() ? 'lvm' : 'eph';
             } else if (platform === 'gce') {
@@ -280,8 +258,6 @@ Scalr.ui.getFarmRoleModel = function() {
 
             if (platform === 'ec2') {
                 engine = 'ebs';
-            } else if (platform === 'rackspace') {
-                engine = 'eph';
             } else if (platform === 'gce') {
                 engine = 'gce_persistent';
             } else if (platform === 'cloudstack' || platform === 'idcf') {
@@ -298,8 +274,6 @@ Scalr.ui.getFarmRoleModel = function() {
 
             if (platform === 'ec2') {
                 engine = 'ebs';
-            } else if (platform === 'rackspace') {
-                engine = 'eph';
             } else if (platform === 'cloudstack' || platform === 'idcf') {
                 engine = 'csvol';
             }
@@ -402,7 +376,7 @@ Scalr.ui.getFarmRoleModel = function() {
                 storages.push({name:'raid.ebs', description:'RAID array on EBS volumes'});
 
                 if (this.isMySql()) {
-                    if (Ext.isDefined(ephemeralDevicesMap[settings['aws.instance_type']])) {
+                    if (Ext.isDefined(ephemeralDevicesMap[settings['instance_type']])) {
                         storages.push({name:'lvm', description:'LVM on ephemeral devices'});
                     }
                     if (settings['db.msr.data_storage.engine'] == 'eph' || Scalr.flags['betaMode']) {
@@ -411,8 +385,6 @@ Scalr.ui.getFarmRoleModel = function() {
                 } else {
                     storages.push({name:'eph', description:'Ephemeral device'});
                 }
-            } else if (platform === 'rackspace') {
-                storages.push({name:'eph', description:'Ephemeral device'});
             } else if (platform === 'gce') {
                 storages.push({name:'gce_persistent', description:'GCE Persistent disk'});
             } else if (Scalr.isOpenstack(platform)) {
@@ -437,7 +409,8 @@ Scalr.ui.getFarmRoleModel = function() {
                 os = Scalr.utils.getOsById(this.get('osId')) || {},
                 arch = this.get('image', true)['architecture'],
                 extraFs = (os.family === 'centos' && arch === 'x86_64') ||
-                          (os.family === 'ubuntu' && (os.generation == '10.04' || os.generation == '12.04' || os.generation == '14.04')),
+                          (os.family === 'ubuntu' && Ext.Array.contains(['10.04', '12.04', '14.04'], os.generation)) ||
+                          (os.family === 'debian' && Ext.Array.contains(['7', '8'], os.generation)),
                 disabledText = extraFs ? '' : 'Not available in the selected OS';
             list = [
                 {value: 'ext3', text: 'Ext3'},
@@ -467,11 +440,11 @@ Scalr.ui.getFarmRoleModel = function() {
             disks.push({'device':'', 'description':''});
             if (platform === 'ec2') {
                 Ext.Object.each(this.storageDisks['ec2'], function(key, value){
-                    if (value[settings['aws.instance_type']] === 1) {
+                    if (value[settings['instance_type']] === 1) {
                         disks.push({'device': key, 'description':'LVM on ' + key + ' (80% available for data)'});
                     }
                 });
-            } else if (Scalr.isOpenstack(platform) || platform === 'rackspace') {
+            } else if (Scalr.isOpenstack(platform)) {
                 disks.push({'device':'/dev/loop0', 'description':'Loop device (75% from /)'});
             } else if (platform === 'gce') {
                 disks.push({'device':'ephemeral-disk-0', 'description':'Loop device (80% of ephemeral-disk-0)'});
@@ -550,7 +523,7 @@ Scalr.ui.getFarmRoleModel = function() {
             var platform = this.get('platform'),
                 cloudLocation = this.get('cloud_location'),
                 instanceTypeInfo;
-            instType = instType || this.get('settings', true)['aws.instance_type'];
+            instType = instType || this.get('settings', true)['instance_type'];
             Scalr.loadInstanceTypes(platform, cloudLocation, function(data, status){
                 Ext.each(data, function(i){
                     if (i.id === instType) {
@@ -569,7 +542,7 @@ Scalr.ui.getFarmRoleModel = function() {
                 ebsOptSupported = false;
 
             if (typeString.indexOf('ebs') !== -1) {
-                instType = instType || this.get('settings', true)['aws.instance_type'];
+                instType = instType || this.get('settings', true)['instance_type'];
                 Scalr.loadInstanceTypes(platform, cloudLocation, function(data, status){
                     Ext.each(data, function(i){
                         if (i.id === instType) {
@@ -589,7 +562,7 @@ Scalr.ui.getFarmRoleModel = function() {
                 cloudLocation = this.get('cloud_location'),
                 pgSupported = false;
 
-            instType = instType || this.get('settings', true)['aws.instance_type'];
+            instType = instType || this.get('settings', true)['instance_type'];
             Scalr.loadInstanceTypes(platform, cloudLocation, function(data, status){
                 Ext.each(data, function(i){
                     if (i.id === instType) {
@@ -609,7 +582,7 @@ Scalr.ui.getFarmRoleModel = function() {
                 params: {
                     platform: me.get('platform'),
                     cloudLocation: me.get('cloud_location'),
-                    instanceType: instanceType || settings[me.getInstanceTypeParamName()],
+                    instanceType: instanceType || settings['instance_type'],
                     osFamily: Scalr.utils.getOsById(me.get('osId'), 'family')
                 }
             }, function(data, status){
@@ -739,6 +712,9 @@ Ext.define('Scalr.ui.FarmDesignerFarmRoles', {
                     type: 'delete',
                     msg: msg,
                     success: function () {
+                        if (!record.get('new')) {
+                            view.store.rolesToRemove.push(record.get('farm_role_id'));
+                        }
                         view.store.remove(record);
                         view.refresh();
                     }
@@ -1357,9 +1333,10 @@ Ext.define('Scalr.ui.FarmSettings', {
                     allowBlank: false,
                     anchor: '100%',
                     forceSelection: true,
-                    editable: false,
+                    editable: true,
                     queryMode: 'local',
-                    anyMatch: true
+                    anyMatch: true,
+                    selectOnFocus: true
                 }, {
                     xtype: 'fieldcontainer',
                     layout: 'hbox',
@@ -1390,9 +1367,11 @@ Ext.define('Scalr.ui.FarmSettings', {
                             }
                         },
                         listeners: {
-                            select: function(field) {
-                                if (field.ownerId && field.showWarning) {
-                                    Scalr.message.Warning('Be careful when changing a Farm\'s Owner, you may lose access.');
+                            change: function(field, value, prev) {
+                                if (field.showWarning) {
+                                    if (!Ext.isEmpty(prev)) {
+                                        Scalr.message.WarningTip('Be careful when changing a Farm\'s Owner, you may lose access.', field.getEl(), { anchor: 'bottom' });
+                                    }
                                     field.showWarning = false;
                                 }
                             }
@@ -1419,9 +1398,13 @@ Ext.define('Scalr.ui.FarmSettings', {
                                         margin: 16,
                                         width: 600,
                                         store: {
-                                            fields: ['newId', 'newEmail', 'changedById', 'changedByEmail', 'dt'],
+                                            fields: ['newId', 'newEmail', 'changedById', 'changedByEmail', 'dt', 'dtTm'],
                                             data: data.history,
-                                            reader: 'object'
+                                            reader: 'object',
+                                            sorters: [{
+                                                property: 'dt',
+                                                direction: 'DESC'
+                                            }]
                                         },
                                         viewConfig: {
                                             emptyText: 'No changes have been made',
@@ -1435,7 +1418,7 @@ Ext.define('Scalr.ui.FarmSettings', {
                                                 dataIndex: 'changedByEmail',
                                                 sortable: true
                                             },
-                                            {header: 'On', flex: 1, dataIndex: 'dt', sortable: true}
+                                            {header: 'On', flex: 1, dataIndex: 'dt', sortable: true, xtype: 'templatecolumn', tpl: '{dtTm}'}
                                         ],
                                         dockedItems: [{
                                             xtype: 'container',
@@ -1464,20 +1447,45 @@ Ext.define('Scalr.ui.FarmSettings', {
                     itemId: 'teamOwnerCt',
                     fieldLabel: 'Team',
                     items: [{
-                        xtype: 'combo',
+                        xtype: 'tagfield',
                         flex: 1,
                         itemId: 'teamOwner',
                         name: 'teamOwner',
-                        editable: false,
-                        queryMode: 'local',
+                        emptyText: 'No teams',
+
+                        queryCaching: false,
+                        minChars: 0,
+                        queryDelay: 10,
+                        forceSelection: true,
+
                         store: {
-                            fields: ['id', 'name', {name: 'displayField', convert: function(v, record){
-                                return record.data.name ? (record.data.name + (record.data.description ? ' (' + record.data.description + ')' : '')) : v;
-                            }}],
-                            proxy: 'object'
+                            fields: [{name: 'id', mapping: 'name'}],
+                            proxy: {
+                                type: 'cachedrequest',
+                                crscope: 'farmDesigner',
+                                url: '/farms/builder/xGetTeams',
+                                filterFields: ['name']
+                            },
                         },
-                        valueField: 'id',
-                        displayField: 'displayField',
+                        listConfig: {
+                            tpl: [
+                                '<tpl for=".">',
+                                    '<div class="x-boundlist-item" style="height: auto; width: auto; max-width: 900px;">',
+                                        '<div>',
+                                            '<b <tpl if="status==&quot;none&quot;"> style="color: #739ac5"</tpl> >{name}</b>',
+                                            '<tpl if="status==&quot;user&quot;"><span style="color: #666; font-size: 11px;">&nbsp;(Your team)</span></tpl>',
+                                        '</div>',
+                                        '<tpl if="description">',
+                                            '<div style="line-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px">',
+                                                '<span style="font-style: italic;">{description}</span>',
+                                            '</div>',
+                                        '</tpl>',
+                                    '</div>',
+                                '</tpl>'
+                            ]
+                        },
+                        valueField: 'name',
+                        displayField: 'name',
                         showWarning: true,
                         setTooltip: function (text) {
                             if (this.rendered) {
@@ -1489,9 +1497,11 @@ Ext.define('Scalr.ui.FarmSettings', {
                             }
                         },
                         listeners: {
-                            select: function(field) {
-                                if (field.teamId && field.showWarning) {
-                                    Scalr.message.Warning('Be careful when changing a Farm\'s Team, you may lose access.');
+                            change: function(field, value, prev) {
+                                if (field.showWarning) {
+                                    if (!Ext.isEmpty(prev)) {
+                                        Scalr.message.WarningTip('Be careful when changing a Farm\'s Team, you may lose access.', field.getEl(), { anchor: 'bottom' });
+                                    }
                                     field.showWarning = false;
                                 }
                             }
@@ -1761,17 +1771,7 @@ Ext.define('Scalr.ui.FarmSettings', {
         itemId: 'variables',
         currentScope: 'farm',
         encodeParams: false,
-        removeTopSeparator: true,
         cls: 'x-panel-column-left x-panel-column-left-with-tabs',
-        //fixme extjs5
-        /*restoreContainerScrollState: function () {
-            var me = this;
-
-            var container = me.up('#farm');
-            container.el.scrollTo('top', container.scrollTop || 0);
-
-            return me;
-        },*/
         updateFarmRoleVariable: function (variable, farmCurrent, scopes, farmDefault, farmLocked) {
             farmLocked = farmLocked || {};
 
@@ -1838,21 +1838,7 @@ Ext.define('Scalr.ui.FarmSettings', {
                     me.farmVariables = farmVariables;
                 }
             },
-            boxready: function (me) {
-                var container = me.up('#farm');
-                //fixme extjs5
-                /*container.el.on('scroll', function () {
-                    container.scrollTop = container.el.getScroll().top;
-                }, me);*/
-            },
-            select: function (me) {
-                //fixme extjs5
-                //me.restoreContainerScrollState();
-            },
             datachanged: function (me, record) {
-                //fixme extjs5
-                //me.restoreContainerScrollState();
-
                 var name = record.get('name');
                 var current = Ext.clone(record.get('current'));
                 var def = record.get('default');
@@ -1915,9 +1901,6 @@ Ext.define('Scalr.ui.FarmSettings', {
                 });
             },
             removevariable: function (me, record) {
-                //fixme extjs5
-                //me.restoreContainerScrollState();
-
                 var name = record.get('name');
 
                 Ext.Array.each(me.farmVariables, function (variable, index, farmVariables) {
@@ -1968,10 +1951,10 @@ Ext.define('Scalr.ui.FarmSettings', {
                 editable: false,
                 name: 'szr.upd.repository',
                 fieldLabel: 'Repository',
-                valueField: 'name',
+                valueField: 'id',
                 displayField: 'name',
                 store: {
-                    fields: ['name'],
+                    model: Scalr.getModel({fields: ['id','name']}),
                     proxy: 'object'
                 }
             },{
@@ -2068,6 +2051,7 @@ Ext.define('Scalr.ui.FarmSettings', {
 
             field = ct.down('#costMetering');
             if (Scalr.flags['analyticsEnabled']) {
+                field.projectEditable = farmSettings.projectEditable || farmSettings.isNew;
                 field.setValue(moduleParams.analytics);
             }
             field.setVisible(Scalr.flags['analyticsEnabled']);
@@ -2078,14 +2062,11 @@ Ext.define('Scalr.ui.FarmSettings', {
             field.store.load({data: moduleParams.usersList});
             field.setDisabled(!farmSettings.ownerEditable || farmSettings.isNew);
             field.setReadOnly(!farmSettings.ownerEditable || farmSettings.isNew);
-            field.ownerId = farmSettings.owner;
-            field.showWarning = true;
+            field.showWarning = false;
             //field.setTooltip(!farmSettings.ownerEditable ? 'Only account owner or farm owner can change this field' : '');
 
             field = ct.down('#teamOwner');
-            field.store.load({data: moduleParams.teamsList});
-            field.teamId = farmSettings.teamOwner;
-            field.showWarning = true;
+            field.showWarning = false;
             field.setDisabled(!farmSettings.teamOwnerEditable && !farmSettings.isNew);
             field.setReadOnly(!farmSettings.teamOwnerEditable && !farmSettings.isNew);
 
@@ -2094,6 +2075,9 @@ Ext.define('Scalr.ui.FarmSettings', {
 
             ct.resetFieldValues();
             ct.setFieldValues(farmSettings);
+
+            ct.down('#farmOwner').showWarning = true;
+            ct.down('#teamOwner').showWarning = true;
 
             //vpc
             ct = this.down('#awsvpc');
@@ -2164,8 +2148,8 @@ Ext.define('Scalr.ui.FarmSettings', {
             ct = this.down('#advanced');
             ct.resetFieldValues();
             field = ct.down('#updRepo');
-            field.store.load({data: moduleParams.tabParams['scalr.scalarizr_update.repos']});
-            field.emptyText = 'System default' + (moduleParams.tabParams['scalr.scalarizr_update.default_repo'] ? ' (' + moduleParams.tabParams['scalr.scalarizr_update.default_repo'] + ')' : '');
+            field.store.load({data: Ext.Object.merge({'':'System default'}, moduleParams.tabParams['scalr.scalarizr_update.repos'])});
+            field.emptyText = 'System default';
             field.applyEmptyText();
             field.setValue(farmSettings['szr.upd.repository'] || '');
 
@@ -2514,7 +2498,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab', {
         }
     },
 
-	clearErrors: function () {
+	clearErrors: function (settingName) {
         var errors;
         if (this.currentRole) {
             errors = this.currentRole.get('errors', true);
@@ -2522,10 +2506,14 @@ Ext.define('Scalr.ui.FarmRoleEditorTab', {
                 var tabSettings = this.getSettingsList();
                 if (tabSettings !== undefined) {
                     Ext.Object.each(errors, function(name, error){
-                        if (name in tabSettings) {
+                        if (name in tabSettings && (!settingName || settingName == name)) {
+                            var field = this.down('[name="' + name + '"]');
+                            if (field && field.isFormField) {
+                                field.clearInvalid();
+                            }
                             delete errors[name];
                         }
-                    });
+                    }, this);
                 }
                 if (Ext.Object.getSize(errors) === 0) {
                     this.currentRole.set('errors', null);
@@ -2550,7 +2538,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab', {
 
     activateTab: function () {
         this.deactivated = false;
-        if (this.el) {//fixme extjs5
+        if (this.el) {
             this.el.unmask();
         }
 	},
@@ -2611,6 +2599,10 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Main', {
     stateEvents: ['minify', 'maximize'],
     autoScroll: false,
     cache: null,
+
+    settings: {
+        instance_type: undefined
+    },
 
     listeners: {
         boxready: function() {
@@ -2681,23 +2673,18 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Main', {
             case 'ec2':
                 return {
                     'aws.availability_zone': '',
-                    'aws.instance_type': record.get('image', true)['architecture'] == 'i386' ? 'm1.small' : 'm1.large'
-                };
-            break;
-            case 'rackspace':
-                return {
-                    'rs.flavor-id': 1
+                    'instance_type': record.get('image', true)['architecture'] == 'i386' ? 'm1.small' : 'm1.large'
                 };
             break;
             case 'cloudstack':
             case 'idcf':
                 return {
-                    'cloudstack.service_offering_id': ''
+                    'instance_type': ''
                 };
             break;
             case 'gce':
                 return {
-                    'gce.machine-type': ''
+                    'instance_type': ''
                 };
             break;
             default:
@@ -2711,7 +2698,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Main', {
             platform = record.get('platform'),
             cloudLocation = record.get('cloud_location');
 
-        callback = function(data, status) {
+        var callback = function(data, status) {
             if (me.callPlatformHandler('beforeShowTab', [record, handler]) === false) {
                 handler();
             }
@@ -2727,8 +2714,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Main', {
 
     setupInstanceTypeField: function(data, status, record, callback) {
         var me = this,
-            field = me.down('[name="instanceType"]'),
-            limits = record.getInstanceTypeLimits(),
+            field = me.down('[name="instance_type"]'),
+            limits = record.getInstanceTypeLimits() || record.get('platform') === 'ec2' && (Scalr.getGovernance('ec2', 'aws.storage') || {})['require_encryption'],
             instanceType,
             instanceTypeList;
 
@@ -2851,10 +2838,11 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Main', {
                     settings['scaling.' + name] = value;
                     record.set('settings', settings);
                 break;
-                case 'instanceType':
+                case 'instance_type':
                     var settings = record.get('settings');
-                    settings[record.getInstanceTypeParamName()] = value;
+                    settings['instance_type'] = value;
                     settings['info.instance_type_name'] = text;
+                    this.clearErrors('instance_type');
                     record.set('settings', settings);
                 break;
                 case 'alias':
@@ -2969,18 +2957,6 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Main', {
     azure: {
         showTab: function(record) {
             this.down('[name="azure.cloud_location"]').setValue(record.get('cloud_location'));
-        },
-        saveParam: function(name, value) {
-            var record = this.currentRole,
-                settings = record.get('settings');
-            settings[name] = value;
-            record.set('settings', settings);
-        }
-    },
-
-    rackspace: {
-        showTab: function(record) {
-            this.down('[name="rs.cloud_location"]').setValue(record.get('cloud_location'));
         },
         saveParam: function(name, value) {
             var record = this.currentRole,
@@ -3242,12 +3218,15 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Main', {
             }]
         },{
             xtype: 'instancetypefield',
-            name: 'instanceType',
+            name: 'instance_type',
             margin: '0 0 6 0',
             labelWidth: 110,
             markInvalidInstaceType: true,
             listeners: {
                 beforeselect: function(comp, record) {
+                    if (!comp.isExpanded) {
+                        return;
+                    }
 
                     var currentRole, storages, storageTab, allowChange = true, dbmsrTab, ec2Tab;
                     currentRole = comp.up('#maintab').currentRole;
@@ -3446,12 +3425,6 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Main', {
                 labelWidth: 110,
                 name: 'azure.cloud_location'
             },{
-                xtype: 'displayfield',
-                platform: ['rackspace'],
-                fieldLabel: 'Cloud location',
-                labelWidth: 110,
-                name: 'rs.cloud_location'
-            },{
                 xtype: 'container',
                 checkPlatform: function(platform) {
                     return Scalr.isOpenstack(platform);
@@ -3619,6 +3592,55 @@ Ext.define('Scalr.ui.FormVpcNetworkInterfaceField', {
                 Scalr.message.InfoTip('Select subnet first.', subnetIdField.bodyEl, {anchor: 'bottom'});
                 return false;
             }
+        }
+    }
+});
+
+Ext.define('Scalr.ui.FormGceSubnetField', {
+    extend: 'Ext.form.field.ComboBox',
+    alias: 'widget.gcesubnetfield',
+
+    store: {
+        fields: [ 'name', 'description'],
+        proxy: 'object'
+    },
+    valueField: 'name',
+    displayField: 'description',
+    fieldLabel: 'Subnet',
+    editable: false,
+    queryMode: 'local',
+    name: 'gce.subnet',
+    allowBlank: false,
+    autoSetValue: true,
+    hidden: true,
+    loadSubnets: function(cloudLocation, network) {
+        this.store.removeAll();//with autoSetValue=true we must clear store before reset
+        this.reset();
+        if (network) {
+            Scalr.cachedRequest.load(
+                {
+                    url: '/platforms/gce/xGetSubnets',
+                    params: {
+                        name: network,
+                        cloudLocation: cloudLocation
+                    }
+                },
+                function (data, status) {
+                    if (data) {
+                        this.show();
+                        this.store.load({data: data});
+
+                        this.emptyText = Ext.isEmpty(data) ? 'Subnetwork was not specified for a custom network.' : '';
+                        this.applyEmptyText();
+                        this.validate();
+                    } else {
+                        this.hide();
+                    }
+                },
+                this
+            );
+        } else {
+            this.hide();
         }
     }
 });

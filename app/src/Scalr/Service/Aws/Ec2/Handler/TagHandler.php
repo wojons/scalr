@@ -34,9 +34,11 @@ class TagHandler extends AbstractEc2Handler
         if (!($tagList instanceof ResourceTagSetList)) {
             $tagList = new ResourceTagSetList($tagList);
         }
+
         if (!($resourceIdList instanceof ListDataType)) {
             $resourceIdList = new ListDataType($resourceIdList);
         }
+
         return $this->getEc2()->getApiHandler()->createTags($resourceIdList, $tagList);
     }
 
@@ -59,9 +61,11 @@ class TagHandler extends AbstractEc2Handler
         if (!($tagList instanceof ResourceTagSetList)) {
             $tagList = new ResourceTagSetList($tagList);
         }
+
         if (!($resourceIdList instanceof ListDataType)) {
             $resourceIdList = new ListDataType($resourceIdList);
         }
+
         return $this->getEc2()->getApiHandler()->deleteTags($resourceIdList, $tagList);
     }
 }

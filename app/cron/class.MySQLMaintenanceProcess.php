@@ -78,7 +78,7 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
                 if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_LAST_BCP_TS)+$bcp_timeout < time())
                     $bcp_timeouted = true;
 
-                if ($bcp_timeouted)
+                if (!empty($bcp_timeouted))
                 {
                     $DBFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_IS_BCP_RUNNING, 0, Entity\FarmRoleSetting::TYPE_LCL);
                     $this->Logger->info("[FarmID: {$DBFarm->ID}] MySQL Backup already running. Timeout. Clear lock.");
@@ -93,12 +93,12 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
 
                     $servers = $DBFarm->GetMySQLInstances(false, true);
 
-                    if (!$servers[0])
-                         $servers = $DBFarm->GetMySQLInstances(true);
+                    if (empty($servers[0]))
+                        $servers = $DBFarm->GetMySQLInstances(true);
                     else
                         $servers = array_reverse($servers);
 
-                    $DBServer = $servers[0];
+                    $DBServer = isset($servers[0]) ? $servers[0] : null;
 
                     if ($DBServer)
                     {
@@ -127,7 +127,7 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
                 if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::MYSQL_LAST_BUNDLE_TS)+$bundle_timeout < time())
                     $bundle_timeouted = true;
 
-                if ($bundle_timeouted)
+                if (!empty($bundle_timeouted))
                 {
                     $DBFarmRole->SetSetting(Entity\FarmRoleSetting::MYSQL_IS_BUNDLE_RUNNING, 0, Entity\FarmRoleSetting::TYPE_LCL);
                     $this->Logger->info("[FarmID: {$DBFarm->ID}] MySQL Bundle already running. Timeout. Clear lock.");
@@ -185,8 +185,8 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
                     $this->Logger->info("[FarmID: {$DBFarm->ID}] Need mySQL bundle procedure");
 
                     // Rebundle
-                       $servers = $DBFarm->GetMySQLInstances(true, false);
-                    $DBServer = $servers[0];
+                    $servers = $DBFarm->GetMySQLInstances(true, false);
+                    $DBServer = isset($servers[0]) ? $servers[0] : null;
 
                     if ($DBServer)
                     {
@@ -203,83 +203,5 @@ class MySQLMaintenanceProcess implements \Scalr\System\Pcntl\ProcessInterface
                 }
             }
         }
-
-
-        // Check replication
-        foreach ($servers as $DBServer)
-        {
-            try
-               {
-                   if ($DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER) == 1)
-                       continue;
-
-                   $this->Logger->info("[FarmID: {$DBFarm->ID}] {$DBServer->remoteIp} -> SLAVE STATUS");
-
-                   $sock = @socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
-                @socket_set_nonblock($sock);
-
-                   $time = time();
-                   $res = true;
-                while (!@socket_connect($sock, $DBServer->remoteIp, 3306))
-                {
-                    $err = @socket_last_error($sock);
-                    if ($err == 115 || $err == 114 || $err == 36 || $err == 37)
-                    {
-                        if ((time() - $time) >= 5)
-                        {
-                            @socket_close($sock);
-                            $res = false;
-                            break;
-                        }
-
-                        sleep(1);
-                        continue;
-                      }
-                      else
-                      {
-                          $res = ($err == 56) ? true : false;
-                          break;
-                      }
-                }
-
-                   if (!$res) {
-                       \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
-                            $DBFarm->ID,
-                            sprintf(_("Scalr cannot connect to server %s:3306 (%s) and check replication status. (Error (%s):%s)"),
-                               $DBServer->remoteIp, $DBServer->serverId, $err, socket_strerror($err)
-                            ),
-                            !empty($DBServer->serverId) ? $DBServer->serverId : null
-                       ));
-                       continue;
-                   }
-
-                   // Connect to Mysql on slave
-                   $conn = NewADOConnection("mysqli");
-                   $conn->Connect($DBServer->remoteIp, 'scalr_stat', $DBServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::MYSQL_STAT_PASSWORD), null);
-                   $conn->SetFetchMode(ADODB_FETCH_ASSOC);
-
-                   // Get Slave status
-                   $r = $conn->GetRow("SHOW SLAVE STATUS");
-
-                   // Check slave replication running or not
-                   if ($r['Slave_IO_Running'] == 'Yes' && $r['Slave_SQL_Running'] == 'Yes')
-                       $replication_status = 1;
-                   else
-                       $replication_status = 0;
-
-                   if ($replication_status != $DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_REPLICATION_STATUS)) {
-                       if ($replication_status == 0)
-                           Scalr::FireEvent($DBFarm->ID, new MySQLReplicationFailEvent($DBServer));
-                       else
-                           Scalr::FireEvent($DBFarm->ID, new MySQLReplicationRecoveredEvent($DBServer));
-                   }
-               } catch (Exception $e) {
-                   \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
-                           $DBFarm->ID,
-                           "Cannot retrieve replication status. {$e->getMessage()}",
-                           !empty($DBServer->serverId) ? $DBServer->serverId : null
-                   ));
-               }
-        }
-        }
+    }
 }

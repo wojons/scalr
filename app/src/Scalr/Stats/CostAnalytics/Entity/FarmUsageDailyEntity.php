@@ -2,7 +2,7 @@
 namespace Scalr\Stats\CostAnalytics\Entity;
 
 use Scalr\Model\AbstractEntity;
-use \DateTime;
+use DateTime;
 
 /**
  * FarmUsageDailyEntity

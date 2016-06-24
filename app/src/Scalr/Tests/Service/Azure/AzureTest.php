@@ -37,6 +37,9 @@ use Scalr\Model\Entity;
  */
 class AzureTest extends TestCase
 {
+
+    const TEST_TYPE = TestCase::TEST_TYPE_CLOUD_DEPENDENT;
+
     /**
      * @var Azure
      */
@@ -99,7 +102,7 @@ class AzureTest extends TestCase
     {
         parent::setUp();
 
-        if ($this->isSkipFunctionalTests()) {
+        if (static::isSkippedFunctionalTest()) {
             $this->markTestSkipped();
         }
 
@@ -117,7 +120,7 @@ class AzureTest extends TestCase
 
         $this->azure = $this->testEnv->azure();
 
-        $this->subscriptionId = $this->azure->getEnvironment()->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID];
+        $this->subscriptionId = $this->azure->getEnvironment()->keychain(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID];
 
         $this->resourceGroupName = 'test3-resource-group-' . $this->getInstallationId();
         $this->availabilitySetName = 'test3-availability-set-' . $this->getInstallationId();
@@ -252,7 +255,7 @@ class AzureTest extends TestCase
         foreach ($publishers as $publisher) {
             $this->assertObjectHasAttribute('name', $publisher);
             $offers = $this->azure->compute->location->getOffersList($this->subscriptionId, $region, $publisher->name);
-
+            
             if (!empty($offers)) {
                 break;
             }

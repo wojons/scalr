@@ -4,12 +4,15 @@ namespace Scalr\Tests\Model;
 use ADODB_mysqli;
 use ADORecordSet_mysqli;
 use Exception;
+use ReflectionClass;
 use Scalr\Model\AbstractEntity;
 use Scalr\Model\Collections\EntityIterator;
 use Scalr\Tests\Fixtures\Model\Entity\TestEntity;
 use Scalr\Tests\TestCase;
 use Scalr\Tests\Fixtures\Model\Entity\Entity1;
 use Scalr\Model\Entity\CloudLocation;
+use Scalr\Db\ConnectionPool;
+use Scalr\Exception\ModelException;
 
 /**
  * AbstractEntityTest test
@@ -23,6 +26,10 @@ class AbstractEntityTest extends TestCase
     const CL_PLATFORM = 'test';
     const CL_URL = '';
     const CL_NAME = 'test';
+    const TEST_UPDATE_COMMON = [12, 'm1-small', 1];
+    const TEST_UPDATE_DEFAULT_COST = 1.0;
+    const ERROR_MSG_FORBIDDEN_TO_CHANGE_PK = 'It is forbidden to change PK value from the update() method. Field "priceId" of the';
+    const ERROR_MSG_PK_NOT_INITIALIZED = 'Field "priceId" is not initialized inside the';
 
     /**
      * Data provider for testBuildQuery
@@ -331,5 +338,105 @@ class AbstractEntityTest extends TestCase
 
         $this->assertEquals(count($entities), $totalCount);
         $this->assertEquals(0, $db->GetOne("SELECT COUNT(*) FROM {$tableName}"));
+    }
+
+    /**
+     * Data provider for the testUpdate
+     *
+     * @return array
+     */
+    public function providerUpdate()
+    {
+        $common = self::TEST_UPDATE_COMMON;
+
+        $array = [
+            [['cost' => '0.22'], ["`prices`.`cost` = ?", array_merge(['0.220000'], $common)]],
+            [['cost'], ["`prices`.`cost` = ?", array_merge([sprintf("%0.6f", self::TEST_UPDATE_DEFAULT_COST)], $common)]],
+            [['nil' => null], ["`prices`.`nil` = NULL", $common]],
+            [['name' => 'The name', 'cost' => '0.1'], ["`prices`.`name` = ?, `prices`.`cost` = ?", array_merge(['The name', '0.100000'], $common)]],
+            [['priceId' => 1], [], self::ERROR_MSG_FORBIDDEN_TO_CHANGE_PK],
+            [['notFound' => 2], [], 'Field "notFound" does not exist in'],
+            [[], []],
+            [['cost' => '1'], [], self::ERROR_MSG_PK_NOT_INITIALIZED]
+        ];
+
+        return $array;
+    }
+
+    /**
+     * @test
+     * @dataProvider providerUpdate
+     * @param array  $fieldValues  arguments for the update method
+     * @param string $result       The Result
+     * @param string $exeption     optional
+     */
+    public function testUpdate($fieldValues, $result, $exeption = null)
+    {
+        $common = self::TEST_UPDATE_COMMON;
+
+        $db = $this->getMockBuilder(ConnectionPool::class)
+            ->disableOriginalConstructor()
+            ->setMethods(['Execute'])
+            ->getMock();
+
+        /* @var $entity Entity1 */
+        $entity = $this->getMockBuilder(Entity1::class)
+            ->setMethods(['db', '_getReflectionClass'])
+            ->getMock()
+        ;
+
+        $entity->expects($this->any())
+            ->method('db')
+            ->will($this->returnValue($db))
+        ;
+
+        $entity->expects($this->any())
+            ->method('_getReflectionClass')
+            ->will($this->returnValue(new ReflectionClass(Entity1::class)))
+        ;
+
+        if (empty($fieldValues)) {
+            $db->expects($this->never())
+                ->method('Execute')
+            ;
+        } elseif (!$exeption) {
+            $template =
+                "UPDATE `prices` SET " . $result[0] . " "
+              . "WHERE `prices`.`price_id` = ? AND `prices`.`instance_type` = ? AND `prices`.`os` = ? LIMIT 1";
+
+            $db->expects($this->once())
+                ->method('Execute')
+                ->with($this->equalTo($template), $this->equalTo($result[1]))
+            ;
+        }
+
+        if ($exeption != self::ERROR_MSG_PK_NOT_INITIALIZED) {
+            $entity->priceId = $common[0];
+        }
+        $entity->instanceType = $common[1];
+        $entity->os = $common[2];
+        $entity->cost = self::TEST_UPDATE_DEFAULT_COST;
+
+        try {
+            $exceptionMessage = null;
+            $entity->update($fieldValues);
+        } catch (ModelException $e) {
+            $exceptionMessage = $e->getMessage();
+        }
+
+        if ($exeption) {
+            $this->assertTrue(isset($exceptionMessage));
+            $this->assertContains($exeption, $exceptionMessage);
+        } else {
+            foreach ($fieldValues as $fieldName => $value) {
+                if (is_numeric($fieldName)) {
+                    $this->assertEquals('cost', $value);
+                    $this->assertEquals(self::TEST_UPDATE_DEFAULT_COST, $entity->$value);
+                    continue;
+                }
+
+                $this->assertEquals($entity->$fieldName, $value);
+            }
+        }
     }
 }

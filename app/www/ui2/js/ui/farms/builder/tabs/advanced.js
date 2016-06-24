@@ -25,18 +25,25 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Advanced', {
     },
 
     showTab: function (record) {
-        var settings = record.get('settings', true),
+        var me = this,
+            settings = record.get('settings', true),
             farmDesigner = this.up('#farmDesigner'),
             fieldLimit = Scalr.getGovernance('general', 'general.hostname_format'),
             moduleParams = farmDesigner.moduleParams,
             field,
             farmSchedule = farmDesigner.getSzrUpdateSettings()['szr.upd.schedule'].split(' '),
-            schedule = (settings['base.upd.schedule'] || '').split(' ');
+            schedule = (settings['base.upd.schedule'] || '').split(' '),
+            isScalarized = record.get('isScalarized') == 1;
+
+        me.down('#isScalarizedWarning').setVisible(!isScalarized);
+        Ext.each(['general', 'scripting', 'scalrAgent', 'timeouts'], function(itemId){
+            me.down('#' + itemId).setDisabled(!isScalarized);
+        });
 
         this.down('[name="base.hostname_format"]').setValueWithGovernance(settings['base.hostname_format'], fieldLimit !== undefined ? fieldLimit.value : undefined);
 
-        this.down('[name="base.upd.repository"]').store.loadData(Ext.Array.merge([['', 'Use farm settings']],Ext.Array.map(moduleParams.tabParams['scalr.scalarizr_update.repos']||[], function(item){return [item, item]}))),
-        this.down('#systemDnsRecords').setVisible(!!moduleParams.tabParams['scalr.dns.global.enabled']);
+        this.down('[name="base.upd.repository"]').store.load({data: Ext.Object.merge({'':'Use farm settings'}, moduleParams.tabParams['scalr.scalarizr_update.repos'])});
+        this.down('#systemDnsRecords').setVisible(Scalr.flags['dnsGlobalEnabled']);
 
         this.setFieldValues({
             'base.keep_scripting_logs_time': Math.round(settings['base.keep_scripting_logs_time']/3600) || 1,
@@ -125,8 +132,16 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Advanced', {
         }
     },
     __items: [{
+        xtype: 'displayfield',
+        itemId: 'isScalarizedWarning',
+        hidden: true,
+        anchor: '100%',
+        cls: 'x-form-field-info',
+        value: 'Scalarizr automation is required to use settings under <b>General</b>, <b>Orchestration</b>, <b>Timeouts</b> and <b>Scalr Agent</b> sections, but it is not enabled for this Farm Role.'
+    },{
         xtype: 'fieldset',
         title: 'General',
+        itemId: 'general',
         items: [{
             xtype: 'textfield',
             name: 'base.hostname_format',
@@ -160,10 +175,11 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Advanced', {
         }]
     },{
         xtype: 'fieldset',
-        title: 'Scripting',
+        title: 'Orchestration',
+        itemId: 'scripting',
         items: [{
             xtype: 'fieldcontainer',
-            fieldLabel: 'Rotate scripting logs every',
+            fieldLabel: 'Rotate instances orchestration logs every',
             layout: {
                 type: 'hbox',
                 align: 'middle'
@@ -193,19 +209,11 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Advanced', {
         },{
             xtype: 'checkbox',
             name: 'base.reboot_after_hostinit_phase',
-            boxLabel: 'Reboot after HostInit Scripts have executed',
-            plugins: [{
-                ptype: 'fieldicons',
-                icons: [{
-                    id: 'szrversion',
-                    tooltipData: {
-                        version: '3.5.12'
-                    }
-                }]
-            }]
+            boxLabel: 'Reboot after HostInit Scripts have executed'
         }]
     }, {
         xtype: 'fieldset',
+        itemId: 'timeouts',
         title: 'Timeouts',
         items: [{
             xtype: 'fieldcontainer',
@@ -284,6 +292,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Advanced', {
     },{
         xtype: 'fieldset',
         title: 'Override Scalarizr Agent update settings',
+        itemId: 'scalrAgent',
         defaults: {
             labelWidth: 160
         },
@@ -295,9 +304,12 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Advanced', {
             queryMode: 'local',
             width: 351,
             emptyText: 'Use farm settings',
-            valueField: 'value',
-            displayField: 'text',
-            store: Ext.create('Ext.data.ArrayStore', {fields: ['value', 'text']})
+            valueField: 'id',
+            displayField: 'name',
+            store: {
+                model: Scalr.getModel({fields: ['id', 'name']}),
+                proxy: 'object'
+            }
         },{
             xtype: 'fieldcontainer',
             fieldLabel: 'Schedule (UTC time)',

@@ -91,7 +91,7 @@ Scalr.regPage('Scalr.ui.logs.events', function (loadParams, moduleParams) {
                             '/<span style="color:orange;">{[values.scripts.timeout]}</span>' +
                             '/<span style="color:red;">{[values.scripts.failed]}</span>' +
                         '</span>'+
-                        '&nbsp;[<a href="#/logs/scripting?eventId={event_id}">View</a>]'+
+                        '&nbsp;[<a href="#/logs/orchestration?eventId={event_id}">View</a>]'+
                     '<tpl else>'+
                         '&mdash;'+
                     '</tpl>',

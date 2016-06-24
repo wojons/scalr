@@ -1,5 +1,10 @@
 <?php
+
+use Scalr\Model\Entity\Account\EnvironmentProperty;
+use Scalr\Model\Entity\Farm;
+use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 use Scalr\Stats\CostAnalytics\Entity\NotificationEntity;
+use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr\Stats\CostAnalytics\Entity\ReportEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
@@ -438,4 +443,210 @@ class Scalr_UI_Controller_Admin_Analytics_Costcenters extends Scalr_UI_Controlle
             $ccId, $mode, $date, $startDate, $endDate
         ));
     }
+
+    /**
+     * Action for managing projects
+     *
+     * @param string    $ccId       Cost center identifier
+     * @throws Exception
+     */
+    public function moveProjectsAction($ccId)
+    {
+        $cc = $this->getContainer()->analytics->ccs->get($ccId);
+
+        if (!$cc) {
+            throw new Exception(sprintf("Cost center with id %s has not been found.", $ccId), 404);
+        }
+
+        $projects = $cc->getProjects();
+
+        $result = [];
+
+        foreach ($projects as $project) {
+            /* @var $project ProjectEntity */
+            $result[] = [
+                'projectId'     => $project->projectId,
+                'projectName'   => $project->name,
+                'ccId'          => $project->ccId
+            ];
+        }
+
+        $collection = $this->getContainer()->analytics->ccs->all();
+
+        $ccs = [];
+
+        foreach ($collection as $costCenter) {
+            /* @var $costCenter CostCentreEntity */
+            if ($costCenter->archived) {
+                continue;
+            }
+
+            $ccs[] = [
+                'ccId'        => $costCenter->ccId,
+                'name'        => $costCenter->name,
+                'billingCode' => $costCenter->getProperty(CostCentrePropertyEntity::NAME_BILLING_CODE)
+            ];
+        }
+
+        $this->response->page('ui/admin/analytics/costcenters/moveProjects.js', [
+            'projects' => $result, 
+            'ccs' => $ccs
+        ]);
+    }
+
+    /**
+     * xMoveProjectsAction
+     *
+     * @param JsonData $projects Projects that should be moved
+     * @throws AnalyticsException
+     * @throws Exception
+     * @throws \Scalr\Exception\ModelException
+     */
+    public function xMoveProjectsAction(JsonData $projects = null)
+    {
+        $envChange = [];
+        $accountChange = [];
+        $projectChange = [];
+
+        $ccEntityCache = [];
+
+        $collisions = [];
+
+        foreach ($projects as $project) {
+            $projectEntity = ProjectEntity::findPk($project['projectId']);
+            /* @var $projectEntity ProjectEntity */
+            if (empty($ccEntity)) {
+                $ccEntity = $projectEntity->getCostCenter();
+            }
+
+            if ($ccEntity->ccId == $project['ccId']) {
+                continue;
+            }
+
+            if (empty($ccEntityCache[$project['ccId']])) {
+                $newCcEntity = CostCentreEntity::findPk($project['ccId']);
+                /* @var $newCcEntity CostCentreEntity */
+                if (!$newCcEntity) {
+                    throw new Exception(sprintf("Cost center with id %s has not been found.", $project['ccId']), 404);
+                }
+
+                $ccEntityCache[$project['ccId']] = $newCcEntity->ccId;
+            }
+
+            $farms[$projectEntity->projectId] = $projectEntity->getFarmsList();
+
+            foreach ($farms[$projectEntity->projectId] as $farmId => $farmName) {
+                $farmEntity = Farm::findPk($farmId);
+                /* @var $farmEntity Farm */
+                if (empty($accountChange[$farmEntity->accountId])) {
+                    $accountCss = AccountCostCenterEntity::findOne([
+                        ['accountId' => $farmEntity->accountId],
+                        ['ccId'      => $newCcEntity->ccId]
+                    ]);
+
+                    if (!$accountCss) {
+                        $accountChange[$farmEntity->accountId] = $newCcEntity->ccId;
+                    }
+                }
+
+                if (empty($envChange[$farmEntity->envId])) {
+                    $project['name'] = $projectEntity->name;
+                    $envChange[$farmEntity->envId] = $project;
+                } else if ($envChange[$farmEntity->envId]['ccId'] != $project['ccId']) {
+                    if (!in_array($projectEntity->name, $collisions)) {
+                        $collisions[] = $projectEntity->name;
+                    }
+
+                    if (!in_array($envChange[$farmEntity->envId]['name'], $collisions)) {
+                        $collisions[] = $envChange[$farmEntity->envId]['name'];
+                    }
+
+                    continue;
+                }
+            }
+
+            $projectEntity->ccId = $project['ccId'];
+            $projectChange[$projectEntity->projectId] = $projectEntity;
+        }
+
+        $remainningEnvs = [];
+
+        $projectsCount = count($projectChange);
+
+        if ($projectsCount) {
+            if (isset($ccEntity)) {
+                $envList = $ccEntity->getEnvironmentsList();
+
+                foreach ($envList as $envId => $name) {
+                    if (isset($envChange[$envId])) {
+                        $ccProjects = $this->getContainer()->analytics->projects->getUsedInEnvironment($envId);
+
+                        foreach ($ccProjects as $project) {
+                            /* @var $project ProjectEntity */
+                            if (!isset($farms[$project->projectId])) {
+                                $farms[$project->projectId] = $project->getFarmsList();
+                            }
+
+                            if (count($farms[$project->projectId]) > 0 && !isset($projectChange[$project->projectId])) {
+                                if (!in_array($envId, $remainningEnvs)) {
+                                    $remainningEnvs[] = $envId;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            $this->db->BeginTrans();
+
+            try {
+                foreach ($accountChange as $accountId => $ccId) {
+                    $accountCss = new AccountCostCenterEntity($accountId, $ccId);
+                    $accountCss->save();
+                }
+
+                if (empty($remainningEnvs) && empty($collisions)) {
+                    foreach ($envChange as $envId => $data) {
+                        $envProp = EnvironmentProperty::findOne([['envId' => $envId], ['name' => EnvironmentProperty::SETTING_CC_ID]]);
+                        /* @var $envProp EnvironmentProperty */
+                        $envProp->value = $data['ccId'];
+                        $envProp->save();
+                    }
+                }
+
+                foreach ($projectChange as $project) {
+                    /* @var $project ProjectEntity */
+                    $project->save();
+                }
+
+                $this->db->CommitTrans();
+            } catch (Exception $e) {
+                $this->db->RollbackTrans();
+                throw $e;
+            }
+        }
+
+        if (count($collisions) > 0) {
+            $this->response->warning(sprintf("%d Project%s %s been moved however collision occurred. Projects '%s' are used in the Farms from the same Environment however they have been moved to different Cost Centers.",
+                $projectsCount,
+                $projectsCount > 1 ? 's' : '',
+                $projectsCount > 1 ? 'have' : 'has',
+                implode("', '", $collisions)
+            ));
+        } else if (count($remainningEnvs) > 0) {
+            $this->response->warning(sprintf("%d Project%s %s been moved however some Projects don't correspond to Cost Centers assigned to Environments '%s'.",
+                $projectsCount,
+                $projectsCount > 1 ? 's' : '',
+                $projectsCount > 1 ? 'have' : 'has',
+                implode("', '", $remainningEnvs)
+            ));
+        } else {
+            $this->response->success(sprintf("%d Project%s %s been moved to other Cost Center.",
+                $projectsCount,
+                $projectsCount > 1 ? 's' : '',
+                $projectsCount > 1 ? 'have' : 'has'
+            ));
+        }
+    }
+
 }

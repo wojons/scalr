@@ -51,12 +51,11 @@ class Scalr_Scaling_Sensors_LoadAverage extends Scalr_Scaling_Sensor
                 $retval[] = $la;
             } catch (Exception $e) {
                 \Scalr::getContainer()->logger(__CLASS__)->warn(new FarmLogMessage(
-                    $DBServer->farmId,
+                    $DBServer,
                     sprintf("Unable to read LoadAverage value from server %s: %s",
                         $DBServer->getNameByConvention(),
                         $e->getMessage()
-                    ),
-                    $DBServer->serverId
+                    )
                 ));
             }
         }

@@ -2,13 +2,13 @@
 
 namespace Scalr\Exception\Model\Entity\Farm;
 
-use Scalr\Exception\ScalrException;
+use Scalr\Exception\ObjectInUseException;
 
 /**
  * FarmInUseException
  *
  * @author N.V.
  */
-class FarmInUseException extends ScalrException
+class FarmInUseException extends ObjectInUseException
 {
 }

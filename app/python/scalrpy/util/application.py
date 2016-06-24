@@ -22,7 +22,6 @@ import yaml
 import atexit
 import docopt
 import psutil
-import logging
 import datetime
 
 from textwrap import dedent
@@ -80,7 +79,6 @@ class Application(object):
     def __init__(self, argv=None):
         self.args = docopt.docopt(self.help(), argv=argv, help=True)
         self.validate_args()
-        self._update_config()
 
         self.start_dtime = None
 
@@ -91,7 +89,7 @@ class Application(object):
     def __call__(self):
         return
 
-    def _update_config(self):
+    def update_config(self):
         if self.args['--log-file']:
             self.config['log_file'] = self.args['--log-file']
         if self.args['--pid-file']:
@@ -158,6 +156,8 @@ class Application(object):
         if helper.check_pid(self.config['pid_file']):
             raise exceptions.AlreadyRunningError(self.config['pid_file'])
         LOG.debug(self._starting_msg)
+        LOG.debug('Log file: {}'.format(self.config['log_file']))
+        LOG.debug('Pid file: {}'.format(self.config['pid_file']))
         if self.args['--daemon']:
             helper.daemonize()
         helper.create_pid_file(self.config['pid_file'])
@@ -194,6 +194,7 @@ class Application(object):
             raise Exception(msg)
 
     def run(self):
+        self.update_config()
         self.validate_config()
         self.configure_log()
         if self.args['start']:

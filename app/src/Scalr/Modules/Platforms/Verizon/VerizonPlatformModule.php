@@ -2,8 +2,8 @@
 
 namespace Scalr\Modules\Platforms\Verizon;
 
-use \DBServer;
-use \BundleTask;
+use DBServer;
+use BundleTask;
 use Exception;
 use Scalr\Model\Entity\CloudInstanceType;
 use Scalr\Service\OpenStack\Services\Servers\Type\Personality;
@@ -85,7 +85,7 @@ class VerizonPlatformModule extends OpenstackPlatformModule
             $DBRole = $DBServer->GetFarmRoleObject()->GetRoleObject();
 
             $launchOptions->imageId = $DBRole->__getNewRoleObject()->getImage($this->platform, $DBServer->GetCloudLocation())->imageId;
-            $launchOptions->serverType = $DBServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::OPENSTACK_FLAVOR_ID);
+            $launchOptions->serverType = $DBServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::INSTANCE_TYPE);
             $launchOptions->cloudLocation = $DBServer->GetFarmRoleObject()->CloudLocation;
 
             $launchOptions->userData = $DBServer->GetCloudUserData();
@@ -236,7 +236,7 @@ class VerizonPlatformModule extends OpenstackPlatformModule
             $DBServer->imageId = $launchOptions->imageId;
             $DBServer->update($params);
             // we set server history here
-            $DBServer->getServerHistory();
+            $DBServer->getServerHistory()->update(['cloudServerId' => $result->id]);
 
             return $DBServer;
         } catch (\Exception $e) {

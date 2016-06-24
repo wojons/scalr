@@ -21,7 +21,7 @@ class Utils
      * @param  array    $allowed
      * @return array
      */
-    static public function convertOrder(JsonData $order, array $default = [], array $allowed = [])
+    public static function convertOrder(JsonData $order, array $default = [], array $allowed = [])
     {
         $result = [];
         foreach ($order as $param) {
@@ -32,5 +32,21 @@ class Utils
         }
 
         return empty($result) ? $default : $result;
+    }
+
+    /**
+     * Returns scalarizr repozitory title
+     *
+     * @param  string $repo
+     * @return string
+     */
+    public static function getScalarizrUpdateRepoTitle($repo)
+    {
+        $repos = [
+            'latest' => 'Scalr Agent Hosted Edition',
+            'stable' => 'Scalr Agent Enterprise Edition'
+        ];
+        
+        return isset($repos[$repo]) ? $repos[$repo] : $repo;
     }
 }

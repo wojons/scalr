@@ -1,0 +1,58 @@
+paths:
+  - uri: /{envId}/servers/
+    acl: fullAccess
+    operations:
+     - {method: get,  response: 200}
+     - {method: get,  response: 200, filterable: '&ServerData'} # test filterable by setting
+     - {method: get,  response: 200, filterable: '&ServerData'} # test filterable by setting
+
+  - uri: /{envId}/servers/
+    acl: readOnly
+    operations:
+     - {method: get,  response: 200}
+
+  - uri: /{envId}/servers/
+    acl: noAccess
+    operations:
+     - {method: get,  response: 403}
+
+  - uri: /{envId}/servers/{serverId}/
+    acl: fullAccess
+    operations:
+     - {method: get,  response: 200, params: '&ServerData'}
+
+  - uri: /{envId}/servers/{serverId}/
+    acl: readOnly
+    operations:
+     - {method: get,  response: 200, params: '&ServerData'}
+
+  - uri: /{envId}/servers/{serverId}/
+    acl: noAccess
+    operations:
+     - {method: get,  response: 403, params: '&ServerData'}
+
+ServerData:
+- {serverId: '&Servers.serverId'}
+- {launchReason: '&{0}ServerProperties.system.launch.reason', hostname: '&{0}ServerProperties.base.hostname'}
+- {launchedBy: '&{0}ServerProperties.audit.launched_by_id',   hostname: '&{0}ServerProperties.base.hostname'}
+
+#server fixture
+Servers:
+ - {serverId: aaaaaaaa-0000-0000-0000-ffffffffffff, farmId: '&{0}Farm.id', farmRoleId: '&{0}FarmRole.id',
+    platform: '&FarmRole.platform', cloudLocation: '&FarmRole.cloudLocation', type: m1.small, instanceTypeName: m1.small,
+    status: Suspended, remoteIp: 127.0.0.1, localIp: 10.10.0.1, index: 1, properties: '&{0}ServerProperties'}
+
+ServerProperties:
+  - {base.hostname: 'hostname', system.launch.reason: API Request, audit.launched_by_id: 2}
+
+Farm:
+  - {name: testFarmForSevers, comments: test-description}
+
+FarmRole:
+  - {farmId: '&{0}Farm.id',  roleId: '&{0}Role.id',  alias: test-server-farm-role, platform: ec2, cloudLocation: us-east-1}
+
+Role:
+  - {name: test-server-role, catId: 1, osId: centos-5-x,   behaviors: 'base,chef',  accountId: , envId: }
+
+RoleImage:
+  - {roleId: '&Role.id', cloudLocation: '&FarmRole.cloudLocation',    platform: '&FarmRole.platform'}

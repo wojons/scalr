@@ -30,7 +30,7 @@ def answer(environ, start_response):
         if msg == '400':
             start_response('400 NOT OK', [('Content-Type', 'text/html')])
         else:
-            time.sleep(random.randint(3, 20) / 10.0)
+            time.sleep(random.randint(3, 40) / 10.0)
             start_response('201 OK', [('Content-Type', 'text/html')])
         yield '<b>Hello world!</b>\n'
     except:

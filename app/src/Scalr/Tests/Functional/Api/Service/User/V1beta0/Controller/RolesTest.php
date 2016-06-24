@@ -21,6 +21,8 @@ use Scalr\Tests\Functional\Api\ApiTestCase;
  */
 class RolesTest extends ApiTestCase
 {
+    const TEST_TYPE = ApiTestCase::TEST_TYPE_CLOUD_DEPENDENT;
+
     /**
      * @test
      */
@@ -86,7 +88,7 @@ class RolesTest extends ApiTestCase
             'name'  => $testName,
             'description' => 'invalidDesc<br/>'
         ]);
-        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, 'Invalid description');
+        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE);
 
         $create = $this->request($uri, Request::METHOD_POST, [], [
             'scope' => ScopeInterface::SCOPE_ENVIRONMENT,
@@ -139,7 +141,7 @@ class RolesTest extends ApiTestCase
             'os'        => ['id' => 'invalid']
 
         ]);
-        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, "OS with id 'invalid' not found.");
+        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE);
 
         $create = $this->request($uri, Request::METHOD_POST, [], [
             'scope'         => ScopeInterface::SCOPE_ENVIRONMENT,
@@ -148,7 +150,8 @@ class RolesTest extends ApiTestCase
             'category'      => $rolesCat->id,
             'os'            => $os->id,
             'quickStart'    => true,
-            'deprecated'    => true
+            'deprecated'    => true,
+            'builtinAutomation' => ['base']
         ]);
 
         $body = $create->getBody();
@@ -507,7 +510,7 @@ class RolesTest extends ApiTestCase
 
         $db->Execute("DELETE FROM roles WHERE name = ? AND id = ?", [$testName, $insertedId]);
 
-        $this->assertErrorMessageContains($delete, 403, ErrorMessage::ERR_SCOPE_VIOLATION);
+        $this->assertErrorMessageContains($delete, 403, ErrorMessage::ERR_PERMISSION_VIOLATION);
     }
 
     /**
@@ -571,7 +574,7 @@ class RolesTest extends ApiTestCase
             'name'  => $testName,
             'description' => 'invalidDesc<br/>'
         ]);
-        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, 'Invalid description');
+        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE);
 
         $create = $this->request($uri, Request::METHOD_POST, [], [
             'scope' => ScopeInterface::SCOPE_ACCOUNT,
@@ -624,7 +627,7 @@ class RolesTest extends ApiTestCase
             'os'        => ['id' => 'invalid']
 
         ]);
-        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, "OS with id 'invalid' not found.");
+        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE);
 
         $create = $this->request($uri, Request::METHOD_POST, [], [
             'scope'         => ScopeInterface::SCOPE_ACCOUNT,
@@ -633,7 +636,8 @@ class RolesTest extends ApiTestCase
             'category'      => $rolesCat->id,
             'os'            => $os->id,
             'quickStart'    => true,
-            'deprecated'    => true
+            'deprecated'    => true,
+            'builtinAutomation' => ['base']
         ]);
 
         $body = $create->getBody();
@@ -983,7 +987,7 @@ class RolesTest extends ApiTestCase
 
         $db->Execute("DELETE FROM roles WHERE name = ? AND id = ?", [$testName, $insertedId]);
 
-        $this->assertErrorMessageContains($delete, 403, ErrorMessage::ERR_SCOPE_VIOLATION);
+        $this->assertErrorMessageContains($delete, 403, ErrorMessage::ERR_PERMISSION_VIOLATION);
     }
 
     /**
@@ -1027,7 +1031,7 @@ class RolesTest extends ApiTestCase
             foreach ($variables->data as $variable) {
                 $this->assertVariableObjectNotEmpty($variable);
 
-                if (empty($declaredNotInRole) && $variable->declaredIn !== ScopeInterface::SCOPE_ROLE) {
+                if (empty($declaredNotInRole) && $variable->declaredIn !== ScopeInterface::SCOPE_ROLE && !$variable->hidden) {
                     $declaredNotInRole = $variable->name;
                 }
 
@@ -1062,7 +1066,7 @@ class RolesTest extends ApiTestCase
         $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, 'Name should contain only letters, numbers and underscores, start with letter and be from 2 to 128 chars long');
 
         $create = $this->request($uri, Request::METHOD_POST, [], ['name' => 'scalr_test']);
-        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, 'prefix is reserved and cannot be used');
+        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, 'is reserved and cannot be used for user GVs');
 
         //test invalid category name
         $create = $this->request($uri, Request::METHOD_POST, [], ['name' => 'TestName', 'category' => 'invalid category']);

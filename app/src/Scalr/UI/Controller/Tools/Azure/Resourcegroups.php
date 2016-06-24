@@ -24,7 +24,7 @@ class Scalr_UI_Controller_Tools_Azure_ResourceGroups extends Scalr_UI_Controller
         }
 
         $rGroup = $azure->resourceManager->resourceGroup->create(
-            $this->environment->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+            $this->environment->keychain(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
             $name,
             $cloudLocation
         );

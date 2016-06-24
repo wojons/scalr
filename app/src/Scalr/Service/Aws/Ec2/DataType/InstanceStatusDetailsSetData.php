@@ -3,7 +3,7 @@
 namespace Scalr\Service\Aws\Ec2\DataType;
 
 use Scalr\Service\Aws\Ec2\AbstractEc2DataType;
-use \DateTime;
+use DateTime;
 
 /**
  * InstanceStatusDetailsSetData

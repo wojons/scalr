@@ -2,7 +2,7 @@
 namespace Scalr\Model\Entity;
 
 use Scalr\Model\AbstractEntity;
-use \Exception;
+use Exception;
 use Scalr\Util\CryptoTool;
 use Scalr\DataType\AccessPermissionsInterface;
 
@@ -266,7 +266,7 @@ class SshKey extends AbstractEntity implements AccessPermissionsInterface
      */
     public function generateKeypair()
     {
-        $this->privateKey = $this->getSshKeygenValue("-t dsa -q -P ''", "", true);
+        $this->privateKey = $this->getSshKeygenValue("-t rsa -q -P ''", "", true);
         $this->generatePublicKey();
 
         return [
@@ -302,6 +302,6 @@ class SshKey extends AbstractEntity implements AccessPermissionsInterface
         if ($environment->id != $this->envId)
             return false;
 
-        return $this->farmId ? $user->hasAccessFarm($this->farmId, $environment->id) : true;
+        return $this->farmId ? Farm::findPk($this->farmId)->hasAccessPermissions($user, $environment) : true;
     }
 }

@@ -515,7 +515,7 @@ Ext.define('Scalr.ui.ActionsMenu', {
 
         item = me.getItemFromEvent(e);
         if (item && item.isMenuItem) {
-            Scalr.ui.ActionsMenu.processEvent(me, item, me.data, e);
+            Scalr.ui.ActionsMenu.processEvent(me.up('optionscolumn') || me, item, me.data, e);
         }
 
         me.callParent(arguments);
@@ -526,6 +526,7 @@ Ext.define('Scalr.ui.ActionsMenu', {
             prevSeparator,
             display;
         me.data = data;
+        me.visibleItemsCount = 0;
 
         this.items.each(function (item) {
             display = Ext.isFunction(item.getVisibility) ? item.getVisibility(me.data) : true;
@@ -535,6 +536,7 @@ Ext.define('Scalr.ui.ActionsMenu', {
                     prevSeparator = display ? item : prevSeparator;
                 } else {
                     prevSeparator = undefined;
+                    me.visibleItemsCount++;
                 }
             }
 
@@ -553,6 +555,7 @@ Ext.define('Scalr.ui.ActionsMenu', {
     },
 
     statics: {
+        // custom method, is used by actionsmenu and optionscolumn
         processEvent: function(me, item, data, e) {
             if (Ext.isFunction (item.menuHandler)) {
                 item.menuHandler(data);
@@ -560,9 +563,11 @@ Ext.define('Scalr.ui.ActionsMenu', {
             } else if (Ext.isObject(item.request)) {
                 var r = Scalr.utils.CloneObject(item.request);
                 r.params = r.params || {};
+                r.scope = r.scope || me;
 
-                if (Ext.isObject(r.confirmBox))
+                if (Ext.isObject(r.confirmBox)) {
                     r.confirmBox.msg = new Ext.Template(r.confirmBox.msg).applyTemplate(data);
+                }
 
                 if (Ext.isFunction(r.dataHandler)) {
                     r.params = Ext.apply(r.params, r.dataHandler(data));
@@ -630,6 +635,7 @@ Ext.define('Scalr.ui.GridOptionsColumn', {
         if (me.menu) {
             me.menu = Ext.widget(me.menu);
             me.menu.doAutoRender();
+            me.menu.ownerCmp = me;
             me.menu.on('hide', function() {
                 if (me.currentBtnEl) {
                     me.currentBtnEl.removeCls('x-grid-row-options-pressed');
@@ -732,7 +738,7 @@ Ext.define('Scalr.ui.GridOptionsColumn', {
                 var quickEl = Ext.get(e.getTarget('div.x-grid-row-options-quick-action')), items = this.menu ? this.menu.items : this.quickItems;
                 if (quickEl) {
                     if (! quickEl.parent('a')) {
-                        Scalr.ui.ActionsMenu.processEvent(this.menu, items.get(quickEl.getAttribute('data-itemid')), record.getData());
+                        Scalr.ui.ActionsMenu.processEvent(this, items.get(quickEl.getAttribute('data-itemid')), record.getData());
                     }
                 }
             } else if (this.menu) {
@@ -743,6 +749,7 @@ Ext.define('Scalr.ui.GridOptionsColumn', {
                     this.currentBtnEl = btnEl;
                     this.menu.setData(record.getData());
                     this.menu.showBy(btnEl, 'tr-br?', [ 0, 1 ]);
+                    this.menu.focus();
                     e.stopPropagation();
                     return false;
                 }
@@ -903,6 +910,7 @@ Ext.define('Ext.grid.feature.AddButton', {
     cls: Ext.baseCSSPrefix + 'grid-add-button',
     viewCls: Ext.baseCSSPrefix + 'grid-with-add-button',
     disabledCls: Ext.baseCSSPrefix + 'disabled',
+    disabledTooltip: null,
     hidden: false,
     config: {
         text: 'Add'
@@ -958,7 +966,8 @@ Ext.define('Ext.grid.feature.AddButton', {
     renderAddButton: function() {
         var me = this;
         if (!me.buttonEl) {
-            me.buttonEl = Ext.core.DomHelper.insertHtml('beforeEnd', me.view.body.el.dom, '<div class="' + me.cls + '' + (me.disabled ? ' ' + me.disabledCls : '') + '" id="' + me.view.id + '-add-button" '+(me.hidden?' style="display:none"':'')+'>' + me.getText() + '</div>');
+            me.buttonEl = Ext.core.DomHelper.insertHtml('beforeEnd', me.view.body.el.dom, '<div class="' + me.cls + '' + (me.disabled ? ' ' + me.disabledCls : '') + '" id="' + me.view.id + '-add-button" '+(me.hidden?' style="display:none"':'')+(me.disabledTooltip?' data-qtip="'+Ext.String.htmlEncode(me.disabledTooltip)+'"':'')+'>' + me.getText() + '</div>');
+            Ext.get(me.buttonEl).setVisibilityMode(Ext.dom.Element.DISPLAY);
         } else {
             me.view.body.el.append(me.buttonEl);
         }
@@ -980,6 +989,9 @@ Ext.define('Ext.grid.feature.AddButton', {
             el.set({
                 'data-qtip': disabled && tooltip ? tooltip : ''
             });
+        }
+        if (tooltip !== undefined) {
+            this.disabledTooltip = tooltip;
         }
         this.disabled = !!disabled;
     },
@@ -1146,14 +1158,18 @@ Ext.define('Scalr.ui.SelectedRecord', {
     },
 
     clearSelectedRecord: function() {
-        var selectedRecord = this.selectedRecord;
+        var selectedRecord = this.selectedRecord,
+            navModel;
         if (this.form) {
             this.form.resetRecord();
         }
         if (selectedRecord) {
             this.selectedRecord = null;
             this.grid.getView().removeItemCls(selectedRecord, this.selectedRecordCls);
-            this.grid.getView().getNavigationModel().setPosition(null, null);
+            navModel = this.grid.getView().getNavigationModel();
+            if (navModel.record === selectedRecord) {
+                navModel.setPosition(null, null);
+            }
             if (!this.suspendSelectedRecordChangeEvent) {
                 this.grid.fireEvent('selectedrecordchange', null, selectedRecord);
             }
@@ -1377,6 +1393,7 @@ Ext.define('Scalr.ui.ContinuousRenderer', {
     isContinuousRenderer: true,
     rowHeight: 30,
     loadNextPageOffset: 10,
+    highlightNew: false,
 
     init: function(grid) {
         var me = this,
@@ -1403,6 +1420,51 @@ Ext.define('Scalr.ui.ContinuousRenderer', {
         me.viewListeners = view.on(viewListeners);
 
         me.view.addFooterFn(Ext.bind(me.renderLoader, me));
+
+        if (me.highlightNew) {
+            var getRowClass = view.getRowClass;
+
+            view.getRowClass = function (record) {
+                var cls;
+
+                if (Ext.isFunction(getRowClass)) {
+                    cls = getRowClass.apply(view, arguments);
+                }
+
+                if (Ext.isEmpty(cls) && record.get('gridHighlightItem')) {
+                    cls = 'x-grid-row-color-new';
+                }
+
+                return cls;
+            };
+
+            grid.getStore().on({
+                clearandload: function (store) {
+                    var data = store.getData();
+
+                    if (data.count() > 0) {
+                        store.gridHightlight = [];
+
+                        data.each(function (record) {
+                            Ext.Array.push(store.gridHightlight, record.getId());
+                        });
+                    }
+                },
+                load: function (store) {
+                    var ids = store.gridHightlight;
+
+                    if (Ext.isDefined(ids)) {
+                        store.each(function (record) {
+                            if (!Ext.Array.contains(ids, record.getId())) {
+                                record.set('gridHighlightItem', true);
+                            }
+                        });
+
+                        delete store.gridHightlight;
+                    }
+                }
+            });
+        }
     },
 
     onViewRefresh: function(view, records) {
@@ -1588,20 +1650,31 @@ Ext.define('Scalr.ui.ContinuousStore', {
         var me = this,
             sorters = me.getSorters().getRange();
 
+        if (me.blockLoadAfterSorters) {
+            delete me.blockLoadAfterSorters;
+            return;
+        }
+
         if (sorters.length) {
             me.clearAndLoad({
                 callback: function() {
                     me.fireEvent('sort', me, sorters);
                 }
-            });
+            }, true);
         } else {
             me.fireEvent('sort', me, sorters);
         }
     },
 
-    clearAndLoad: function(options) {
-        this.removeAll();
-        this.loadPage(1, options);
+    clearAndLoad: function(options, suppressEvent) {
+        var me = this;
+
+        if (suppressEvent !== true) {
+            me.fireEvent('clearandload', me);
+        }
+
+        me.removeAll();
+        me.loadPage(1, options);
     },
 
     loadRecords: function(records, options) {
@@ -1632,7 +1705,7 @@ Ext.define('Scalr.ui.ContinuousStore', {
         }
 
         ++me.loadCount;
-        me.updatingCollection--;;
+        me.updatingCollection--;
         me.complete = true;
         me.fireEvent('datachanged', me);
         if (!addRecords) me.fireEvent('refresh', me);
@@ -1922,7 +1995,7 @@ Ext.define('Scalr.ui.AclResourceColumn', {
     },
     getAccessButtonHtml: function(record) {
         var html,
-            cls,
+            cls = [],
             permissions,
             text,
             value,
@@ -1931,6 +2004,7 @@ Ext.define('Scalr.ui.AclResourceColumn', {
             id = record.get('id');
 
         if (this.getReadOnly()) {
+            cls.push('x-btn-not-btn');
             isBtnDisabled = true;
         } else if (id == 264 || id == 265) {
             var parentRecord = record.store.getById(256);//RESOURCE_FARMS (RESOURCE_OWN/TEAM_FARMS)
@@ -1940,32 +2014,43 @@ Ext.define('Scalr.ui.AclResourceColumn', {
         }
 
         if (record.get('granted') != 1) {
-            cls = 'x-btn-red' + (isBtnDisabled ? ' scalr-ui-panel-account-roles-btn-no' : '');
+            cls.push('x-btn-red');
+            if (isBtnDisabled) {
+                cls.push('x-no-access');
+            }
             text = 'No access';
             value = 'no';
         } else {
             permissions = Ext.Object.getValues(record.get('permissions'));
             if ((Ext.isEmpty(permissions) || !Ext.Array.contains(permissions, 0))) {
-                cls = 'x-btn-green' + (isBtnDisabled ? ' scalr-ui-panel-account-roles-btn-full' : '');
+                cls.push('x-btn-green');
+                if (isBtnDisabled) {
+                    cls.push('x-full-access');
+                }
                 text = 'Full access';
                 value = 'full';
             } else if (!Ext.Array.contains(permissions, 1)) {
-                cls = 'x-btn-purple' + (isBtnDisabled ? ' scalr-ui-panel-account-roles-btn-readonly' : '');
+                cls.push('x-btn-purple');
+                if (isBtnDisabled) {
+                    cls.push('x-readonly-access');
+                }
                 text = 'Read only';
                 value = 'readonly';
             } else {
-                cls = (isBtnDisabled ? ' scalr-ui-panel-account-roles-btn-limitd' : '');
+                if (isBtnDisabled) {
+                    cls.push('x-limited-access');
+                }
                 text = 'Limited';
                 value = 'limited';
             }
         }
 
         if (isBtnDisabled) {
-            cls += ' x-btn-disabled';
+            cls.push('x-btn-disabled');
         }
 
         html =
-            '<a class="x-btn ' + cls +' x-unselectable x-btn-default-small" data-value="'+value+'">' +
+            '<a class="x-btn ' + cls.join(' ') +' x-unselectable x-btn-default-small" data-value="'+value+'">' +
             '<span style="table-layout:fixed;" class="x-btn-wrap x-btn-wrap-default-small x-btn-split x-btn-split-right">' +
             '<span class="x-btn-button x-btn-button-default-small x-btn-text x-btn-button-center">' +
             '<span class="x-btn-icon-el x-btn-icon-el-default-small"></span>' +
@@ -2013,7 +2098,7 @@ Ext.define('Scalr.ui.AclResourceColumn', {
                 if (modeAll !== currentMode) {
                     cls += ' ' + me.cbCheckedCls;
                 }
-                html.push('<span class="' + cls + ' x-unselectable"><img src="' + Ext.BLANK_IMAGE_URL + '"/>Limit user acces to volumes from</span>');
+                html.push('<span class="' + cls + ' x-unselectable"><img src="' + Ext.BLANK_IMAGE_URL + '"/>Limit user access to volumes from</span>');
             }
             html.push(
                 '<a style="display:inline-block;vertical-align:top;margin:0 0 0 12px;text-decoration:none" class="x-field x-picker-field x-form-item x-form-item-default x-form-type-text '+(modeAll === currentMode || me.getReadOnly() ? 'x-form-readonly' : '')+'" >' +
@@ -2104,7 +2189,7 @@ Ext.define('Scalr.ui.AclResourceColumn', {
             if (settings.granted === 1) {
                 childRecord.set('granted', 1);
             }
-            //ExtJS 5.1.0 bug workaround: commiting record, which is not visible(filtered) at the moment, causes error
+            //ExtJS v5.1.0 bug workaround: commiting record, which is not visible(filtered) at the moment, causes error
             var view = this.getView();
             if (view) childRecord.commit(!!Ext.isEmpty(view.getNode(childRecord)));
 
@@ -2114,7 +2199,12 @@ Ext.define('Scalr.ui.AclResourceColumn', {
                 childRecord.set('granted', 1);
             }
 
-            //ExtJS 5.1.0 bug workaround: commiting record, which is not visible(filtered) at the moment, causes error
+            // if full access - also enable create permission
+            if (!Ext.Array.contains(Ext.Object.getValues(settings.permissions), 0)) {
+                childRecord.set('permissions', Ext.apply(childRecord.get('permissions'), { create: 1}));
+            }
+
+            //ExtJS v5.1.0 bug workaround: commiting record, which is not visible(filtered) at the moment, causes error
             if (view) childRecord.commit(!!Ext.isEmpty(this.ownerCt.view.getNode(childRecord)));
         }
     }
@@ -2270,11 +2360,11 @@ Ext.define('Scalr.ui.RoleEnvironmentsColumn', {
         }
 
         if (record.get('enabled') != 1) {
-            cls = 'x-btn-red' + (isBtnDisabled ? ' scalr-ui-panel-account-roles-btn-no' : '');
+            cls = 'x-btn-red';
             text = 'Restricted';
             value = 0;
         } else {
-            cls = 'x-btn-green' + (isBtnDisabled ? ' scalr-ui-panel-account-roles-btn-full' : '');
+            cls = 'x-btn-green';
             text = 'Available';
             value = 1;
         }
@@ -2300,4 +2390,78 @@ Ext.define('Scalr.ui.RoleEnvironmentsColumn', {
         return '<div class="x-resource-name">' + record.get('name') + '</div>';
     }
 
+});
+
+/**
+ * Config has one specific parameter: `client`. Acceptable values: 'popup', 'dashboard'.
+ * @DependsOn Scalr.utils.announcementHelper
+ * @DependsOn Scalr.utils.announcement
+ */
+Ext.define('Scalr.ui.AnnouncementsView', {
+    extend: 'Ext.view.View',
+    alias: 'widget.announcementsview',
+
+    maxHeight: 720,
+    overflowY: 'auto',
+    preserveScrollOnRefresh: true,
+    itemSelector: '.x-announcements-div',
+    collectData: function () {
+        var data = this.callParent(arguments);
+        data.clientCls = this.client;
+
+        return data;
+    },
+    tpl: [
+        '<div class="x-announcements-client-{clientCls}">',
+            '<tpl for="."><div class="x-announcements-div">',
+                '<img class="x-announcements-type x-announcements-icon x-announcements-icon-{type}" data-qtip="{[this.getTooltipHtml(values)]}" src="' + Ext.BLANK_IMAGE_URL + '" />',
+                '<tpl if="isNew">',
+                    '<span class="x-announcements-info x-announcements-icon x-announcements-icon-info">New</span>',
+                '</tpl>',
+                '<span class="x-announcements-desc">{time}</span>',
+                '<div class="x-announcements-data">',
+                    '<tpl if="type === \'message\'">',
+                        '<span class="x-announcements-title x-announcements-title-msg">{[this.title(values.title)]}</span>',
+                        '<div class="x-announcements-message-msg">{[this.msgText(values.msg)]}</div>',
+                    '<tpl else>',
+                        '<a href="{url}" target="_blank"><span class="x-announcements-title">{title}</span></a>',
+                    '</tpl>',
+                '</div>',
+            '</div></tpl>',
+        '</div>',
+        {
+            disableFormats: true,
+            title: function (title) {
+                return Scalr.utils.announcementHelper.title(title);
+            },
+            msgText: function (text) {
+                return Scalr.utils.announcementHelper.formatMsg(text);
+            },
+            getTooltipHtml: function (values) {
+                var type;
+                switch (values.type) {
+                    case 'scalrblog': type = 'Blog'; break;
+                    case 'changelog': type = 'Changelog'; break;
+                    case 'message':   type = 'Announcement'; break;
+                    default: type = 'unknown';
+                }
+
+                return type;
+            }
+        }
+    ],
+
+    store: Scalr.utils.announcement.store,
+
+    listeners: {
+        itemclick: function (view, record, item, index, e) {
+            var target = e.getTarget();
+
+            if (target.className === 'x-announcements-title' && 'scalrblog' === record.get('type')) {
+                if (typeof _gaq !== 'undefined') {
+                    _gaq.push(['_trackEvent', 'ProductBlog', 'Open', target.innerHTML]);
+                }
+            }
+        }
+    }
 });

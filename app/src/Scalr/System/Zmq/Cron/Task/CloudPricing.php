@@ -37,6 +37,7 @@ class CloudPricing extends AbstractTask
         'ap-southeast-1' => 'ap-southeast-1',
         'apac-tokyo'     => 'ap-northeast-1',
         'ap-northeast-1' => 'ap-northeast-1',
+        'ap-northeast-2' => 'ap-northeast-2',
         'apac-syd'       => 'ap-southeast-2',
         'ap-southeast-2' => 'ap-southeast-2',
         'us-gov-west-1'  => 'us-gov-west-1',
@@ -114,7 +115,7 @@ class CloudPricing extends AbstractTask
                     $opt['proxyhost'] = $proxy['host'];
                     $opt['proxyport'] = $proxy['port'];
                     $opt['proxytype'] = $proxy['type'];
-    
+
                     if (!empty($proxy['pass']) && !empty($proxy['user'])) {
                         $opt['proxyauth'] = "{$proxy['user']}:{$proxy['pass']}";
                         $opt['proxyauthtype'] = $proxy['authtype'];

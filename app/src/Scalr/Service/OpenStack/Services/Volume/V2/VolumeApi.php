@@ -2,7 +2,7 @@
 
 namespace Scalr\Service\OpenStack\Services\Volume\V2;
 
-use \Scalr\Service\OpenStack\Services\Volume\V1\VolumeApi as VolumeApiV1;
+use Scalr\Service\OpenStack\Services\Volume\V1\VolumeApi as VolumeApiV1;
 
 /**
  * Volume API v2 placeholder

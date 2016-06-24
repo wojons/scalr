@@ -80,7 +80,7 @@ class ApplicationTest extends TestCase
         $path = '/api/v:apiversion/users/:id';
         $requirements = ['id' => '[\d]+'];
 
-        $route = $this->app->addRoute($path, function($id){/* do nothing */}, $requirements);
+        $route = $this->app->addRoute($path, function ($id) {/* do nothing */}, $requirements);
 
         $this->assertInstanceOf(self::getApiClass('Routing\Route'), $route);
 
@@ -107,7 +107,7 @@ class ApplicationTest extends TestCase
      */
     public function testGet()
     {
-        $route = $this->app->get('/path', function(){/* do nothing */});
+        $route = $this->app->get('/path', function () {/* do nothing */});
         $this->assertTrue($route->hasMethod(Request::METHOD_HEAD));
         $this->assertTrue($route->hasMethod(Request::METHOD_GET));
         $this->assertFalse($route->hasMethod(Request::METHOD_POST));
@@ -118,7 +118,7 @@ class ApplicationTest extends TestCase
      */
     public function testPost()
     {
-        $route = $this->app->post('/path', function(){/* do nothing */});
+        $route = $this->app->post('/path', function () {/* do nothing */});
         $this->assertEquals([Request::METHOD_POST], $route->getMethods());
     }
 
@@ -127,7 +127,7 @@ class ApplicationTest extends TestCase
      */
     public function testPut()
     {
-        $route = $this->app->put('/path', function(){/* do nothing */});
+        $route = $this->app->put('/path', function () {/* do nothing */});
         $this->assertEquals([Request::METHOD_PUT], $route->getMethods());
     }
 
@@ -136,7 +136,7 @@ class ApplicationTest extends TestCase
      */
     public function testPatch()
     {
-        $route = $this->app->patch('/path', function(){/* do nothing */});
+        $route = $this->app->patch('/path', function () {/* do nothing */});
         $this->assertEquals([Request::METHOD_PATCH], $route->getMethods());
     }
 
@@ -145,7 +145,7 @@ class ApplicationTest extends TestCase
      */
     public function testDelete()
     {
-        $route = $this->app->delete('/path', function(){/* do nothing */});
+        $route = $this->app->delete('/path', function () {/* do nothing */});
         $this->assertEquals([Request::METHOD_DELETE], $route->getMethods());
     }
 
@@ -154,7 +154,7 @@ class ApplicationTest extends TestCase
      */
     public function testOptions()
     {
-        $route = $this->app->options('/path', function(){/* do nothing */});
+        $route = $this->app->options('/path', function () {/* do nothing */});
         $this->assertEquals([Request::METHOD_OPTIONS], $route->getMethods());
     }
 
@@ -167,17 +167,17 @@ class ApplicationTest extends TestCase
         $me = $this;
 
         $middlewares = [
-            function(){ return '1'; },
-            function(){ return '2'; },
+            function () { return '1'; },
+            function () { return '2'; },
         ];
 
         $this->app->group('/api/v1', $middlewares[0], $middlewares[1], function() use ($app, $me, $middlewares) {
-            $route = $app->options('/path/:id', function($id){/* do nothing */});
+            $route = $app->options('/path/:id', function ($id) {/* do nothing */});
             $me->assertEquals('/api/v1/path/:id', $route->getPath());
 
             //Inner routes
             $app->group('/details', function() use ($app, $me, $middlewares) {
-                $inner = $app->options('/path/:id', function($id){/* do nothing */});
+                $inner = $app->options('/path/:id', function ($id) {/* do nothing */});
                 $me->assertEquals('/api/v1/details/path/:id', $inner->getPath());
                 //Route must have group's middlewares
                 $me->assertContains($middlewares[0], $inner->getMidleware());
@@ -222,6 +222,8 @@ class ApplicationTest extends TestCase
      */
     public function testError()
     {
+        $this->app->getContainer()->apilogger->setIsEnabled(false);
+
         try {
             $this->app->error();
             $this->assertTrue(false, 'app->error() should throw StopException');

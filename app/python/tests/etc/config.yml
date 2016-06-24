@@ -42,6 +42,7 @@ scalr:
         pool_size: 50
     instances_connection_timeout: 5
     pool_size: 500
+    workers: 2
     log_file: "/var/log/scalr/msg-sender-test.log"
     pid_file: "/var/run/scalr/msg-sender-test.pid"
 

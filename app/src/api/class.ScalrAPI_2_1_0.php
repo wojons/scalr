@@ -115,32 +115,10 @@ class ScalrAPI_2_1_0 extends ScalrAPI_2_0_0
         $response->ApacheVhostSet = new stdClass();
         $response->ApacheVhostSet->Item = array();
 
-        $stmt = "SELECT v.* FROM apache_vhosts v ";
-        $stmtWhere = "WHERE v.client_id=?";
+        $stmt = "SELECT v.* FROM apache_vhosts v LEFT JOIN farms f ON f.id = v.farm_id WHERE v.client_id = ? AND " . $this->getFarmSqlQuery();
         $args = array($this->user->getAccountId());
 
-        if (!$this->isAllowed(Acl::RESOURCE_FARMS)) {
-            $stmt .= " JOIN farms f ON f.id = v.farm_id ";
-
-            $q = [];
-            if ($this->isAllowed(Acl::RESOURCE_TEAM_FARMS)) {
-                $t = array_map(function($t) { return $t['id']; }, $this->user->getTeams());
-                if (count($t))
-                    $q[] = 'f.team_id IN(' . join(',', $t) . ')';
-            }
-
-            if ($this->isAllowed(Acl::RESOURCE_OWN_FARMS)) {
-                $q[] = 'f.created_by_id = ' . $this->DB->qstr($this->user->getId());
-            }
-
-            if (count($q)) {
-                $stmtWhere .= ' AND (' . join(' OR ', $q) . ')';
-            } else {
-                $stmtWhere .= ' AND false'; // no permissions
-            }
-        }
-
-        $rows = $this->DB->Execute($stmt . $stmtWhere, $args);
+        $rows = $this->DB->Execute($stmt, $args);
         while ($row = $rows->FetchRow()) {
             $itm = new stdClass();
             $itm->Name = $row['name'];

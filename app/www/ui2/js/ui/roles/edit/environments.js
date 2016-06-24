@@ -54,7 +54,6 @@ Ext.define('Scalr.ui.RoleDesignerTabEnvironments', {
                     }
                 }, {
                     xtype: 'buttongroupfield',
-                    cls: 'scalr-ui-panel-account-roles-btngroup',
                     margin: '0 0 0 18',
                     maxWidth: 600,
                     isFormField: false,
@@ -69,11 +68,11 @@ Ext.define('Scalr.ui.RoleDesignerTabEnvironments', {
                         value: 'all'
                     }, {
                         text: 'Available',
-                        cls: 'scalr-ui-panel-account-roles-btn-allowed',
+                        cls: 'x-full-access',
                         value: 1
                     }, {
                         text: 'Restricted',
-                        cls: 'scalr-ui-panel-account-roles-btn-restricted',
+                        cls: 'x-no-access',
                         value: 0
                     }],
                     listeners: {

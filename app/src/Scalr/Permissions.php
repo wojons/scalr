@@ -64,11 +64,7 @@ class Scalr_Permissions
             case 'DBRole':
             case 'BundleTask':
             case 'DBDNSZone':
-            case 'Scalr_Dm_Application':
-            case 'Scalr_Dm_Source':
-            case 'Scalr_Dm_DeploymentTask':
             case 'Scalr\Model\Entity\ScalingMetric':
-            case 'Scalr_ServiceConfiguration':
             case 'Scalr_Service_Apache_Vhost':
             case 'Scalr_SchedulerTask':
             case 'Scalr\Model\Entity\SslCertificate':
@@ -177,11 +173,11 @@ class Scalr_Permissions
 
         $superposition = $this->user->getAclRolesByEnvironment($this->envId);
         $result = $superposition->isAllowed(Acl::RESOURCE_FARMS, $perm);
-        if (!$result && $dbFarm->teamId && $this->user->isInTeam($dbFarm->teamId)) {
+        if (!$result && $dbFarm->__getNewFarmObject()->hasUserTeamOwnership($this->user)) {
             $result = $superposition->isAllowed(Acl::RESOURCE_TEAM_FARMS, $perm);
         }
 
-        if (!$result && $dbFarm->createdByUserId && $this->user->id == $dbFarm->createdByUserId) {
+        if (!$result && $dbFarm->ownerId && $this->user->id == $dbFarm->ownerId) {
             $result = $superposition->isAllowed(Acl::RESOURCE_OWN_FARMS, $perm);
         }
 

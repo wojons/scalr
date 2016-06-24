@@ -96,16 +96,25 @@ class Scalr_UI_Controller_Platforms extends Scalr_UI_Controller
                     if ($ind !== false) {
                         $projectId = substr($image->id, 0, $ind);
                     } else
-                        $projectId = $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID];
+                        $projectId = $this->environment->keychain(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID];
 
                     $id = str_replace("{$projectId}/images/", '', $image->id);
                 }
 
-                $imageInfo = $gceClient->images->get($projectId, $id);
-                $settings = [
-                    FarmRoleStorageConfig::SETTING_GCE_PD_TYPE => 'pd-standard',
-                    FarmRoleStorageConfig::SETTING_GCE_PD_SIZE => $imageInfo->diskSizeGb
-                ];
+                try {
+                    $imageInfo = $gceClient->images->get($projectId, $id);
+                    $settings = [
+                        FarmRoleStorageConfig::SETTING_GCE_PD_TYPE => 'pd-standard',
+                        FarmRoleStorageConfig::SETTING_GCE_PD_SIZE => $imageInfo->diskSizeGb
+                    ];
+                } catch (Exception $e) {
+                    // gce client returns error as json-encoded message
+                    if ($e->getMessage() && ($json = json_decode($e->getMessage())) && is_object($json) && !empty($json->error)) {
+                        throw new Exception($json->error->message);
+                    } else {
+                        throw $e;
+                    }
+                }
 
                 $data['type'] = 'gce_persistent';
                 $data['readOnly'] = false;

@@ -1,7 +1,18 @@
 <?php
 use Scalr\Acl\Acl;
+use Scalr\Model\AbstractEntity;
+use Scalr\Model\Collections\EntityIterator;
+use Scalr\Model\Entity;
+use Scalr\Model\Entity\Event;
+use Scalr\Model\Entity\Farm;
+use Scalr\Model\Entity\FarmRole;
+use Scalr\Model\Entity\OrchestrationLog;
+use Scalr\Model\Entity\OrchestrationLogManualScript;
+use Scalr\Model\Entity\SchedulerTask;
 use Scalr\Model\Entity\Script;
+use Scalr\Model\Entity\Server;
 use Scalr\Model\Entity\WebhookHistory;
+use Scalr\UI\Request\JsonData;
 
 class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
 {
@@ -24,15 +35,15 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
         ]);
     }
 
-    public function getScriptingLogAction()
+    public function getOrchestrationLogAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_LOGS_SCRIPTING_LOGS);
+        $this->request->restrictAccess(Acl::RESOURCE_LOGS_ORCHESTRATION_LOGS);
 
         $this->request->defineParams([
             'executionId' => ['type' => 'string']
         ]);
 
-        $info = $this->db->GetRow("SELECT * FROM scripting_log WHERE execution_id = ? LIMIT 1", [$this->getParam('executionId')]);
+        $info = $this->db->GetRow("SELECT * FROM orchestration_log WHERE execution_id = ? LIMIT 1", [$this->getParam('executionId')]);
         if (!$info)
             throw new Exception('Script execution log not found');
 
@@ -57,14 +68,16 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
         $this->response->data(['message' => $msg]);
     }
 
-    public function scriptingAction()
+    public function orchestrationAction()
     {
-        $this->request->restrictAccess(Acl::RESOURCE_LOGS_SCRIPTING_LOGS);
+        $this->request->restrictAccess(Acl::RESOURCE_LOGS_ORCHESTRATION_LOGS);
 
         $farms = self::loadController('Farms')->getList();
         array_unshift($farms, ['id' => '0', 'name' => 'All farms']);
         //todo: use Script::getScriptingData
-        $scripts = array_map(function($s) { return ['id' => $s['id'], 'name' => $s['name']]; }, Script::getList($this->user->getAccountId(), $this->getEnvironmentId()));
+        $scripts = array_map(function ($s) {
+            return ['id' => $s['id'], 'name' => $s['name']];
+        }, Script::getList($this->user->getAccountId(), $this->getEnvironmentId()));
         array_unshift($scripts, ['id' => 0, 'name' => '']);
 
         $glEvents = array_keys(EVENT_TYPE::getScriptingEvents());
@@ -77,7 +90,7 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
         $tasks = $this->db->GetAll('SELECT id, name FROM scheduler WHERE env_id = ? ORDER BY name ASC', [$this->getEnvironmentId()]);
         array_unshift($tasks, ['id' => 0, 'name' => '']);
 
-        $this->response->page('ui/logs/scripting.js', [
+        $this->response->page('ui/logs/orchestration.js', [
             'farms' => $farms,
             'scripts' => $scripts,
             'events' => $events,
@@ -108,36 +121,23 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
     {
         $this->request->restrictAccess(Acl::RESOURCE_LOGS_SYSTEM_LOGS);
 
-        $sql = "SELECT * FROM logentries WHERE ";
-        $args = [];
+        $sql = "SELECT logentries.* FROM logentries JOIN farms f ON f.id = logentries.farmid WHERE f.env_id = ? AND " . $this->request->getFarmSqlQuery();
+        $args = [$this->getEnvironmentId()];
 
+        $query = trim($query);
         if ($query) {
-            $query = trim($query);
-            $sql .= " (`message` LIKE ? OR `serverid` LIKE ? OR `source` LIKE ? )";
-            $args = [ "%$query%", "$query%", "%$query%"];
-        } else {
-            $sql .= ' true ';
+            $sql .= " AND (`message` LIKE ? OR `serverid` LIKE ? OR `source` LIKE ? )";
+            $args = array_merge($args, ["%$query%", "$query%", "%$query%"]);
         }
 
         if ($serverId) {
-            $sql .= ' AND serverid = ?';
+            $sql .= " AND serverid = ?";
             $args[] = $serverId;
         }
 
-        $farmSql = "SELECT id FROM farms WHERE env_id = ?";
-        $farmArgs = [$this->getEnvironmentId()];
-        list($farmSql, $farmArgs) = $this->request->prepareFarmSqlQuery($farmSql, $farmArgs);
-        $farms = $this->db->GetCol($farmSql, $farmArgs);
-
-        if ($farmId && in_array($farmId, $farms)) {
-            $sql .= ' AND farmid = ?';
+        if ($farmId) {
+            $sql .= " AND farmid = ?";
             $args[] = $farmId;
-        } else {
-            if (count($farms)) {
-                $sql .= ' AND farmid IN (' . implode(',', $farms) . ')';
-            } else {
-                $sql .= ' AND 0';
-            }
         }
 
         if ($severity) {
@@ -178,7 +178,7 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
                     $dtE = $dtE->add(new DateInterval('P1D'));
                 }
 
-                $sql .= ' AND time > ? AND time < ?';
+                $sql .= " AND time > ? AND time < ?";
                 $args[] = $dtS->getTimestamp();
                 $args[] = $dtE->getTimestamp();
             } catch (Exception $e) {
@@ -241,165 +241,303 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
     }
 
     /**
-     * @param   int     $farmId
-     * @param   string  $serverId
-     * @param   string  $event
-     * @param   string  $eventId
-     * @param   string  $eventServerId
-     * @param   int     $scriptId
-     * @param   int     $schedulerId
-     * @param   string  $byDate
-     * @param   string  $fromTime
-     * @param   string  $toTime
-     * @param   string  $status
+     * @param   int         $farmId
+     * @param   string      $serverId
+     * @param   string      $eventId
+     * @param   int         $scriptId
+     * @param   string      $eventServerId
+     * @param   int         $schedulerId
+     * @param   string      $byDate
+     * @param   string      $fromTime
+     * @param   string      $toTime
+     * @param   string      $status
+     * @param   string      $event
+     * @param   JsonData    $sort
+     * @param   int         $start
+     * @param   int         $limit
+     * @param   string      $query
      * @throws  Scalr_Exception_Core
      * @throws  Scalr_Exception_InsufficientPermissions
      */
-    public function xListScriptingLogsAction($farmId = 0, $serverId = '', $event = '', $eventId = '', $eventServerId = '',
-                                             $scriptId = 0, $schedulerId = 0, $byDate = '', $fromTime = '', $toTime = '', $status = '')
+    public function xListOrchestrationLogsAction($farmId = 0, $serverId = '', $eventId = '', $scriptId = 0, $eventServerId = '',
+                                             $schedulerId = 0, $byDate = '', $fromTime = '', $toTime = '', $status = '', $event = '',
+                                             JsonData $sort, $start = 0, $limit = 20, $query = '')
     {
-        $this->request->restrictAccess(Acl::RESOURCE_LOGS_SCRIPTING_LOGS);
+        $this->request->restrictAccess(Acl::RESOURCE_LOGS_ORCHESTRATION_LOGS);
 
-        $sql = "SELECT * FROM scripting_log WHERE :FILTER:";
-        $args = [];
+        $o = new Entity\OrchestrationLog();
+        $f = new Entity\Farm();
+        $criteria = [
+            Entity\Farm::STMT_FROM => "{$o->table()} JOIN {$f->table('f')} ON {$f->columnId('f')} = {$o->columnFarmId}",
+            Entity\Farm::STMT_WHERE => $this->request->getFarmSqlQuery() . " AND {$f->columnEnvId('f')} = " . $this->db->qstr($this->getEnvironmentId())
+        ];
 
-        $farmSql = "SELECT id FROM farms WHERE env_id = ?";
-        $farmArgs = [$this->getEnvironmentId()];
-        list($farmSql, $farmArgs) = $this->request->prepareFarmSqlQuery($farmSql, $farmArgs);
-        $farms = $this->db->GetCol($farmSql, $farmArgs);
-
-        if ($farmId && in_array($farmId, $farms)) {
-            $sql .= ' AND farmid = ?';
-            $args[] = $farmId;
-        } else {
-            if (count($farms)) {
-                $sql .= ' AND farmid IN (' . implode(',', $farms) . ')';
-            } else {
-                $sql .= ' AND 0';
-            }
+        if ($farmId) {
+            $criteria[] = ['farmId' => $farmId];
         }
 
         if ($serverId) {
-            $sql .= ' AND server_id = ?';
-            $args[] = $serverId;
-        }
-
-        if ($eventServerId) {
-            $sql .= ' AND event_server_id = ?';
-            $args[] = $eventServerId;
+            $criteria[] = ['serverId' => $serverId];
         }
 
         if ($eventId) {
-            $sql .= ' AND event_id = ?';
-            $args[] = $eventId;
+            $criteria[] = ['eventId' => $eventId];
+        }
+
+        if ($eventServerId) {
+            $criteria[] = ['eventServerId' => $eventServerId];
         }
 
         if ($scriptId) {
             /* @var $script Script */
             $script = Script::findPk($scriptId);
-            if ($script && (!$script->accountId || $script->accountId == $this->user->getAccountId())) {
-                $scriptName = substr(preg_replace("/[^A-Za-z0-9]+/", "_", $script->name), 0, 50); // because of column's length
-                $sql .= ' AND script_name = ?';
-                $args[] = $scriptName;
+
+            if ($script && $this->request->hasPermissions($script)) {
+                $scriptName = preg_replace("/[^A-Za-z0-9]+/", "_", $script->name);
+                $criteria[] = ['scriptName' => $scriptName];
+            }
+        }
+
+        if ($query || $event) {
+            $logEntity = new OrchestrationLog();
+            $eventEntity = new Event();
+
+            $criteria[AbstractEntity::STMT_FROM] = $criteria[AbstractEntity::STMT_FROM] . "
+                LEFT JOIN {$eventEntity->table('e')}
+                ON {$logEntity->columnEventId} = {$eventEntity->columnEventId('e')}
+            ";
+
+            if ($event && $query) {
+                $query = $this->db->qstr('%' . $query . '%');
+
+                $criteria[AbstractEntity::STMT_WHERE] = $criteria[AbstractEntity::STMT_WHERE] . " AND (
+                    {$eventEntity->columnType('e')} = {$this->db->qstr($event)}
+                    OR ({$logEntity->columnType} LIKE {$query}
+                    AND {$logEntity->columnScriptName} LIKE {$query})
+                )";
+            } else if ($event) {
+                $criteria[AbstractEntity::STMT_WHERE] = $criteria[AbstractEntity::STMT_WHERE] . " AND (
+                    {$eventEntity->columnType('e')} = {$this->db->qstr($event)}
+                )";
+            } else {
+                $query = $this->db->qstr('%' . $query . '%');
+
+                $criteria[AbstractEntity::STMT_WHERE] = $criteria[AbstractEntity::STMT_WHERE] . " AND (
+                    ({$eventEntity->columnType('e')} LIKE {$query}
+                    OR {$logEntity->columnType} LIKE {$query}
+                    OR {$logEntity->columnScriptName} LIKE {$query})
+                )";
             }
         }
 
         if ($schedulerId) {
-            $sql .= ' AND event = ?';
-            $args[] = 'Scheduler (TaskID: ' . $schedulerId . ')';
-        } else if ($event) {
-            $sql .= ' AND event = ?';
-            $args[] = $event;
+            $criteria[] = ['taskId' => $schedulerId];
         }
 
         if ($byDate) {
             try {
-                $tz = $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE);
-                if (! $tz)
-                    $tz = 'UTC';
+                $tz = $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE) ?: 'UTC';
 
                 $tz = new DateTimeZone($tz);
                 $dtS = new DateTime($byDate, $tz);
                 $dtE = new DateTime($byDate, $tz);
 
-                if ($fromTime)
+                if ($fromTime) {
                     $dtS = DateTime::createFromFormat('Y-m-d H:i', "{$byDate} {$fromTime}", $tz);
+                }
 
-                if ($toTime)
+                if ($toTime) {
                     $dtE = DateTime::createFromFormat('Y-m-d H:i', "{$byDate} {$toTime}", $tz);
-                else
+                } else {
                     $dtE = $dtE->add(new DateInterval('P1D'));
+                }
 
                 if ($dtS && $dtE) {
                     Scalr_Util_DateTime::convertTimeZone($dtS);
                     Scalr_Util_DateTime::convertTimeZone($dtE);
 
-                    $sql .= ' AND dtadded > ? AND dtadded < ?';
-                    $args[] = $dtS->format('Y-m-d H:i:s');
-                    $args[] = $dtE->format('Y-m-d H:i:s');
+                    $criteria[] = ['added' => ['$gt' => $dtS]];
+                    $criteria[] = ['added' => ['$lt' => $dtE]];
                 }
             } catch (Exception $e) {}
         }
 
         if ($status === 'success') {
-            $sql .= ' AND exec_exitcode = ?';
-            $args[] = 0;
+            $criteria[] = ['execExitCode' => 0];
         } else if ($status === 'failure') {
-            $sql .= ' AND exec_exitcode <> ?';
-            $args[] = 0;
+            $criteria[] = ['execExitCode' => ['$ne' => 0]];
         }
 
-        $response = $this->buildResponseFromSql2($sql, ['id', 'dtadded'], ['event', 'script_name'], $args);
-        $cache = [];
-        foreach ($response["data"] as &$row) {
-            //
-            //target_data
-            //
-            if (!$cache['farm_names'][$row['farmid']])
-                $cache['farm_names'][$row['farmid']] = $this->db->GetOne("SELECT name FROM farms WHERE id=? LIMIT 1", [$row['farmid']]);
-            $row['target_farm_name'] = $cache['farm_names'][$row['farmid']];
-            $row['target_farm_id'] = $row['farmid'];
+        $logs = OrchestrationLog::find(
+            $criteria,
+            null,
+            Scalr\UI\Utils::convertOrder($sort, ['id' => false], ['id', 'added']),
+            $limit,
+            $start,
+            true
+        );
 
-            $sInfo = $this->db->GetRow("SELECT farm_roleid, `index` FROM servers WHERE server_id = ? LIMIT 1", [$row['server_id']]);
-            $row['target_farm_roleid'] = $sInfo['farm_roleid'];
+        $data = $this->prepareOrchestrationLogData($logs);
+        $this->response->data(['data' => $data, 'total' => $logs->totalNumber]);
+    }
 
-            if (!$cache['role_names'][$sInfo['farm_roleid']])
-                $cache['role_names'][$sInfo['farm_roleid']] = $this->db->GetOne("SELECT alias FROM farm_roles WHERE id=?", [$sInfo['farm_roleid']]);
-            $row['target_role_name'] = $cache['role_names'][$sInfo['farm_roleid']];
+    /**
+     * Returns prepared orchestration log data for response
+     *
+     * @param EntityIterator $logs  List of Orchestration Log objects
+     * @return array
+     */
+    private function prepareOrchestrationLogData($logs)
+    {
+        $farmIds = [];
+        $serverIds = [];
+        $taskIds = [];
+        $eventIds = [];
+        $ids = [];
 
-            $row['target_server_index'] = $sInfo['index'];
-            $row['target_server_id'] = $row['server_id'];
+        foreach ($logs as $row) {
+            /* @var $row OrchestrationLog */
+            $farmIds[] = $row->farmId;
+            $serverIds[] = $row->serverId;
 
-            //
-            //event_data
-            //
-            if ($row['event_server_id']) {
-                $esInfo = $this->db->GetRow("SELECT farm_roleid, `index`, farm_id FROM servers WHERE server_id = ? LIMIT 1", [$row['event_server_id']]);
-
-                if (!$cache['farm_names'][$esInfo['farm_id']])
-                    $cache['farm_names'][$esInfo['farm_id']] = $this->db->GetOne("SELECT name FROM farms WHERE id=? LIMIT 1", [$esInfo['farm_id']]);
-                $row['event_farm_name'] = $cache['farm_names'][$esInfo['farm_id']];
-                $row['event_farm_id'] = $esInfo['farm_id'];
-
-                $row['event_farm_roleid'] = $esInfo['farm_roleid'];
-
-                if (!$cache['role_names'][$esInfo['farm_roleid']])
-                    $cache['role_names'][$esInfo['farm_roleid']] = $this->db->GetOne("SELECT alias FROM farm_roles WHERE id=? LIMIT 1", [$esInfo['farm_roleid']]);
-                $row['event_role_name'] = $cache['role_names'][$esInfo['farm_roleid']];
-
-                $row['event_server_index'] = $esInfo['index'];
+            if ($row->eventServerId) {
+                $serverIds[] = $row->eventServerId;
             }
 
-            $row['dtadded'] = Scalr_Util_DateTime::convertTz($row['dtadded']);
+            if ($row->taskId) {
+                $taskIds[] = $row->taskId;
+            }
 
-            if(\Scalr::config('scalr.system.scripting.logs_storage') == 'scalr')
-                $row['execution_id'] = null;
+            if ($row->eventId) {
+                $eventIds[] = $row->eventId;
+            }
 
-            if ($row['message'])
-                $row['message'] = nl2br(htmlspecialchars($row['message']));
+            if ($row->type == OrchestrationLog::TYPE_MANUAL) {
+                $ids[] = $row->id;
+            }
         }
 
-        $this->response->data($response);
+        if (!empty($farmIds)) {
+            $farms = Farm::find([['id' => ['$in' => array_unique($farmIds)]]]);
+
+            foreach ($farms as $farm) {
+                /* @var $farm Farm */
+                $farmData[$farm->id] = $farm->name;
+            }
+        }
+
+        if (!empty($serverIds)) {
+            $servers = Server::find([['serverId' => ['$in' => array_unique($serverIds)]]]);
+
+            $farmRoleIds = [];
+            $serverFarmIds = [];
+
+            foreach ($servers as $server) {
+                /* @var $server Server */
+                $serverData[$server->serverId]['serverIndex'] = $server->index;
+                $farmRoleIds[$server->serverId] = $server->farmRoleId;
+                $serverFarmIds[$server->serverId] = $server->farmId;
+            }
+
+            $farms = Farm::find([['id' => ['$in' => array_unique(array_values($serverFarmIds))]]]);
+
+            foreach ($farms as $farm) {
+                /* @var $farm Farm */
+                foreach ($serverFarmIds as $serverId => $farmId) {
+                    if ($farmId == $farm->id) {
+                        $serverData[$serverId]['farmName'] = $farm->name;
+                        $serverData[$serverId]['farmId'] = $farm->id;
+                    }
+                }
+            }
+
+            $farmRoles = FarmRole::find([['id' => ['$in' => array_unique(array_values($farmRoleIds))]]]);
+
+            foreach ($farmRoles as $farmRole) {
+                /* @var $farmRole FarmRole */
+                foreach ($farmRoleIds as $serverId => $farmRoleId) {
+                    if ($farmRoleId == $farmRole->id) {
+                        $serverData[$serverId]['alias'] = $farmRole->alias;
+                        $serverData[$serverId]['farmRoleId'] = $farmRole->id;
+                    }
+                }
+            }
+        }
+
+        if (!empty($taskIds)) {
+            $tasks = SchedulerTask::find([['id' => ['$in' => array_unique($taskIds)]]]);
+
+            foreach ($tasks as $task) {
+                /* @var $task SchedulerTask */
+                $taskData[$task->id] = $task->name;
+            }
+        }
+
+        if (!empty($eventIds)) {
+            $events = Event::find([['eventId' => ['$in' => array_unique($eventIds)]]]);
+
+            foreach ($events as $event) {
+                /* @var $event Event */
+                $eventData[$event->eventId] = $event->type;
+            }
+        }
+
+        if (!empty($ids)) {
+            $manualLogs = OrchestrationLogManualScript::find([['orchestrationLogId' => ['$in' => array_unique($ids)]]]);
+
+            foreach ($manualLogs as $manualLog) {
+                /* @var $manualLog OrchestrationLogManualScript */
+                $scriptData[$manualLog->orchestrationLogId] = $manualLog->userEmail;
+            }
+        }
+
+        $data = [];
+
+        foreach ($logs as $row) {
+            /* @var $row OrchestrationLog */
+            $dataRow = get_object_vars($row);
+            $dataRow['targetFarmName'] = isset($farmData[$row->farmId]) ? $farmData[$row->farmId] : null;
+            $dataRow['targetFarmId'] = $row->farmId;
+            $dataRow['targetServerId'] = $row->serverId;
+            $dataRow['targetServerIndex'] = isset($serverData[$row->serverId]['serverIndex']) ? $serverData[$row->serverId]['serverIndex'] : null;
+            $dataRow['targetFarmRoleId'] = isset($serverData[$row->serverId]['farmRoleId']) ? $serverData[$row->serverId]['farmRoleId'] : null;
+            $dataRow['targetRoleName'] = isset($serverData[$row->serverId]['alias']) ? $serverData[$row->serverId]['alias'] : null;
+            $dataRow['added'] = Scalr_Util_DateTime::convertTz($row->added);
+
+            if (\Scalr::config('scalr.system.scripting.logs_storage') == 'scalr') {
+                $dataRow['executionId'] = null;
+            }
+
+            if ($dataRow['message']) {
+                $dataRow['message'] = nl2br(htmlspecialchars($dataRow['message']));
+            }
+
+            if ($row->eventServerId) {
+                $dataRow['eventFarmName'] = isset($serverData[$row->eventServerId]['farmName']) ? $serverData[$row->eventServerId]['farmName'] : null;
+                $dataRow['eventFarmId'] = isset($serverData[$row->eventServerId]['farmId']) ? $serverData[$row->eventServerId]['farmId'] : null;
+                $dataRow['eventFarmRoleId'] = isset($serverData[$row->eventServerId]['farmRoleId']) ? $serverData[$row->eventServerId]['farmRoleId'] : null;
+                $dataRow['eventRoleName'] = isset($serverData[$row->eventServerId]['alias']) ? $serverData[$row->eventServerId]['alias'] : null;
+                $dataRow['eventServerIndex'] = isset($serverData[$row->eventServerId]['serverIndex']) ? $serverData[$row->eventServerId]['serverIndex'] : null;
+            }
+
+            $dataRow['event'] = null;
+
+            if ($row->taskId) {
+                $dataRow['event'] = isset($taskData[$row->taskId]) ? $taskData[$row->taskId] : null;
+            }
+
+            if ($row->eventId) {
+                $dataRow['event'] = isset($eventData[$row->eventId]) ? $eventData[$row->eventId] : null;
+            }
+
+            if ($row->type == OrchestrationLog::TYPE_MANUAL) {
+                $dataRow['event'] = isset($scriptData[$row->id]) ? $scriptData[$row->id] : null;
+            }
+
+            $data[] = $dataRow;
+        }
+
+        return $data;
     }
 
     public function xListApiLogsAction()
@@ -443,41 +581,6 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
         }
 
         $this->response->data($response);
-    }
-
-    /**
-     * @deprecated since 4.0
-     * @throws Exception
-     */
-    public function scriptingMessageAction()
-    {
-        $this->request->restrictAccess(Acl::RESOURCE_LOGS_SCRIPTING_LOGS);
-
-        $entry = $this->db->GetRow("SELECT * FROM scripting_log WHERE id = ?", [$this->getParam('eventId')]);
-        if (empty($entry))
-            throw new Exception ('Unknown event');
-
-        $farm = DBFarm::LoadByID($entry['farmid']);
-        $this->user->getPermissions()->validate($farm);
-
-        $form = [
-            [
-                'xtype' => 'fieldset',
-                'title' => 'Message',
-                'layout' => 'fit',
-                'items' => [
-                    [
-                        'xtype' => 'textarea',
-                        'readOnly' => true,
-                        'hideLabel' => true,
-                        'height' => 400,
-                        'value' => $entry['message']
-                    ]
-                ]
-            ]
-        ];
-
-        $this->response->page('ui/logs/scriptingmessage.js', $form);
     }
 
     public function apiLogEntryDetailsAction()
@@ -575,10 +678,8 @@ class Scalr_UI_Controller_Logs extends Scalr_UI_Controller
     {
         $this->request->restrictAccess(Acl::RESOURCE_LOGS_EVENT_LOGS);
 
-        $sql = "SELECT `events`.* FROM `farms` INNER JOIN `events` ON `farms`.`id` = `events`.`farmid` WHERE `farms`.`env_id` = ? AND :FILTER:";
+        $sql = "SELECT `events`.* FROM `farms` f INNER JOIN `events` ON `f`.`id` = `events`.`farmid` WHERE `f`.`env_id` = ? AND :FILTER: AND " . $this->request->getFarmSqlQuery();
         $args = [$this->getEnvironmentId()];
-
-        list($sql, $args) = $this->request->prepareFarmSqlQuery($sql, $args, 'farms');
 
         if ($farmId) {
             $sql .= " AND farmid = ?";

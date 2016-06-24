@@ -50,8 +50,8 @@ use Scalr\Service\Aws\RdsException;
 use Scalr\Service\Aws\EntityManager;
 use Scalr\Service\Aws\Client\ClientInterface;
 use Scalr\Service\Aws\Client\ClientException;
-use \DateTimeZone;
-use \DateTime;
+use DateTimeZone;
+use DateTime;
 
 /**
  * Rds Api messaging.

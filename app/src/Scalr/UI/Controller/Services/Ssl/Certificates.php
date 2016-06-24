@@ -73,7 +73,7 @@ class Scalr_UI_Controller_Services_Ssl_Certificates extends Scalr_UI_Controller
     {
         $this->request->restrictAccess(Acl::RESOURCE_SERVICES_SSL, Acl::PERM_SERVICES_SSL_MANAGE);
 
-        /* @var \Scalr\Model\Entity\SslCertificate $cert */
+        /* @var $cert Entity\SslCertificate */
         $cert = Entity\SslCertificate::findPk($certId);
 
         if (!$cert) {
@@ -116,7 +116,7 @@ class Scalr_UI_Controller_Services_Ssl_Certificates extends Scalr_UI_Controller
 
         $flagNew = false;
         if ($id) {
-            /* @var \Scalr\Model\Entity\SslCertificate $cert */
+            /* @var $cert Entity\SslCertificate */
             $cert = Entity\SslCertificate::findPk($id);
 
             if (!$cert) {
@@ -134,7 +134,7 @@ class Scalr_UI_Controller_Services_Ssl_Certificates extends Scalr_UI_Controller
         if (!$cert->name) {
             $this->request->addValidationErrors('name', 'Name can\'t be empty');
         }
-        
+
         $criteria = [
             ['name' => $cert->name],
             ['envId' => $cert->envId]
@@ -143,7 +143,7 @@ class Scalr_UI_Controller_Services_Ssl_Certificates extends Scalr_UI_Controller
         if ($id) {
             $criteria[] = ['id' => ['$ne' => $id]];
         }
-        
+
         if (Entity\SslCertificate::findOne($criteria)) {
             $this->request->addValidationErrors('name', 'Name must be unique.');
         }
@@ -243,7 +243,7 @@ class Scalr_UI_Controller_Services_Ssl_Certificates extends Scalr_UI_Controller
         $certs = Entity\SslCertificate::find($criteria);
         $certInfos = [];
 
-        /* @var \Scalr\Model\Entity\SslCertificate $cert */
+        /* @var $cert Entity\SslCertificate */
         foreach ($certs as $cert) {
             $certInfos[] = $cert->getInfo();
         }

@@ -74,6 +74,8 @@ class DBQueueEvent(application.ScalrIterationApplication):
         self.https_session = requests.Session()
         self.https_session.mount('https://', helper.HttpsAdapter())
 
+        self.proxy = None
+
     def configure(self):
         helper.update_config(
             self.scalr_config.get('dbqueue_event', {}), self.config)
@@ -82,6 +84,13 @@ class DBQueueEvent(application.ScalrIterationApplication):
 
         self._db = dbmanager.ScalrDB(self.config['connections']['mysql'])
         self._pool = helper.GPool(pool_size=self.config['pool_size'])
+
+        proxy_settings = helper.get_proxy_settings(self.scalr_config, 'system.webhooks')
+        if proxy_settings:
+            self.proxy = {
+                'http': proxy_settings['url'],
+                'https': proxy_settings['url']
+            }
 
     def get_webhooks(self):
         query = (
@@ -129,7 +138,8 @@ class DBQueueEvent(application.ScalrIterationApplication):
 
         resp = self.https_session.post(
             url, data=webhook['payload'], headers=headers, timeout=webhook['timeout'],
-            allow_redirects=False, verify=not self.args['--disable-ssl-verification'])
+            allow_redirects=False, verify=not self.args['--disable-ssl-verification'],
+            proxies=self.proxy)
 
         if resp.status_code > 205:
             webhook['error_msg'] = resp.text.encode('ascii', 'replace')

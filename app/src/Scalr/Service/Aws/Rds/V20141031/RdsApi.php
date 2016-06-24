@@ -72,8 +72,8 @@ use Scalr\Service\Aws\RdsException;
 use Scalr\Service\Aws\EntityManager;
 use Scalr\Service\Aws\Client\ClientInterface;
 use Scalr\Service\Aws\Client\ClientException;
-use \DateTimeZone;
-use \DateTime;
+use DateTimeZone;
+use DateTime;
 
 
 /**
@@ -2299,11 +2299,13 @@ class RdsApi extends AbstractApi
                 'engine',
                 'engineVersion',
                 'latestRestorableTime' => 'DateTime',
+                'kmsKeyId',
                 'masterUsername',
                 'preferredBackupWindow',
                 'preferredMaintenanceWindow',
                 'port' => 'int',
                 'endpoint',
+                'storageEncrypted' => 'bool',
                 'availabilityZones' => '_loadAvailabilityZonesList',
                 'vpcSecurityGroups' => '_loadVpcSecurityGroupMembershipList',
                 'dBClusterOptionGroupMemberships' => '_loadOptionGroupMembershipList',

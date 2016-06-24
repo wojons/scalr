@@ -67,6 +67,7 @@ class Scalr_UI_Controller_Account2 extends Scalr_UI_Controller
             }
             $row['dtAdded'] = Scalr_Util_DateTime::convertTz($env->dtAdded);
             $row['status'] = $env->status;
+            $row['defaultPriority'] = $env->defaultPriority;
 
             if ($this->getContainer()->analytics->enabled) {
                 $row['ccId'] = $env->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID);
@@ -185,5 +186,10 @@ class Scalr_UI_Controller_Account2 extends Scalr_UI_Controller
     public function scriptsAction()
     {
         self::loadController('Scripts')->defaultAction();
+    }
+
+    public function aboutAction()
+    {
+        self::loadController('Core')->aboutAction();
     }
 }

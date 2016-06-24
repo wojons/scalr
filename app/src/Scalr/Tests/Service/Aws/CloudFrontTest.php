@@ -29,7 +29,7 @@ class CloudFrontTest extends AwsTestCase
     {
         parent::setUp();
 
-        if (!$this->isSkipFunctionalTests()) {
+        if (!static::isSkippedFunctionalTest()) {
             $this->aws = $this->getEnvironment()->aws(AwsTestCase::REGION);
             $this->aws->cloudFront->enableEntityManager();
         }

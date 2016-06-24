@@ -142,7 +142,7 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
     public function xListAction()
     {
         $sql = "SELECT `id`, `name`, `type`, `comments`, `target_id` as `targetId`, `target_server_index` as `targetServerIndex`, `target_type` as `targetType`, `start_time` as `startTime`,
-            `end_time` as `endTime`, `last_start_time` as `lastStartTime`, `restart_every` as `restartEvery`, `config`, `status`, `timezone` FROM `scheduler` WHERE `env_id` = ? AND :FILTER:";
+            `last_start_time` as `lastStartTime`, `restart_every` as `restartEvery`, `config`, `status`, `timezone` FROM `scheduler` WHERE `env_id` = ? AND :FILTER:";
 
         $response = $this->buildResponseFromSql2($sql, ['id', 'name', 'type', 'startTime', 'lastStartTime', 'timezone', 'status'], ['name'], [$this->getEnvironmentId()]);
 
@@ -181,7 +181,6 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
 
             //$row['type'] = Scalr_SchedulerTask::getTypeByName($row['type']);
             $row['startTime'] = $row['startTime'] ? Scalr_Util_DateTime::convertDateTime($row['startTime'], $row['timezone']) : 'Now';
-            $row['endTime'] = $row['endTime'] ? Scalr_Util_DateTime::convertDateTime($row['endTime'], $row['timezone']) : 'Never';
             $row['lastStartTime'] = $row['lastStartTime'] ? Scalr_Util_DateTime::convertDateTime($row['lastStartTime'], $row['timezone']) : '';
 
             $row['config'] = unserialize($row['config']);
@@ -421,10 +420,6 @@ class Scalr_UI_Controller_Schedulertasks extends Scalr_UI_Controller
             $task = new Scalr_SchedulerTask();
             $task->loadById($taskId);
             $this->user->getPermissions()->validate($task);
-
-            if ($task->status == Scalr_SchedulerTask::STATUS_FINISHED) {
-                continue;
-            }
 
             if ($task->execute(true)) {
                 $executed[] = $task->name;

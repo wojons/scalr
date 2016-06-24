@@ -19,7 +19,11 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.edit', function (loadParams, mo
             xtype: 'fieldset',
             cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
             items: [{
-                xtype: 'hidden',
+                xtype: 'textfield',
+                readOnly: true,
+                fieldLabel: 'ID',
+                hidden: !moduleParams.project.projectId,
+                hideInputOnReadOnly: true,
                 name: 'projectId'
             },{
                 xtype: 'textfield',
@@ -214,7 +218,7 @@ Scalr.regPage('Scalr.ui.admin.analytics.projects.edit', function (loadParams, mo
 			},{
                 xtype: 'button',
                 cls: 'x-btn-red',
-                hidden: !moduleParams.project.projectId || !!moduleParams.project.archived,
+                hidden: !moduleParams.project.projectId || !!moduleParams.project.archived || !Scalr.isAllowed('ANALYTICS_PROJECTS_ACCOUNT', 'delete'),
                 text: moduleParams.project.removable ? 'Delete' : 'Archive',
                 disabled: !moduleParams.project.removable && moduleParams.project.warning,
                 tooltip: !moduleParams.project.removable && moduleParams.project.warning ? moduleParams.project.warning : '',

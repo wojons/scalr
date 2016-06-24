@@ -42,6 +42,7 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
         while ($farmRole = $s->fetchRow()) {
             try {
                 $dbRole = DBRole::loadById($farmRole['role_id']);
+                $farmRole['isScalarized'] = $dbRole->isScalarized;
                 if (! $farmRole['name'])
                     $farmRole['name'] = $dbRole->name;
 
@@ -59,6 +60,7 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
                 }
             } catch (Exception $e) {
                 $farmRole['name'] = '*removed*';
+                $farmRole['isScalarized'] = 1;
             }
 
             $retval[$farmRole['id']] = $farmRole;
@@ -175,7 +177,7 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
         $dbFarm = $dbFarmRole->GetFarmObject();
 
         $this->user->getPermissions()->validate($dbFarmRole);
-        $this->request->restrictFarmAccess($dbFarm, Acl::PERM_FARMS_SERVERS);
+        $this->request->checkPermissions($dbFarm->__getNewFarmObject(), Acl::PERM_FARMS_SERVERS);
 
         if ($dbFarm->Status != FARM_STATUS::RUNNING) {
             throw new Scalr_Exception_Core('You can launch servers only on running farms');
@@ -303,6 +305,7 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
                 $DBFarmRole->Platform,
                 $DBFarmRole->CloudLocation
             )->imageId;
+            $row['isScalarized'] = $DBRole->isScalarized;
 
             if ($DBFarmRole->GetFarmObject()->Status == FARM_STATUS::RUNNING) {
                 $row['shortcuts'] = [];
@@ -327,8 +330,8 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
                 $row['scaling_algos'] = implode(', ', $scaling_algos);
             }
 
-            $row['farmOwnerIdPerm'] = $DBFarmRole->GetFarmObject()->createdByUserId == $this->user->getId();
-            $row['farmTeamIdPerm'] = $DBFarmRole->GetFarmObject()->teamId ? $this->user->isInTeam($DBFarmRole->GetFarmObject()->teamId) : false;
+            $row['farmOwnerIdPerm'] = $DBFarmRole->GetFarmObject()->ownerId == $this->user->getId();
+            $row['farmTeamIdPerm'] = $DBFarmRole->GetFarmObject()->__getNewFarmObject()->hasUserTeamOwnership($this->getUser());
         }
 
         $this->response->data($response);
@@ -338,7 +341,7 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
     {
         $dbFarmRole = DBFarmRole::LoadByID($this->getParam(self::CALL_PARAM_NAME));
         $this->user->getPermissions()->validate($dbFarmRole);
-        $this->request->restrictFarmAccess($this->dbFarm, Acl::PERM_FARMS_MANAGE);
+        $this->request->checkPermissions($this->dbFarm->__getNewFarmObject(), Acl::PERM_FARMS_UPDATE);
 
         $roles = $dbFarmRole->getReplacementRoles(true);
         $this->response->page('ui/farms/roles/replaceRole.js', array(
@@ -355,10 +358,10 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
 
         $dbFarmRole = DBFarmRole::LoadByID($this->getParam(self::CALL_PARAM_NAME));
         $this->user->getPermissions()->validate($dbFarmRole);
-        $this->request->restrictFarmAccess($this->dbFarm, Acl::PERM_FARMS_MANAGE);
+        $this->request->checkPermissions($this->dbFarm->__getNewFarmObject(), Acl::PERM_FARMS_UPDATE);
 
         $newRole = DBRole::loadById($this->request->getParam('roleId'));
-        $this->checkPermissions($newRole->__getNewRoleObject());
+        $this->request->checkPermissions($newRole->__getNewRoleObject());
 
         if (!empty(($envs = $newRole->__getNewRoleObject()->getAllowedEnvironments()))) {
             if (!in_array($this->getEnvironmentId(), $envs)) {
@@ -373,10 +376,10 @@ class Scalr_UI_Controller_Farms_Roles extends Scalr_UI_Controller
         $dbFarmRole->Save();
 
         \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
-            $dbFarmRole->FarmID,
+            !empty($dbFarmRole->FarmID) ? $dbFarmRole->FarmID : null,
             sprintf("Role '%s' was upgraded to role '%s'",
                 $oldName,
-                $newRole->name
+                !empty($newRole->name) ? $newRole->name : null
             )
         ));
 

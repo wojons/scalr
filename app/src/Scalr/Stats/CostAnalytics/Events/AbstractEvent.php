@@ -6,8 +6,8 @@ use Scalr\Stats\CostAnalytics\Entity\TimelineEventEntity;
 use Scalr\Exception\AnalyticsException;
 use Scalr\Stats\CostAnalytics\Entity\TimelineEventCostCentreEntity;
 use Scalr\Stats\CostAnalytics\Entity\TimelineEventProjectEntity;
-use \Scalr_UI_Request;
-use \Scalr_Environment;
+use Scalr_UI_Request;
+use Scalr_Environment;
 
 /**
  * AbstractEvent

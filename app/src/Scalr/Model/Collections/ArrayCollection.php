@@ -2,8 +2,10 @@
 
 namespace Scalr\Model\Collections;
 
-use ArrayObject;
+use ArrayIterator;
 use BadMethodCallException;
+use Iterator;
+use IteratorIterator;
 use Scalr\Model\AbstractEntity;
 
 /**
@@ -14,7 +16,7 @@ use Scalr\Model\AbstractEntity;
  * @author   Vitaliy Demidov  <vitaliy@scalr.com>
  * @since    4.5.2 (13.03.2014)
  */
-class ArrayCollection extends ArrayObject
+class ArrayCollection extends ArrayIterator
 {
     /**
      * The total number of records without limit
@@ -69,5 +71,17 @@ class ArrayCollection extends ArrayObject
         throw new BadMethodCallException(sprintf(
             "Could not find method %s for class %s", $name, get_class($this)
         ));
+    }
+
+    /**
+     * This method is used for compatibility with IteratorAggregate
+     *
+     * @see IteratorAggregate::getIterator()
+     *
+     * @return  Iterator
+     */
+    public function getIterator()
+    {
+        return new IteratorIterator($this);
     }
 }

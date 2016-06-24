@@ -62,7 +62,7 @@ class StatusAdapter implements \Scalr\Modules\Platforms\StatusAdapterInterface
 
     public function isSuspended()
     {
-        return ($this->platformStatus == 'SHUTOFF' || $this->platformStatus == 'SUSPENDED' || $this->platformStatus == 'SUSPENDING');
+        return ($this->platformStatus == 'PAUSED' || $this->platformStatus == 'SHUTOFF' || $this->platformStatus == 'SUSPENDED' || $this->platformStatus == 'SUSPENDING');
     }
 
     public function isPendingSuspend()

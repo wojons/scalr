@@ -3,6 +3,7 @@ namespace Scalr\Model\Entity;
 
 use Scalr\Model\AbstractEntity;
 use Scalr\Model\Entity\Image;
+use SERVER_PLATFORMS;
 
 /**
  * Role images model
@@ -50,6 +51,8 @@ class RoleImage extends AbstractEntity
     public $cloudLocation;
 
     /**
+     * @deprecated Use method FarmRole::getImage
+     *
      * @return Image|NULL
      * @throws \Exception
      */
@@ -57,20 +60,36 @@ class RoleImage extends AbstractEntity
     {
         /* @var $role Role */
         $role = Role::findPk($this->roleId);
-        return Image::findOne([
+        $criteria = [
             ['id'            => $this->imageId],
-            ['$or'           => [['envId' => $role->envId == 0 ? null : $role->envId], ['envId' => null]]],
             ['platform'      => $this->platform],
-            ['cloudLocation' => $this->cloudLocation]
-        ]);
+            ['cloudLocation' => $this->cloudLocation],
+            ['$or' => [
+                ['accountId' => null],
+                ['$and' => [
+                    ['accountId' => $role->accountId],
+                    ['$or' => [
+                        ['envId' => null],
+                        ['envId' => $role->envId]
+                    ]]
+                ]]
+            ]]
+        ];
+
+        return Image::findOne($criteria);
     }
 
+    /**
+     * Check whether the Role is used in any farm
+     *
+     * @return bool Returns true if the Role is used in some farm or false otherwise
+     */
     public function isUsed()
     {
-        if (in_array($this->platform, [\SERVER_PLATFORMS::GCE, \SERVER_PLATFORMS::AZURE])) {
-            return !!$this->db()->GetOne('SELECT EXISTS(SELECT 1 FROM farm_roles WHERE role_id = ? AND platform = ?)', [$this->roleId, $this->platform]);
+        if (in_array($this->platform, [SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::AZURE])) {
+            return !!$this->db()->GetOne("SELECT EXISTS(SELECT 1 FROM farm_roles WHERE role_id = ? AND platform = ?)", [$this->roleId, $this->platform]);
         } else {
-            return !!$this->db()->GetOne('SELECT EXISTS(SELECT 1 FROM farm_roles WHERE role_id = ? AND platform = ? AND cloud_location = ?)', [$this->roleId, $this->platform, $this->cloudLocation]);
+            return !!$this->db()->GetOne("SELECT EXISTS(SELECT 1 FROM farm_roles WHERE role_id = ? AND platform = ? AND cloud_location = ?)", [$this->roleId, $this->platform, $this->cloudLocation]);
         }
     }
 }

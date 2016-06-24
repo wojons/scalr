@@ -59,8 +59,9 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
 
         var me = this,
             fullname = name.join('.'),
-            settings = record.get('settings');
-        if (fullname === 'settings.aws.instance_type' || fullname === 'settings.gce.machine-type') {
+            settings = record.get('settings'),
+            platform = record.get('platform');
+        if (fullname === 'settings.instance_type' && Ext.Array.contains(['ec2', 'gce'], platform)) {
             var devices = record.getAvailableStorageDisks(),
                 fistDevice = '',
                 field, currentValue;
@@ -94,12 +95,18 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                 }
                 me.refreshDisksCheckboxes(record, 'lvm_settings', 'db.msr.storage.lvm.volumes');
 
-                if (fullname === 'settings.aws.instance_type' && record.get('new')) {
+                if (platform === 'ec2' && record.get('new')) {
                     record.loadInstanceTypeInfo(function(instanceTypeInfo){
                         var field = me.down('[name="db.msr.data_storage.ebs.encrypted"]'),
+                            readOnly = false,
                             ebsEncryptionSupported = instanceTypeInfo ? instanceTypeInfo.ebsencryption || false : true;
                         if (field) {
-                            field.setReadOnly(!ebsEncryptionSupported);
+                            readOnly = !ebsEncryptionSupported;
+                            if (ebsEncryptionSupported && (Scalr.getGovernance('ec2', 'aws.storage') || {})['require_encryption']) {
+                                readOnly = true;
+                                field.setValue(true);
+                            }
+                            field.setReadOnly(readOnly);
                         }
                     });
 
@@ -126,10 +133,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
             settings = record.get('settings', true),
             instanceType;
 
-        if (platform === 'gce') {
-            instanceType = settings['gce.machine-type'];
-        } else if (platform === 'ec2') {
-            instanceType = settings['aws.instance_type'];
+        if (Ext.Array.contains(['ec2', 'gce'], platform)) {
+            instanceType = settings['instance_type'];
         }
 
         if (instanceType !== undefined && ephemeralDevicesMap[instanceType] !== undefined) {
@@ -202,7 +207,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                     layout: 'hbox',
                     items: [{
                         xtype: 'combo',
-                        store: Scalr.constants.ebsTypes,
+                        store: Scalr.utils.getEbsTypes(),
                         fieldLabel: 'EBS type',
                         valueField: 'id',
                         displayField: 'name',
@@ -312,8 +317,15 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
         if (platform === 'ec2' && record.get('new')) {
             record.loadInstanceTypeInfo(function(instanceTypeInfo){
                 var field = me.down('[name="db.msr.data_storage.ebs.encrypted"]'),
+                    readOnly = false,
                     ebsEncryptionSupported = instanceTypeInfo ? instanceTypeInfo.ebsencryption || false : true;
-                field.setReadOnly(!ebsEncryptionSupported);
+                readOnly = !ebsEncryptionSupported;
+                if (ebsEncryptionSupported && (Scalr.getGovernance('ec2', 'aws.storage') || {})['require_encryption']) {
+                    readOnly = true;
+                    field.setValue(true);
+                }
+                field.encryptionSupported = ebsEncryptionSupported;
+                field.setReadOnly(readOnly);
                 handler();
             });
         } else {
@@ -787,7 +799,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                         field.show();
                         var changes = [];
                         if (value['volumeType']) {
-                            var ebsType = Ext.Array.findBy(Scalr.constants.ebsTypes, function(item){
+                            var ebsType = Ext.Array.findBy(Scalr.utils.getEbsTypes(), function(item){
                                 if (item[0] == value['volumeType']) {
                                     return true;
                                 }
@@ -826,7 +838,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                 width: 600,
                 items: [{
                     xtype: 'combo',
-                    store: Scalr.constants.ebsTypes,
+                    store: Scalr.utils.getEbsTypes(),
                     fieldLabel: 'EBS type',
                     labelWidth: 185,
                     valueField: 'id',
@@ -913,13 +925,12 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                 plugins: {
                     ptype: 'fieldicons',
                     icons: [
-                        {id: 'question', tooltip: 'EBS encryption is not supported by selected instance type'},
-                        {id: 'szrversion', tooltipData: {version: '2.9.25'}}
+                        {id: 'question', tooltip: 'EBS encryption is not supported by selected instance type'}
                     ]
                 },
                 listeners: {
                     writeablechange: function(comp, readOnly) {
-                        this.toggleIcon('question', readOnly && comp.up('#dbmsr').currentRole.get('new'));
+                        this.toggleIcon('question', readOnly && comp.up('#dbmsr').currentRole.get('new') && !comp.encryptionSupported);
                     }
                 }
             }, {
@@ -1017,14 +1028,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                   editable: false,
                   queryMode: 'local',
                   value: 'pd-standard',
-                  name: 'db.msr.data_storage.gced.type',
-                  plugins: {
-                      ptype: 'fieldicons',
-                      position: 'outer',
-                      icons: [
-                          {id: 'szrversion', tooltipData: {version: '3.5.19'}}
-                      ]
-                  }
+                  name: 'db.msr.data_storage.gced.type'
               }]
         }, {
             xtype:'fieldset',
@@ -1088,7 +1092,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Dbmsr', {
                 width: 600,
                 items: [{
                     xtype: 'combo',
-                    store: Scalr.constants.ebsTypes,
+                    store: Scalr.utils.getEbsTypes(),
                     fieldLabel: 'EBS type',
                     valueField: 'id',
                     displayField: 'name',

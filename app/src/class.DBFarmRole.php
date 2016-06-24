@@ -5,6 +5,10 @@ use Scalr\Modules\PlatformFactory;
 use Scalr\Model\Entity\Script;
 use Scalr\Model\Entity;
 use Scalr\DataType\ScopeInterface;
+use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
+use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
+use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
+use Scalr\Stats\CostAnalytics\Entity\ProjectPropertyEntity;
 
 /**
  * Class DBFarmRole
@@ -306,7 +310,7 @@ class DBFarmRole
      * @param $id
      * @return DBFarmRole
      */
-    static public function LoadByID($id)
+    public static function LoadByID($id)
     {
         $db = \Scalr::getDb();
 
@@ -326,7 +330,7 @@ class DBFarmRole
      * @param $id
      * @return DBFarmRole
      */
-    static public function Load($farmid, $roleid, $cloudLocation)
+    public static function Load($farmid, $roleid, $cloudLocation)
     {
         $db = \Scalr::getDb();
 
@@ -372,19 +376,6 @@ class DBFarmRole
     public function GetRoleID()
     {
         return $this->RoleID;
-    }
-
-    public function GetServiceConfiguration($behavior)
-    {
-        $preset_id = $this->DB->GetOne("SELECT preset_id FROM farm_role_service_config_presets WHERE farm_roleid=? AND behavior=? LIMIT 1", array(
-            $this->ID,
-            $behavior
-        ));
-
-        if ($preset_id)
-            return Scalr_Model::init(Scalr_Model::SERVICE_CONFIGURATION)->loadById($preset_id);
-        else
-            return null;
     }
 
     public function GetPendingInstancesCount()
@@ -494,81 +485,7 @@ class DBFarmRole
         }
         $this->DB->CommitTrans();
 
-        $this->SetSetting(Entity\FarmRoleSetting::SYSTEM_NEW_PRESETS_USED, 1, Entity\FarmRoleSetting::TYPE_CFG);
-
         return true;
-    }
-
-    /**
-     * @deprecated
-     */
-    public function SetServiceConfigPresets(array $presets)
-    {
-        foreach ($this->GetRoleObject()->getBehaviors() as $behavior) {
-            $farm_preset_id = $this->DB->GetOne("SELECT preset_id FROM farm_role_service_config_presets WHERE farm_roleid=? AND behavior=? LIMIT 1", array(
-                $this->ID,
-                $behavior
-            ));
-
-            $send_message = false;
-            $msg = false;
-
-            if (!empty($presets[$behavior])) {
-                if (!$farm_preset_id) {
-                    $this->DB->Execute("INSERT INTO farm_role_service_config_presets SET
-                        preset_id   = ?,
-                        farm_roleid = ?,
-                        behavior    = ?,
-                        restart_service = '1'
-                    ", array(
-                        $presets[$behavior],
-                        $this->ID,
-                        $behavior
-                    ));
-
-                    $send_message = true;
-                }
-                elseif ($farm_preset_id != $presets[$behavior]) {
-                    $this->DB->Execute("UPDATE farm_role_service_config_presets SET
-                        preset_id   = ?
-                    WHERE farm_roleid = ? AND behavior = ?
-                    ", array(
-                        $presets[$behavior],
-                        $this->ID,
-                        $behavior
-                    ));
-
-                    $send_message = true;
-                }
-
-                if ($send_message) {
-                    $msg = new Scalr_Messaging_Msg_UpdateServiceConfiguration(
-                        $behavior,
-                        0,
-                        1
-                    );
-                }
-            }
-            else {
-                if ($farm_preset_id) {
-                    $this->DB->Execute("DELETE FROM farm_role_service_config_presets WHERE farm_roleid=? AND behavior=?", array($this->ID, $behavior));
-                    $msg = new Scalr_Messaging_Msg_UpdateServiceConfiguration(
-                        $behavior,
-                        1,
-                        1
-                    );
-                }
-            }
-
-            if ($msg)
-            {
-                foreach ($this->GetServersByFilter(array('status' => \SERVER_STATUS::RUNNING)) as $dbServer)
-                {
-                    if ($dbServer->IsSupported("0.6"))
-                        $dbServer->SendMessage($msg);
-                }
-            }
-        }
     }
 
     public function SetScripts(array $scripts, array $params = array())
@@ -712,6 +629,92 @@ class DBFarmRole
     {
         $storage = new \Scalr\Farm\Role\FarmRoleStorage($this);
         return $storage;
+    }
+
+    /**
+     * Apply FarmRole global variables to a value
+     *
+     * @return string
+     */
+    public function applyGlobalVarsToValue($value)
+    {
+        if (empty($this->globalVariablesCache)) {
+            $formats = \Scalr::config("scalr.system.global_variables.format");
+
+            $systemVars = array(
+                'env_id'            => $this->GetFarmObject()->EnvID,
+                'env_name'          => $this->GetFarmObject()->GetEnvironmentObject()->name,
+                'farm_team'         => $this->GetFarmObject()->teamId ? (new Scalr_Account_Team())->loadById($this->GetFarmObject()->teamId)->name : '',
+                'farm_id'           => $this->GetFarmObject()->ID,
+                'farm_name'         => $this->GetFarmObject()->Name,
+                'farm_hash'         => $this->GetFarmObject()->Hash,
+                'farm_owner_email'  => $this->GetFarmObject()->createdByUserEmail,
+                'farm_role_id'      => $this->ID,
+                'farm_role_alias'   => $this->Alias,
+                'cloud_location'    => $this->CloudLocation
+            );
+
+            if (\Scalr::getContainer()->analytics->enabled) {
+                $projectId = $this->GetFarmObject()->GetSetting(Entity\FarmSetting::PROJECT_ID);
+
+                if ($projectId) {
+                    /* @var $project ProjectEntity */
+                    $project = ProjectEntity::findPk($projectId);
+
+                    $systemVars['project_id'] = $projectId;
+                    $systemVars['project_bc'] = $project->getProperty(ProjectPropertyEntity::NAME_BILLING_CODE);
+                    $systemVars['project_name'] = $project->name;
+
+                    $ccId = $project->ccId;
+                }
+
+                if ($ccId) {
+                    /* @var $cc CostCentreEntity */
+                    $cc = CostCentreEntity::findPk($ccId);
+
+                    if ($cc) {
+                        $systemVars['cost_center_id'] = $ccId;
+                        $systemVars['cost_center_bc'] = $cc->getProperty(CostCentrePropertyEntity::NAME_BILLING_CODE);
+                        $systemVars['cost_center_name'] = $cc->name;
+                    } else {
+                        throw new Exception("Cost center {$ccId} not found");
+                    }
+                }
+            }
+
+            // Get list of Server system vars
+            foreach ($systemVars as $name => $val) {
+                $name = "SCALR_".strtoupper($name);
+                $val = trim($val);
+
+                if (isset($formats[$name])) {
+                    $val = @sprintf($formats[$name], $val);
+                }
+
+                $this->globalVariablesCache[$name] = $val;
+            }
+
+            // Add custom variables
+            $gv = new Scalr_Scripting_GlobalVariables($this->GetFarmObject()->ClientID, $this->GetFarmObject()->EnvID, ScopeInterface::SCOPE_FARMROLE);
+
+            $vars = $gv->listVariables($this->RoleID, $this->FarmID, $this->ID);
+
+            foreach ($vars as $v) {
+                $this->globalVariablesCache[$v['name']] = $v['value'];
+            }
+        }
+
+        //Parse variable
+        $keys = array_map(function ($item) {
+            return "{" . $item . "}";
+        }, array_keys($this->globalVariablesCache));
+
+        $values = array_values($this->globalVariablesCache);
+
+        $retval = str_replace($keys, $values, $value);
+
+        // Strip undefined variables & return value
+        return preg_replace("/{[A-Za-z0-9_-]+}/", "", $retval);
     }
 
     /**
@@ -859,6 +862,7 @@ class DBFarmRole
             AND ri.platform = ? " .
             (in_array($this->Platform, array(SERVER_PLATFORMS::GCE)) ? '' : "AND ri.cloud_location = ? ") .
             "AND os.family = ? " .
+            ($dbRole->isScalarized == 1 ? ' AND r.is_scalarized = 1 ' : '') .
             ($includeSelf ? '' : "AND r.id != ? ") .
             "GROUP BY r.id"
         ;
@@ -896,7 +900,7 @@ class DBFarmRole
 
             sort($behaviors2);
 
-            if ($behaviors == $behaviors2) {
+            if ($behaviors == $behaviors2 || $dbRole->isScalarized == 0) {
                 $image = $role->__getNewRoleObject()->getImage($this->Platform, $this->CloudLocation)->getImage();
                 if ($image) {
                     $result[] = array(
@@ -963,27 +967,7 @@ class DBFarmRole
      */
     public function getInstanceType()
     {
-        switch ($this->Platform) {
-            case SERVER_PLATFORMS::EC2:
-                $name = Entity\FarmRoleSetting::AWS_INSTANCE_TYPE;
-                break;
-            case SERVER_PLATFORMS::GCE:
-                $name = Entity\FarmRoleSetting::GCE_MACHINE_TYPE;
-                break;
-            case SERVER_PLATFORMS::RACKSPACE:
-                $name = Entity\FarmRoleSetting::RS_FLAVOR_ID;
-                break;
-            case SERVER_PLATFORMS::AZURE:
-                $name = Entity\FarmRoleSetting::SETTING_AZURE_VM_SIZE;
-                break;
-            default:
-                if (PlatformFactory::isOpenstack($this->Platform)) {
-                    $name = Entity\FarmRoleSetting::OPENSTACK_FLAVOR_ID;
-                } else if (PlatformFactory::isCloudstack($this->Platform)) {
-                    $name = Entity\FarmRoleSetting::CLOUDSTACK_SERVICE_OFFERING_ID;
-                }
-        }
-        return $this->GetSetting($name);
+        return $this->GetSetting(Entity\FarmRoleSetting::INSTANCE_TYPE);
     }
 
 }

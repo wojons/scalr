@@ -1,6 +1,7 @@
 <?php
 namespace Scalr\Model\Entity;
 
+use Scalr\Exception\Model\Entity\Image\ImageNotScalarizedException;
 use Scalr\Model\AbstractEntity;
 use Scalr\DataType\ScopeInterface;
 use Scalr\DataType\AccessPermissionsInterface;
@@ -9,6 +10,7 @@ use Scalr\Exception\Model\Entity\Image\ImageNotFoundException;
 use Scalr\Exception\Model\Entity\Image\NotAcceptableImageStatusException;
 use Scalr\Exception\Model\Entity\Image\ImageInUseException;
 use Scalr\Util\CryptoTool;
+use ROLE_BEHAVIORS;
 
 /**
  * Role entity
@@ -21,6 +23,59 @@ use Scalr\Util\CryptoTool;
  */
 class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsInterface
 {
+    /**
+     * List of DB behaviors
+     * It is used to generate mutually exclusive rules of behavior compatibility
+     *
+     * @var array
+     */
+    protected static $dbBehaviors = [
+        ROLE_BEHAVIORS::MYSQL2,
+        ROLE_BEHAVIORS::MARIADB,
+        ROLE_BEHAVIORS::PERCONA,
+        ROLE_BEHAVIORS::REDIS,
+        ROLE_BEHAVIORS::MONGODB,
+        ROLE_BEHAVIORS::POSTGRESQL
+    ];
+
+    /**
+     * Rules of behavior compatibility
+     * Implies that the DB behaviors is mutually exclusive
+     *
+     * @var array
+     */
+    protected static $behaviorsOverlaps = [
+        ROLE_BEHAVIORS::APACHE => [
+            ROLE_BEHAVIORS::TOMCAT,
+            ROLE_BEHAVIORS::NGINX
+        ],
+        ROLE_BEHAVIORS::TOMCAT => [
+            ROLE_BEHAVIORS::APACHE
+        ],
+        ROLE_BEHAVIORS::NGINX => [
+            ROLE_BEHAVIORS::APACHE,
+            ROLE_BEHAVIORS::HAPROXY
+        ],
+        ROLE_BEHAVIORS::HAPROXY => [
+            ROLE_BEHAVIORS::NGINX
+        ],
+        ROLE_BEHAVIORS::BASE => [
+            ROLE_BEHAVIORS::MYSQL2,
+            ROLE_BEHAVIORS::PERCONA,
+            ROLE_BEHAVIORS::NGINX,
+            ROLE_BEHAVIORS::APACHE,
+            ROLE_BEHAVIORS::TOMCAT,
+            ROLE_BEHAVIORS::MEMCACHED,
+            ROLE_BEHAVIORS::POSTGRESQL,
+            ROLE_BEHAVIORS::REDIS,
+            ROLE_BEHAVIORS::RABBITMQ,
+            ROLE_BEHAVIORS::MONGODB,
+            ROLE_BEHAVIORS::HAPROXY,
+            ROLE_BEHAVIORS::VPC_ROUTER,
+            ROLE_BEHAVIORS::MARIADB
+        ]
+    ];
+
     /**
      * Scalr scope Role
      * @deprecated
@@ -188,6 +243,14 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
     private $_behaviors;
 
     /**
+     * Whether it is Scalarized Role
+     *
+     * @Column(name="is_scalarized",type="boolean")
+     * @var bool
+     */
+    public $isScalarized = true;
+
+    /**
      * Constructor
      */
     public function __construct()
@@ -218,12 +281,13 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
     /**
      * Check if given name is used on scalr, account or environment scopes
      *
-     * @param   string  $name       Role's name to check
-     * @param   int     $accountId  Identifier of account
-     * @param   int     $envId      Identifier of environment
+     * @param   string  $name         Role's name to check
+     * @param   int     $accountId    Identifier of account
+     * @param   int     $envId        Identifier of environment
+     * @param   int     $ignoreRoleId Role id to ignore
      * @return  bool    Returns TRUE if a such name has been already used on scalr or account (or environment) scopes
      */
-    public static function isNameUsed($name, $accountId, $envId)
+    public static function isNameUsed($name, $accountId, $envId, $ignoreRoleId = null)
     {
         $criteria = [['accountId' => null]];
         if ($accountId) {
@@ -235,7 +299,13 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
             }
         }
 
-        return !!Role::findOne([['name' => $name], ['$or' => $criteria]]);
+        $criteria = [['name' => $name], ['$or' => $criteria]];
+
+        if ($ignoreRoleId) {
+            $criteria[] = ['id' => ['$ne' => $ignoreRoleId]];
+        }
+
+        return !!Role::findOne($criteria);
     }
 
     /**
@@ -333,11 +403,16 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
 
         $criteria[static::STMT_WHERE] = "{$roleImage->columnRoleId} = " . intval($this->id);
 
-        if ($this->envId) {
-            $criteria[] = ['$or' => [['envId' => $this->envId], ['envId' => null]]];
-        } else {
-            $criteria[] = ['envId' => null];
-        }
+        $criteria[] = ['$or' => [
+            ['accountId' => null],
+            ['$and' => [
+                ['accountId' => $this->accountId],
+                ['$or' => [
+                    ['envId' => null],
+                    ['envId' => $this->envId]
+                ]]
+            ]]
+        ]];
 
         return $image->find($criteria, $group, $order, $limit, $offset, $countRecords);
     }
@@ -421,6 +496,10 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
                 }
             }
 
+            if ($this->isScalarized && !($newImage->isScalarized || $newImage->hasCloudInit)) {
+                throw new ImageNotScalarizedException("You can not add the Image {$newImage->id} because neither it is not use Scalr Agent nor cloud-init");
+            }
+
             $history->imageId = $newImage->id;
 
             if ($oldImage) {
@@ -485,6 +564,30 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
     public function hasBehavior($behavior)
     {
         return in_array($behavior, $this->getBehaviors());
+    }
+
+    /**
+     * Check if Role has database behavior
+     *
+     * @return bool
+     */
+    public function hasDbBehavior()
+    {
+        return !empty(array_intersect(static::$dbBehaviors, $this->getBehaviors()));
+    }
+
+    /**
+     * If role has any database behavior, it will return behavior's name
+     *
+     * @return  bool|string     Name of database behavior of false
+     */
+    public function getDbMsrBehavior()
+    {
+        $dbMsrBehaviors = [ROLE_BEHAVIORS::REDIS, ROLE_BEHAVIORS::POSTGRESQL, ROLE_BEHAVIORS::MYSQL2,
+            ROLE_BEHAVIORS::PERCONA, ROLE_BEHAVIORS::MARIADB];
+        $result = array_intersect($dbMsrBehaviors, $this->getBehaviors());
+
+        return empty($result) ? false : array_shift($result);
     }
 
     /**
@@ -736,5 +839,39 @@ class Role extends AbstractEntity implements ScopeInterface, AccessPermissionsIn
             $this->db()->RollbackTrans();
             throw $e;
         }
+    }
+
+    /**
+     * Checks given set of behaviors on compatibility
+     *
+     * @param   array   $behaviors  Array of a Role behaviors
+     *
+     * @return  array   Returns an array of behaviors that cannot be used together
+     */
+    public static function getBehaviorsConflicts(array $behaviors)
+    {
+        static $overlaps = null;
+
+        if (empty($overlaps)) {
+            $overlaps = static::$behaviorsOverlaps;
+
+            foreach (static::$dbBehaviors as $dbBehavior) {
+                $overlaps[$dbBehavior] = array_diff(static::$dbBehaviors, (array) $dbBehavior);
+            }
+        }
+
+        $conflicts = [];
+
+        foreach ($behaviors as $behavior) {
+            if (isset($overlaps[$behavior])) {
+                $intersect = array_intersect($behaviors, $overlaps[$behavior]);
+
+                if (!empty($intersect)) {
+                    $conflicts = array_merge($conflicts, (array) $behavior, $intersect);
+                }
+            }
+        }
+
+        return array_unique($conflicts);
     }
 }

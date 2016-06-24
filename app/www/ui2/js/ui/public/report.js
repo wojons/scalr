@@ -182,7 +182,7 @@ Scalr.regPage('Scalr.ui.public.report', function (loadParams, moduleParams) {
             },{
                 xtype: 'component',
                 cls: 'x-footer',
-                html: '<a href="#/admin/analytics/dashboard">View detailed statistics</a>'
+                html: '<a href="'+ (moduleParams['detailsUrl'] || '#/admin/analytics/dashboard') + '">View detailed statistics</a>'
             }]
         }],
         listeners: {

@@ -33,14 +33,14 @@ class OpenstackObserver extends AbstractEventObserver
             $osClient->servers->updateServerMetadata($dbServer->GetCloudServerID(), $tags);
 
         } catch (\Exception $e) {
-            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(
-                new \FarmLogMessage($event->DBServer->farmId, sprintf(
-                    _("Scalr was unable to add custom meta-data (tags) to the server '%s': %s (%s)"),
-                    $event->DBServer->serverId,
+            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(new \FarmLogMessage(
+                $event->DBServer,
+                sprintf(_("Scalr was unable to add custom meta-data (tags) to the server '%s': %s (%s)"),
+                    !empty($event->DBServer->serverId) ? $event->DBServer->serverId : null,
                     $e->getMessage(),
                     \json_encode($tags)
-                ), $event->DBServer->serverId)
-            );
+                )
+            ));
         }
     }
 

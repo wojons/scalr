@@ -3,8 +3,8 @@ namespace Scalr\Tests\Service\CloudStack;
 
 use Scalr\Service\CloudStack\CloudStack;
 use Scalr\Service\CloudStack\DataType\AssociateIpAddressData;
-use \DateTime;
-use \DateTimeZone;
+use DateTime;
+use DateTimeZone;
 
 /**
  * CloudStack TestCase

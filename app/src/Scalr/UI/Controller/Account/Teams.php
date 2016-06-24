@@ -66,7 +66,9 @@ class Scalr_UI_Controller_Account_Teams extends Scalr_UI_Controller
             }
 
             $users = $team->getUsers();
-            $teamUserIds = array_map(function($u){ return $u['id']; }, $users);
+            $teamUserIds = array_map(function ($u) {
+                return $u['id'];
+            }, $users);
             if (!empty($teamUserIds)) {
                 //Gets ACL roles which are assigned to this user with this team.
                 $userRoles = $acl->getUserRoleIdsByTeam($teamUserIds, $team->id, $this->user->getAccountId());

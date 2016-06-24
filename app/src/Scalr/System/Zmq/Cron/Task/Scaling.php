@@ -6,24 +6,24 @@ use ArrayObject, Exception;
 use stdClass;
 use Scalr\Modules\PlatformFactory;
 use Scalr\System\Zmq\Cron\AbstractTask;
-use \DBServer;
-use \FARM_STATUS;
-use \Scalr_Account;
-use \Scalr_Environment;
-use \DBFarm;
-use \DBFarmRole;
-use \ROLE_BEHAVIORS;
-use \SERVER_PLATFORMS;
-use \SERVER_PROPERTIES;
-use \EC2_SERVER_PROPERTIES;
-use \SERVER_STATUS;
-use \ServerCreateInfo;
-use \Scalr_Db_Msr;
-use \Scalr_Role_Behavior;
-use \Scalr_Scaling_Manager;
-use \Scalr_Scaling_Decision;
-use \LOG_CATEGORY;
-use \FarmLogMessage;
+use DBServer;
+use FARM_STATUS;
+use Scalr_Account;
+use Scalr_Environment;
+use DBFarm;
+use DBFarmRole;
+use ROLE_BEHAVIORS;
+use SERVER_PLATFORMS;
+use SERVER_PROPERTIES;
+use EC2_SERVER_PROPERTIES;
+use SERVER_STATUS;
+use ServerCreateInfo;
+use Scalr_Db_Msr;
+use Scalr_Role_Behavior;
+use Scalr_Scaling_Manager;
+use Scalr_Scaling_Decision;
+use LOG_CATEGORY;
+use FarmLogMessage;
 use Scalr\Model\Entity;
 
 /**
@@ -97,8 +97,6 @@ class Scaling extends AbstractTask
             if (!$row['farm_roles_launch_order']) {
                 //Asynchronous launch order
                 $obj->farmRoleId = $row['farm_role_id'];
-                $obj->lastPollingTime = $row['last_polling_time'];
-                $obj->pollingInterval = $row['polling_interval'];
             }
 
             $queue->append($obj);
@@ -167,8 +165,7 @@ class Scaling extends AbstractTask
 
             $disabledScaling = false;
             if ($DBFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_ENABLED) != '1') {
-                if ($DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MONGODB) ||
-                    $DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::RABBITMQ) ||
+                if ($DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::RABBITMQ) ||
                     $DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::VPC_ROUTER)) {
                     // For Mongo, RabbitMQ and VPC Router we need to launch first instance (or maintain 1 instance running)
                     // When 1 instance is already running, the rest is fully manual
@@ -178,7 +175,9 @@ class Scaling extends AbstractTask
                         $disabledScaling = true;
                     }
                 } else {
-                    $disabledScaling = true;
+                    if (!$DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MONGODB)) {
+                        $disabledScaling = true;
+                    }
                 }
 
                 if ($disabledScaling) {
@@ -201,9 +200,9 @@ class Scaling extends AbstractTask
             $scalingManager->logger = $this->getLogger();
 
             $scalingDecision = $scalingManager->makeScalingDecision();
-            $scalingDecisionAlgorithm = $scalingManager->decisonInfo;
+            $scalingDecisionDetails = $scalingManager->decisonInfo;
 
-            $this->getLogger()->info(sprintf("Decision '%s' (%s)", $scalingDecision, $scalingDecisionAlgorithm));
+            $this->getLogger()->info(sprintf("Decision '%s' (%s)", $scalingDecision, $scalingDecisionDetails));
 
             if ($scalingDecision == Scalr_Scaling_Decision::STOP_SCALING) {
                 return;
@@ -230,11 +229,14 @@ class Scaling extends AbstractTask
                     if ((time() - $last_down_scale_data_time) < $timeout_interval * 60) {
                         // if the launch time is too small to terminate smth in this role -> go to the next role in foreach()
                         \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->info(new FarmLogMessage(
-                            $request->farmId,
+                            !empty($request->farmId) ? $request->farmId : null,
                             sprintf("Waiting for downscaling timeout on farm %s, role %s",
-                                $request->farmName,
-                                $DBFarmRole->Alias
-                            )
+                                !empty($request->farmName) ? $request->farmName : null,
+                                !empty($DBFarmRole->Alias) ? $DBFarmRole->Alias : null
+                            ),
+                            null,
+                            null,
+                            !empty($DBFarmRole->ID) ? $DBFarmRole->ID : null
                         ));
 
                         continue;
@@ -249,19 +251,37 @@ class Scaling extends AbstractTask
 
                 $got_valid_instance = false;
 
+                $ignoreFullHour = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_IGNORE_FULL_HOUR);
+                $useSafeShutdown = $DBFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_SAFE_SHUTDOWN);
+                $isRabbitMQ = $DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::RABBITMQ);
                 // Select instance that will be terminated
                 //
                 // Instances ordered by uptime (oldest wil be choosen)
                 // Instance cannot be mysql master
                 // Choose the one that was rebundled recently
+                $DBServer = null;
                 while (!$got_valid_instance && count($servers) > 0) {
                     $item = array_shift($servers);
                     $DBServer = DBServer::LoadByID($item['server_id']);
 
-                    if ($DBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::RABBITMQ)) {
-                        $serversCount = count($DBServer->GetFarmRoleObject()->GetServersByFilter(array(), array('status' => array(SERVER_STATUS::TERMINATED, SERVER_STATUS::SUSPENDED))));
-                        if ($DBServer->index == 1 && $serversCount > 1)
+                    if ($isRabbitMQ) {
+                        $serverExists = $this->db->GetOne("
+                            SELECT EXISTS (
+                                SELECT 1 FROM servers
+                                WHERE farm_roleid = ?
+                                AND status NOT IN (?, ?)
+                                AND `index` != ?
+                            )
+                        ", [
+                            $DBServer->farmRoleId,
+                            SERVER_STATUS::TERMINATED,
+                            SERVER_STATUS::SUSPENDED,
+                            1
+                        ]);
+
+                        if ($DBServer->index == 1 && $serverExists) {
                             continue;
+                        }
                     }
 
                     if ($DBServer->GetProperty(EC2_SERVER_PROPERTIES::IS_LOCKED))
@@ -272,31 +292,23 @@ class Scaling extends AbstractTask
                         $got_valid_instance = true;
 
                     //Check safe shutdown
-                    if ($DBServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::SCALING_SAFE_SHUTDOWN) == 1) {
-                        if ($DBServer->IsSupported('0.11.3')) {
-                            try {
-                                $res  = $DBServer->scalarizr->system->callAuthShutdownHook();
-                            } catch (Exception $e) {
-                                $res = $e->getMessage();
-                            }
-                        } else {
-                            \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->error(new FarmLogMessage(
-                                $request->farmId,
-                                sprintf("Safe shutdown enabled, but not supported by scalarizr installed on server '%s'. Ignoring.",
-                                    $DBServer->serverId
-                                ),
-                                !empty($DBServer->serverId) ? $DBServer->serverId : null
-                            ));
+                    if ($useSafeShutdown == 1) {
+                        try {
+                            $res  = $DBServer->scalarizr->system->callAuthShutdownHook();
+                        } catch (Exception $e) {
+                            $res = $e->getMessage();
                         }
 
                         if ($res != '1') {
                             \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->info(new FarmLogMessage(
-                                $request->farmId,
+                                $DBServer->farmId,
                                 sprintf("Safe shutdown enabled. Server '%s'. Script returned '%s' skipping it.",
                                     $DBServer->serverId,
                                     $res
                                 ),
-                                !empty($DBServer->serverId) ? $DBServer->serverId : null
+                                $DBServer->serverId,
+                                $DBServer->envId,
+                                $DBServer->farmRoleId
                             ));
 
                             $got_valid_instance = false;
@@ -304,14 +316,14 @@ class Scaling extends AbstractTask
                     }
                 } // end while
 
-                if ($DBServer && $got_valid_instance) {
+                if ($DBServer !== null && $got_valid_instance) {
                     $this->getLogger()->info(sprintf("Server '%s' selected for termination...", $DBServer->serverId));
                     $allow_terminate = false;
 
                     if ($DBServer->platform == SERVER_PLATFORMS::EC2) {
                         $aws = $DBServer->GetEnvironmentObject()->aws($DBServer);
                         // Shutdown an instance just before a full hour running
-                        if (!$DBServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::SCALING_IGNORE_FULL_HOUR)) {
+                        if (!$ignoreFullHour) {
                             $response = $aws->ec2->instance->describe($DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID))->get(0);
                             if ($response && count($response->instancesSet)) {
                                 $launch_time = $response->instancesSet->get(0)->launchTime->getTimestamp();
@@ -324,14 +336,16 @@ class Scaling extends AbstractTask
 
                                     \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->info(new FarmLogMessage(
                                         $request->farmId,
-                                        sprintf("Farm %s, role %s scaling down ({$scalingDecisionAlgorithm}). Server '%s' will be terminated in %s minutes. Launch time: %s",
-                                            $request->farmName,
+                                        sprintf("Role '%s' scaling down (%s). Server '%s' will be terminated in %s minutes. Launch time: %s",
                                             $DBServer->GetFarmRoleObject()->Alias,
+                                            $scalingDecisionDetails,
                                             $DBServer->serverId,
                                             $timeout,
                                             $response->instancesSet->get(0)->launchTime->format('c')
                                         ),
-                                        $DBServer->serverId
+                                        $DBServer->serverId,
+                                        $DBServer->envId,
+                                        $DBServer->farmRoleId
                                     ));
                                 }
                             }
@@ -357,12 +371,14 @@ class Scaling extends AbstractTask
 
                                 \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->info(new FarmLogMessage(
                                     $request->farmId,
-                                    sprintf("Farm %s, role %s scaling down ({$scalingDecisionAlgorithm}). Server '%s' marked as 'Pending terminate' and will be fully terminated in 3 minutes.",
-                                        $request->farmName,
+                                    sprintf("Role '%s' scaling down (%s). Server '%s' marked as 'Pending terminate' and will be fully terminated in 3 minutes.",
                                         $DBServer->GetFarmRoleObject()->Alias,
+                                        $scalingDecisionDetails,
                                         $DBServer->serverId
                                     ),
-                                    $DBServer->serverId
+                                    $DBServer->serverId,
+                                    $DBServer->envId,
+                                    $DBServer->farmRoleId
                                 ));
                             } else {
                                 $DBServer->suspend('SCALING_DOWN', false);
@@ -370,12 +386,14 @@ class Scaling extends AbstractTask
                                 $DBFarmRole->SetSetting(Entity\FarmRoleSetting::SCALING_DOWNSCALE_DATETIME, time(), Entity\FarmRoleSetting::TYPE_LCL);
 
                                 \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->info(new FarmLogMessage(
-                                    $request->farmId, sprintf("Farm %s, role %s scaling down ({$scalingDecisionAlgorithm}). Server '%s' marked as 'Pending suspend' and will be fully suspended in 3 minutes.",
-                                        $request->farmName,
+                                    $request->farmId, sprintf("Role '%s' scaling down (%s). Server '%s' marked as 'Pending suspend' and will be fully suspended in 3 minutes.",
                                         $DBServer->GetFarmRoleObject()->Alias,
+                                        $scalingDecisionDetails,
                                         $DBServer->serverId
                                     ),
-                                    $DBServer->serverId
+                                    $DBServer->serverId,
+                                    $DBServer->envId,
+                                    $DBServer->farmRoleId
                                 ));
                             }
                         } catch (Exception $e) {
@@ -478,12 +496,14 @@ class Scaling extends AbstractTask
                 if ($terminateStrategy == 'suspend' && $suspendedServer) {
                     \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->warn(new FarmLogMessage(
                         $request->farmId,
-                        sprintf("Farm %s, role %s scaling up ($scalingDecisionAlgorithm). Found server to resume. ServerID = %s.",
-                            $request->farmName,
+                        sprintf("Role '%s' scaling up (%s). Found server to resume. ServerID = %s.",
                             $suspendedServer->GetFarmRoleObject()->Alias,
+                            $scalingDecisionDetails,
                             $suspendedServer->serverId
                         ),
-                        !empty($suspendedServer->serverId) ? $suspendedServer->serverId : null
+                        $suspendedServer->serverId,
+                        $suspendedServer->envId,
+                        $suspendedServer->farmRoleId
                     ));
                 }
 
@@ -499,12 +519,14 @@ class Scaling extends AbstractTask
 
                         \Scalr::getContainer()->logger(LOG_CATEGORY::FARM)->info(new FarmLogMessage(
                             $request->farmId,
-                            sprintf("Farm %s, role %s scaling up ($scalingDecisionAlgorithm). Starting new instance. ServerID = %s.",
-                                $request->farmName,
+                            sprintf("Role '%s' scaling up (%s). Starting new instance. ServerID = %s.",
                                 $DBServer->GetFarmRoleObject()->Alias,
+                                $scalingDecisionDetails,
                                 $DBServer->serverId
                             ),
-                            $DBServer->serverId
+                            $DBServer->serverId,
+                            $DBServer->envId,
+                            $DBServer->farmRoleId
                         ));
                     } catch (Exception $e) {
                         \Scalr::getContainer()->logger(LOG_CATEGORY::SCALING)->error($e->getMessage());

@@ -17,69 +17,6 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
         return $this->user ? true : false;
     }
 
-    /**
-     * @param bool $resetCounter
-     */
-    public function xGetChangeLogAction($resetCounter = false)
-    {
-        if ($resetCounter) {
-            if (! Scalr_Session::getInstance()->isVirtual()) {
-                $this->user->setSetting(Scalr_Account_User::SETTING_UI_CHANGELOG_TIME, time());
-            }
-
-            $this->response->success();
-        } else {
-            $rssCachePath = CACHEPATH."/rss.changelog.cxml";
-            $data = array();
-            if (file_exists($rssCachePath) && (time() - filemtime($rssCachePath) < 3600)) {
-                clearstatcache();
-                $data = json_decode(file_get_contents($rssCachePath), true);
-            } else {
-                $feedUrl = $this->getContainer()->config->get('scalr.ui.changelog_rss_url');
-                $curl = curl_init();
-                curl_setopt($curl, CURLOPT_URL, $feedUrl);
-                curl_setopt($curl, CURLOPT_TIMEOUT, 10);
-                curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
-                curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
-                //curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
-
-                $feedContent = curl_exec($curl);
-                curl_close($curl);
-
-                if ($feedContent && !empty($feedContent)) {
-                    $feedXml = simplexml_load_string($feedContent);
-
-                    if($feedXml) {
-                        foreach ($feedXml->entry as $key=>$item) {
-                            $data[] = array(
-                                'text' =>  (string)$item->title,
-                                'url'  =>  (string)$item->link->attributes()->href,
-                                'time' =>  date('M d Y',strtotime((string)$item->published)),
-                                'timestamp'  => strtotime((string)$item->published)
-                            );
-                        }
-                    }
-                }
-                file_put_contents($rssCachePath, json_encode($data));
-            }
-
-            $tm = $this->user->getSetting(Scalr_Account_User::SETTING_UI_CHANGELOG_TIME);
-            $countNew = 0;
-
-            if (count($data) > 100) {
-                $data = array_slice($data, 0, 100);
-            }
-
-            foreach ($data as &$v) {
-                $v['new'] = $v['timestamp'] > $tm ? true : false;
-                if ($v['new'])
-                    $countNew++;
-            }
-
-            $this->response->data(array('data' => $data, 'countNew' => $countNew, 'tm' => time()));
-        }
-    }
-
     public function aboutAction()
     {
         $key = "short";
@@ -278,7 +215,9 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
         if (count($processed) == $num) {
             $this->response->success('All API keys processed');
         } else {
-            array_walk($errors, function(&$item) { $item = '- ' . $item; });
+            array_walk($errors, function (&$item) {
+                $item = '- ' . $item;
+            });
             $this->response->warning(sprintf("Successfully processed only %d from %d API KEYS. \nFollowing errors occurred:\n%s", count($processed), $num, join($errors, '')));
         }
 
@@ -633,12 +572,15 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
         }
 
         $environments = $this->request->getScope() == ScopeInterface::SCOPE_ACCOUNT ?
-            array_map(function($r) { return $r['id']; }, $this->user->getEnvironments()) :
+            array_map(function ($r) {
+                return $r['id'];
+            }, $this->user->getEnvironments()) :
             [$this->getEnvironmentId()];
 
         $f = new Entity\Farm();
         $s = new Entity\Server();
         $fr = new Entity\FarmRole();
+        $ft = new Entity\FarmTeam();
         $e = new Entity\Account\Environment();
         $at = new Entity\Account\Team();
         $sp = new Entity\Server\Property();
@@ -653,7 +595,7 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
                                       $acl->isAllowed(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_IMPORT);
 
             if ($acl->isAllowed(Acl::RESOURCE_FARMS)) {
-                $farmSql[] = "{$f->columnEnvId} = $envId";
+                $farmSql[] = "{$f->columnEnvId('f')} = $envId";
                 if ($isTermporaryServerPerm) {
                     $serverSql[] = "{$s->columnEnvId} = {$envId}";
                 } else {
@@ -662,18 +604,15 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
             } else {
                 $q = [];
                 if ($acl->isAllowed(Acl::RESOURCE_TEAM_FARMS)) {
-                    $t = array_map(function($t) { return $t['id']; }, $this->user->getTeams());
-                    if (count($t)) {
-                        $q[] = "{$f->columnTeamId} IN (" . join(',', $t) . ")";
-                    }
+                    $q[] = Entity\Farm::getUserTeamOwnershipSql($this->getUser()->id);
                 }
 
                 if ($acl->isAllowed(Acl::RESOURCE_OWN_FARMS)) {
-                    $q[] = "{$f->columnCreatedById} = {$this->user->getId()}";
+                    $q[] = "{$f->columnOwnerId('f')} = '" . intval($this->getUser()->id) . "'";
                 }
 
                 if (count($q)) {
-                    $farmSql[] = "{$f->columnEnvId} = {$envId} AND (" . join(" OR ", $q) . ")";
+                    $farmSql[] = "{$f->columnEnvId('f')} = {$envId} AND (" . join(" OR ", $q) . ")";
                 }
 
                 if ($isTermporaryServerPerm) {
@@ -690,24 +629,39 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
 
         if (count($farmSql)) {
             $farmStmt = $this->db->Execute("
-                SELECT {$f->columnId} AS id, {$f->columnName} AS name, {$f->columnEnvId} AS envId, {$f->columnStatus} AS status,
-                {$f->columnAdded} AS added, {$f->columnCreatedByEmail} AS createdByEmail, {$at->columnName} AS teamName, {$e->columnName} AS `envName`
-                FROM {$f->table()}
-                LEFT JOIN {$at->table()} ON {$at->columnId} = {$f->columnTeamId}
-                LEFT JOIN {$e->table()} ON {$f->columnEnvId} = {$e->columnId}
-                WHERE ({$f->columnName} LIKE ?) AND (" . join(" OR ", $farmSql) . ")",
-                [$queryEnc]
+                SELECT {$f->columnId('f')} AS id, {$f->columnName('f')} AS name, {$f->columnEnvId('f')} AS envId, {$f->columnStatus('f')} AS status,
+                {$f->columnAdded('f')} AS added, {$f->columnCreatedByEmail('f')} AS createdByEmail, {$e->columnName} AS `envName`,
+                GROUP_CONCAT({$at->columnName} SEPARATOR ', ') AS teamName
+                FROM {$f->table('f')}
+                LEFT JOIN {$e->table()} ON {$f->columnEnvId('f')} = {$e->columnId}
+                LEFT JOIN {$ft->table()} ON {$ft->columnFarmId} = {$f->columnId('f')}
+                LEFT JOIN {$at->table()} ON {$at->columnId} = {$ft->columnTeamId}
+                WHERE ({$f->columnName('f')} LIKE ? OR {$f->columnId('f')} = ?) AND (" . join(" OR ", $farmSql) . ")
+                GROUP BY {$f->columnId('f')}",
+                [$queryEnc, $query]
             );
+
+            $names = [
+                'id'    => 'ID',
+                'name'  => 'Name'
+            ];
+
             while (($farm = $farmStmt->FetchRow())) {
                 $farm['status'] = Entity\Farm::getStatusName($farm['status']);
                 $farm['added'] = Scalr_Util_DateTime::convertTz($farm['added'], 'M j, Y H:i');
+
+                if (stristr($farm['name'], $query)) {
+                    $m = 'name';
+                } else {
+                    $m = 'id';
+                }
 
                 $farms[] = [
                     'entityName' => 'farm',
                     'envId'      => $farm['envId'],
                     'envName'    => $farm['envName'],
-                    'matchField' => 'Name',
-                    'matchValue' => $farm['name'],
+                    'matchField' => $names[$m],
+                    'matchValue' => $farm[$m],
                     'data'       => $farm
                 ];
             }
@@ -720,11 +674,11 @@ class Scalr_UI_Controller_Core extends Scalr_UI_Controller
                 SELECT {$s->columnServerId} AS serverId, {$s->columnFarmId} AS farmId, {$s->columnFarmRoleId} AS farmRoleId,
                 {$s->columnEnvId} AS envId, {$s->columnPlatform} AS platform, {$s->columnInstanceTypeName} AS instanceTypeName,
                 {$s->columnStatus} AS status, {$s->columnCloudLocation} AS cloudLocation, {$s->columnRemoteIp} AS publicIp,
-                {$s->columnLocalIp} AS privateIp, {$s->columnAdded} AS added, {$f->columnName} AS farmName,
+                {$s->columnLocalIp} AS privateIp, {$s->columnAdded} AS added, {$f->columnName('f')} AS farmName,
                 {$fr->columnAlias} AS farmRoleName, {$e->columnName} AS `envName`, {$fr->columnRoleId} AS roleId,
                 {$sp->columnValue('sp1', 'hostname')}
                 FROM {$s->table()}
-                LEFT JOIN {$f->table()} ON {$f->columnId} = {$s->columnFarmId}
+                LEFT JOIN {$f->table('f')} ON {$f->columnId('f')} = {$s->columnFarmId}
                 LEFT JOIN {$fr->table()} ON {$fr->columnId} = {$s->columnFarmRoleId}
                 LEFT JOIN {$e->table()} ON {$e->columnId} = {$s->columnEnvId}
                 LEFT JOIN {$sp->table('sp1')} ON {$sp->columnServerId('sp1')} = {$s->columnServerId} AND {$sp->columnName('sp1')} = ?

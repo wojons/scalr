@@ -30,7 +30,7 @@ class Scalr_UI_Controller_Tools_Gce_Addresses extends Scalr_UI_Controller
 
         $locations = array();
         $regions = $client->regions->listRegions(
-            $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID]
+            $this->environment->keychain(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID]
         );
         foreach ($regions as $region) {
             /* @var $region Google_Service_Compute_Region */
@@ -58,7 +58,7 @@ class Scalr_UI_Controller_Tools_Gce_Addresses extends Scalr_UI_Controller
 
         foreach ($this->getParam('addressId') as $addressId) {
             $client->addresses->delete(
-                $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
+                $this->environment->keychain(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
                 $this->getParam('cloudLocation'),
                 $addressId
             );
@@ -80,7 +80,7 @@ class Scalr_UI_Controller_Tools_Gce_Addresses extends Scalr_UI_Controller
         $retval = array();
 
         $addresses = $client->addresses->listAddresses(
-            $this->environment->cloudCredentials(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
+            $this->environment->keychain(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
             $cloudLocation,
             $addressId ? ['filter' => "name eq {$addressId}"] : []
         );

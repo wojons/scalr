@@ -34,6 +34,7 @@ import urllib2
 import greenlet
 import urlparse
 import binascii
+import StringIO
 
 import boto.ec2
 import boto.exception
@@ -51,7 +52,7 @@ libcloud.security.VERIFY_SSL_CERT = False
 import httplib2
 import googleapiclient
 from googleapiclient.discovery import build
-from oauth2client.client import SignedJwtAssertionCredentials
+from oauth2client.service_account import ServiceAccountCredentials
 
 from scalrpy.util import helper
 from scalrpy.util import dbmanager
@@ -98,12 +99,13 @@ def _handle_exception(e, msg):
     elif isinstance(e, (libcloud.common.types.InvalidCredsError,
                         libcloud.common.types.LibcloudError,
                         libcloud.common.types.MalformedResponseError,
+                        libcloud.common.exceptions.BaseHTTPError,
                         oauth2client.client.AccessTokenRefreshError,
                         gevent.timeout.Timeout,
                         socket.timeout,
                         socket.gaierror)):
         LOG.warning(msg)
-    elif isinstance(e, socket.error) and e.errno in (110, 111, 113):
+    elif isinstance(e, socket.error):
         LOG.warning(msg)
     elif isinstance(e, googleapiclient.errors.HttpError) and e.resp['status'] in ('403',):
         LOG.warning(msg)
@@ -127,11 +129,11 @@ def _ec2_region(region, cred):
             'aws_access_key_id': access_key,
             'aws_secret_access_key': secret_key
         }
-        proxy_settings = app.proxy_settings[cred.platform]
-        kwds['proxy'] = proxy_settings.get('host', None)
-        kwds['proxy_port'] = proxy_settings.get('port', None)
-        kwds['proxy_user'] = proxy_settings.get('user', None)
-        kwds['proxy_pass'] = proxy_settings.get('pass', None)
+        proxy_settings = app.proxy_settings.get(cred.platform, {})
+        kwds['proxy'] = proxy_settings.get('host')
+        kwds['proxy_port'] = proxy_settings.get('port')
+        kwds['proxy_user'] = proxy_settings.get('user')
+        kwds['proxy_pass'] = proxy_settings.get('pass')
 
         msg = "List nodes for platform: 'ec2', region: '{}', envs_ids: {}"
         msg = msg.format(region, cred.envs_ids)
@@ -178,6 +180,7 @@ def ec2(cred):
             'ap-southeast-1',
             'ap-southeast-2',
             'ap-northeast-1',
+            'ap-northeast-2',
             'sa-east-1',
         ],
         'gov-cloud': ['us-gov-west-1'],
@@ -225,6 +228,10 @@ def _cloudstack(cred):
 
         cls = get_driver(Provider.CLOUDSTACK)
         driver = cls(key=api_key, secret=secret_key, host=host, port=port, path=path, secure=secure)
+
+        proxy_url = app.proxy_settings.get(cred.platform, {}).get('url')
+        driver.connection.set_http_proxy(proxy_url=proxy_url)
+
         locations = driver.list_locations()
         cloud_nodes = _libcloud_list_nodes(driver)
         timestamp = int(time.time())
@@ -305,13 +312,13 @@ def _gce_conn(cred, key=None):
     if key is None:
         key = _gce_key(cred)
 
-    signed_jwt_assert_cred = SignedJwtAssertionCredentials(
+    credentials = ServiceAccountCredentials.from_p12_keyfile_buffer(
         service_account_name,
-        key,
-        ['https://www.googleapis.com/auth/compute']
+        StringIO.StringIO(key),
+        scopes=['https://www.googleapis.com/auth/compute']
     )
     http = httplib2.Http()
-    http = signed_jwt_assert_cred.authorize(http)
+    http = credentials.authorize(http)
     return build('compute', 'v1', http=http), http
 
 
@@ -425,7 +432,8 @@ def _openstack_region(provider, service_name, region, cred):
             ex_force_service_type=service_type,
             ex_force_service_name=service_name,
         )
-        driver.connection.set_http_proxy(proxy_url=app.proxy_url[cred.platform])
+        proxy_url = app.proxy_settings.get(cred.platform, {}).get('url')
+        driver.connection.set_http_proxy(proxy_url=proxy_url)
         cloud_nodes = _libcloud_list_nodes(driver)
         try:
             cloud_nodes = [node for node in cloud_nodes
@@ -476,7 +484,8 @@ def _openstack(provider, cred):
         ex_tenant_name=tenant_name,
         ex_force_auth_version=auth_version,
     )
-    driver.connection.set_http_proxy(proxy_url=app.proxy_url[cred.platform])
+    proxy_url = app.proxy_settings.get(cred.platform, {}).get('url')
+    driver.connection.set_http_proxy(proxy_url=proxy_url)
 
     service_catalog = _libcloud_get_service_catalog(driver)
     service_names = service_catalog.get_service_names(service_type='compute')
@@ -789,23 +798,10 @@ class AnalyticsPoller(application.ScalrIterationApplication):
         self.pool = None
         self.crypto_key = None
         self.proxy_settings = {}
-        self.proxy_url = {}
 
     def set_proxy(self):
-        for platform in analytics.PLATFORMS:
-            if platform == 'ec2':
-                use_proxy = self.scalr_config.get('aws', {}).get('use_proxy', False)
-            else:
-                use_proxy = self.scalr_config.get(platform, {}).get('use_proxy', False)
-            use_on = self.scalr_config['connections'].get('proxy', {}).get('use_on', 'both')
-            if use_proxy in [True, 'yes'] and use_on in ['both', 'scalr']:
-                proxy_settings = self.scalr_config['connections']['proxy']
-                proxy_url = 'http://{user}:{pass}@{host}:{port}'.format(**proxy_settings)
-                self.proxy_settings[platform] = proxy_settings
-                self.proxy_url[platform] = proxy_url
-            else:
-                self.proxy_settings[platform] = {}
-                self.proxy_url[platform] = None
+        self.proxy_settings = {platform: helper.get_proxy_settings(self.scalr_config, platform)
+                               for platform in analytics.PLATFORMS}
 
     def configure(self):
         enabled = self.scalr_config.get('analytics', {}).get('enabled', False)

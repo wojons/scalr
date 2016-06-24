@@ -14,6 +14,15 @@ When an object of type [`PlacementConfiguration`](./../definitions/PlacementConf
 
 ## Properties ##
 
+### `subnets` (required) ###
+
+
+
+
+An array of 
+objects of type [`CloudAwsVpcSubnetForeignKey`](./../definitions/CloudAwsVpcSubnetForeignKey.mkd).
+
+
 ### `region` (required) ###
 
 
@@ -32,15 +41,6 @@ Property of type: `string`.
 This `string` property is used for polymorphism. It **must** be set to: `"AwsVpcPlacementConfiguration"`
 
 
-### `subnets` (optional) ###
-
-
-
-
-An array of 
-objects of type [`CloudAwsVpcSubnetForeignKey`](./../definitions/CloudAwsVpcSubnetForeignKey.mkd).
-
-
 ### `router` (optional) ###
 
 
@@ -56,24 +56,7 @@ An object of type [`FarmRoleForeignKey`](./../definitions/FarmRoleForeignKey.mkd
 ## Swagger Definition ##
 
     {
-      "x-abstractType": {
-        "$ref": "#/definitions/PlacementConfiguration"
-      }, 
-      "required": [
-        "placementConfigurationType", 
-        "region"
-      ], 
-      "x-discriminator": "placementConfigurationType", 
       "properties": {
-        "subnets": {
-          "items": {
-            "$ref": "#/definitions/CloudAwsVpcSubnetForeignKey"
-          }, 
-          "type": "array"
-        }, 
-        "region": {
-          "type": "string"
-        }, 
         "placementConfigurationType": {
           "enum": [
             "AwsClassicPlacementConfiguration", 
@@ -84,8 +67,26 @@ An object of type [`FarmRoleForeignKey`](./../definitions/FarmRoleForeignKey.mkd
           ], 
           "type": "string"
         }, 
+        "region": {
+          "type": "string"
+        }, 
         "router": {
           "$ref": "#/definitions/FarmRoleForeignKey"
+        }, 
+        "subnets": {
+          "items": {
+            "$ref": "#/definitions/CloudAwsVpcSubnetForeignKey"
+          }, 
+          "type": "array"
         }
-      }
+      }, 
+      "required": [
+        "placementConfigurationType", 
+        "region", 
+        "subnets"
+      ], 
+      "x-abstractType": {
+        "$ref": "#/definitions/PlacementConfiguration"
+      }, 
+      "x-discriminator": "placementConfigurationType"
     }

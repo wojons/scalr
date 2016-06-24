@@ -16,6 +16,27 @@ use Scalr\DataType\ScopeInterface;
  */
 class GlobalVariablesTest extends TestCase
 {
+
+    const ERR_VALUE_ISNT_VALID_1 = "Value isn't valid because of validation pattern";
+
+    const ERR_VALUE_ISNT_VALID_JSON = "The value is not valid JSON";
+
+    const ERR_YOU_CANT_CHANGE_FINAL_VARIABLE = "You can't change final variable locked on scalr level";
+
+    const ERR_YOU_CANT_CHANGE_FINAL_VARIABLE_ACC_LEVEL = "You can't change final variable locked on account level";
+
+    const ERR_PREFIX_SCALR_IS_RESERVED = "Prefix 'SCALR_' is reserved and cannot be used for user GVs";
+
+    const ERR_PATTERN_IS_NOT_VALID_INVALID_STRUCTURE = "Validation pattern is not valid: invalid structure";
+
+    const ERR_YOU_CANT_SET_FINAL_AND_REQUIRED_FLAG_BOTH = "You can't set final and required flags both";
+
+    const ERR_NAME_SHOULD_CONTAIN = "Name should contain only letters, numbers and underscores, start with letter and be from 2 to 128 chars long.";
+
+    const ERR_CATEGORY_SHOULD_CONTAIN = "Category should contain only letters, numbers, dashes and underscores, start and end with letter and be from 2 to 32 chars long";
+
+    const FORMAT_JSON = 'json';
+
     /**
      * Array of Scalr_Scripting_GlobalVariables objects for each scope except SERVER
      *
@@ -34,7 +55,7 @@ class GlobalVariablesTest extends TestCase
     {
         parent::setUpBeforeClass();
 
-        if (\Scalr::config('scalr.phpunit.skip_functional_tests')) {
+        if (self::isSkippedFunctionalTest(self::TEST_TYPE_UI)) {
             return;
         }
 
@@ -53,13 +74,13 @@ class GlobalVariablesTest extends TestCase
         self::$vars[ScopeInterface::SCOPE_ENVIRONMENT] = new Scalr_Scripting_GlobalVariables($env->clientId, $env->id, ScopeInterface::SCOPE_ENVIRONMENT);
         self::$args[ScopeInterface::SCOPE_SCALR] = self::$args[ScopeInterface::SCOPE_ACCOUNT] = self::$args[ScopeInterface::SCOPE_ENVIRONMENT] = [0, 0, 0, ''];
 
-        /* @var Farm $farm */
+        /* @var $farm Farm */
         $farm = Farm::findOne([['envId' => $env->id]]);
         if ($farm) {
             self::$vars[ScopeInterface::SCOPE_FARM] = new Scalr_Scripting_GlobalVariables($env->clientId, $env->id, ScopeInterface::SCOPE_FARM);
             self::$args[ScopeInterface::SCOPE_FARM] = [0, $farm->id, 0, ''];
 
-            /* @var FarmRole $farmRole */
+            /* @var $farmRole FarmRole */
             $farmRole = FarmRole::findOne([['farmId' => $farm->id]]);
             if ($farmRole) {
                 self::$vars[ScopeInterface::SCOPE_ROLE] = new Scalr_Scripting_GlobalVariables($env->clientId, $env->id, ScopeInterface::SCOPE_ROLE);
@@ -314,12 +335,12 @@ class GlobalVariablesTest extends TestCase
             'name'          => $this->getVarTestName('required_var_2'),
             'value'         => '3',
             'validator'     => '/^[12]$/'
-        ], [$this->getVarTestName('required_var_2') => ['value' => ["Value isn't valid because of validation pattern"]]]];
+        ], [$this->getVarTestName('required_var_2') => ['value' => [self::ERR_VALUE_ISNT_VALID_1]]]];
 
         $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
             'name'          => $this->getVarTestName('required_var_2'),
             'value'         => '0'
-        ], [$this->getVarTestName('required_var_2') => ['value' => ["Value isn't valid because of validation pattern"]]]];
+        ], [$this->getVarTestName('required_var_2') => ['value' => [self::ERR_VALUE_ISNT_VALID_1]]]];
 
         $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
             'name'          => $this->getVarTestName('required_var_2'),
@@ -359,53 +380,53 @@ class GlobalVariablesTest extends TestCase
         $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
             'name'          => 'Invalid-name',
             'value'         => '',
-        ], ['Invalid-name' => ['name' => ["Name should contain only letters, numbers and underscores, start with letter and be from 2 to 128 chars long."]]]];
+        ], ['Invalid-name' => ['name' => [self::ERR_NAME_SHOULD_CONTAIN]]]];
 
         $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
             'name'          => '1name',
             'value'         => '',
-        ], ['1name' => ['name' => ["Name should contain only letters, numbers and underscores, start with letter and be from 2 to 128 chars long."]]]];
+        ], ['1name' => ['name' => [self::ERR_NAME_SHOULD_CONTAIN]]]];
 
         $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
             'name'          => 'a',
             'value'         => '',
-        ], ['a' => ['name' => ["Name should contain only letters, numbers and underscores, start with letter and be from 2 to 128 chars long."]]]];
+        ], ['a' => ['name' => [self::ERR_NAME_SHOULD_CONTAIN]]]];
 
         $longName = 'abcdefghikl1abcdefghik21abcdefghik31abcdefghik41abcdefghik51abcdefghik61abcdefghik71abcdefghik81abcdefghik91abcdefghik1abcdefghia';
         $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
             'name'          => $longName,
             'value'         => '',
-        ], [$longName => ['name' => ["Name should contain only letters, numbers and underscores, start with letter and be from 2 to 128 chars long."]]]];
+        ], [$longName => ['name' => [self::ERR_NAME_SHOULD_CONTAIN]]]];
 
         $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
             'name'          => $this->getVarTestName('name'),
             'value'         => '',
             'category'      => 'category.name'
-        ], [$this->getVarTestName('name') => ['category' => ["Category should contain only letters, numbers, dashes and underscores, start and end with letter and be from 2 to 32 chars long"]]]];
+        ], [$this->getVarTestName('name') => ['category' => [self::ERR_CATEGORY_SHOULD_CONTAIN]]]];
 
         $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
             'name'          => $this->getVarTestName('name'),
             'value'         => '',
             'category'      => 'scalr_ui_defaults'
-        ], [$this->getVarTestName('name') => ['category' => ["Prefix 'SCALR_' is reserved and cannot be used for user GVs"]]]];
+        ], [$this->getVarTestName('name') => ['category' => [self::ERR_PREFIX_SCALR_IS_RESERVED]]]];
 
         $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
             'name'          => $this->getVarTestName('name'),
             'value'         => '',
             'category'      => 'scalr_1'
-        ], [$this->getVarTestName('name') => ['category' => ["Prefix 'SCALR_' is reserved and cannot be used for user GVs"]]]];
+        ], [$this->getVarTestName('name') => ['category' => [self::ERR_PREFIX_SCALR_IS_RESERVED]]]];
 
         $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
             'name'          => 'scalr_test',
             'value'         => '',
-        ], ['scalr_test' => ['name' => ["'SCALR_' prefix is reserved and cannot be used for user GVs"]]]];
+        ], ['scalr_test' => ['name' => [self::ERR_PREFIX_SCALR_IS_RESERVED]]]];
 
         $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
             'name'          => $this->getVarTestName('name'),
             'value'         => '',
             'flagFinal'     => '1',
             'flagRequired'  => 'environment'
-        ], [$this->getVarTestName('name') => ['flagFinal' => ["You can't set final and required flags both"], 'flagRequired' => ["You can't set final and required flags both"]]]];
+        ], [$this->getVarTestName('name') => ['flagFinal' => [self::ERR_YOU_CANT_SET_FINAL_AND_REQUIRED_FLAG_BOTH], 'flagRequired' => [self::ERR_YOU_CANT_SET_FINAL_AND_REQUIRED_FLAG_BOTH]]]];
 
         $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
             'name'          => $this->getVarTestName('name'),
@@ -417,13 +438,13 @@ class GlobalVariablesTest extends TestCase
             'name'          => $this->getVarTestName('name'),
             'value'         => '',
             'validator'     => "^[0-9]$"
-        ], [$this->getVarTestName('name') => ['validator' => ["Validation pattern is not valid: invalid structure"]]]];
+        ], [$this->getVarTestName('name') => ['validator' => [self::ERR_PATTERN_IS_NOT_VALID_INVALID_STRUCTURE]]]];
 
         $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
             'name'          => $this->getVarTestName('name'),
             'value'         => '',
             'validator'     => "/^[0-9]$/es"
-        ], [$this->getVarTestName('name') => ['validator' => ["Validation pattern is not valid: invalid structure"]]]];
+        ], [$this->getVarTestName('name') => ['validator' => [self::ERR_PATTERN_IS_NOT_VALID_INVALID_STRUCTURE]]]];
 
         $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
             'name'          => $this->getVarTestName('name'),
@@ -435,13 +456,13 @@ class GlobalVariablesTest extends TestCase
             'name'          => $this->getVarTestName('name'),
             'value'         => '1',
             'validator'     => "/^[23]$/is"
-        ], [$this->getVarTestName('name') => ['value' => ["Value isn't valid because of validation pattern"]]]];
+        ], [$this->getVarTestName('name') => ['value' => [self::ERR_VALUE_ISNT_VALID_1]]]];
 
         $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
             'name'          => $this->getVarTestName('name'),
             'value'         => '0',
             'validator'     => "/^[23]$/is"
-        ], [$this->getVarTestName('name') => ['value' => ["Value isn't valid because of validation pattern"]]]];
+        ], [$this->getVarTestName('name') => ['value' => [self::ERR_VALUE_ISNT_VALID_1]]]];
 
         $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
             'name'          => $this->getVarTestName('name'),
@@ -462,6 +483,46 @@ class GlobalVariablesTest extends TestCase
                 You might have copied it from another application that submitted invalid characters.
                 To solve this issue, you can type in the variable manually.", $this->getVarTestName('name'))]
         ]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $this->getVarTestName('testJsonVariable'),
+            'value'         => '{"name": "user", "age": 25}',
+            'format'         => self::FORMAT_JSON
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $this->getVarTestName('testJsonVariable'),
+            'value'         => '{name: "user", age: 25}',
+            'format'         => self::FORMAT_JSON
+        ], [$this->getVarTestName('testJsonVariable') => ['value' => [self::ERR_VALUE_ISNT_VALID_JSON]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $this->getVarTestName('testJsonVariable'),
+            'value'         => '{\'name\': "user", \'age\': 25}',
+            'format'         => self::FORMAT_JSON
+        ], [$this->getVarTestName('testJsonVariable') => ['value' => [self::ERR_VALUE_ISNT_VALID_JSON]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $this->getVarTestName('testJsonVariable'),
+            'value'         => '{"name": user, "age": 25}',
+            'format'         => self::FORMAT_JSON
+        ], [$this->getVarTestName('testJsonVariable') => ['value' => [self::ERR_VALUE_ISNT_VALID_JSON]]]];
+
+        $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'set', [
+            'name'          => $this->getVarTestName('testJsonVariable'),
+            'value'         => '{"name": "user"}'
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
+            'name'          => $this->getVarTestName('testJsonVariable'),
+            'value'         => '{"name": "user", "age": 25}',
+            'format'         => self::FORMAT_JSON
+        ], true];
+
+        $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'set', [
+            'name'          => $this->getVarTestName('testJsonVariable'),
+            'value'         => '{name: "user"}'
+        ], [$this->getVarTestName('testJsonVariable') => ['value' => [self::ERR_VALUE_ISNT_VALID_JSON]]]];
 
         /*
          * TEST 4 (final variable)
@@ -499,17 +560,17 @@ class GlobalVariablesTest extends TestCase
         $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
             'name'      => $this->getVarTestName('final_var'),
             'value'     => '0'
-        ], [$this->getVarTestName('final_var') => ['value' => ["You can't change final variable locked on scalr level"]]]];
+        ], [$this->getVarTestName('final_var') => ['value' => [self::ERR_YOU_CANT_CHANGE_FINAL_VARIABLE]]]];
 
         $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'set', [
             'name'      => $this->getVarTestName('final_var'),
             'value'     => '1'
-        ], [$this->getVarTestName('final_var') => ['value' => ["You can't change final variable locked on scalr level"]]]];
+        ], [$this->getVarTestName('final_var') => ['value' => [self::ERR_YOU_CANT_CHANGE_FINAL_VARIABLE]]]];
 
         $cases[] = [ScopeInterface::SCOPE_FARM, 'set', [
             'name'      => $this->getVarTestName('final_var'),
             'value'     => '2'
-        ], [$this->getVarTestName('final_var') => ['value' => ["You can't change final variable locked on scalr level"]]]];
+        ], [$this->getVarTestName('final_var') => ['value' => [self::ERR_YOU_CANT_CHANGE_FINAL_VARIABLE]]]];
 
         $cases[] = [ScopeInterface::SCOPE_SCALR, 'set', [
             'name'      => $this->getVarTestName('final_var'),
@@ -533,7 +594,7 @@ class GlobalVariablesTest extends TestCase
         $cases[] = [ScopeInterface::SCOPE_FARM, 'set', [
             'name'     => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
             'value'    => '1'
-        ], ['SCALR_UI_DEFAULT_STORAGE_RE_USE' => ['name' => ["'SCALR_' prefix is reserved and cannot be used for user GVs"]]]];
+        ], ['SCALR_UI_DEFAULT_STORAGE_RE_USE' => ['name' => [self::ERR_PREFIX_SCALR_IS_RESERVED]]]];
 
         $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
             'name'     => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
@@ -553,17 +614,17 @@ class GlobalVariablesTest extends TestCase
         $cases[] = [ScopeInterface::SCOPE_ACCOUNT, 'set', [
             'name'    => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
             'value'   => 'a'
-        ], ['SCALR_UI_DEFAULT_STORAGE_RE_USE' => ['value' => ["Value isn't valid because of validation pattern"]]]];
+        ], ['SCALR_UI_DEFAULT_STORAGE_RE_USE' => ['value' => [self::ERR_VALUE_ISNT_VALID_1]]]];
 
         $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'set', [
             'name'    => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
             'value'   => 'a'
-        ], ['SCALR_UI_DEFAULT_STORAGE_RE_USE' => ['value' => ["Value isn't valid because of validation pattern"]]]];
+        ], ['SCALR_UI_DEFAULT_STORAGE_RE_USE' => ['value' => [self::ERR_VALUE_ISNT_VALID_1]]]];
 
         $cases[] = [ScopeInterface::SCOPE_FARM, 'set', [
             'name'     => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
             'value'    => '1'
-        ], ['SCALR_UI_DEFAULT_STORAGE_RE_USE' => ['name' => ["'SCALR_' prefix is reserved and cannot be used for user GVs"]]]];
+        ], ['SCALR_UI_DEFAULT_STORAGE_RE_USE' => ['name' => [self::ERR_PREFIX_SCALR_IS_RESERVED]]]];
 
         $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'set', [
             'name'   => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
@@ -635,7 +696,7 @@ class GlobalVariablesTest extends TestCase
         $cases[] = [ScopeInterface::SCOPE_ENVIRONMENT, 'set', [
             'name'          => 'SCALR_UI_DEFAULT_STORAGE_RE_USE',
             'value'         => '0'
-        ], ['SCALR_UI_DEFAULT_STORAGE_RE_USE' => ['value' => ["You can't change final variable locked on account level"]]]];
+        ], ['SCALR_UI_DEFAULT_STORAGE_RE_USE' => ['value' => [self::ERR_YOU_CANT_CHANGE_FINAL_VARIABLE_ACC_LEVEL]]]];
 
         return $cases;
     }
@@ -643,7 +704,6 @@ class GlobalVariablesTest extends TestCase
     /**
      * @test
      * @dataProvider providerLoad
-     * @functional
      */
     public function testGlobalVariablesFunctional($scope, $action, $var, $expectedResult)
     {

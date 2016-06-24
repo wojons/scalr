@@ -3,7 +3,7 @@ Scalr.regPage('Scalr.ui.db.manager.dashboard', function (loadParams, moduleParam
 
     var ebsTypesStore = Ext.create('Ext.data.ArrayStore', {
         fields: [ 'id', 'name' ],
-        data: Scalr.constants.ebsTypes
+        data: Scalr.utils.getEbsTypes()
     });
 
     var panel = Ext.create('Ext.form.Panel', {

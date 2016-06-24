@@ -88,8 +88,11 @@ class ProjectAdapter extends ApiEntityAdapter
                 $property = new ProjectPropertyEntity();
 
                 return [
-                    AbstractEntity::STMT_FROM => $project->table() . " LEFT JOIN " . $property->table() . " ON {$property->columnProjectId} = {$project->columnProjectId}",
-                    AbstractEntity::STMT_WHERE => "({$property->columnName} = '" . ProjectPropertyEntity::NAME_BILLING_CODE . "' AND {$property->columnValue} = " . $property->qstr('value', $from->billingCode) . ")"
+                    AbstractEntity::STMT_FROM => "
+                        JOIN  {$property->table()}  ON {$property->columnProjectId} = {$project->columnProjectId}
+                            AND  {$property->columnName} = " . $property->qstr('name', ProjectPropertyEntity::NAME_BILLING_CODE) . "
+                    ",
+                    AbstractEntity::STMT_WHERE => " {$property->columnValue} = " . $property->qstr('value', $from->billingCode)
                 ];
         }
     }

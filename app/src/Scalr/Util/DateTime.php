@@ -164,6 +164,56 @@ class Scalr_Util_DateTime
         }
     }
 
+    /**
+     * Formats a time interval depending on the size according to:
+     * - just now               - interval < 1 min
+     * - 2 min ago              - interval < 30 mins
+     * - 3:17 AM                - today
+     * - Yesterday, 3:17 AM     - yesterday
+     * - Jan. 10, 7:12 AM       - current year
+     * - Jan. 10,2015, 7:12 AM  - less than the current year
+     *
+     * @param  integer|DateTime $time Time
+     * @return string
+     */
+    public static function getIncrescentTimeInterval($value, $currentTime = null)
+    {
+        if (!($value instanceof DateTime)) {
+            $value = new DateTime($value);
+        }
+
+        $time = $value->getTimestamp();
+
+        if (is_null($currentTime)) {
+            $now = time();
+        } else {
+            if (!($currentTime instanceof DateTime)) {
+                $currentTime = new DateTime($currentTime);
+            }
+            $now = $currentTime->getTimestamp();
+        }
+
+        if ($time & $now) {
+            $diff = $now - $time;
+            if ($diff < 60) {
+                return 'just now';
+            } elseif ($diff < 1800) {
+                $mins = ($diff / 60) % 60;
+                return "{$mins} min ago";
+            } elseif (date('Ymd', $time) == date('Ymd', $now)) {
+                return date('g:i A', $time);
+            } elseif (date('Ymd', $time) == date('Ymd', strtotime('yesterday', $now))) {
+                return 'Yesterday, ' . date('g:i A', $time);
+            } elseif (date('Y', $time) == date('Y', $now)) {
+                return date('M. j, g:i A', $time);
+            } else {
+                return date('M. j, Y, g:i A', $time);
+            }
+        } else {
+            return NULL;
+        }
+    }
+
     public static function getFuzzyTimeString($value)
     {
         if (is_integer($value)) {

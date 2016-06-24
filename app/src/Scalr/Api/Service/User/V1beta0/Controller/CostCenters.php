@@ -2,6 +2,7 @@
 
 namespace Scalr\Api\Service\User\V1beta0\Controller;
 
+use Scalr\Acl\Acl;
 use Scalr\Api\DataType\ErrorMessage;
 use Scalr\Api\DataType\ResultEnvelope;
 use Scalr\Api\Rest\Controller\ApiController;
@@ -14,7 +15,7 @@ use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
 
 /**
- * User/Version-1beta0/CostCenters API Controller
+ * User/CostCenters API Controller
  *
  * @author N.V.
  */
@@ -28,7 +29,7 @@ class CostCenters extends ApiController
      */
     public function getEnvironmentCostCenterId()
     {
-        return $this->getEnvironment()->getProperty(EnvironmentProperty::SETTING_CC_ID)->value;
+        return $this->getEnvironment()->getProperty(EnvironmentProperty::SETTING_CC_ID);
     }
 
     /**
@@ -98,6 +99,8 @@ class CostCenters extends ApiController
      */
     public function fetchAction($ccId)
     {
+        $this->checkPermissions(Acl::RESOURCE_ANALYTICS_ACCOUNT);
+
         return $this->result($this->adapter('costCenter')->toData($this->getCostCenter($ccId)));
     }
 
@@ -110,6 +113,8 @@ class CostCenters extends ApiController
      */
     public function describeAction()
     {
+        $this->checkPermissions(Acl::RESOURCE_ANALYTICS_ACCOUNT);
+
         $criteria = $this->getDefaultCriteria();
 
         if (empty($this->params('name')) && empty($this->params('billingCode'))) {
@@ -117,5 +122,19 @@ class CostCenters extends ApiController
         }
         
         return $this->adapter('costCenter')->getDescribeResult($criteria);
+    }
+
+    /**
+     * Permissions won't check if object has environment scope and role Acl::RESOURCE_ANALYTICS_ACCOUNT
+     * {@inheritdoc}
+     * @see ApiController::checkPermissions()
+     */
+    public function checkPermissions(...$args)
+    {
+        if ($this->getScope() === ScopeInterface::SCOPE_ENVIRONMENT &&
+            isset($args[0]) && $args[0] == Acl::RESOURCE_ANALYTICS_ACCOUNT && empty($args[1])) {
+            return;
+        }
+        parent::checkPermissions(...$args);
     }
 }

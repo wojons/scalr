@@ -64,7 +64,7 @@ class AclTest extends TestCase
      */
     public function testPredefinedRoles($roleId, $allowed)
     {
-        if (\Scalr::config('scalr.phpunit.skip_functional_tests')) {
+        if (static::isSkippedFunctionalTest()) {
             $this->markTestSkipped();
         }
 

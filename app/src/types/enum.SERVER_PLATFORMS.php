@@ -3,7 +3,6 @@
 final class SERVER_PLATFORMS
 {
     const EC2		= 'ec2';
-    const RACKSPACE = 'rackspace';
     const GCE		= 'gce';
     const AZURE     = 'azure';
 
@@ -31,7 +30,6 @@ final class SERVER_PLATFORMS
         return array(
             self::EC2 			=> 'Amazon EC2',
             self::GCE			=> 'Google Compute Engine',
-            self::RACKSPACE		=> 'Legacy Rackspace',
             self::CLOUDSTACK	=> 'Cloudstack',
             self::OPENSTACK		=> 'Openstack',
             self::IDCF			=> 'IDC Frontier',

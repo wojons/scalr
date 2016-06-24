@@ -140,6 +140,13 @@ class DBClusterData extends AbstractRdsDataType
     public $latestRestorableTime;
 
     /**
+     * If StorageEncrypted is true, the KMS key identifier for the encrypted DB cluster.
+     *
+     * @var string
+     */
+    public $kmsKeyId;
+
+    /**
      * Contains the master username for the DB Instance
      *
      * @var string
@@ -183,6 +190,13 @@ class DBClusterData extends AbstractRdsDataType
      * @var string
      */
     public $status;
+
+    /**
+     * Specifies whether the DB cluster is encrypted.
+     *
+     * @var bool
+     */
+    public $storageEncrypted;
 
     /**
      * {@inheritdoc}

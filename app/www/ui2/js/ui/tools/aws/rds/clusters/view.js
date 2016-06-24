@@ -435,15 +435,9 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.clusters.view', function (loadParams, modu
                 name: 'engine',
                 fieldLabel: 'Engine',
                 renderer: function (engineName) {
-                    var fullEngineName = Scalr.utils.beautifyEngineName(engineName);
-
-                    if (engineName.indexOf('-') !== -1) {
-                        engineName = engineName.substring(0, engineName.indexOf('-'));
-                    }
-
                     return '<img class="x-icon-engine-small x-icon-engine-small-' +
                         engineName + '" src="' + Ext.BLANK_IMAGE_URL + '"/>&nbsp;&nbsp;' +
-                        fullEngineName;
+                        Scalr.utils.beautifyEngineName(engineName);
                 }
             }, {
                 name: 'engineVersion',

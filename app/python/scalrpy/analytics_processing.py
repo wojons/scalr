@@ -43,17 +43,7 @@ from scalrpy import exceptions
 
 helper.patch_gevent()
 
-
-poller_period = 60 * 30               # half hour
-poller_timeout = poller_period - 5
-
-aws_period = 60 * 60                  # one hour
-aws_timeout = 60 * 60 * 6               # six hours
-
-azure_period = 60 * 60 * 2            # two hours
-azure_timeout = azure_period - 5
-
-launch_delay = 60
+LAUNCH_DELAY = 60
 
 BILLING_TYPES = ('poller', 'aws-detailed-billing', 'azure')
 
@@ -111,7 +101,7 @@ class AnalyticsProcessing(application.ScalrApplication):
             'billing': BILLING_TYPES,
             'platform': PLATFORMS,
         })
-        self.config['aws_proxy'] = {}
+        self.config['proxy'] = {}
         self.config['crypto_key'] = ''
 
         self.scalr_db = None
@@ -120,6 +110,7 @@ class AnalyticsProcessing(application.ScalrApplication):
 
     def validate_args(self):
         super(AnalyticsProcessing, self).validate_args()
+        utcnow = datetime.datetime.utcnow().replace(microsecond=0)
         if self.args['--billing']:
             assert_msg = "Billing type '%s' is not supported" % self.args['--billing']
             assert self.args['--billing'] in BILLING_TYPES, assert_msg
@@ -131,18 +122,24 @@ class AnalyticsProcessing(application.ScalrApplication):
             assert self.args['--daemon'] is False, assert_msg
             assert_msg = "To recalculate data you should specify '--year' or '--date-from' option"
             assert self.args['--year'] or self.args['--date-from'], assert_msg
+            assert_msg = "Recalculating is supported only for 'aws-detailed-billing and 'poller' billing types"
+            assert self.args['--billing'] in ('aws-detailed-billing', 'poller'), assert_msg
         if self.args['--date-from']:
             assert_msg = "Wrong date format for '--date-from' option, use Y-m-d"
             try:
-                datetime.datetime.strptime(self.args['--date-from'], '%Y-%m-%d')
+                dtime_from = datetime.datetime.strptime(self.args['--date-from'], '%Y-%m-%d')
             except:
                 raise AssertionError(assert_msg)
+            assert_msg = 'Processing is not supported for future'
+            assert dtime_from <= utcnow, assert_msg
         if self.args['--date-to']:
             assert_msg = "Wrong date format for '--date-to' option, use Y-m-d"
             try:
-                datetime.datetime.strptime(self.args['--date-to'], '%Y-%m-%d')
+                dtime_to = datetime.datetime.strptime(self.args['--date-to'], '%Y-%m-%d')
             except:
                 raise AssertionError(assert_msg)
+            assert_msg = 'Processing is not supported for future'
+            assert dtime_to <= utcnow, assert_msg
         if self.args['--year']:
             assert_msg = "'--year' option is used in recalculate mode"
             assert self.args['--recalculate'], assert_msg
@@ -168,8 +165,6 @@ class AnalyticsProcessing(application.ScalrApplication):
         utcnow = datetime.datetime.utcnow().replace(microsecond=0)
         if self.args['--date-from']:
             dtime_from = datetime.datetime.strptime(self.args['--date-from'], '%Y-%m-%d')
-            assert_msg = 'Processing is not supported for future'
-            assert dtime_from <= utcnow, assert_msg
             if not self.args['--recalculate']:
                 if self.args['--billing'] in ('aws-detailed-billing', 'azure'):
                     three_months_ago = utcnow + datetime.timedelta(days=-119)
@@ -182,8 +177,6 @@ class AnalyticsProcessing(application.ScalrApplication):
             self.config['dtime_from'] = dtime_from
         if self.args['--date-to']:
             dtime_to = datetime.datetime.strptime(self.args['--date-to'], '%Y-%m-%d')
-            assert_msg = 'Processing is not supported for future'
-            assert dtime_to <= utcnow, assert_msg
             self.config['dtime_to'] = dtime_to
 
         helper.update_config(
@@ -215,6 +208,8 @@ class AnalyticsProcessing(application.ScalrApplication):
         self.analytics = analytics.Analytics(self.scalr_db, self.analytics_db)
 
         if self.args['--year']:
+            # XXX pymysql.connect issue
+            time.sleep(0)
             quarters_calendar = self.analytics.get_quarters_calendar()
             year = int(self.args['--year'])
             quarter = int(self.args['--quarter'] or 1)
@@ -222,72 +217,55 @@ class AnalyticsProcessing(application.ScalrApplication):
             self.config['dtime_from'] = dtime_from
             self.config['dtime_to'] = min(utcnow, dtime_to)
 
-        aws_use_proxy = self.scalr_config.get('aws', {}).get('use_proxy', False)
-        aws_use_on = self.scalr_config['connections'].get('proxy', {}).get('use_on', 'both')
-        if aws_use_proxy in [True, 'yes'] and aws_use_on in ['both', 'scalr']:
-            self.config['aws_proxy']['proxy'] = self.scalr_config['connections']['proxy']['host']
-            self.config['aws_proxy']['proxy_port'] = self.scalr_config['connections']['proxy']['port']
-            self.config['aws_proxy']['proxy_user'] = self.scalr_config['connections']['proxy']['user']
-            self.config['aws_proxy']['proxy_pass'] = self.scalr_config['connections']['proxy']['pass']
+        self.config['proxy']['aws'] = helper.get_proxy_settings(self.scalr_config, 'aws')
+        self.config['proxy']['azure'] = helper.get_proxy_settings(self.scalr_config, 'azure')
 
         socket.setdefaulttimeout(self.config['instances_connection_timeout'])
 
     def __call__(self):
         self.change_permissions()
 
-        periodical_tasks = []
+        tasks = []
 
         if self.args['--recalculate']:
 
-            def after_task(periodical_task):
-                periodical_task.task.fill_farm_usage_d(force=True)
-                periodical_task.stop()
+            def after_task(task):
+                task.task.fill_farm_usage_d(force=True)
+                task.stop()
 
-            if 'poller' in self.config['billing']:
-                poller_task = billing.RecalculatePollerBilling(self.analytics, self.config)
-                periodical_tasks.append(helper.PeriodicalTask(poller_task,
-                                                              timeout=60 * 60 * 6,
-                                                              after=after_task))
-            if 'aws-detailed-billing' in self.config['billing']:
-                aws_billing_task = billing.RecalculateAWSBilling(self.analytics, self.config)
-                periodical_tasks.append(helper.PeriodicalTask(aws_billing_task,
-                                                              timeout=60 * 60 * 12,
-                                                              after=after_task))
+            task_cls = {
+                'poller': billing.RecalculatePollerBilling,
+                'aws-detailed-billing': billing.RecalculateAWSBilling,
+            }
+            for billing_type in self.config['billing']:
+                task = task_cls[billing_type](self.analytics, self.config)
+                tasks.append(helper.PeriodicalTask(task, timeout=task.timeout, after=after_task))
         else:
 
-            def after_task(periodical_task):
-                periodical_task.task.fill_farm_usage_d()
+            def after_task(task):
+                task.task.fill_farm_usage_d()
                 if self.config['dtime_to']:
-                    periodical_task.stop()
+                    task.stop()
                 else:
-                    periodical_task.task.config['dtime_from'] = False
+                    task.task.config['dtime_from'] = False
 
-            if 'poller' in self.config['billing']:
-                poller_task = billing.PollerBilling(self.analytics, self.config)
-                periodical_tasks.append(helper.PeriodicalTask(poller_task,
-                                                              period=poller_period,
-                                                              timeout=poller_timeout,
-                                                              after=after_task))
-
-            if 'aws-detailed-billing' in self.config['billing']:
-                aws_task = billing.AWSBilling(self.analytics, self.config)
-                periodical_tasks.append(helper.PeriodicalTask(aws_task,
-                                                              period=aws_period,
-                                                              timeout=aws_timeout,
-                                                              after=after_task))
-
-            if 'azure' in self.config['billing']:
-                azure_task = billing.AzureBilling(self.analytics, self.config)
-                periodical_tasks.append(helper.PeriodicalTask(azure_task,
-                                                              period=azure_period,
-                                                              timeout=azure_timeout,
-                                                              after=after_task))
+            task_cls = {
+                'poller': billing.PollerBilling,
+                'aws-detailed-billing': billing.AWSBilling,
+                'azure': billing.AzureBilling,
+            }
+            for billing_type in self.config['billing']:
+                task = task_cls[billing_type](self.analytics, self.config)
+                tasks.append(helper.PeriodicalTask(task,
+                                                   period=task.period,
+                                                   timeout=task.timeout,
+                                                   after=after_task))
 
         results = []
-        for periodical_task in periodical_tasks:
-            results.append(periodical_task())
-            if len(periodical_tasks) > 1:
-                time.sleep(launch_delay)
+        for task in tasks:
+            results.append(task())
+            if len(tasks) > 1:
+                time.sleep(LAUNCH_DELAY)
 
         gevent.wait(results)
 

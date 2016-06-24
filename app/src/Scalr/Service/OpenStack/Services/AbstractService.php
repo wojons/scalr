@@ -195,7 +195,9 @@ abstract class AbstractService
                     throw $e;
                 }
 
-                $supported = array_map(function ($v) { return substr($v, 1); }, $this->getSupportedVersions());
+                $supported = array_map(function ($v) {
+                    return substr($v, 1);
+                }, $this->getSupportedVersions());
 
                 $versions = array_intersect($supported, array_keys($endpoints[$type][$region]));
 

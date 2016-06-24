@@ -26,19 +26,26 @@ Ext.define('Scalr.ui.FilterFieldPicker', {
         var form = me.getForm();
 
         form.getFields().each(function (field) {
-            field.on('specialkey', function (field, e) {
+            field.getEl().on('keydown', function (e) {
                 var key = e.getKey();
 
                 if (key === e.ESC) {
                     form.reset();
                     form.setValues(me.oldValues);
                     filterField.collapse();
+                    e.stopPropagation();
                 }
 
-                if (key === e.ENTER) {
+                if (key === e.ENTER && !field.isExpanded) {
                     filterField.collapse();
                     filterField.doForceChange();
                 }
+            });
+
+            // prevent picker collapse if user click on component label or body
+            field.getEl().on('mousedown', function (e) {
+                e.stopEvent();
+                field.focus();
             });
         });
     }
@@ -131,7 +138,8 @@ Ext.define('Scalr.ui.FormFilterField', {
         var me = this;
 
         return new Scalr.ui.FilterFieldPicker(Ext.apply(me.getForm(), {
-            pickerField: me
+            pickerField: me,
+            defaultFocus: '[isFormField]:focusable'
         }));
     },
 
@@ -178,12 +186,6 @@ Ext.define('Scalr.ui.FormFilterField', {
 
         if (me.hasStore()) {
             me.remoteSort = me.remoteSort || me.getRemoteSort() || me.getRemoteFilter();
-
-            if (me.remoteSort) {
-                me.addCls('x-form-filterfield-remote');
-            }
-        } else if (me.forceSearchButonVisibility) {
-            me.addCls('x-form-filterfield-remote');
         }
 
         if (!Ext.isDefined(me.emptyText)) {
@@ -205,10 +207,7 @@ Ext.define('Scalr.ui.FormFilterField', {
             }
 
             if (me.isValueInverted(value, oldValue)) {
-                me
-                    .toggleFocusCls()
-                    .getTrigger('cancelButton')
-                        .toggleVisibility();
+                me.getTrigger('cancelButton').toggleVisibility();
 
                 me.updateLayout();
             }
@@ -218,7 +217,7 @@ Ext.define('Scalr.ui.FormFilterField', {
         me.on('specialkey', function (me, e) {
             var key = e.getKey();
 
-            if (key === e.ESC) {
+            if (key === e.ESC && !Ext.isEmpty(me.getValue())) {
                 me.resetFilter();
                 e.stopEvent();
             }
@@ -319,28 +318,22 @@ Ext.define('Scalr.ui.FormFilterField', {
     onCollapse: function () {
         var me = this;
 
+        var form = me.getPicker().getForm();
+        var formValues = form.getValues();
+        var formFieldNames = form.getFields().collect('name');
+        var disabledFields = Ext.Array.difference(formFieldNames, Ext.Object.getKeys(formValues));
+
+        if (!Ext.isEmpty(disabledFields)) {
+            Ext.Array.each(disabledFields, function (field) {
+                formValues[field] = '';
+            });
+        }
+
         if (me.hasForm()) {
             me.setValue(me.compileValue(
-                Ext.apply(
-                    me.getParsedValue(),
-                    me.getPicker().getForm().getValues()
-                )
+                Ext.apply(me.getParsedValue(), formValues)
             ));
         }
-    },
-
-    toggleFocusCls: function () {
-        var me = this;
-
-        var className = 'x-form-filterfield-has-value';
-
-        if (!me.hasCls(className)) {
-            me.addCls(className);
-            return me;
-        }
-
-        me.removeCls(className);
-        return me;
     },
 
     isValueInverted: function (value, oldValue) {
@@ -845,7 +838,7 @@ Ext.define('Scalr.ui.FormFieldFarmRoles', {
         hidden: true,
         name: 'farmRoleId',
         store: {
-            model: Scalr.getModel({fields: [ 'id', 'name', 'platform', 'role_id' ]})
+            model: Scalr.getModel({fields: [ 'id', 'name', 'platform', 'role_id', 'isScalarized' ]})
         },
         valueField: 'id',
         displayField: 'name',
@@ -853,7 +846,20 @@ Ext.define('Scalr.ui.FormFieldFarmRoles', {
         margin: '0 0 0 5',
         editable: false,
         queryMode: 'local',
+        listConfig: {
+            getInnerTpl: function(displayField) {
+                return '{' + displayField + '}<tpl if="values.isScalarized!==undefined&&values.isScalarized!=1"> <i>(agentless role)</i></tpl>';
+           }
+        },
         listeners: {
+            beforeselect: function(field, record) {
+                var isScalarized = record.get('isScalarized'),
+                    checkScalarized = this.up('fieldset').params.options.indexOf('isScalarizedOnly') != -1;
+                if (checkScalarized && field.getPicker().isVisible() && (isScalarized !== undefined && isScalarized == 0)) {
+                    Scalr.message.InfoTip('Action is not available for agentless Farm Roles', field.inputEl, {anchor: 'bottom'});
+                    return false;
+                }
+            },
             change: function () {
                 var me = this, fieldset = this.up('fieldset');
 
@@ -1013,7 +1019,6 @@ Ext.define('Scalr.ui.FormFieldProgress', {
         }
 
         me.rawValue = Ext.isObject(value) ? Ext.clone(value) : value;
-
         if (me.rendered) {
             me.doRenderProgressBar();
         } else {
@@ -1155,6 +1160,30 @@ Ext.define('Scalr.ui.FormFieldProgress', {
     }
 });
 
+Ext.define('Scalr.ui.FormFieldProgressStep', {
+    extend: 'Ext.form.field.Display',
+    alias: 'widget.progressbarstepfield',
+    fieldCls: 'x-form-progressbarstep',
+
+    renderer: function (value, field) {
+        var content = '', i, len = this.steps.length, status = 'finished', width = parseInt(100 / len);
+
+        for (i = 0, len = this.steps.length; i < len; i++) {
+            if (value && this.steps[i].name == value) {
+                status = this.steps[i].isWaiting ? 'waiting' : 'running';
+            }
+
+            content += '<div class="step ' + status + '" style="width: ' + width + '%">' + this.steps[i].title + '</div>';
+
+            if (value && this.steps[i].name == value) {
+                status = 'pending';
+            }
+        }
+
+        return content;
+    }
+});
+
 Ext.define('Scalr.ui.CloudLocationMap', {
     extend: 'Ext.Component',
     alias: 'widget.cloudlocationmap',
@@ -1193,6 +1222,7 @@ Ext.define('Scalr.ui.CloudLocationMap', {
     locations: {
         ec2: {
             'ap-northeast-1': {region: 'ap', x: {common: 125, large: 183}, y: {common:27, large: 40}},
+            'ap-northeast-2': {region: 'ap', x: {common: 115, large: 170}, y: {common:27, large: 40}},
             'ap-southeast-1': {region: 'ap', x: {common: 95, large: 142}, y: {common:58, large: 81}},
             'ap-southeast-2': {region: 'ap', x: {common: 133, large: 193}, y: {common:88, large: 118}},
             'eu-west-1': {region: 'eu', x: {common: 75, large: 112}, y: {common:14, large: 18}},
@@ -1204,6 +1234,7 @@ Ext.define('Scalr.ui.CloudLocationMap', {
         },
         ec2_world: {//all locations on a single map
             'ap-northeast-1': {region: 'all', x: {common: 182, large: 274}, y: {common:32, large: 46}},
+            'ap-northeast-2': {region: 'all', x: {common: 175, large: 264}, y: {common:32, large: 46}},
             'ap-southeast-1': {region: 'all', x: {common: 156, large: 244}, y: {common:54, large: 78}},
             'ap-southeast-2': {region: 'all', x: {common: 186, large: 286}, y: {common:76, large: 110}},
             'eu-west-1': {region: 'all', x: {common: 88, large: 140}, y: {common:24, large: 32}},
@@ -1212,10 +1243,6 @@ Ext.define('Scalr.ui.CloudLocationMap', {
             'us-east-1': {region: 'all', x: {common: 48, large: 78}, y: {common:34, large: 48}},
             'us-west-1': {region: 'all', x: {common: 28, large: 42}, y: {common:40, large: 50}},
             'us-west-2': {region: 'all', x: {common: 22, large: 40}, y: {common:30, large: 40}}
-        },
-        rackspace: {
-            'rs-LONx': {region: 'eu', x: {common: 75, large: 120}, y: {common:14, large: 18}},
-            'rs-ORD1': {region: 'us', x: {common: 120, large: 180}, y: {common:32, large: 44}}
         },
         rackspace_world: {
             'rs-LONx': {region: 'all', x: {common: 88, large: 144}, y: {common:24, large: 30}},
@@ -1451,7 +1478,11 @@ Ext.define('Scalr.ui.FormTextCodeMirror', {
                 break;
         }
     },
-
+    focus: function() {
+        if (this.codeMirror) {
+            this.codeMirror.focus();
+        }
+    },
     afterRender: function () {
         this.callParent(arguments);
         this.codeMirror = new CodeMirror(this.inputEl, {
@@ -1790,6 +1821,7 @@ Ext.define('Ext.form.field.Color', {
 
         return new Ext.picker.Color({
             cls: 'x-field-colorpicker-menu',
+            focusable: false, // prevent color field blur after expand picker
             pickerField: me,
             floating: true,
             hidden: true,
@@ -2028,6 +2060,182 @@ Ext.define('Scalr.ui.FormScriptField', {
 
         me.callParent(arguments);
     }
+});
+
+Ext.define('Scalr.ui.ValueListField', {
+    extend: 'Ext.grid.Panel',
+    alias: 'widget.valuelistfield',
+    cls: 'x-grid-with-formfields',
+    trackMouseOver: false,
+    disableSelection: true,
+    encodeValue: true,
+
+    store: {
+        fields: [{name: 'value', defaultValue: ''}],
+        proxy: 'object'
+    },
+    features: {
+        ftype: 'addbutton',
+        text: 'Add',
+        handler: function(view) {
+            var grid = view.up(),
+                record = grid.store.add({})[0],
+                field = grid.columns[0].getWidget(record);
+            field.focus();
+            field.clearInvalid();
+        }
+    },
+
+    listeners: {
+        itemclick: function (view, record, item, index, e) {
+            if (e.getTarget('img.x-grid-icon-delete')) {
+                view.store.remove(record);
+                return false;
+            }
+        }
+    },
+
+    initComponent: function() {
+        if (this.itemName) {
+            this.on('viewready', function() {
+                this.view.findFeature('addbutton').setText('Add ' + this.itemName);
+                this.columns[0].setText(this.columnName);
+            }, this, {single: true});
+        }
+        this.callParent(arguments);
+    },
+
+    setReadOnly: function(readOnly) {
+        this.readOnly = !!readOnly;
+        this.view.refresh();
+        this.view.findFeature('addbutton').setDisabled(readOnly);
+    },
+
+    setValue: function(value){
+        var me = this,
+            data = [],
+            forcedItems = me.forcedItems || [];
+        if (value) {
+            value = me.encodeValue ? Ext.decode(value, true) : value;
+        } else {
+            value = []
+        }
+        Ext.each(forcedItems, function(val){
+            data.push({
+                value: val,
+                system: true
+            });
+        });
+        Ext.each(value, function(val){
+            if (!Ext.Array.contains(forcedItems, val)) {
+                data.push({
+                    value: val
+                });
+            }
+        });
+        me.store.loadData(data);
+    },
+
+    getValue: function(){
+        var me = this,
+            result  = [],
+            forcedItems = me.forcedItems || [];
+        me.store.getUnfiltered().each(function(record){
+            var value = record.get('value');
+            if (value && !Ext.Array.contains(forcedItems, value)) {
+                result.push(value);
+            }
+        });
+        return Ext.isEmpty(result) ? null : (me.encodeValue ? Ext.encode(result) : result);
+    },
+
+    isRowReadOnly: function(record) {
+        return this.readOnly || record.get('system');
+    },
+
+    isValid: function(){
+        var me = this,
+            isValid = true;
+        me.store.getUnfiltered().each(function(record){
+            var value = Ext.String.trim(record.get('value'));
+            if (!value && !record.get('system')) {
+                var widget = me.columns[0].getWidget(record);
+                isValid = widget.validate();
+                widget.focus();
+                return false;
+            }
+        });
+        return isValid;
+    },
+
+    markInvalid: function(error) {
+        if (this.rendered) {
+            this.isValid();
+        }
+    },
+
+    isValueValid: function(value, record) {
+        return true;
+    },
+
+    columns: [{
+        header: ' ',
+        sortable: false,
+        resizable: false,
+        dataIndex: 'value',
+        flex: 2,
+        xtype: 'widgetcolumn',
+        onWidgetAttach: function(column, widget, record) {
+            widget.setReadOnly(widget.up('grid').isRowReadOnly(record));
+            widget.validate();
+        },
+        widget: {
+            xtype: 'textfield',
+            listeners: {
+                change: function(comp, value){
+                    var record = comp.getWidgetRecord();
+                    if (record) {
+                        record.set('value', value);
+                    }
+                    cb = function() {
+                        comp.inputEl.set({'data-qtip': comp.readOnly ? Ext.String.htmlEncode(value) : ''});
+                    }
+                    if (comp.inputEl) {
+                        cb();
+                    } else {
+                        comp.on('afterrender', cb, comp, {single: true})
+                    }
+                }
+            },
+            validator: function(value) {
+                var column = this.getWidgetColumn(),
+                    record = this.getWidgetRecord();
+                if (column && record) {
+                    return column.ownerCt.grid.isValueValid(value, record);
+                } else {
+                    return true;
+                }
+            }
+        }
+    },{
+        renderer: function(value, meta, record, rowIndex, colIndex, store, view) {
+            var result = '<img style="cursor:pointer;margin-top:6px;',
+                grid = view.up();
+            if (record.get('system')) {
+                result += 'cursor:default;opacity:.4" class="x-grid-icon x-grid-icon-lock" data-qwidth="440" data-qtip="System '+grid.itemName+'s cannot be modified or removed"';
+            } else {
+                result += '" class="x-grid-icon x-grid-icon-delete" data-qtip="Delete"';
+            }
+            result += ' src="'+Ext.BLANK_IMAGE_URL+'"/>';
+            return result;
+        },
+        tdCls: 'x-grid-cell-nopadding',
+        width: 36,
+        sortable: false,
+        align:'left'
+
+    }],
+
 });
 
 Ext.define('Scalr.ui.NameValueListField', {
@@ -2422,9 +2630,47 @@ Ext.define('Scalr.ui.FieldProgressBar', {
     }
 });
 
-Ext.define('Scalr.ui.view.TagBoundListKeyNav', {
+Ext.define('Scalr.ui.view.TagFieldBoundListKeyNav', {
     extend: 'Ext.view.BoundListKeyNav',
-    alias: 'view.navigation.tagboundlist',
+    alias: 'view.navigation.tagfieldboundlist',
+
+    onKeyEnter: function(e) {
+        var me = this,
+            selModel = me.view.getSelectionModel(),
+            field = me.view.pickerField,
+            count = selModel.getCount();
+
+        me.selectHighlighted(e);
+
+        field.inputEl.dom.value = '';
+
+        field.doRawQuery();
+
+        // Handle the case where the highlighted item is already selected
+        // In this case, the change event won't fire, so just collapse
+        if (!field.multiSelect && count === selModel.getCount()) {
+            field.collapse();
+        }
+    },
+
+    selectHighlighted: function(e) {
+        var boundList = this.view,
+            selModel = boundList.getSelectionModel(),
+            highlightedRec;
+
+        highlightedRec = boundList.getNavigationModel().getRecord();
+
+        // Select if not already selected.
+        // If already selected, selecting with no CTRL flag will deselect the record.
+        if (highlightedRec && (e.getKey() === e.ENTER || !selModel.isSelected(highlightedRec))) {
+            selModel.selectWithEvent(highlightedRec, e);
+        }
+    }
+});
+
+Ext.define('Scalr.ui.view.TagListBoundListKeyNav', {
+    extend: 'Ext.view.BoundListKeyNav',
+    alias: 'view.navigation.taglistboundlist',
 
     onKeyEnter: function(e) {
         var me = this,
@@ -2474,6 +2720,12 @@ Ext.define('Scalr.ui.view.TagBoundListKeyNav', {
 Ext.define('Scalr.ui.form.field.TagList', {
     extend: 'Ext.form.field.Tag',
     alias: 'widget.taglistfield',
+
+    config: {
+        listConfig: {
+            navigationModel: 'taglistboundlist'
+        }
+    },
 
     createNewOnEnter: true,
 
@@ -2877,6 +3129,7 @@ Ext.define('Scalr.ui.CloudLocationField', {
     mode: 'clouds',
     allCloudsText: '&nbsp;All locations',
     localLocationParamName: 'grid-ui-default-cloud-location',
+    maskOnDisable: false,
     config: {
         platforms: []
     },
@@ -2900,9 +3153,9 @@ Ext.define('Scalr.ui.CloudLocationField', {
                     this.next('#cloudLocation').setValue(field.initialCloudLocation || '');
                     delete field.initialCloudLocation;
                     field.updateButtonText();
-                    field.fireEvent('change', field, {platform: value});
+                        field.fireEvent('change', field, {platform: value});
+                    }
                 }
-            }
         },{
             xtype: 'hiddenfield',
             itemId: 'cloudLocation',
@@ -2963,6 +3216,10 @@ Ext.define('Scalr.ui.CloudLocationField', {
                 }
             }
         }]);
+
+        if (this.value && this.value.platform) {
+            this.onCloudLocationSelect(this.value.platform, this.value.cloudLocation);
+        }
     },
 
     updateButtonText: function() {
@@ -3085,6 +3342,20 @@ Ext.define('Scalr.ui.CloudLocationField', {
                         iconCls: 'x-icon-loading-list',
                         hideOnClick: false
                     },
+                    listeners: {
+                        afterrender: function() {
+                            this.el.on({
+                                mouseover: function(){
+                                    me.currentPlatform = platform;
+                                },
+                                mouseleave: function(){
+                                    delete me.currentPlatform;
+                                },
+                                scope: this
+                            });
+                        }
+                    }
+
                 }, true);
             }
             parentMenuItem.doExpandMenu();

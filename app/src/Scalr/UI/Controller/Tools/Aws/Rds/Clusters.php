@@ -76,7 +76,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Clusters extends Scalr_UI_Controller
 
         $this->response->page('ui/tools/aws/rds/clusters/create.js', [
             'locations'     => self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false),
-            'accountId'     => $this->environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
+            'accountId'     => $this->environment->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
             'remoteAddress' => $this->request->getRemoteAddr(),
         ]);
     }
@@ -129,7 +129,7 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Clusters extends Scalr_UI_Controller
         $this->response->page([ 'ui/tools/aws/rds/clusters/edit.js', 'ui/security/groups/sgeditor.js' ], [
             'locations'     => self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false),
             'cluster'       => $dbCluster,
-            'accountId'     => $this->environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
+            'accountId'     => $this->environment->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
             'remoteAddress' => $this->request->getRemoteAddr()
         ]);
     }
@@ -253,12 +253,15 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Clusters extends Scalr_UI_Controller
      * @param   int         $farmId                      optional Farm identifier
      * @param   JsonData    $VpcSecurityGroups           optional VPC Security groups list
      * @param   JsonData    $SubnetIds                   optional Subnets list
+     * @param   bool        $StorageEncrypted            optional Storage encryption
+     * @param   string      $KmsKeyId                    optional Kms key id
      */
     public function xSaveAction($cloudLocation, $DBClusterIdentifier, $Engine, $MasterUsername, RawData $MasterUserPassword,
                                 $VpcId = null, $Port = null, $DBName = null, $CharacterSetName = null, $DBParameterGroup = null,
                                 $OptionGroupName = null, JsonData $AvailabilityZones = null, $BackupRetentionPeriod = null,
                                 $PreferredBackupWindow = null, $PreferredMaintenanceWindow = null, $DBSubnetGroupName = null,
-                                $EngineVersion = null, $farmId = null, JsonData $VpcSecurityGroups = null, JsonData $SubnetIds = null)
+                                $EngineVersion = null, $farmId = null, JsonData $VpcSecurityGroups = null, JsonData $SubnetIds = null,
+                                $StorageEncrypted = null, $KmsKeyId = null)
     {
         $this->request->restrictAccess(Acl::RESOURCE_AWS_RDS, Acl::PERM_AWS_RDS_MANAGE);
 
@@ -269,6 +272,8 @@ class Scalr_UI_Controller_Tools_Aws_Rds_Clusters extends Scalr_UI_Controller
         $request->port             = $Port ?: null;
         $request->databaseName     = $DBName ?: null;
         $request->characterSetName = $CharacterSetName ?: null;
+        $request->storageEncrypted = $StorageEncrypted ?: null;
+        $request->kmsKeyId         = $KmsKeyId ?: null;
 
         $paramName = $DBParameterGroup;
 

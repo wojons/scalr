@@ -1,5 +1,8 @@
 <?php
 
+use Scalr\Model\Entity\OrchestrationLog;
+use Scalr\Model\Entity\OrchestrationLogManualScript;
+
 class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service_QueueHandler
 {
 
@@ -40,41 +43,53 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
                     $msg = sprintf("STDERR: %s \n\n STDOUT: %s", base64_decode($message->stderr), base64_decode($message->stdout));
 
                 if ($message->scriptPath) {
-                    $name = (stristr($message->scriptPath, '/usr/local/bin/scalr-scripting') || preg_match('/fatmouse-agent\/tasks\/[^\/]+\/[^\/]+\/bin/', $message->scriptPath))
+                    $name = (stristr($message->scriptPath, 'C:\Windows\TEMP\scalr-scripting') || 
+                            stristr($message->scriptPath, '/usr/local/bin/scalr-scripting') || 
+                            preg_match('/fatmouse-agent\/tasks\/[^\/]+\/[^\/]+\/bin/', $message->scriptPath)
+                    )
                         ? $message->scriptName : $message->scriptPath;
                 } else {
                     $name = $message->scriptName;
                 }
 
-                $this->db->Execute("INSERT INTO scripting_log SET
-                    farmid = ?,
-                    server_id = ?,
-                    event = ?,
-                    message = ?,
-                    dtadded = NOW(),
-                    script_name = ?,
-                    event_server_id = ?,
-                    exec_time = ?,
-                    exec_exitcode = ?,
-                    event_id = ?,
-                    execution_id = ?,
-                    run_as = ?
-                ", array(
-                    $dbserver->farmId,
-                    $message->getServerId(),
-                    $message->eventName,
-                    $msg,
-                    $name,
-                    $message->eventServerId,
-                    round($message->timeElapsed, 2),
-                    $message->returnCode,
-                    $message->eventId,
-                    $message->executionId,
-                    $message->runAs
-                ));
+                $log = new OrchestrationLog();
 
-                if ($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION])
+                if (strpos($message->eventName, 'Scheduler (TaskID: ') === 0) {
+                    $type = OrchestrationLog::TYPE_SCHEDULER;
+                    $log->taskId = filter_var($message->eventName, FILTER_SANITIZE_NUMBER_INT);
+                } else if ($message->eventName == 'Manual') {
+                    $type = OrchestrationLog::TYPE_MANUAL;
+                } else {
+                    $type = OrchestrationLog::TYPE_EVENT;
+                }
+
+                $log->farmId        = $dbserver->farmId;
+                $log->serverId      = $message->getServerId();
+                $log->type          = $type;
+                $log->message       = $msg;
+                $log->added         = new DateTime('now');
+                $log->scriptName    = $name;
+                $log->execTime      = round($message->timeElapsed, 2);
+                $log->execExitCode  = $message->returnCode;
+                $log->eventId       = $message->eventId;
+                $log->eventServerId = $message->eventServerId;
+                $log->executionId   = $message->executionId;
+                $log->runAs         = $message->runAs;
+
+                $log->save();
+
+                if ($type === OrchestrationLog::TYPE_MANUAL) {
+                    $logManual = OrchestrationLogManualScript::findOne([['executionId' => $message->executionId], ['serverId' => $message->getServerId()]]);
+                    /* @var $logManual OrchestrationLogManualScript */
+                    if ($logManual && empty($logManual->orchestrationLogId)) {
+                        $logManual->orchestrationLogId = $log->id;
+                        $logManual->save();
+                    }
+                }
+
+                if ($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION]) {
                     DBServer::LoadByID($message->getServerId())->setScalarizrVersion($message->meta[Scalr_Messaging_MsgMeta::SZR_VERSION]);
+                }
 
                 if ($message->eventId) {
                     $updateTotal = '';
@@ -90,7 +105,7 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
                     if (stristr($name, '[Scalr built-in]'))
                         $updateTotal = ', `scripts_total` = `scripts_total`+1';
 
-                    $this->db->Execute("UPDATE events SET `{$field}` = `{$field}`+1 {$updateTotal} WHERE event_id = ?", array($message->eventId));
+                    $this->db->Execute("UPDATE events SET `{$field}` = `{$field}`+1 {$updateTotal} WHERE event_id = ?", [$message->eventId]);
                 }
 
             } catch (Exception $e) {
@@ -111,11 +126,7 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
                 }
 
                 $level = $entry->level === "WARNING" ? "warn" : strtolower($entry->level);
-                \Scalr::getContainer()->logger($entry->name)->{$level}(new FarmLogMessage(
-                    $dbserver->farmId,
-                    $entry->msg,
-                    $message->getServerId()
-                ));
+                \Scalr::getContainer()->logger($entry->name)->{$level}(new FarmLogMessage($dbserver, !empty($entry->msg) ? $entry->msg : null));
             }
         } elseif ($message instanceof Scalr_Messaging_Msg_RebundleLog) {
             try {
@@ -123,24 +134,13 @@ class Scalr_Messaging_Service_LogQueueHandler implements Scalr_Messaging_Service
                     bundle_task_id = ?,
                     dtadded = NOW(),
                     message = ?
-                ", array(
+                ", [
                     $message->bundleTaskId,
                     $message->message
-                ));
+                ]);
             } catch (Exception $e) {
                 $this->logger->error($e->getMessage());
             }
-        } elseif ($message instanceof Scalr_Messaging_Msg_DeployLog) {
-            try {
-                $this->db->Execute("INSERT INTO dm_deployment_task_logs SET
-                    `dm_deployment_task_id` = ?,
-                    `dtadded` = NOW(),
-                    `message` = ?
-                ", array(
-                    $message->deployTaskId,
-                    $message->message
-                ));
-            } catch (Exception $e) {}
         }
     }
 }

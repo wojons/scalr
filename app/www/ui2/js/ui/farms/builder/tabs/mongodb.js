@@ -33,8 +33,6 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Mongodb', {
         if (platform === 'ec2') {
             storages.push({name:'ebs', description:'EBS Volume'});
             storages.push({name:'raid.ebs', description:'RAID array'});
-        } else if (platform === 'rackspace') {
-            storages.push({name:'eph', description:'Ephemeral device'});
         } else if (platform === 'cloudstack' || platform == 'idcf') {
             storages.push({name:'csvol', description:'Cloudstack Block Device'});
         } else if (platform === 'gce') {
@@ -263,7 +261,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Mongodb', {
                 margin: '0 0 6',
                 items: [{
                     xtype: 'combo',
-                    store: Scalr.constants.ebsTypes,
+                    store: Scalr.utils.getEbsTypes(),
                     fieldLabel: 'EBS type',
                     labelWidth:160,
                     valueField: 'id',

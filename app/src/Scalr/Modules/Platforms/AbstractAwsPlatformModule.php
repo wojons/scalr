@@ -19,7 +19,7 @@ abstract class AbstractAwsPlatformModule extends AbstractPlatformModule
         $accountType = null;
 
         if ($environment instanceof \Scalr_Environment) {
-            $accountType = $environment->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE];
+            $accountType = $environment->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE];
         }
 
         return $this->getLocationsByAccountType($accountType);
@@ -42,7 +42,8 @@ abstract class AbstractAwsPlatformModule extends AbstractPlatformModule
             Aws::REGION_SA_EAST_1      => 'sa-east-1 (Sao Paulo)',
             Aws::REGION_AP_SOUTHEAST_1 => 'ap-southeast-1 (Singapore)',
             Aws::REGION_AP_SOUTHEAST_2 => 'ap-southeast-2 (Sydney)',
-            Aws::REGION_AP_NORTHEAST_1 => 'ap-northeast-1 (Tokyo)'
+            Aws::REGION_AP_NORTHEAST_1 => 'ap-northeast-1 (Tokyo)',
+            Aws::REGION_AP_NORTHEAST_2 => 'ap-northeast-2 (Seoul)',
         ];
 
         if (isset($accountType)) {

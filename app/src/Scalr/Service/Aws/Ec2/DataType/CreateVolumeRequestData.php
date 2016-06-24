@@ -25,6 +25,10 @@ class CreateVolumeRequestData extends AbstractEc2DataType
     const VOLUME_TYPE_IO1 = 'io1';
 
     const VOLUME_TYPE_GP2 = 'gp2';
+    
+    const VOLUME_TYPE_SC1 = 'sc1';
+    
+    const VOLUME_TYPE_ST1 = 'st1';
 
     /**
      * The size of the volume, in GiBs.

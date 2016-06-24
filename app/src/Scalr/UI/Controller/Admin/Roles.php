@@ -18,4 +18,10 @@ class Scalr_UI_Controller_Admin_Roles extends Scalr_UI_Controller
     {
         Scalr_UI_Controller_Roles::controller()->callActionMethod('editAction');
     }
+    
+    public function categoriesAction()
+    {
+        self::loadController('Categories', 'Scalr_UI_Controller_Roles')->defaultAction();
+    }
+    
 }

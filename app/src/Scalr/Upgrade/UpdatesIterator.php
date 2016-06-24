@@ -1,8 +1,8 @@
 <?php
 namespace Scalr\Upgrade;
 
-use \RegexIterator;
-use \FilesystemIterator;
+use RegexIterator;
+use FilesystemIterator;
 
 /**
  * UpdatesIterator

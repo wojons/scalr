@@ -1,5 +1,6 @@
 Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
-    var isScalrAdmin = Scalr.user.type === 'ScalrAdmin';
+    var isScalrAdmin = Scalr.user.type === 'ScalrAdmin',
+        currentCatId = 0;
     var deleteConfirmationForm = {
         xtype: 'fieldset',
         cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
@@ -12,14 +13,17 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
         }]
     };
 
-    //category tabs
-    var categories = [{text: 'All categories', catId: 0, pressed: true}];
-    categories.push.apply(categories, Ext.Array.map(moduleParams['categories'], function(item) {
-        return {
-            text: item.name,
-            catId: item.id
-        };
-    }));
+    getCategoriesItems = function(categories) {
+        var items = [{text: 'All categories', catId: 0, pressed: currentCatId == 0}];
+        Ext.Object.each(categories, function(id, cat) {
+            items.push({
+                text: cat.name,
+                catId: cat.id,
+                pressed: cat.id == currentCatId
+            });
+        });
+        return items;
+    }
 
     //clouds filter
     var platforms = [];
@@ -47,7 +51,7 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
         fields: [
             {name: 'id', type: 'int'},
             'name', 'scope', 'behaviors', 'osId', 'dtAdded', 'dtLastUsed', 'platforms','status',
-            'images', 'description', 'usedBy', 'isQuickStart', 'isDeprecated', 'accountId', 'envId', 'scope', 'environments'
+            'images', 'description', 'usedBy', 'isQuickStart', 'isDeprecated', 'isScalarized', 'accountId', 'envId', 'scope', 'environments'
         ],
         proxy: {
             type: 'ajax',
@@ -442,6 +446,7 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
             });
 
             this.down('#addToFarm').setDisabled(images.length == 0 || record.get('isDeprecated') == 1 || osDeprecated);
+            this.down('#promoteRole').setDisabled(record.get('scope') !== 'environment');
 
             //add empty platforms
             if (!isScalrAdmin) {
@@ -502,12 +507,42 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
             items: [{
                 xtype: 'container',
                 style: 'z-index:2;',
-                items: {
+                items: [{
+                    itemId: 'promoteRole',
+                    xtype: 'button',
+                    iconCls: 'x-btn-icon-replace',
+                    tooltip: 'Promoto role to account scope',
+                    //hidden: !(Scalr.isAllowed('ROLES_ACCOUNT', 'manage') && Scalr.isAllowed('ROLES_ENVIRONMENT', 'manage')),
+                    hidden: true,
+                    style: 'position:absolute;right:118px',
+                    handler: function() {
+                        var record = this.up('form').getForm().getRecord();
+                        Scalr.Request({
+                            confirmBox: {
+                                type: 'action',
+                                msg: 'Are you sure want to move role to account scope? This cannot be undone. ' +
+                                'Also we will move all images associated with role to account scope.'
+                            },
+                            processBox: {
+                                type: 'action'
+                            },
+                            params: {
+                                id: record.get('id')
+                            },
+                            url: '/roles/xPromote',
+                            success: function(data) {
+                                if (data.role) {
+                                    record.set(data.role);
+                                }
+                            }
+                        });
+                    }
+                }, {
                     itemId: 'addToFarm',
                     xtype: 'button',
                     text: 'Add to farm',
                     cls: 'x-btn-green',
-                    hidden: Scalr.scope !== 'environment' || !(Scalr.isAllowed('FARMS', 'manage') || Scalr.isAllowed('OWN_FARMS', 'manage') || Scalr.isAllowed('TEAM_FARMS', 'manage')),
+                    hidden: Scalr.scope !== 'environment' || !(Scalr.isAllowed('FARMS', 'update') || Scalr.isAllowed('OWN_FARMS', 'update') || Scalr.isAllowed('TEAM_FARMS', 'update')),
                     style: 'position:absolute;right:0',
                     maxWidth: 120,
                     handler: function() {
@@ -531,7 +566,7 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                             }
                         });
                     }
-                }
+                }]
             },{
                 xtype: 'displayfield',
                 name: 'id',
@@ -549,12 +584,16 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                 name: 'behaviors',
                 fieldLabel: 'Built-in automation',
                 renderer: function (value) {
-                    var html = [];
-                    Ext.Array.each(value, function (value) {
-                        if (value !== 'base') {
-                            html.push('<img style="float:left;margin:0 8px 8px 0" class="x-icon-role-small x-icon-role-small-' + value + '" src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="' + Ext.htmlEncode(Scalr.utils.beautifyBehavior(value, true)) + '" />');
-                        }
-                    });
+                    var html = [],
+                        record = this.up('form').getRecord();
+                    if (record && record.get('isScalarized') == 1) {
+                        html.push('<img style="float:left;margin:0 8px 8px 0" class="x-icon-scalr-small" src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="Scalarizr (Scalr agent)" />');
+                        Ext.Array.each(value, function (value) {
+                            if (!Ext.isEmpty(value) && value !== 'base') {
+                                html.push('<img style="float:left;margin:0 8px 8px 0" class="x-icon-role-small x-icon-role-small-' + value + '" src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="' + Ext.htmlEncode(Scalr.utils.beautifyBehavior(value, true)) + '" />');
+                            }
+                        });
+                    }
                     return html.length > 0 ? html.join(' ') : '&ndash;';
                 }
             }, {
@@ -774,7 +813,7 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
             maximize: 'all',
             menuHref: '#' + Scalr.utils.getUrlPrefix() +  '/roles',
             menuTitle: 'Roles',
-                menuFavorite: true
+            menuFavorite: true
         },
         cls: 'scalr-ui-roles-manager',
         resetOn: 'roleId',
@@ -806,29 +845,19 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
                 toggleHandler: function(btn, pressed) {
                     if (pressed) {
                         rolesStore.applyProxyParams({catId: btn.catId});
+                        currentCatId = btn.catId;
                     }
                 }
             },
             setTab: function (catId) {
-                var me = this;
-
-                me.down('[catId=' + catId + ']').toggle(true);
-
-                return me;
+                this.down('[catId=' + catId + ']').toggle(true);
+                return this;
             },
-            resetTabs: function() {
-                this.items.each(function(){
-                    if (this.pressed) {
-                        this.toggle(false, true);
-                    }
-                });
-                this.items.first().toggle(true, true);
-            },
-            items: categories
+            items: getCategoriesItems(moduleParams['categories'])
         }]
     });
 
-    Scalr.event.on('update', function (type, role) {
+    Scalr.event.on('update', function (type, role, categories) {
         if (type == '/roles/edit') {
             var record = rolesStore.getById(role.id);
             if (Ext.isEmpty(record)) {
@@ -836,6 +865,16 @@ Scalr.regPage('Scalr.ui.roles.manager', function (loadParams, moduleParams) {
             } else {
                 record.set(role);
                 grid.clearSelectedRecord();
+            }
+            if (Ext.isObject(categories)) {
+                var tabs = panel.down('#tabs');
+                if (!categories[currentCatId]) {
+                    currentCatId = 0;
+                }
+                tabs.suspendLayouts();
+                tabs.removeAll();
+                tabs.add(getCategoriesItems(categories));
+                tabs.resumeLayouts(true);
             }
             Ext.defer(function(){grid.view.focusRow(record)}, 100);
         }
@@ -895,9 +934,7 @@ Ext.define('Scalr.ui.RolesManagerFarmSelect', {
                 {header: "ID", width: 80, dataIndex: 'id'},
                 {header: "Farm name", flex: 1, dataIndex: 'name'},
                 { text: "Owner", flex: 1, dataIndex: 'created_by_email', sortable: true },
-                { text: "Roles", width: 70, dataIndex: 'roles', sortable: false, align:'center', xtype: 'templatecolumn',
-                    tpl: '<a href="#/farms/{id}/roles">{roles}</a>'
-                },
+                { text: "Roles", width: 70, dataIndex: 'roles', sortable: false, align:'center' },
                 { text: "Status", width: 120, minWidth: 120, dataIndex: 'status', sortable: true, xtype: 'statuscolumn', statustype: 'farm'}
             ],
 

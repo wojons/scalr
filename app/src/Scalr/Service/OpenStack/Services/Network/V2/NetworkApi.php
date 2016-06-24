@@ -345,7 +345,7 @@ class NetworkApi
 
         $options = array('subnet' => array_filter(
             get_object_vars($request),
-            create_function('$v', 'return $v !== null;')
+            [$this, 'filterNull']
         ));
 
         $response = $this->getClient()->call(
@@ -457,7 +457,7 @@ class NetworkApi
 
         $options = array('port' => array_filter(
             get_object_vars($request),
-            create_function('$v', 'return $v !== null;')
+            [$this, 'filterNull']
         ));
 
         $response = $this->getClient()->call(
@@ -601,7 +601,7 @@ class NetworkApi
 
         $options = array('router' => array_filter(
             get_object_vars($request),
-            create_function('$v', 'return $v !== null;')
+            [$this, 'filterNull']
         ));
 
         $response = $this->getClient()->call(
@@ -846,7 +846,7 @@ class NetworkApi
         if (isset($portId)) {
             $options['port_id'] = (string)$portId;
         }
-        
+
         if (isset($fixedIpAddress)) {
             $options['fixed_ip_address'] = (string)$fixedIpAddress;
         }
@@ -977,7 +977,7 @@ class NetworkApi
 
         $options = array('vip' => array_filter(
             get_object_vars($request),
-            create_function('$v', 'return $v !== null;')
+            [$this, 'filterNull']
         ));
 
         $response = $this->getClient()->call(
@@ -1089,7 +1089,7 @@ class NetworkApi
 
         $options = array('pool' => array_filter(
             get_object_vars($request),
-            create_function('$v', 'return $v !== null;')
+            [$this, 'filterNull']
         ));
 
         $response = $this->getClient()->call(
@@ -1264,7 +1264,7 @@ class NetworkApi
 
         $options = array('member' => array_filter(
             get_object_vars($request),
-            create_function('$v', 'return $v !== null;')
+            [$this, 'filterNull']
         ));
 
         $response = $this->getClient()->call(
@@ -1376,7 +1376,7 @@ class NetworkApi
 
         $options = array('health_monitor' => array_filter(
             get_object_vars($request),
-            create_function('$v', 'return $v !== null;')
+            [$this, 'filterNull']
         ));
 
         $response = $this->getClient()->call(
@@ -1620,7 +1620,7 @@ class NetworkApi
 
         $options = ['security_group_rule' => array_filter(
             get_object_vars($request),
-            create_function('$v', 'return $v !== null;')
+            [$this, 'filterNull']
         )];
 
         $response = $this->getClient()->call($this->service, '/security-group-rules', $options, 'POST');
@@ -1657,5 +1657,16 @@ class NetworkApi
         }
 
         return $result;
+    }
+
+    /**
+     * NULL value filter callback
+     *
+     * @param    mixed   $v The value
+     * @return   boolean Returns true if the value does not equal NULL
+     */
+    private function filterNull($v)
+    {
+        return $v !== null;
     }
 }

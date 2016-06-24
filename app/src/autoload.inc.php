@@ -18,8 +18,6 @@ function __autoload($class_name)
         'BundleTask' => SRCPATH . '/class.BundleTask.php',
         'DBRole' => SRCPATH . '/class.DBRole.php',
         'DBDNSZone' => SRCPATH . '/class.DBDNSZone.php',
-        /********************** Service Configuration Modules ********************/
-        'ServiceConfigurationFactory' => SRCPATH . '/Modules/class.ServiceConfigurationFactory.php',
         /***************************** API ***********************************/
         'ScalrAPICoreFactory' => SRCPATH . '/api/class.ScalrAPICoreFactory.php',
         'ScalrAPICore' => SRCPATH . '/api/class.ScalrAPICore.php',
@@ -55,8 +53,6 @@ function __autoload($class_name)
         'IPAddressChangedEvent' => SRCPATH . '/events/class.IPAddressChangedEvent.php',
         'MysqlBackupCompleteEvent' => SRCPATH . '/events/class.MysqlBackupCompleteEvent.php',
         'MysqlBackupFailEvent' => SRCPATH . '/events/class.MysqlBackupFailEvent.php',
-        'MySQLReplicationFailEvent' => SRCPATH . '/events/class.MySQLReplicationFailEvent.php',
-        'MySQLReplicationRecoveredEvent' => SRCPATH . '/events/class.MySQLReplicationRecoveredEvent.php',
         'NewMysqlMasterUpEvent' => SRCPATH . '/events/class.NewMysqlMasterUpEvent.php',
         'NewDbMsrMasterUpEvent' => SRCPATH . '/events/class.NewDbMsrMasterUpEvent.php',
         'RebootBeginEvent' => SRCPATH . '/events/class.RebootBeginEvent.php',
@@ -68,10 +64,8 @@ function __autoload($class_name)
         'BeforeInstanceLaunchEvent' => SRCPATH . '/events/class.BeforeInstanceLaunchEvent.php',
         'InstanceLaunchFailedEvent' => SRCPATH . '/events/class.InstanceLaunchFailedEvent.php',
         'BeforeHostTerminateEvent' => SRCPATH . '/events/class.BeforeHostTerminateEvent.php',
-        'DNSZoneUpdatedEvent' => SRCPATH . '/events/class.DNSZoneUpdatedEvent.php',
         'EBSVolumeAttachedEvent' => SRCPATH . '/events/class.EBSVolumeAttachedEvent.php',
         'BeforeHostUpEvent' => SRCPATH . '/events/class.BeforeHostUpEvent.php',
-        'ServiceConfigurationPresetChangedEvent' => SRCPATH . '/events/class.ServiceConfigurationPresetChangedEvent.php',
         /****************************** ENUMS ******************************/
         'EVENT_TYPE' => SRCPATH . "/types/enum.EVENT_TYPE.php",
         'MYSQL_BACKUP_TYPE' => SRCPATH . "/types/enum.MYSQL_BACKUP_TYPE.php",
@@ -93,7 +87,6 @@ function __autoload($class_name)
         'SERVER_PLATFORMS' => SRCPATH . "/types/enum.SERVER_PLATFORMS.php",
         'EC2_SERVER_PROPERTIES' => SRCPATH . "/types/enum.EC2_SERVER_PROPERTIES.php",
         'GCE_SERVER_PROPERTIES' => SRCPATH . "/types/enum.GCE_SERVER_PROPERTIES.php",
-        'RACKSPACE_SERVER_PROPERTIES' => SRCPATH . "/types/enum.RACKSPACE_SERVER_PROPERTIES.php",
         'OPENSTACK_SERVER_PROPERTIES' => SRCPATH . "/types/enum.OPENSTACK_SERVER_PROPERTIES.php",
         'CLOUDSTACK_SERVER_PROPERTIES' => SRCPATH . "/types/enum.CLOUDSTACK_SERVER_PROPERTIES.php",
         'AZURE_SERVER_PROPERTIES' => SRCPATH . "/types/enum.AZURE_SERVER_PROPERTIES.php",

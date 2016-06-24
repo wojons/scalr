@@ -12,7 +12,7 @@ Note that you can pass a complete [`Role`](./../definitions/Role.mkd) object as 
 
 ## Properties ##
 
-### `id` (required, read-only) ###
+### `id` (required) ###
 
 
 
@@ -28,19 +28,18 @@ Property of type: `integer`.
 ## Swagger Definition ##
 
     {
+      "properties": {
+        "id": {
+          "type": "integer"
+        }
+      }, 
       "required": [
         "id"
       ], 
-      "x-references": {
-        "$ref": "#/definitions/Role"
-      }, 
       "x-derived": {
         "$ref": "#/definitions/Role"
       }, 
-      "properties": {
-        "id": {
-          "readOnly": true, 
-          "type": "integer"
-        }
+      "x-references": {
+        "$ref": "#/definitions/Role"
       }
     }

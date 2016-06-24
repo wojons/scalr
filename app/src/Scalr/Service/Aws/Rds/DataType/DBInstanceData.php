@@ -6,7 +6,7 @@ use Scalr\Service\Aws\DataType\ListDataType;
 use Scalr\Service\Aws\Rds;
 use Scalr\Service\Aws\RdsException;
 use Scalr\Service\Aws\Rds\AbstractRdsDataType;
-use \DateTime;
+use DateTime;
 
 /**
  * DBInstanceData
@@ -54,6 +54,11 @@ class DBInstanceData extends AbstractRdsDataType
     const LICENSE_LICENSE_INCLUDED = 'license-included';
     const LICENSE_BRING_YOUR_OWN_LICENSE = 'bring-your-own-license';
     const LICENSE_GENERAL_PUBLIC_LICENSE = 'general-public-license';
+
+    const ENGINE_SQL_SERVER_SE = 'sqlserver-se';
+    const ENGINE_SQL_SERVER_EE = 'sqlserver-ee';
+    const ENGINE_SQL_SERVER_EX = 'sqlserver-ex';
+    const ENGINE_SQL_SERVER_WEB = 'sqlserver-web';
 
     /**
      * List of the public properties

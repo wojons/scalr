@@ -4,12 +4,12 @@ namespace Scalr\System\Zmq\Cron\Task;
 
 use ArrayObject, Exception, DateTime, DateTimeZone, DateInterval, stdClass;
 use Scalr\System\Zmq\Cron\AbstractTask;
-use \FarmTerminatedEvent;
-use \Scalr_Governance;
-use \Scalr_Util_DateTime;
-use \Scalr_Account_User;
-use \DBFarm;
-use \FARM_STATUS;
+use FarmTerminatedEvent;
+use Scalr_Governance;
+use Scalr_Util_DateTime;
+use Scalr_Account_User;
+use DBFarm;
+use FARM_STATUS;
 use Scalr\Model\Entity\SettingEntity;
 use Scalr\Model\Entity;
 
@@ -112,10 +112,7 @@ class LeaseManager extends AbstractTask
                     SettingEntity::increase(SettingEntity::LEASE_TERMINATE_FARM);
 
                     //Ajdusts both account & environment for the audit log
-                    \Scalr::getContainer()->auditlogger
-                        ->setAccountId($dbFarm->ClientID)
-                        ->setEnvironmentId($dbFarm->EnvID)
-                    ;
+                    \Scalr::getContainer()->auditlogger->setAccountId($dbFarm->ClientID)->setAccountId($dbFarm->EnvID);
 
                     \Scalr::FireEvent($request->farmId, new FarmTerminatedEvent(
                         0, // do not remove Zone
@@ -143,17 +140,21 @@ class LeaseManager extends AbstractTask
                                 $mailer = \Scalr::getContainer()->mailer;
                                 $tdHuman = Scalr_Util_DateTime::convertDateTime($td, $dbFarm->GetSetting(Entity\FarmSetting::TIMEZONE), 'M j, Y');
 
+                                /* @var $user Entity\Account\User */
                                 if ($n['to'] == 'owner') {
-                                    $user = new Scalr_Account_User();
-                                    $user->loadById($dbFarm->createdByUserId);
+                                    if ($dbFarm->ownerId) {
+                                        $user = Entity\Account\User::findPk($dbFarm->ownerId);
+                                    } else {
+                                        $user = Entity\Account\User::findOne([['accountId' => $dbFarm->ClientID], ['type' => Entity\Account\User::TYPE_ACCOUNT_OWNER]]);
+                                    }
 
                                     if (\Scalr::config('scalr.auth_mode') == 'ldap') {
-                                        $email = $user->getSetting(Scalr_Account_User::SETTING_LDAP_EMAIL);
+                                        $email = $user->getSetting(Entity\Account\User\UserSetting::NAME_LDAP_EMAIL);
                                         if (!$email) {
-                                            $email = $user->getEmail();
+                                            $email = $user->email;
                                         }
                                     } else {
-                                        $email = $user->getEmail();
+                                        $email = $user->email;
                                     }
 
                                     $mailer->addTo($email);
@@ -163,11 +164,12 @@ class LeaseManager extends AbstractTask
                                     }
                                 }
 
-                                $mailer->sendTemplate(SCALR_TEMPLATES_PATH . '/emails/farm_lease_terminate.eml', array(
-                                    '{{terminate_date}}' => $tdHuman,
-                                    '{{farm}}' => $dbFarm->Name,
-                                    '{{envName}}' => $dbFarm->GetEnvironmentObject()->name,
-                                    '{{envId}}' => $dbFarm->GetEnvironmentObject()->id
+                                $mailer->sendTemplate(SCALR_TEMPLATES_PATH . '/emails/farm_lease_terminate.eml.php', array(
+                                    'terminateDate' => $tdHuman,
+                                    'farm' => $dbFarm->Name,
+                                    'envName' => $dbFarm->GetEnvironmentObject()->name,
+                                    'envId' => $dbFarm->GetEnvironmentObject()->id,
+                                    'showOwnerWarning' => !$dbFarm->ownerId
                                 ));
 
                                 $notifications[$n['key']] = 1;

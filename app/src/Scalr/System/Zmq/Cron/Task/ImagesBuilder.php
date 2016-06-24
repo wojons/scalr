@@ -3,23 +3,22 @@
 namespace Scalr\System\Zmq\Cron\Task;
 
 use ArrayObject, Exception, DateTime, DateTimeZone, stdClass;
-use Scalr\Model\Entity\Account\Environment;
-use Scalr\Model\Entity\Account\User;
+use Scalr\Model\Entity;
 use Scalr\System\Zmq\Cron\AbstractTask;
 use Scalr\Modules\PlatformFactory;
 use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
-use \BundleTask;
-use \DBServer;
-use \DBRole;
-use \DBFarm;
-use \DBFarmRole;
-use \SERVER_PROPERTIES;
-use \CLOUDSTACK_SERVER_PROPERTIES;
-use \OPENSTACK_SERVER_PROPERTIES;
-use \SERVER_STATUS;
-use \SERVER_SNAPSHOT_CREATION_STATUS;
-use \SERVER_PLATFORMS;
-use \SERVER_REPLACEMENT_TYPE;
+use BundleTask;
+use DBServer;
+use DBRole;
+use DBFarm;
+use DBFarmRole;
+use SERVER_PROPERTIES;
+use CLOUDSTACK_SERVER_PROPERTIES;
+use OPENSTACK_SERVER_PROPERTIES;
+use SERVER_STATUS;
+use SERVER_SNAPSHOT_CREATION_STATUS;
+use SERVER_PLATFORMS;
+use SERVER_REPLACEMENT_TYPE;
 use Scalr;
 use Scalr\Acl\Acl;
 use Scalr\Model\Entity\CloudCredentialsProperty;
@@ -204,7 +203,7 @@ class ImagesBuilder extends AbstractTask
                         $cloudLocation = $dbServer->GetCloudLocation();
 
                         $platform = PlatformFactory::NewPlatform($dbServer->platform);
-                        $ccProps = $environment->cloudCredentials($dbServer->platform)->properties;
+                        $ccProps = $environment->keychain($dbServer->platform)->properties;
 
                         $sharedIpId = $ccProps[CloudCredentialsProperty::CLOUDSTACK_SHARED_IP_ID . ".{$cloudLocation}"];
                         $sharedIp = $ccProps[CloudCredentialsProperty::CLOUDSTACK_SHARED_IP . ".{$cloudLocation}"];
@@ -599,25 +598,21 @@ class ImagesBuilder extends AbstractTask
                                         $r_farm_roles[] = $DBFarm->GetFarmRoleByRoleID($bundleTask->prototypeRoleId);
                                     } catch (Exception $e) {}
                                 } elseif ($bundleTask->replaceType == SERVER_REPLACEMENT_TYPE::REPLACE_ALL) {
-                                    $sql = "SELECT f.id FROM farms f WHERE f.env_id = ?";
-                                    $args = [$bundleTask->envId];
-
-                                    /** @var User $user */
-                                    $user = User::findPk($bundleTask->createdById);
-                                    /** @var Environment $env */
-                                    $env = Environment::findPk($bundleTask->envId);
-                                    /** @var Acl $acl */
+                                    /* @var $user Entity\Account\User */
+                                    $user = Entity\Account\User::findPk($bundleTask->createdById);
+                                    /* @var $env Entity\Account\Environment */
+                                    $env = Entity\Account\Environment::findPk($bundleTask->envId);
+                                    /* @var $acl Acl */
                                     $acl = Scalr::getContainer()->acl;
-
-                                    if (!$acl->isUserAllowedByEnvironment($user, $env, Acl::RESOURCE_FARMS, Acl::PERM_FARMS_MANAGE)) {
+                                    $sql = "SELECT fr.id FROM farm_roles fr JOIN farms f ON f.id = fr.farmid WHERE fr.role_id=? AND f.env_id = ?";
+                                    $args = [$bundleTask->prototypeRoleId, $bundleTask->envId];
+                                    if (!$acl->isUserAllowedByEnvironment($user, $env, Acl::RESOURCE_FARMS, Acl::PERM_FARMS_UPDATE)) {
                                         $q = [];
-                                        if ($acl->isUserAllowedByEnvironment($user, $env, Acl::RESOURCE_TEAM_FARMS, Acl::PERM_FARMS_MANAGE)) {
-                                            $t = array_map(function($t) { return $t['id']; }, $user->getTeams());
-                                            if (count($t))
-                                                $q[] = "f.team_id IN(" . join(',', $t) . ")";
+                                        if ($acl->isUserAllowedByEnvironment($user, $env, Acl::RESOURCE_TEAM_FARMS, Acl::PERM_FARMS_UPDATE)) {
+                                            $q[] = Entity\Farm::getUserTeamOwnershipSql($user->id);
                                         }
 
-                                        if ($acl->isUserAllowedByEnvironment($user, $env, Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_MANAGE)) {
+                                        if ($acl->isUserAllowedByEnvironment($user, $env, Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_UPDATE)) {
                                             $q[] = "f.created_by_id = ?";
                                             $args[] = $user->getId();
                                         }
@@ -625,16 +620,11 @@ class ImagesBuilder extends AbstractTask
                                         if (count($q)) {
                                             $sql .= ' AND (' . join(' OR ', $q) . ')';
                                         } else {
-                                            $sql .= ' AND false'; // no permissions
+                                            $sql .= ' AND 0'; // no permissions
                                         }
                                     }
 
-                                    $farm_roles = $db->GetAll("
-                                        SELECT fr.id FROM farm_roles fr
-                                        WHERE fr.role_id=?
-                                        AND fr.farmid IN ({$sql})
-                                    ", array_merge([$bundleTask->prototypeRoleId], $args));
-
+                                    $farm_roles = $db->GetAll($sql, $args);
                                     foreach ($farm_roles as $farm_role) {
                                         try {
                                             $r_farm_roles[] = DBFarmRole::LoadByID($farm_role['id']);

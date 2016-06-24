@@ -83,7 +83,7 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
             } else {
                 $s['scope'] = 'scalr';
             }
-            $s['used'] = $event->getUsed($this->user->getAccountId());
+            $s['used'] = $event->getUsed($this->user->getAccountId(), $this->getEnvironmentId(true));
             $s['status'] = $s['used'] ? 'In use' : 'Not used';
             $data[] = $s;
         }
@@ -201,7 +201,7 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
             }
         }
 
-        $used = $event->getUsed($this->user->getAccountId());
+        $used = $event->getUsed($this->user->getAccountId(), $this->getEnvironmentId(true));
         $this->response->data([
             'event' => [
                 'id' => $event->id,
@@ -234,7 +234,7 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
                 $this->user->isScalrAdmin() && $event->accountId == NULL && $event->envId == NULL ||
                 $this->user->isUser() && $event->accountId == $this->user->getAccountId() && ($event->envId == NULL || $event->envId == $this->getEnvironmentId(true))
             ) {
-                if ($event->getUsed($this->user->getAccountId())) {
+                if ($event->getUsed()) {
                     $errors[] = 'Custom event is in use and can\'t be removed.';
                 } else {
                     $processed[] = $event->id;
@@ -249,7 +249,9 @@ class Scalr_UI_Controller_Scripts_Events extends Scalr_UI_Controller
         if (count($processed) == $num) {
             $this->response->success('Custom events successfully removed');
         } else {
-            array_walk($errors, function(&$item) { $item = '- ' . $item; });
+            array_walk($errors, function (&$item) {
+                $item = '- ' . $item;
+            });
             $this->response->warning(sprintf("Successfully removed %d from %d custom events. \nFollowing errors occurred:\n%s", count($processed), $num, join($errors, '')));
         }
 

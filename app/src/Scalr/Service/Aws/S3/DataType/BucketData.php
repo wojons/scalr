@@ -307,7 +307,7 @@ class BucketData extends AbstractS3DataType
      *
      * @return  string      Returns bucket location
      *                      Valid Values: EU | eu-west-1 | eu-central-1 | us-west-1 | us-west-2 | ap-southeast-1 |
-     *                      ap-northeast-1 | sa-east-1 | empty string (for the US Classic Region)
+     *                      ap-northeast-1 | ap-northeast-2 | sa-east-1 | empty string (for the US Classic Region)
      * @throws  ClientException
      * @throws  S3Exception
      */

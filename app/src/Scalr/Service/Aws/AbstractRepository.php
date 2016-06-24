@@ -1,7 +1,7 @@
 <?php
 namespace Scalr\Service\Aws;
 
-use \ArrayObject;
+use ArrayObject;
 
 /**
  * AbstractRepository

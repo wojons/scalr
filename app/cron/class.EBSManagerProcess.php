@@ -1,6 +1,6 @@
 <?php
 
-use \Scalr\Service\Aws\Ec2\DataType\CreateVolumeRequestData;
+use Scalr\Service\Aws\Ec2\DataType\CreateVolumeRequestData;
 use Scalr\Model\Entity;
 
 class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
@@ -306,8 +306,6 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
      */
     public function StartThread($volume)
     {
-        $db = \Scalr::getDb();
-
         $DBEBSVolume = DBEBSVolume::loadById($volume['id']);
 
         $aws = $DBEBSVolume->getEnvironmentObject()->aws($DBEBSVolume);
@@ -326,6 +324,8 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                 }
             }
         }
+
+        $attach_volume = null;
 
         switch ($DBEBSVolume->attachmentStatus) {
             case EC2_EBS_ATTACH_STATUS::DELETING:
@@ -428,23 +428,29 @@ class EBSManagerProcess implements \Scalr\System\Pcntl\ProcessInterface
                         }
                     } catch (Exception $e) {
                         if (stristr($e->getMessage(), "must be at least snapshot size")) {
+                            $matches = [];
+
                             @preg_match_all("/(([0-9]+)GiB)/sim", $e->getMessage(), $matches);
-                            if ($matches[2][1] > 1) {
+
+                            if (!empty($matches[2][1]) && $matches[2][1] > 1) {
                                 $DBEBSVolume->size = $matches[2][1];
                                 $DBEBSVolume->save();
                             }
                         }
                         if ($DBEBSVolume->farmId) {
                             $this->logger->error(new FarmLogMessage(
-                                $DBEBSVolume->farmId,
+                                !empty($DBEBSVolume->farmId) ? $DBEBSVolume->farmId : null,
                                 "Cannot create volume: {$e->getMessage()}",
-                                !empty($DBEBSVolume->serverId) ? $DBEBSVolume->serverId : null
+                                !empty($DBEBSVolume->serverId) ? $DBEBSVolume->serverId : null,
+                                !empty($DBEBSVolume->envId) ? $DBEBSVolume->envId : null,
+                                !empty($DBEBSVolume->farmRoleId) ? $DBEBSVolume->farmRoleId : null
                             ));
                         } else {
                             $this->logger->error(
                                 "Cannot create volume: {$e->getMessage()}. Database ID: {$DBEBSVolume->id}"
                             );
                         }
+
                         exit();
                     }
                 } else {

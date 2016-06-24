@@ -121,6 +121,24 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
                 }
             }
 
+            $oldCloudCredsList = $oldEnv->cloudCredentialsList();
+
+            foreach ($oldCloudCredsList as $oldCloudCreds) {
+                if ($oldCloudCreds->getScope() == ScopeInterface::SCOPE_ENVIRONMENT) {
+                    $cloudCreds = clone $oldCloudCreds;
+                    $cloudCreds->envId = $env->id;
+                    $cloudCreds->name = "{$env->id}-{$cloudCreds->accountId}-{$cloudCreds->cloud}-" . \Scalr::GenerateUID(true);
+                    $cloudCreds->save();
+                    $cloudCreds->bindToEnvironment($env);
+                } else {
+                    $envCloudCreds = new \Scalr\Model\Entity\EnvironmentCloudCredentials();
+                    $envCloudCreds->envId = $env->id;
+                    $envCloudCreds->cloud = $oldCloudCreds->cloud;
+                    $envCloudCreds->cloudCredentialsId = $oldCloudCreds->id;
+                    $envCloudCreds->save();
+                }
+            }
+
             $this->response->success("Environment successfully cloned");
 
             $this->response->data(array(
@@ -187,13 +205,14 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
             if (!$this->user->isAccountSuperAdmin() && !$this->user->getAclRolesByEnvironment($env->id)->isAllowed(Acl::RESOURCE_ENV_CLOUDS_ENVIRONMENT))
                 throw new Scalr_Exception_InsufficientPermissions();
 
-            //set name and status
+            //set name, status and defaultPriority
             if ($this->user->isAccountOwner() || $this->user->isAccountSuperAdmin()) {
                 $env->name = $this->getParam('name');
             }
 
             if ($this->user->canManageAcl()) {
                 $env->status = $this->getParam('status') == Scalr_Environment::STATUS_ACTIVE ? Scalr_Environment::STATUS_ACTIVE : Scalr_Environment::STATUS_INACTIVE;
+                $env->defaultPriority = $this->getParam('defaultPriority');
             }
 
             $env->save();
@@ -302,6 +321,7 @@ class Scalr_UI_Controller_Account2_Environments extends Scalr_UI_Controller
                     'id' => $env->id,
                     'name' => $env->name,
                     'status' => $env->status,
+                    'defaultPriority' => $env->defaultPriority,
                     'platforms' => $env->getEnabledPlatforms(),
                     'teams' => $teams,
                     'ccId' => $env->getPlatformConfigValue(Scalr_Environment::SETTING_CC_ID)

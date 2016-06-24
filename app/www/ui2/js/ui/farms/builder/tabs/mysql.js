@@ -26,7 +26,6 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Mysql', {
         return this.callParent(arguments) && (record.get('behaviors').match('mysql') && !record.get('behaviors').match('mysql2') && !record.get('behaviors').match('mysqlproxy') &&
             (
                 record.get('platform') == 'ec2' ||
-                record.get('platform') == 'rackspace' ||
                 record.get('platform') == 'cloudstack' ||
                 record.get('platform') == 'idcf'
             )
@@ -268,7 +267,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Mysql', {
             width: 600,
             items: [{
                 xtype: 'combo',
-                store: Scalr.constants.ebsTypes,
+                store: Scalr.utils.getEbsTypes(),
                 fieldLabel: 'EBS type',
                 labelWidth:160,
                 valueField: 'id',

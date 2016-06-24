@@ -167,6 +167,11 @@ class Scalr_Service_Chef_Client
             $data = trim($data);
             $httpRequest = new Request();
 
+            $httpRequest->setSslOptions([
+                'verifypeer' => false,
+                'verifyhost' => false
+            ]);
+            
             $fullUrl = "{$this->chefServerUrl}{$path}";
             $chunks = parse_url($fullUrl);
 
@@ -248,7 +253,7 @@ class Scalr_Service_Chef_Client
 
             $sigs = preg_split("/\n/", chunk_split(base64_encode($crypt), 60));
 
-            for ($i = 1; $i < count($sigs); $i++) {
+            for ($i = 1, $c = count($sigs); $i < $c; $i++) {
                 if ($sigs[$i-1] != '')
                     $headers["x-ops-authorization-{$i}"] = trim($sigs[$i-1]);
             }

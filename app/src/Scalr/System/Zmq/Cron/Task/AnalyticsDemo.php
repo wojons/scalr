@@ -474,6 +474,7 @@ namespace Scalr\System\Zmq\Cron\Task\AnalyticsDemo
 
     use DateTime;
     use Scalr\Model\Entity\CloudLocation;
+    use Scalr\Model\Entity\FarmRoleSetting;
     use Scalr\Modules\PlatformFactory;
     use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
     use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
@@ -634,21 +635,7 @@ namespace Scalr\System\Zmq\Cron\Task\AnalyticsDemo
         public function getInstanceType()
         {
             if ($this->instanceType === null) {
-                $property = 'aws.instance_type';
-
-                if ($this->farmRole->Platform == \SERVER_PLATFORMS::EC2) {
-                    $property = 'aws.instance_type';
-                } else if (PlatformFactory::isOpenstack($this->farmRole->Platform)) {
-                    $property = 'openstack.flavor-id';
-                } else if (PlatformFactory::isCloudstack($this->farmRole->Platform)) {
-                    $property = 'cloudstack.service_offering_id';
-                } else if ($this->farmRole->Platform == \SERVER_PLATFORMS::GCE) {
-                    $property = 'gce.machine-type';
-                } else if ($this->farmRole->Platform == \SERVER_PLATFORMS::AZURE) {
-                    $property = 'azure.vm-size';
-                }
-
-                $this->instanceType = $this->farmRole->GetSetting($property);
+                $this->instanceType = $this->farmRole->GetSetting(FarmRoleSetting::INSTANCE_TYPE);
             }
 
             return $this->instanceType;
@@ -686,11 +673,11 @@ namespace Scalr\System\Zmq\Cron\Task\AnalyticsDemo
                     $value = '';
                 } else if (PlatformFactory::isOpenstack($platform)) {
                     $value = CloudLocation::normalizeUrl(
-                        $this->env->cloudCredentials($platform)->properties[CloudCredentialsProperty::OPENSTACK_KEYSTONE_URL]
+                        $this->env->keychain($platform)->properties[CloudCredentialsProperty::OPENSTACK_KEYSTONE_URL]
                     );
                 } else if (PlatformFactory::isCloudstack($platform)) {
                     $value = CloudLocation::normalizeUrl(
-                        $this->env->cloudCredentials($platform)->properties[CloudCredentialsProperty::CLOUDSTACK_API_URL]
+                        $this->env->keychain($platform)->properties[CloudCredentialsProperty::CLOUDSTACK_API_URL]
                     );
                 }
 

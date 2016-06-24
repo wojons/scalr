@@ -174,22 +174,31 @@ Ext.define('Scalr.ui.ElasticLoadBalancerForm', {
         return me;
     },
 
-    applyInstances: function (instances, loadBalancerName) {
+    applyInstances: function (instances) {
         var me = this;
 
-        var fieldValue = !Ext.isEmpty(instances)
+        var instancesFieldset = me.down('#instances');
 
-            ? Ext.Array.map(instances, function (instance) {
-                var instanceId = instance.instanceId;
+        var instancesStore = instancesFieldset.down('#instancesGrid').getStore();
+        instancesStore.removeAll();
 
-                return '<a class="scalr-ec2-elb-instance" data-instanceid="' + instanceId + '"'
-                    + 'style="cursor: pointer; text-decoration: none">'
-                    + instanceId + '</a>';
-            }).join(', ')
+        var instancesCountText = '0/0';
 
-            : '<i>There are no instances registered on this Load Balancer</i>';
+        if (!Ext.isEmpty(instances)) {
+            instancesStore.loadData(instances);
 
-        me.down('#instances').setValue(fieldValue);
+            var inServiceInstancesCount = 0;
+
+            Ext.Array.each(instances, function (instance) {
+                if (instance.status === 'InService') {
+                    inServiceInstancesCount++;
+                }
+            });
+
+            instancesCountText = inServiceInstancesCount + '/' + (instances.length - inServiceInstancesCount);
+        }
+
+        instancesFieldset.setTitle('Instances (' + instancesCountText + ')');
 
         return me;
     },
@@ -214,13 +223,14 @@ Ext.define('Scalr.ui.ElasticLoadBalancerForm', {
             msg: 'Are you sure you want to remove Instance <b>' + instanceId +
                 '</b> with status <i>' + state +
                 '</i> from Load Balancer <b>' + elbName + '</b> ?',
-            ok: 'Derigister',
+            ok: 'Remove',
             closeOnSuccess: true,
             scope: this,
             success: function (formValues) {
                 Scalr.Request({
                     processBox: {
-                        type: 'delete'
+                        type: 'delete',
+                        msg: 'Removing instance...'
                     },
                     url: '/tools/aws/ec2/elb/xDeregisterInstance',
                     params: {
@@ -229,17 +239,18 @@ Ext.define('Scalr.ui.ElasticLoadBalancerForm', {
                         awsInstanceId: instanceId
                     },
                     success: function (response) {
-                        var instances = response.instances;
+                        var instanceId = response.instanceId;
+                        var record = me.getForm().getRecord();
+                        var instances = record.get('instances');
+                        var removedInstance = Ext.Array.findBy(instances, function (instance) {
+                            return instance.instanceId === instanceId;
+                        });
 
-                        if (Ext.isArray(instances)) {
-                            me.applyInstances(instances, elbName);
+                        record.set('instances', Ext.Array.remove(instances, removedInstance));
 
-                            var record = me.getForm().getRecord();
+                        me.applyInstances(instances, elbName);
 
-                            if (!Ext.isEmpty(record)) {
-                                record.set('instances', instances);
-                            }
-                        }
+                        return true;
                     }
                 });
 
@@ -377,10 +388,10 @@ Ext.define('Scalr.ui.ElasticLoadBalancerForm', {
                 Ext.apply(policy, {
                     allowAddingGroups: !!params['allow_additional_sec_groups'],
                     enabledPolicyMessage: 'A Security Group Policy is active in this Environment' +
-                        (!Ext.isEmpty(policy.defaultGroups) ? ', and requires that you attach the following Security Groups to your ELB: ' + policy.defaultGroupsList : '') + 
+                        (!Ext.isEmpty(policy.defaultGroups) ? ', and requires that you attach the following Security Groups to your ELB: ' + policy.defaultGroupsList : '') +
                         '.',
                     requiredGroupsMessage: 'A Security Group Policy is active in this Environment' +
-                        (!Ext.isEmpty(policy.defaultGroups) ? ', and restricts you to the following Security Groups: ' + policy.defaultGroupsList : '') + 
+                        (!Ext.isEmpty(policy.defaultGroups) ? ', and restricts you to the following Security Groups: ' + policy.defaultGroupsList : '') +
                         '.'
                 });
             }
@@ -621,6 +632,7 @@ Ext.define('Scalr.ui.ElasticLoadBalancerForm', {
             form: [{
                 xtype: 'rdssgmultiselect',
                 title: 'Add security groups to Elastic Load Balancer',
+                listGroupsUrl: '/tools/aws/ec2/elb/xListSecurityGroups',
                 limit: 5, //VPC ELB sg limit
                 allowBlank: true,
                 minHeight: 200,
@@ -1507,25 +1519,6 @@ Ext.define('Scalr.ui.ElasticLoadBalancerForm', {
                     }
                 }]
             }, {
-                fieldLabel: 'Instances',
-                itemId: 'instances',
-                listeners: {
-                    afterrender: {
-                        fn: function (field) {
-                            field.getEl().on('click', function (event, target) {
-                                target = Ext.get(target);
-
-                                if (target.hasCls('scalr-ec2-elb-instance')) {
-                                    me.deregisterInstance(
-                                        target.getAttribute('data-instanceid')
-                                    );
-                                }
-                            });
-                        },
-                        single: true
-                    }
-                }
-            }, {
                 xtype: 'checkbox',
                 name: 'scheme',
                 fieldLabel: 'Create an internal Load Balancer',
@@ -1549,6 +1542,65 @@ Ext.define('Scalr.ui.ElasticLoadBalancerForm', {
                         tooltip: 'Cross-Zone Load Balancing distributes traffic ' +
                             'evenly across all your back-end instances in all Availability Zones.'
                     }
+                }]
+            }]
+        }, {
+            title: 'instances',
+            itemId: 'instances',
+            setReadOnly: function (readOnly) {
+                var me = this;
+
+                me.setVisible(readOnly).setDisabled(!readOnly);
+
+                return me;
+            },
+            items: [{
+                xtype: 'fieldcontainer',
+                items: [{
+                    xtype: 'grid',
+                    itemId: 'instancesGrid',
+                    disableSelection: true,
+                    margin: '12 0 0 0',
+                    maxHeight: 500,
+                    store: {
+                        proxy: 'object',
+                        fields: [ 'instanceId', 'availabilityZone', 'status' ]
+                    },
+                    viewConfig: {
+                        emptyText: 'There are no instances registered to this Load Balancer.',
+                        deferEmptyText: false
+                    },
+                    columns: [{
+                        header: 'Instance ID',
+                        dataIndex: 'instanceId',
+                        xtype: 'templatecolumn',
+                        tpl: '<a href="#/servers?cloudServerId={instanceId}">{instanceId}</a>',
+                        flex: 1,
+                        sortable: false
+                    }, {
+                        header: 'Availability Zone',
+                        dataIndex: 'availabilityZone',
+                        flex: 0.7,
+                        sortable: false
+                    }, {
+                        xtype: 'statuscolumn',
+                        header: 'Status',
+                        statustype: 'instancehealth',
+                        dataIndex: 'status',
+                        minWidth: 140,
+                        sortable: true
+                    }, {
+                        xtype: 'optionscolumn',
+                        hidden: !Scalr.isAllowed('AWS_ELB', 'manage'),
+                        menu: [{
+                            iconCls: 'x-menu-icon-delete',
+                            text: 'Remove from Load Balancer',
+                            showAsQuickAction: true,
+                            menuHandler: function (data) {
+                                me.deregisterInstance(data.instanceId);
+                            }
+                        }]
+                    }]
                 }]
             }]
         }, {

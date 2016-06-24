@@ -25,7 +25,7 @@ class SqsTest extends SqsTestCase
     {
         parent::setUp();
 
-        if (!$this->isSkipFunctionalTests()) {
+        if (!static::isSkippedFunctionalTest()) {
             $this->sqs = $this->getEnvironment()->aws(self::REGION)->sqs;
             $this->sqs->enableEntityManager();
         }

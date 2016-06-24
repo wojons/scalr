@@ -648,4 +648,3 @@ class Scalr_UI_Controller_Admin_Analytics_Pricing extends Scalr_UI_Controller
     }
 
 }
-

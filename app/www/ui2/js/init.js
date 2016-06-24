@@ -6,7 +6,7 @@ Ext.Ajax.on('requestexception', function(conn, response, options) {
     // this messages are used in window.onhashchange at ui.js
     if (response.status == 403) {
         Scalr.state.userNeedLogin = true;
-        Scalr.utils.authWindow.show();
+        Scalr.utils.authWindow.showIfHidden();
 
     } else if (response.status == 404) {
         Scalr.message.Error('Page not found.');
@@ -549,7 +549,7 @@ Scalr.message = {
     }
 };
 
-Ext.Ajax.timeout = 60000;
+Ext.Ajax.setTimeout(60000);
 
 // prevents "console is not defined" errors
 if (!Ext.isDefined(window.console)) {

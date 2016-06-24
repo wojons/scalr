@@ -162,6 +162,48 @@ class Azure
     private $services = [];
 
     /**
+     * Proxy Host
+     *
+     * @var string
+     */
+    private $proxyHost;
+
+    /**
+     * Proxy Port
+     *
+     * @var int
+     */
+    private $proxyPort;
+
+    /**
+     * The username that is used for proxy
+     *
+     * @var string
+     */
+    private $proxyUser;
+
+    /**
+     * Proxy password
+     *
+     * @var string
+     */
+    private $proxyPass;
+
+    /**
+     * The type of the proxy
+     *
+     * @var int
+     */
+    private $proxyType;
+
+    /**
+     * The auth type of the proxy
+     *
+     * @var int
+     */
+    private $authType;
+
+    /**
      * Constructor.
      *
      * @param string $appClientId  Application Client ID
@@ -195,6 +237,43 @@ class Azure
     public function getEnvironment()
     {
         return $this->environment;
+    }
+
+    /**
+     * Set proxy configuration to connect to AWS services
+     *
+     * @param string  $host
+     * @param integer $port
+     * @param string  $user
+     * @param string  $pass
+     * @param int     $type      Allowed values 4 - SOCKS4, 5 - SOCKS5, 0 - HTTP
+     * @param int     $authType  Allowed authtypes: 1 - Basic, Digest - 2, GSSNeg - 4, NTLM - 8, any - -1
+     */
+    public function setProxy($host, $port = 3128, $user = null, $pass = null, $type = 0, $authType = 1)
+    {
+        $this->proxyHost = $host;
+        $this->proxyPort = $port;
+        $this->proxyUser = $user;
+        $this->proxyPass = $pass;
+        $this->proxyType = $type;
+        $this->authType  = $authType;
+    }
+
+    /**
+     * Gets proxy configuration
+     *
+     * @return array|bool
+     */
+    public function getProxy()
+    {
+        return ($this->proxyHost) ? [
+            'host'      => $this->proxyHost,
+            'port'      => $this->proxyPort,
+            'user'      => $this->proxyUser,
+            'pass'      => $this->proxyPass,
+            'type'      => $this->proxyType,
+            'authtype'  => $this->authType
+        ] : false;
     }
 
     /**
@@ -382,7 +461,7 @@ class Azure
                 $this->refreshToken->token = $responseObj->refresh_token;
                 $this->refreshToken->expireDate = time() + 14 * 24 * 60 * 60;
 
-                $this->environment->cloudCredentials(\SERVER_PLATFORMS::AZURE)->properties->saveSettings([
+                $this->environment->keychain(\SERVER_PLATFORMS::AZURE)->properties->saveSettings([
                     CloudCredentialsProperty::AZURE_REFRESH_TOKEN => $this->refreshToken->token,
                     CloudCredentialsProperty::AZURE_REFRESH_TOKEN_EXPIRE => $this->refreshToken->expireDate
                 ]);
@@ -406,7 +485,7 @@ class Azure
         $resource = self::URL_CORE_WINDOWS . '/';
         $this->accessToken = $this->getToken($grantType, $resource, null, $authorizationCode);
 
-        $this->environment->cloudCredentials(\SERVER_PLATFORMS::AZURE)->properties->saveSettings([
+        $this->environment->keychain(\SERVER_PLATFORMS::AZURE)->properties->saveSettings([
             CloudCredentialsProperty::AZURE_ACCESS_TOKEN => $this->accessToken->token,
             CloudCredentialsProperty::AZURE_ACCESS_TOKEN_EXPIRE => $this->accessToken->expireDate
         ]);
@@ -433,7 +512,7 @@ class Azure
             $token = $this->getRefreshToken();
             $this->accessToken = $this->getToken($grantType, $resource, $token->token);
 
-            $this->environment->cloudCredentials(\SERVER_PLATFORMS::AZURE)->properties->saveSettings([
+            $this->environment->keychain(\SERVER_PLATFORMS::AZURE)->properties->saveSettings([
                 CloudCredentialsProperty::AZURE_ACCESS_TOKEN => $this->accessToken->token,
                 CloudCredentialsProperty::AZURE_ACCESS_TOKEN_EXPIRE => $this->accessToken->expireDate
             ]);
@@ -457,7 +536,7 @@ class Azure
             $grantType = 'client_credentials';
             $this->clientToken = $this->getToken($grantType, $resource . '/');
 
-            $this->environment->cloudCredentials(\SERVER_PLATFORMS::AZURE)->properties->saveSettings([
+            $this->environment->keychain(\SERVER_PLATFORMS::AZURE)->properties->saveSettings([
                 CloudCredentialsProperty::AZURE_CLIENT_TOKEN => $this->clientToken->token,
                 CloudCredentialsProperty::AZURE_CLIENT_TOKEN_EXPIRE => $this->clientToken->expireDate
             ]);
@@ -482,7 +561,7 @@ class Azure
             throw new AzureException('Refresh token is expired or not exists! Please process authorisation flow to continue working.');
         }
 
-        $this->environment->cloudCredentials(\SERVER_PLATFORMS::AZURE)->properties->saveSettings([
+        $this->environment->keychain(\SERVER_PLATFORMS::AZURE)->properties->saveSettings([
             CloudCredentialsProperty::AZURE_REFRESH_TOKEN => $this->refreshToken->token,
             CloudCredentialsProperty::AZURE_REFRESH_TOKEN_EXPIRE => $this->refreshToken->expireDate
         ]);
@@ -500,7 +579,7 @@ class Azure
     private function loadToken($type)
     {
         $azureConstantsPrefix = '\Scalr\Model\Entity\CloudCredentialsProperty::AZURE';
-        $ccProps = $this->environment->cloudCredentials(\SERVER_PLATFORMS::AZURE)->properties;
+        $ccProps = $this->environment->keychain(\SERVER_PLATFORMS::AZURE)->properties;
 
         $type = strtoupper($type);
         $token = new \stdClass();
@@ -558,7 +637,7 @@ class Azure
 
         $path = '/subscriptions';
 
-        $step = $this->environment->cloudCredentials(\SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_AUTH_STEP];
+        $step = $this->environment->keychain(\SERVER_PLATFORMS::AZURE)->properties[CloudCredentialsProperty::AZURE_AUTH_STEP];
 
         if ($step == 3) {
             $token = $this->getClientToken(Azure::URL_MANAGEMENT_WINDOWS);
@@ -811,6 +890,30 @@ class Azure
         $result = null;
 
         $path = '/subscriptions/' . $subscriptionId . '/providers/' . $resourceProvider . '/register';
+
+        $request = $this->getClient()->prepareRequest($path, 'POST', self::SUBSCRIPTION_API_VERSION, self::URL_MANAGEMENT_WINDOWS);
+        $response = $this->getClient()->call($request);
+
+        if (!$response->hasError()) {
+            $result = ProviderData::initArray($response->getResult());
+        }
+
+        return $result;
+    }
+
+    /**
+     * Unregister a subscription from a resource provider.
+     *
+     * @param string $subscriptionId subscription::subscriptionId value of one of user's subscriptions
+     * @param string $resourceProvider The namespace of the resource provider with which you want to unregister from your subscription
+     * @return ProviderData
+     * @throws AzureException
+     */
+    public function unregisterSubscription($subscriptionId, $resourceProvider)
+    {
+        $result = null;
+
+        $path = '/subscriptions/' . $subscriptionId . '/providers/' . $resourceProvider . '/unregister';
 
         $request = $this->getClient()->prepareRequest($path, 'POST', self::SUBSCRIPTION_API_VERSION, self::URL_MANAGEMENT_WINDOWS);
         $response = $this->getClient()->call($request);

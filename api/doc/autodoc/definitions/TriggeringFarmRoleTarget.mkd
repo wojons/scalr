@@ -1,6 +1,6 @@
 # `TriggeringFarmRoleTarget` #
 
-Selects all Servers of the triggering Server's Farm Role
+Selects all Servers of the triggering Server's Farm Role.
 
 ## Polymorphism ##
 
@@ -28,14 +28,7 @@ This `string` property is used for polymorphism. It **must** be set to: `"Trigge
 ## Swagger Definition ##
 
     {
-      "x-abstractType": {
-        "$ref": "#/definitions/Target"
-      }, 
-      "required": [
-        "targetType"
-      ], 
-      "x-discriminator": "targetType", 
-      "description": "Selects all Servers of the triggering Server's Farm Role", 
+      "description": "Selects all Servers of the triggering Server's Farm Role.", 
       "properties": {
         "targetType": {
           "enum": [
@@ -47,5 +40,12 @@ This `string` property is used for polymorphism. It **must** be set to: `"Trigge
           ], 
           "type": "string"
         }
-      }
+      }, 
+      "required": [
+        "targetType"
+      ], 
+      "x-abstractType": {
+        "$ref": "#/definitions/Target"
+      }, 
+      "x-discriminator": "targetType"
     }

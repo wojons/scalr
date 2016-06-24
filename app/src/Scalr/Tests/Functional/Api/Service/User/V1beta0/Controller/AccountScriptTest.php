@@ -1,10 +1,4 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: andriy
- * Date: 24.12.15
- * Time: 20:39
- */
 
 namespace Scalr\Tests\Functional\Api\Service\User\V1beta0\Controller;
 
@@ -28,10 +22,9 @@ use Scalr\Api\DataType\ErrorMessage;
 class AccountScriptTest extends ScriptsTestCase
 {
 
-
     public function ruleToDelete($ruleId)
     {
-        static::toDelete('Scalr\Model\Entity\AccountScript', $ruleId);
+        static::toDelete(AccountScript::class, [$ruleId]);
     }
 
     /**
@@ -118,14 +111,14 @@ class AccountScriptTest extends ScriptsTestCase
 
     public function testComplex()
     {
-        /* @var Script $script */
+        /* @var $script Script */
         $script = static::generateScripts([['os' => 'linux']])[0];
-        /* @var ScriptVersion $version */
+        /* @var $version ScriptVersion */
         $version = static::generateVersions($script, [['content' => '#!/bin/sh']])[0];
 
         $adapter = $this->getAdapter('OrchestrationRules\AccountScript');
 
-        /* @var User $user */
+        /* @var $user User */
         $user = $this->getUser();
 
         static::createEntity(new AccountScript(), [

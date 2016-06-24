@@ -28,7 +28,7 @@ class ScriptVersionAdapter extends ApiEntityAdapter {
         //Allows all entity properties to be converted from entity into data result object.
         //[entityProperty1 => resultProperty1, ... or  entityProperty1, entityProperty2, ...]
         self::RULE_TYPE_TO_DATA     => [
-            '_script' => 'script', 'version', 'content' => 'body', 'dtCreated' => 'added'
+            '_script' => 'script', '_body' => 'body', 'version', 'dtCreated' => 'added'
         ],
 
         //The alterable properties
@@ -63,6 +63,24 @@ class ScriptVersionAdapter extends ApiEntityAdapter {
         }
     }
 
+    public function _body($from, $to, $action)
+    {
+        switch ($action) {
+            case static::ACT_CONVERT_TO_OBJECT:
+                /* @var $from ScriptVersion */
+                $to->body = $from->content;
+                break;
+
+            case static::ACT_CONVERT_TO_ENTITY:
+                /* @var $to ScriptVersion */
+                $to->content = $from->body;
+                break;
+
+            case static::ACT_GET_FILTER_CRITERIA:
+                return [[]];
+        }
+    }
+
     /**
      * {@inheritdoc}
      * @see \Scalr\Api\DataType\ApiEntityAdapter::validateEntity()
@@ -77,6 +95,10 @@ class ScriptVersionAdapter extends ApiEntityAdapter {
 
         if (!Script::findPk($entity->scriptId)) {
             throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Script {$entity->scriptId} not found");
+        }
+
+        if (substr($entity->content, 0, 2) !== '#!') {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, 'Property body is not valid. First line must contain shebang (#!/path/to/interpreter)');
         }
 
         if (!$this->controller->hasPermissions($entity, true)) {

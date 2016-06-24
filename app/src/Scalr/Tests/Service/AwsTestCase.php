@@ -16,6 +16,9 @@ use Scalr\Service\Aws;
  */
 class AwsTestCase extends TestCase
 {
+
+    const TEST_TYPE = TestCase::TEST_TYPE_CLOUD_DEPENDENT;
+
     const AWS_NS = 'Scalr\\Service\\Aws';
 
     const REGION = 'us-east-1';
@@ -59,7 +62,7 @@ class AwsTestCase extends TestCase
         $this->container = \Scalr::getContainer();
         $this->environment = new \Scalr_Environment();
 
-        if (!$this->isSkipFunctionalTests()) {
+        if (!static::isSkippedFunctionalTest()) {
             $this->environment->loadById(\Scalr::config('scalr.phpunit.envid'));
             $this->container->environment = $this->environment;
         }
@@ -70,7 +73,8 @@ class AwsTestCase extends TestCase
      */
     protected function skipIfEc2PlatformDisabled()
     {
-        if ($this->isSkipFunctionalTests() || !$this->environment ||
+        if (static::isSkippedFunctionalTest() ||
+            !$this->environment ||
             !$this->environment->isPlatformEnabled(\SERVER_PLATFORMS::EC2)) {
             $this->markTestSkipped('Ec2 platform is not enabled.');
         }

@@ -2,6 +2,8 @@
 
 namespace Scalr\Api\Service\User\V1beta0\Adapter;
 
+use Scalr\Model\Entity\GlobalVariable\RoleGlobalVariable;
+
 /**
  * RoleGlobalVariableAdapter V1
  *
@@ -16,5 +18,5 @@ class RoleGlobalVariableAdapter extends GlobalVariableAdapter
      *
      * @var string
      */
-    protected $entityClass = 'Scalr\Model\Entity\RoleGlobalVariable';
+    protected $entityClass = RoleGlobalVariable::class;
 }

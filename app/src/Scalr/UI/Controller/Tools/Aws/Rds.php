@@ -2,6 +2,7 @@
 
 use Scalr\Acl\Acl;
 use Scalr\Service\Aws\Rds\DataType\DescribeEventRequestData;
+use Scalr\UI\Request\JsonData;
 
 class Scalr_UI_Controller_Tools_Aws_Rds extends Scalr_UI_Controller
 {
@@ -51,4 +52,18 @@ class Scalr_UI_Controller_Tools_Aws_Rds extends Scalr_UI_Controller
 
         $this->response->data($response);
     }
+
+    /**
+     * Lists security groups
+     *
+     * @param string   $platform    Platform
+     * @param string   $cloudLocation Cloud location
+     * @param JsonData $filters
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function xListSecurityGroupsAction($platform, $cloudLocation, JsonData $filters = null)
+    {
+        $this->response->data(self::loadController('Groups', 'Scalr_UI_Controller_Security')->listGroups($platform, $cloudLocation, (array)$filters));
+    }
+
 }

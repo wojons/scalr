@@ -420,7 +420,7 @@ Scalr.regPage('Scalr.ui.services.chef.servers.view', function (loadParams, modul
                                 }
                                 grid.clearSelectedRecord();
                                 grid.setSelectedRecord(record);
-                                Scalr.CachedRequestManager.get().setExpired({url: '/services/chef/servers/xListServers/'});
+                                Scalr.CachedRequestManager.get().setExpired({url: '/services/chef/xListServers/'});
                             }
                         });
                     }

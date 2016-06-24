@@ -252,15 +252,7 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.instances.createReadReplica', function (lo
                 xtype: 'combo',
                 name: 'DBInstanceClass',
                 fieldLabel: 'Type',
-                store: [
-                    'db.t1.micro', 'db.m1.small', 'db.m1.medium',
-                    'db.m1.large', 'db.m1.xlarge', 'db.m2.2xlarge ',
-                    'db.m2.4xlarge' , 'db.m3.medium ', 'db.m3.large',
-                    'db.m3.xlarge', 'db.m3.2xlarge', 'db.r3.large',
-                    'db.r3.xlarge', 'db.r3.2xlarge', 'db.r3.4xlarge',
-                    'db.r3.8xlarge', 'db.t2.micro', 'db.t2.small',
-                    'db.t2.medium'
-                ],
+                store: Scalr.constants.rdsInstancesTypes,
                 value: 'db.m1.small',
                 queryMode: 'local',
                 allowBlank: false,

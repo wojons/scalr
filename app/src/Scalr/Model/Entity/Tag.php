@@ -64,7 +64,9 @@ class Tag extends AbstractEntity
      */
     public static function getAll($accountId)
     {
-        return array_map(function($t) { return $t->name; }, self::find([['accountId' => $accountId]])->getArrayCopy());
+        return array_map(function ($t) {
+            return $t->name;
+        }, self::find([['accountId' => $accountId]])->getArrayCopy());
     }
 
     /**

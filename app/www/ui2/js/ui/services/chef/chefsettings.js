@@ -1,6 +1,6 @@
 Ext.define('Scalr.ui.ChefSettingsField', {
-	extend: 'Ext.container.Container',
-	alias: 'widget.chefsettings',
+    extend: 'Ext.container.Container',
+    alias: 'widget.chefsettings',
 
     scrollable: 'y',
     readOnly: false,
@@ -212,22 +212,23 @@ Ext.define('Scalr.ui.ChefSettingsField', {
         this.down('#solo').resetValues();
     },
 
-    setReadOnly: function(readOnly) {
-        var fields = this.query('[isFormField]'),
+    setRoleChefSettings: function(roleChefSettings) {
+        var me = this,
+            fields = me.query('[isFormField]'),
             field;
-        this.suspendLayouts();
+        me.readOnly = !!roleChefSettings;
+        me.roleChefSettings = roleChefSettings;
+        me.suspendLayouts();
         Ext.Array.each(fields, function(field){
             if (!Ext.Array.contains(['overrideAttributes', 'chef.log_level', 'chef.environment', 'chef.runlist_append'], field.name)) {
-                field.setReadOnly(!!readOnly, false);
+                field.setReadOnly(me.readOnly, false);
             }
         });
-        this.down('#configureRunlist').setDisabled(!!readOnly);
-        this.down('#overrideAttributes').setVisible(!!readOnly);
-        //this.down('[name="chef.allow_to_append_runlist"]').setVisible(!readOnly && this.mode === 'role');
-        field = this.down('[name="chef.attributes"]');
-        field.setFieldLabel(readOnly ? '' : ('Attributes' + field.afterLabelTextTpl));//setFieldLabel removes fieldicons, we have to restore them
-        this.resumeLayouts(true);
-        this.readOnly = !!readOnly;
+        me.down('#configureRunlist').setDisabled(me.readOnly && roleChefSettings['chef.allow_to_append_runlist'] != 1);
+        me.down('#overrideAttributes').setVisible(me.readOnly);
+        field = me.down('[name="chef.attributes"]');
+        field.setFieldLabel(me.readOnly ? '' : 'Attributes');
+        me.resumeLayouts(true);
     },
 
     items: [{
@@ -479,17 +480,30 @@ Ext.define('Scalr.ui.ChefSettingsField', {
                     text: 'Configure runlist',
                     handler: function() {
                         var ct = this.up('chefsettings'),
-                            runlistField = ct.down('[name="chef.runlist"]'),
-                            runlist = Ext.decode(runlistField.getValue() || '[]', true);
+                            roleChefSettings = ct.roleChefSettings || {},
+                            runlistField,
+                            envId,
+                            runlist;
+                        runlistField = ct.readOnly ? ct.down('[name="chef.runlist_append"]') : ct.down('[name="chef.runlist"]'),
+                        runlist = Ext.decode(runlistField.getValue() || '[]', true);
                         if (runlist === null) {
                             var msg = 'JSON is invalid';
+                            runlistField.focus();
                             runlistField.markInvalid(msg);
                             Scalr.message.InfoTip(msg, runlistField.inputEl, {anchor: 'bottom'});
                             return;
                         }
+                        envId = ct.down('[name="chef.environment"]').getValue();
+                        if (!envId) {
+                            if (ct.readOnly && roleChefSettings['chef.environment']) {
+                                envId = roleChefSettings['chef.environment'];
+                            } else {
+                                Scalr.message.InfoTip('Select Chef Environment first.', ct.down('[name="chef.environment"]').inputEl, {anchor: 'bottom'});
+                            }
+                        }
                         Scalr.ui.ChefRunlistCosnstructor.show({
                             chefServerId: ct.down('[name="chef.server_id"]').getValue(),
-                            chefEnvironment: ct.down('[name="chef.environment"]').getValue(),
+                            chefEnvironment: envId,
                             runlist: runlist,
                             success: function (formValues, form) {
                                 var runlist = this.getValues();
@@ -626,13 +640,6 @@ Ext.define('Scalr.ui.ChefSettingsField', {
                 itemId: 'sslVerifyMode',
                 labelWidth: 135,
                 name: 'chef.ssl_verify_mode',
-                plugins: {
-                    ptype: 'fieldicons',
-                    position: 'outer',
-                    icons: [
-                        {id: 'szrversion', tooltipData: {version: '3.5.22'}}
-                    ]
-                },
                 defaults: {
                     width: 143
                 },
@@ -683,8 +690,8 @@ Ext.define('Scalr.ui.ChefSettingsField', {
 });
 
 Ext.define('Scalr.ui.ChefSoloSettings', {
-	extend: 'Ext.container.Container',
-	alias: 'widget.chefsolocontainer',
+    extend: 'Ext.container.Container',
+    alias: 'widget.chefsolocontainer',
 
     layout: 'anchor',
     defaults: {
@@ -765,8 +772,8 @@ Ext.define('Scalr.ui.ChefSoloSettings', {
 })
 
 Ext.define('Scalr.ui.ChefServerIdField', {
-	extend: 'Ext.form.field.ComboBox',
-	alias: 'widget.chefserveridcombo',
+    extend: 'Ext.form.field.ComboBox',
+    alias: 'widget.chefserveridcombo',
 
     fieldLabel: 'Chef server',
     valueField: 'id',
@@ -781,7 +788,7 @@ Ext.define('Scalr.ui.ChefServerIdField', {
         fields: ['id', 'url', 'username', 'scope' ],
         proxy: {
             type: 'cachedrequest',
-            url: '/services/chef/servers/xListServers/'
+            url: '/services/chef/xListServers/'
         }
     },
     plugins: {
@@ -803,8 +810,8 @@ Ext.define('Scalr.ui.ChefServerIdField', {
 });
 
 Ext.define('Scalr.ui.ChefEnvironmentField', {
-	extend: 'Ext.form.field.ComboBox',
-	alias: 'widget.chefenvironmentcombo',
+    extend: 'Ext.form.field.ComboBox',
+    alias: 'widget.chefenvironmentcombo',
 
     fieldLabel: 'Chef environment',
     valueField: 'name',
@@ -837,283 +844,255 @@ Ext.define('Scalr.ui.ChefEnvironmentField', {
 Ext.define('Scalr.ui.ChefRunlistCosnstructor', {
     singleton: true,
     show: function(config) {
-        var runlistGridData = [], runlistStore;
+        var runlistGridData = [],
+            runlistStore,
+            store;
 
         Ext.Array.each(config.runlist, function(item) {
-            var itemData = {}, name;
+            var itemData = {}, id;
             if (item.indexOf('role[') === 0) {
                 item = item.replace(/^role\[/i, '').replace(/\]$/i, '');
                 Ext.apply(itemData, {
                     id: item,
-                    name: item,
-                    chef_type: true
+                    type: 'role'
                 });
             } else if (item.indexOf('recipe[') === 0) {
                 item = item.replace(/^recipe\[/i, '').replace(/\]$/i, '');
-                item = item.split('::');
                 Ext.apply(itemData, {
-                    id: item.join('::'),
-                    cookbook: item[0],
-                    name: item[1]
+                    id: item,
+                    type: 'recipe'
                 });
             } else {
-                Ext.apply(itemData, {id: item, name: item});
+                Ext.apply(itemData, {id: item});
             }
             runlistGridData.push(itemData);
         });
+
         runlistStore = Ext.create('store.store', {
-            fields: ['id', 'name', 'cookbook', 'chef_type'],
+            fields: ['id', 'type'],
             proxy: 'object',
             data: runlistGridData
         });
+
+        store = Ext.create('store.store', {
+            fields: [ 'id', 'type'],
+            sorters: [{
+                property: 'id'
+            }],
+            proxy: {
+                type: 'cachedrequest',
+                url: '/services/chef/xListRolesRecipes',
+                params: {servId: config.chefServerId, chefEnv: config.chefEnvironment},
+                processBox: false,
+                filterFn: function(record){
+                    var result = true;
+                    return !runlistStore.getById(record.get('id'));
+                }
+            }
+        });
+        
         Scalr.Confirm({
             formWidth: 850,
-            form: [{
-                xtype: 'fieldset',
-                title: 'Configure Chef runlist<span class="x-fieldset-header-description">Drag and drop roles and recipes from left to the right to configure runlist</span>',
-                cls: 'x-fieldset-separator-none',
-                items: [{
-                    xtype: 'filterfield',
-                    itemId: 'search',
-                    emptyText: 'Filter',
-                    hideFilterIcon: true,
-                    filterFn: Ext.emptyFn,
-                    listeners: {
-                        change: {
-                            fn: function(comp, value) {
-                                var ct = this.up(),
-                                    storeRoles = ct.down('#rolesGrid').store,
-                                    storeRecipes = ct.down('#recipesGrid').store;
-                                storeRoles.clearFilter(!!value);
-                                storeRecipes.clearFilter(!!value);
-                                if (value) {
-                                    value = value.toLowerCase();
-                                    storeRoles.filter([{filterFn: function(item){
-                                        return item.get('name').toLowerCase().indexOf(value) !== -1;
-                                    }}]);
-                                    storeRecipes.filter([{filterFn: function(item){
-                                        return item.get('id').toLowerCase().indexOf(value) !== -1;
-                                    }}]);
-                                }
-                            },
-                            buffer: 200
+            formLayout: 'fit',
+            alignTop: true,
+            winConfig: {
+                autoScroll: false,
+                layout: 'fit',
+                height: '80%',
+                getValues: function() {
+                    var runlist = [],
+                        store = this.down('#runList').store;
+                    store.getUnfiltered().each(function(record) {
+                        if (record.get('type') === 'recipe') {
+                            runlist.push('recipe[' + record.get('id') + ']');
+                        } else if (record.get('type') === 'role'){
+                            runlist.push('role[' + record.get('id') + ']');
+                        } else {
+                            runlist.push(record.get('id'));
                         }
-                    }
-                },{
-                    xtype: 'container',
-                    height: 400,
+                    });
+                    return runlist;
+                }
+            },
+            form: [{
+                xtype: 'container',
+                layout: 'fit',
+                items: {
+                    xtype: 'fieldset',
+                    title: 'Configure Chef runlist<span class="x-fieldset-header-description">Drag and drop roles and recipes from left to the right to configure runlist</span>',
+                    cls: 'x-fieldset-separator-none',
                     layout: {
                         type: 'hbox',
                         align: 'stretch'
                     },
-                    defaults: {
-                        flex: 1
-                    },
                     items: [{
-                        xtype: 'container',
-                        layout: 'accordion',
-                        items: [{
-                            xtype: 'grid',
-                            itemId: 'rolesGrid',
-                            title: 'Available roles',
-                            hideHeaders: true,
-                            selModel: {
-                                selType: 'rowmodel',
-                                mode: 'MULTI'
-                            },
-                            plugins: {
-                                ptype: 'gridstore',
-                                loadMask: true
-                            },
-                            viewConfig: {
-                                deferEmptyText: false,
-                                focusedItemCls: '',
-                                emptyText: 'No roles found to match your search.',
-                                preserveScrollOnRefresh: true,
-                                loadingText: '',
-                                plugins: {
-                                    ptype: 'gridviewdragdrop',
-                                    dragGroup: 'runList'
-                                }
-                            },
-                            store: {
-                                model: Scalr.getModel({fields: [ 'name', 'chef_type', {name: 'id', convert: function(v, record){return record.data.name}}]}),
-                                sorters: [{
-                                    property: 'name',
-                                    transform: function(value){
-                                        return value.toLowerCase();
+                        xtype: 'grid',
+                        itemId: 'availableList',
+                        flex: 1,
+                        selModel: {
+                            selType: 'rowmodel',
+                            mode: 'MULTI'
+                        },
+                        scrollable: 'y',
+                        dockedItems: [{
+                            xtype: 'toolbar',
+                            dock: 'top',
+                            ui: 'inline',
+                            items: [{
+                                xtype: 'filterfield',
+                                itemId: 'search',
+                                emptyText: 'Filter',
+                                hideFilterIcon: true,
+                                filterFn: Ext.emptyFn,
+                                width: 160,
+                                margin: '0 12 0 0',
+                                store: store,
+                                filterFields: ['id'],
+                                listeners: {
+                                    afterfilter: function() {
+                                        var grid = this.up('grid');
+                                        grid.store.removeAll();
+                                        grid.store.load();
                                     }
-                                }],
-                                proxy: {
-                                    type: 'cachedrequest',
-                                    url: '/services/chef/xListRoles',
-                                    params: {servId: config.chefServerId},
-                                    processBox: false
                                 }
-                            },
-                            columns: [{
-                                flex: 1,
-                                dataIndex: 'name'
-                            }],
-                            listeners: {
-                                afterrender: function() {
-                                    var store = this.store;
-                                    store.load({callback: function(records, operation, success) {
-                                        if (success) {
-                                            runlistStore.getUnfiltered().each(function(rec){
-                                                var res = store.query('id', rec.get('id'), false, true, false);
-                                                if (res.length) {
-                                                    store.remove(res.first());
-                                                }
-                                            });
-                                        }
-                                    }});
-                                }
-                            }
-                        },{
-                            xtype: 'grid',
-                            itemId: 'recipesGrid',
-                            title: 'Available recipes',
-                            hideHeaders: true,
-                            selModel: {
-                                selType: 'rowmodel',
-                                mode: 'MULTI'
-                            },
-                            plugins: {
-                                ptype: 'gridstore',
-                                loadMask: true
-                            },
-                            viewConfig: {
-                                deferEmptyText: false,
-                                focusedItemCls: '',
-                                emptyText: 'No recipes found to match your search.',
-                                preserveScrollOnRefresh: true,
-                                loadingText: '',
-                                plugins: {
-                                    ptype: 'gridviewdragdrop',
-                                    dragGroup: 'runList'
-                                }
-                            },
-                            store: {
-                                model: Scalr.getModel({fields: [ 'name', 'cookbook', {name: 'id', convert: function(v, record){return record.data.cookbook+'::'+record.data.name}}]}),
-                                sorters: [{
-                                    property: 'cookbook',
-                                    transform: function(value){
-                                        return value.toLowerCase();
-                                    }
+                            },{
+                                xtype: 'buttongroupfield',
+                                itemId: 'typeFilter',
+                                defaults: {
+                                    width: 80
+                                },
+                                items: [{
+                                    text: 'Roles',
+                                    value: 'role'
                                 },{
-                                    property: 'name',
-                                    transform: function(value){
-                                        return value.toLowerCase();
-                                    }
+                                    text: 'Recipes',
+                                    value: 'recipe'
                                 }],
-                                proxy: {
-                                    type: 'cachedrequest',
-                                    url: '/services/chef/xListAllRecipes',
-                                    params: {servId: config.chefServerId, chefEnv: config.chefEnvironment},
-                                    processBox: false
+                                listeners: {
+                                    change: function(comp, value) {
+                                        store.removeFilter('typefilter');
+                                        store.addFilter({
+                                            id: 'typefilter',
+                                            property: 'type',
+                                            value: value
+                                        });
+                                        var grid = comp.up('grid');
+                                        grid.columns[0].setText('Available ' + value + 's');
+                                        grid.store.removeAll();
+                                        grid.store.load();
+                                    }
                                 }
-                            },
-                            columns: [{
-                                xtype: 'templatecolumn',
-                                flex: 1,
-                                tpl: '{cookbook}::{name}'
-                            }],
-                            listeners: {
-                                afterrender: function() {
-                                    var store = this.store;
-                                    store.load({callback: function(records, operation, success) {
-                                        if (success) {
-                                            runlistStore.getUnfiltered().each(function(rec){
-                                                var res = store.query('id', rec.get('id'), false, true, false);
-                                                if (res.length) {
-                                                    store.remove(res.first());
-                                                }
-                                            });
-                                        }
-                                    }});
+                            },{
+                                xtype: 'tbfill'
+                            },{
+                                xtype: 'button',
+                                cls: 'x-btn-flag',
+                                iconCls: 'x-btn-icon-refresh',
+                                tooltip: 'Refresh',
+                                handler: function (me) {
+                                    var ct = this.up('fieldset');
+                                    this.up('grid').store.load({clearCache: true});
                                 }
+                            }]
+                        }],
+                        viewConfig: {
+                            deferEmptyText: false,
+                            focusedItemCls: '',
+                            emptyText: 'Nothing found to match your search.',
+                            preserveScrollOnRefresh: false,
+                            loadingText: '',
+                            plugins: {
+                                ptype: 'gridviewdragdrop',
+                                dragGroup: 'runList'
                             }
-                        }]
-                    },{
+                        },
+                        store: store,
+                        columns: [{
+                            flex: 1,
+                            dataIndex: 'id',
+                            sortable: false,
+                            resizeable: false
+                        }],
+                        listeners: {
+                            filterchange: function() {
+                                this.view.refresh();
+                            },
+                            afterrender: function () {
+                                var me = this,
+                                    store = me.store;
+                                store.load();
+                                me.down('#typeFilter').setValue('role');
+                            }
+                        }
+                    }, {
                         xtype: 'grid',
                         itemId: 'runList',
                         trackMouseOver: false,
                         bodyStyle: 'background:#fff',
-                        margin: '0 0 0 12',
+                        margin: '45 0 0 12',
                         store: runlistStore,
+                        flex: 1,
+                        scrollable: 'y',
                         viewConfig: {
                             deferEmptyText: false,
                             focusedItemCls: '',
-                            emptyText: '<span style="line-height:300px">Runlist is empty. Drag and drop roles and recipes here.</span>',
+                            emptyText: 'Runlist is empty. Drag and drop roles and recipes here.',
                             plugins: {
                                 ptype: 'gridviewdragdrop',
                                 ddGroup: 'runList'
+                            },
+                            listeners: {
+                                drop: function() {
+                                    this.up('grid').prev().view.refresh();
+                                }
                             }
                         },
                         columns: [{
                             xtype: 'templatecolumn',
-                            tpl: '<tpl if="cookbook">recipe[{cookbook}::</tpl><tpl if="chef_type">role[</tpl>{name}<tpl if="cookbook">]</tpl><tpl if="chef_type">]</tpl>',
+                            tpl: '{type}[{id}]',
                             flex: 1,
                             text: 'Runlist',
                             sortable: false,
                             resizable: false,
                             border: false,
-                            dataIndex: 'name'
+                            dataIndex: 'id'
                         }, {
                             xtype: 'templatecolumn',
-                            tpl: '<img class="x-grid-icon x-grid-icon-delete" title="Remove from runlist" src="'+Ext.BLANK_IMAGE_URL+'"/>',
+                            tpl: '<img class="x-grid-icon x-grid-icon-delete" title="Remove from runlist" src="' + Ext.BLANK_IMAGE_URL + '"/>',
                             text: '&nbsp;',
                             width: 45,
                             sortable: false,
                             resizable: false,
                             border: false,
                             dataIndex: 'id',
-                            align:'center'
+                            align: 'center',
+                            tdCls: 'x-grid-cell-nopadding',
                         }],
                         listeners: {
                             itemclick: function (view, record, item, index, e) {
                                 if (e.getTarget('img.x-grid-icon-delete')) {
-                                    var isRecipe= !!record.get('cookbook'),
-                                        store = this.up('fieldset').down(isRecipe ? '#recipesGrid' : '#rolesGrid').store;
-                                    if (store.query('id', record.get('id'), false, true, false).length === 0) {
+                                    var store = this.up('fieldset').down('#availableList').store,
+                                        id = record.get('id');
+                                    if (!store.getById(record.get('id'))) {
                                         store.add(record);
-                                        store.sort();
                                     }
-
                                     view.store.remove(record);
                                 }
                             }
                         }
                     }]
-                }]
+                }
             }],
             ok: 'Save',
             closeOnSuccess: true,
-            success: config.success,
-            winConfig: {
-                getValues: function() {
-                    var runlist = [],
-                        store = this.down('#runList').store;
-                    store.getUnfiltered().each(function(record) {
-                        if (record.get('cookbook')) {
-                            runlist.push('recipe[' + record.get('cookbook') + '::' + record.get('name') + ']');
-                        } else if (record.get('chef_type')) {
-                            runlist.push('role[' + record.get('name') + ']');
-                        } else {
-                            runlist.push(record.get('name'));
-                        }
-                    });
-                    return runlist;
-                }
-            }
+            success: config.success
         });
     }
 });
 
 Ext.define('Scalr.ui.ChefOrchestrationField', {
-	extend: 'Ext.container.Container',
-	alias: 'widget.cheforchestration',
+    extend: 'Ext.container.Container',
+    alias: 'widget.cheforchestration',
 
     layout: 'anchor',
     defaults: {

@@ -7,6 +7,7 @@ use Scalr\Service\OpenStack\Client\Auth\RequestBuilderV2;
 use Scalr\Service\OpenStack\Client\Auth\RequestBuilderV3;
 use Scalr\Service\OpenStack\Client\AuthToken;
 use Scalr\Service\OpenStack\Exception\OpenStackException;
+use Closure;
 
 /**
  * OpenStack configuration object
@@ -16,6 +17,7 @@ use Scalr\Service\OpenStack\Exception\OpenStackException;
  */
 class OpenStackConfig
 {
+    const DEFAULT_REQUEST_TIMEOUT = 30;
 
     /**
      * OpenStack Account Location
@@ -52,7 +54,7 @@ class OpenStackConfig
      * @var string
      */
     private $apiKey;
-    
+
     /**
      * Keystone domain name
      * @var string
@@ -60,7 +62,7 @@ class OpenStackConfig
     private $domainName;
 
     /**
-     * @var \Closure
+     * @var Closure
      */
     private $updateTokenCallback;
 
@@ -97,14 +99,27 @@ class OpenStackConfig
     private $authRequestBuilder;
 
     /**
+     * Request timeout
+     *
+     * @var int
+     */
+    private $requestTimeout;
+
+    /**
+     * Default request timeout
+     *
+     * @var int
+     */
+    private $defaultRequestTimeout;
+
+    /**
      * Proxy settings:
      *  host
      *  port
      *  user
      *  pass
      *  type
-     *
-     * @see config.yml
+     *  authtype
      *
      * @var array
      */
@@ -117,7 +132,7 @@ class OpenStackConfig
      * @param   string    $identityEndpoint              OpenStack Identity Endpoint
      * @param   string    $region                        OpenStack Region
      * @param   string    $apiKey               optional An User's API Key
-     * @param   \Closure  $updateTokenCallback  optional Update Token Callback
+     * @param   Closure  $updateTokenCallback  optional Update Token Callback
      *                                                   This function must accept one parameter AuthToken object.
      * @param   AuthToken $authToken            optional Authentication token for the OpenStack service.
      * @param   string    $password             optional An User's password
@@ -125,15 +140,20 @@ class OpenStackConfig
      * @param   string    $domainName           optional The domain name
      * @param   string    $identityVersion      optional The version of the identity
      * @param   array     $proxySettings        optional Proxy settings
+     * @param   int       $requestTimeout       optional Request timeout
      *
      * @throws NotSupportedException
      */
-    public function __construct($username, $identityEndpoint, $region, $apiKey = null, \Closure $updateTokenCallback = null,
-                                AuthToken $authToken = null, $password = null, $tenantName = null, $domainName = null, $identityVersion = null, array $proxySettings = null)
+    public function __construct($username, $identityEndpoint, $region, $apiKey = null, Closure $updateTokenCallback = null,
+                                AuthToken $authToken = null, $password = null, $tenantName = null, $domainName = null,
+                                $identityVersion = null, array $proxySettings = null, $requestTimeout = null)
     {
         if ($identityVersion === null) {
             $identityVersion = static::parseIdentityVersion($identityEndpoint);
         }
+
+        //Sets default value for the request timeout
+        $this->defaultRequestTimeout = $requestTimeout ?: self::DEFAULT_REQUEST_TIMEOUT;
 
         $this
             ->setUsername($username)
@@ -147,6 +167,7 @@ class OpenStackConfig
             ->setDomainName($domainName)
             ->setIdentityVersion($identityVersion)
             ->setProxySettings($proxySettings)
+            ->setRequestTimeout($this->defaultRequestTimeout)
         ;
     }
 
@@ -171,7 +192,7 @@ class OpenStackConfig
         $this->tenantName = $tenantName;
         return $this;
     }
-    
+
     /**
      * Gets OpenStack identity domain name
      *
@@ -181,7 +202,7 @@ class OpenStackConfig
     {
         return $this->domainName;
     }
-    
+
     /**
      * Sets OpenStack identity domain name
      *
@@ -272,6 +293,7 @@ class OpenStackConfig
     public function setRegion($region)
     {
         $this->region = $region;
+
         return $this;
     }
 
@@ -367,7 +389,7 @@ class OpenStackConfig
     /**
      * Gets update token callback
      *
-     * @return  \Closure Returns update token callback
+     * @return  Closure Returns update token callback
      */
     public function getUpdateTokenCallback()
     {
@@ -377,9 +399,9 @@ class OpenStackConfig
     /**
      * Sets update token callback
      *
-     * @param   \Closure $updateTokenCallback Update token callback must accept one argument - AuthToken
+     * @param   Closure $updateTokenCallback Update token callback must accept one argument - AuthToken
      */
-    public function setUpdateTokenCallback(\Closure $updateTokenCallback = null)
+    public function setUpdateTokenCallback(Closure $updateTokenCallback = null)
     {
         $this->updateTokenCallback = $updateTokenCallback;
 
@@ -479,6 +501,8 @@ class OpenStackConfig
      */
     public static function parseIdentityVersion($keystone)
     {
+        $matches = [];
+
         preg_match_all('/\/v(?P<major>\d+)(?:\.(?P<minor>\d+))?/', $keystone, $matches);
 
         return array_shift($matches['major']);
@@ -494,5 +518,40 @@ class OpenStackConfig
     public function getProxySettings()
     {
         return $this->proxySettings;
+    }
+
+    /**
+     * Sets request timeout for api calls
+     *
+     * @param   int $requestTimeout Request timeout (in seconds)
+     * @return  OpenStackConfig
+     */
+    public function setRequestTimeout($requestTimeout)
+    {
+        $this->requestTimeout = $requestTimeout;
+
+        return $this;
+    }
+
+    /**
+     * Sets default request timeout for api calls (from config)
+     *
+     * @return  OpenStackConfig
+     */
+    public function resetRequestTimeout()
+    {
+        $this->requestTimeout = $this->defaultRequestTimeout;
+
+        return $this;
+    }
+
+    /**
+     * Gets request timeout for api calls
+     *
+     * @return int Returns request timeout
+     */
+    public function getRequestTimeout()
+    {
+        return $this->requestTimeout;
     }
 }

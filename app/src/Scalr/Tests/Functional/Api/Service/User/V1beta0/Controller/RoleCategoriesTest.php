@@ -46,7 +46,7 @@ class RoleCategoriesTest extends ApiTestCase
 
             $notFoundRoleCategoryId = 10 + $db->GetOne("SELECT MAX(rc.id) FROM role_categories rc");
             $response = $this->request($uri . '/' . $notFoundRoleCategoryId, Request::METHOD_GET);
-            $this->assertErrorMessageContains($response, 404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "The Role Category either does not exist or isn't in scope for the current Environment");
+            $this->assertErrorMessageContains($response, 404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "The Role Category either does not exist or it is out of Environment scope.");
 
             $response = $this->request($uri . '/' . $roleCategory->id, Request::METHOD_GET);
             $this->assertEquals(200, $response->status);

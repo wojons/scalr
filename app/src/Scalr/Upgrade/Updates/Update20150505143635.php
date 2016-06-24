@@ -24,6 +24,7 @@ class Update20150505143635 extends AbstractUpdate implements SequenceInterface
     const RESOURCE_FARMS_SERVERS = 0x105;
     const RESOURCE_FARMS_ALERTS = 0x101;
     const RESOURCE_FARMS_STATISTICS = 0x103;
+    const PERM_FARMS_MANAGE = 'manage';
 
     /**
      * {@inheritdoc}
@@ -172,7 +173,7 @@ class Update20150505143635 extends AbstractUpdate implements SequenceInterface
                 Acl::ROLE_ID_FULL_ACCESS, $resource
             ]);
 
-            foreach ([Acl::PERM_FARMS_MANAGE, Acl::PERM_FARMS_CLONE, Acl::PERM_FARMS_LAUNCH_TERMINATE, Acl::PERM_FARMS_SERVERS, Acl::PERM_FARMS_CHANGE_OWNERSHIP, Acl::PERM_FARMS_STATISTICS] as $permission) {
+            foreach ([self::PERM_FARMS_MANAGE, Acl::PERM_FARMS_CLONE, Acl::PERM_FARMS_LAUNCH_TERMINATE, Acl::PERM_FARMS_SERVERS, Acl::PERM_FARMS_CHANGE_OWNERSHIP, Acl::PERM_FARMS_STATISTICS] as $permission) {
                 $this->db->Execute("
                     INSERT IGNORE `acl_role_resource_permissions` (`role_id`, `resource_id`, `perm_id`, `granted`)
                     VALUES (?, ?, ?, 1)
@@ -275,7 +276,7 @@ class Update20150505143635 extends AbstractUpdate implements SequenceInterface
         $this->console->out('Converting acl rules to a new schema');
 
         $permissionsArray = [
-            Acl::PERM_FARMS_MANAGE, Acl::PERM_FARMS_LAUNCH_TERMINATE, Acl::PERM_FARMS_CLONE,
+            self::PERM_FARMS_MANAGE, Acl::PERM_FARMS_LAUNCH_TERMINATE, Acl::PERM_FARMS_CLONE,
             Acl::PERM_FARMS_SERVERS, Acl::PERM_FARMS_CHANGE_OWNERSHIP, Acl::PERM_FARMS_STATISTICS
         ];
 
@@ -312,7 +313,7 @@ class Update20150505143635 extends AbstractUpdate implements SequenceInterface
                         $this->setGrantedAccountResource($accountRoleId, $r, '1');
                     }
 
-                    $this->createAclPermissionRule($accountRoleId, $permFarmsManage, Acl::RESOURCE_FARMS, Acl::PERM_FARMS_MANAGE, $isDenyRole);
+                    $this->createAclPermissionRule($accountRoleId, $permFarmsManage, Acl::RESOURCE_FARMS, self::PERM_FARMS_MANAGE, $isDenyRole);
                     // special requirement for upgrade script, permission is disabled for existing roles (base roles have this permission enabled)
                     $this->createAclPermissionRule($accountRoleId, '0', Acl::RESOURCE_FARMS, Acl::PERM_FARMS_CHANGE_OWNERSHIP, $isDenyRole);
                     $this->createAclPermissionRule($accountRoleId, $permFarmsLaunch, Acl::RESOURCE_FARMS, Acl::PERM_FARMS_LAUNCH_TERMINATE, $isDenyRole);
@@ -320,7 +321,7 @@ class Update20150505143635 extends AbstractUpdate implements SequenceInterface
                     $this->createAclPermissionRule($accountRoleId, $resourceFarmServers, Acl::RESOURCE_FARMS, Acl::PERM_FARMS_SERVERS, $isDenyRole);
                     $this->createAclPermissionRule($accountRoleId, $resourceStatistics, Acl::RESOURCE_FARMS, Acl::PERM_FARMS_STATISTICS, $isDenyRole);
 
-                    $this->createAclPermissionRule($accountRoleId, $permFarmsManage, Acl::RESOURCE_TEAM_FARMS, Acl::PERM_FARMS_MANAGE, $isDenyRole);
+                    $this->createAclPermissionRule($accountRoleId, $permFarmsManage, Acl::RESOURCE_TEAM_FARMS, self::PERM_FARMS_MANAGE, $isDenyRole);
                     // special requirement for upgrade script, permission is disabled for existing roles (base roles have this permission enabled)
                     $this->createAclPermissionRule($accountRoleId, '0', Acl::RESOURCE_TEAM_FARMS, Acl::PERM_FARMS_CHANGE_OWNERSHIP, $isDenyRole);
                     $this->createAclPermissionRule($accountRoleId, $permFarmsLaunch, Acl::RESOURCE_TEAM_FARMS, Acl::PERM_FARMS_LAUNCH_TERMINATE, $isDenyRole);
@@ -328,7 +329,7 @@ class Update20150505143635 extends AbstractUpdate implements SequenceInterface
                     $this->createAclPermissionRule($accountRoleId, $resourceFarmServers, Acl::RESOURCE_TEAM_FARMS, Acl::PERM_FARMS_SERVERS, $isDenyRole);
                     $this->createAclPermissionRule($accountRoleId, $resourceStatistics, Acl::RESOURCE_TEAM_FARMS, Acl::PERM_FARMS_STATISTICS, $isDenyRole);
 
-                    $this->createAclPermissionRule($accountRoleId, $permFarmsManage, Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_MANAGE, $isDenyRole);
+                    $this->createAclPermissionRule($accountRoleId, $permFarmsManage, Acl::RESOURCE_OWN_FARMS, self::PERM_FARMS_MANAGE, $isDenyRole);
                     $this->createAclPermissionRule($accountRoleId, $permFarmsManage, Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_CHANGE_OWNERSHIP, $isDenyRole);
                     $this->createAclPermissionRule($accountRoleId, $permFarmsLaunch, Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_LAUNCH_TERMINATE, $isDenyRole);
                     $this->createAclPermissionRule($accountRoleId, $permFarmsClone, Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_CLONE, $isDenyRole);
@@ -350,7 +351,7 @@ class Update20150505143635 extends AbstractUpdate implements SequenceInterface
                         }
                     }
 
-                    $this->createAclPermissionRule($accountRoleId, $permFarmsManage, Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_MANAGE, $isDenyRole);
+                    $this->createAclPermissionRule($accountRoleId, $permFarmsManage, Acl::RESOURCE_OWN_FARMS, self::PERM_FARMS_MANAGE, $isDenyRole);
                     $this->createAclPermissionRule($accountRoleId, $permFarmsManage, Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_CHANGE_OWNERSHIP, $isDenyRole);
                     $this->createAclPermissionRule($accountRoleId, $permFarmsLaunch, Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_LAUNCH_TERMINATE, $isDenyRole);
                     $this->createAclPermissionRule($accountRoleId, $permFarmsClone, Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_CLONE, $isDenyRole);

@@ -96,7 +96,7 @@ Scalr.regPage( 'Scalr.ui.db.backups.details', function ( loadParams, moduleParam
 			+ ')</a>'
 		);
 		form.down('[name="type"]').setValue(
-			'<a href="#/dbmsr/status?farmId=' + moduleParams['backup']['farm_id'] + '&type=' + moduleParams['backup']['type'] + '">'
+			'<a href="#/dbmsr/status?farmId=' + moduleParams['backup']['farm_id'] + '&type=' + moduleParams['backup']['behavior'] + '">'
 			+ moduleParams['backup']['type']
 			+ '</a>'
 		);

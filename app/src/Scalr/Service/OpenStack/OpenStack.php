@@ -169,6 +169,33 @@ class OpenStack
         return $this;
     }
 
+
+    /**
+     * Sets request timeout for api calls
+     *
+     * @param   int $requestTimeout Request timeout (in seconds)
+     *
+     * @return  OpenStack
+     */
+    public function setRequestTimeout($requestTimeout)
+    {
+        $this->getConfig()->setRequestTimeout($requestTimeout);
+
+        return $this;
+    }
+
+    /**
+     * Sets default request timeout for api calls (from config)
+     *
+     * @return  OpenStack
+     */
+    public function resetRequestTimeout()
+    {
+        $this->getConfig()->resetRequestTimeout();
+
+        return $this;
+    }
+
     /**
      * Performs an authentication request
      *

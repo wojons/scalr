@@ -408,6 +408,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                                     form = formPanel.getForm(),
                                     record = formPanel.getRecord(),
                                     scriptRecord = comp.findRecordByValue(value),
+                                    scriptField = comp.up('scriptfield'),
                                     disableFields = function (fields) {
                                         for (var i = 0, len = fields.length; i < len; i++) {
                                             var field = formPanel.down(fields[i]);
@@ -425,11 +426,12 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                                             c[i].setVisible(true);
                                         }
                                         if (record.store === undefined) {
-                                            form.findField('order_index').setValue(comp.up('scriptfield').getNextOrderIndexForEvent(value));
+                                            form.findField('order_index').setValue(scriptField.getNextOrderIndexForEvent(value));
                                         }
                                     }
                                     formPanel.savedScrollTop = formPanel.body.getScroll().top;
                                     formPanel.updateRecordSuspended++;
+                                    var hideRoleTargets = scriptField.isScalarized != 1 && scriptField.mode !== 'account';
                                     switch (value) {
                                         case 'HostDown':
                                         case 'BeforeInstanceLaunch':
@@ -437,8 +439,21 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                                             break;
                                         default:
                                             formPanel.down('#targetRoles').enable();
-                                            formPanel.down('#targetInstance').enable();
+                                            formPanel.down('#targetInstance').setDisabled(hideRoleTargets);
                                             break;
+                                    }
+                                    formPanel.down('#targetInstance').toggleIcon('question', hideRoleTargets);
+                                    if (scriptField.mode === 'role') {
+                                        formPanel.down('#targetRole').setDisabled(hideRoleTargets).toggleIcon('question', hideRoleTargets);
+                                    }
+                                    if (Ext.Array.contains(['HostDown', 'BeforeInstanceLaunch'], value)) {
+                                        var targetRolesListField = formPanel.down('#targetRolesList');
+                                        Ext.each(targetRolesListField.getValue(), function(val) {
+                                            var rec = targetRolesListField.findRecordByValue(val);
+                                            if (rec && rec.get('current')) {
+                                                targetRolesListField.removeValue(val);
+                                            }
+                                        });
                                     }
                                     formPanel.body.scrollTo('top', formPanel.savedScrollTop);
 
@@ -902,20 +917,24 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                         name: 'target',
                         itemId: 'targetInstance',
                         inputValue: 'instance',
-                        boxLabel: 'Triggering instance only'
+                        boxLabel: 'Triggering instance only',
+                        plugins: {
+                            ptype: 'fieldicons',
+                            icons: [{id: 'question', tooltip: 'Scalarizr automation is required to use this Orchestration target, but it is not enabled.'}]
+                        }
                     },{
                         xtype: 'container',
                         itemId: 'targetRolesWrap',
                         layout: {
-                            type: 'column'
+                            type: 'anchor'
                         },
                         items: [{
                             xtype: 'radio',
                             name: 'target',
                             itemId: 'targetRoles',
                             inputValue: 'farmroles',
-                            boxLabel: 'Selected roles:',
-                            width: 168,
+                            boxLabel: 'Selected roles',
+                            width: 160,
                             listeners: {
                                 change: function(comp, checked) {
                                     if (checked) {
@@ -935,11 +954,17 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                             valueField: 'alias',
                             columnWidth: 1,
                             queryMode: 'local',
+                            plugins: {
+                                ptype: 'fieldicons',
+                                align: 'right',
+                                icons: [{id: 'question', hidden: false, tooltip: 'Only Farm Roles with Scalarizr automation are available.'}]
+                            },
                             store: {
-                                fields: ['farm_role_id', 'platform', 'cloud_location', 'role_id',  'name', 'alias'],
+                                fields: ['farm_role_id', 'platform', 'cloud_location', 'role_id',  'name', 'alias', 'current'],
                                 proxy: 'object'
                             },
-                            flex: 1,
+                            margin: '-6 0 0 0',
+                            anchor: '100%',
                             grow: false,
                             labelTpl: new Ext.XTemplate(
                                 '{[this.getLabel(values)]}',
@@ -963,6 +988,15 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                                 change: function(){
                                     this.up('form').updateRecord(['target', 'target_farmroles']);
 
+                                },
+                                beforeselect: function(comp, record) {
+                                    if (comp.getPicker().isVisible() && record.get('current')) {
+                                        var event = comp.up('form').down('#event').getValue();
+                                        if (Ext.Array.contains(['HostDown', 'BeforeInstanceLaunch'], event)) {
+                                            Scalr.message.InfoTip(record.get('alias') + ' can\'t be a target for ' + event, comp.bodyEl, {anchor: 'bottom'});
+                                            return false;
+                                        }
+                                    }
                                 }
                             }
 
@@ -1022,7 +1056,11 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                         itemId: 'targetRole',
                         hidden: true,
                         boxLabel: 'All instances of this role',
-                        margin: '6 0 0'
+                        margin: '6 0 0',
+                        plugins: {
+                            ptype: 'fieldicons',
+                            icons: [{id: 'question', tooltip: 'Scalarizr automation is required to use this Orchestration target, but it is not enabled.'}]
+                        }
                     },{
                         xtype: 'radio',
                         name: 'target',
@@ -1116,7 +1154,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
                             this.setReadOnly(readOnly ? readOnly && system === 'account' : readOnly, this.editable);
                         }
                     });
-                    if (isNewRecord || record.get('target') != 'farmroles') {
+                    if ((isNewRecord || record.get('target') != 'farmroles') && !Ext.Array.contains(['HostDown', 'BeforeInstanceLaunch'], record.get('event'))) {
                         form.findField('target_farmroles').setValue([this.up('scriptfield').farmRoleAlias]);
                     }
                     chefSettingsField = this.down('#chefSettings');
@@ -1298,6 +1336,7 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
             this.down('form').down('[name="run_as"]').setVisible(options.osFamily !== 'windows');
             this.down('#chef').tab.setVisible(options.chefAvailable);
             this.farmRoleAlias = options.farmRoleAlias;
+            this.isScalarized = options.isScalarized;
         }
     },
 
@@ -1348,7 +1387,8 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
     },
 
     loadRoles: function(data) {
-        var roles = [];
+        var roles = [],
+            field = this.down('#targetRolesList');
         for (var i=0, len=data.length; i<len; i++) {
             if (!Ext.isEmpty(data[i].farm_role_id) || data[i].current) {
                 data[i].farm_role_id = Ext.isEmpty(data[i].farm_role_id) ? '*self*' : data[i].farm_role_id;
@@ -1356,7 +1396,9 @@ Ext.define('Scalr.ui.RoleScriptingPanel', {
             }
         }
 
-        this.down('#targetRolesList').getStore().load({data: roles});
+        field.getStore().load({data: roles});
+        field.emptyText = roles.length > 0 ? ' ' : 'No Farm Roles available';
+        field.applyEmptyText();
     },
 
     getNextOrderIndexForEvent: function(eventName) {

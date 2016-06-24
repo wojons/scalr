@@ -9,7 +9,6 @@
         const MODULE_DNS = 'module.dns';
         const MODULE_ENVIRONMENTS = 'module.environments';
         const MODULE_VHOSTS	= 'module.vhosts';
-        const MODULE_CONFIG_PRESETS = 'module.config_presets';
 
         protected $session;
 

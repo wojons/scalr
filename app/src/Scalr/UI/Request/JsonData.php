@@ -29,6 +29,10 @@ class JsonData extends ArrayObject implements ObjectInitializingInterface
 
         $decoded = json_decode($value, true);
 
+        if (is_null($decoded) && !empty($value) && (!(strlen($value) == 4 && strtolower($value) === 'null'))) {
+            throw new BadRequestException(sprintf('JsonData expects parameter "%s" to be json-encoded string, but it could not be decoded: %s', $name, json_last_error_msg()));
+        }
+
         if (!empty($decoded) && !is_array($decoded)) {
             // decoded could be int, string or bool
             throw new BadRequestException(sprintf('Passed parameter "%s" is not an array or object', $name));

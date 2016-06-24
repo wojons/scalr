@@ -35,11 +35,6 @@ class Scalr_UI_Controller_Webhooks_History extends Scalr_UI_Controller
      */
     public function xGetListAction($eventId = null)
     {
-        $this->request->defineParams(array(
-            'query',
-            'sort' => array('type' => 'json')
-        ));
-
         $hist = new WebhookHistory();
 
         $sql = "SELECT " . $hist->fields('h') . ", w.name AS webhookName, e.url
@@ -68,13 +63,13 @@ class Scalr_UI_Controller_Webhooks_History extends Scalr_UI_Controller
             $args[] = $this->getEnvironmentId();
         }
 
-        $response = $this->buildResponseFromSql2($sql, array('created'), array('e.url', 'h.event_type'), $args);
+        $response = $this->buildResponseFromSql2($sql, ['created'], ['e.url', 'h.event_type', 'h.payload'], $args);
 
         foreach ($response['data'] as $index => $row) {
             $hist = new WebhookHistory();
             $hist->load($row);
 
-            $item = array();
+            $item = [];
             foreach (get_object_vars($hist) as $k => $v) {
                 $item[$k] = $v;
             }

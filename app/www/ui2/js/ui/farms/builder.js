@@ -280,8 +280,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                 },
                 success: function(data) {
                     if (data['scalrPageHashMismatch']) {
-                        farmDesigner.close();
-                        Scalr.event.fireEvent('refresh');
+                        Scalr.event.fireEvent('refresh', true);
                         return;
                     }
 
@@ -318,6 +317,10 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                 farm: moduleParams['farm'] ? moduleParams['farm'].farm : {}
             });
 
+            if (!isNewFarm && !farmSettings.farm.owner && farmSettings.farm.ownerEditable) {
+                Scalr.message.Warning('Owner for this farm has been removed. Please assign new one before saving farm.');
+            }
+
             me.getComponent('farmDesignerCard').getComponent('farmRoleEditor').initTabs();
             //disable save button if farm is locked
             var btnSave = me.getDockedComponent('buttons').getComponent('save');
@@ -327,10 +330,11 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
 
             me.getComponent('farmRoles').down('filterfield').resetFilter();
             farmRolesStore.loadData(farmSettings.roles || []);
+            farmRolesStore.rolesToRemove = [];
 
             if (loadParams['roleId']) {
                 me.down('farmrolesview').toggleRolesLibraryBtn(true);
-                me.showRolesLibrary(loadParams['roleId']*1);
+                me.showRolesLibrary(loadParams['roleId']*1, loadParams['settings']);
             } else if (loadParams['farmRoleId']) {
                 record = farmRolesStore.findRecord('farm_role_id', loadParams['farmRoleId']);
                 if (record) {
@@ -396,7 +400,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
 
             if (tab.itemId === 'scripting') tab.fireEvent('activate');
         },
-        showRolesLibrary: function(roleId) {
+        showRolesLibrary: function(roleId, defaultRoleSettings) {
             var me = this,
                 card = me.getComponent('farmDesignerCard'),
                 rolesLibrary = card.getComponent('rolesLibrary');
@@ -405,9 +409,12 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                 rolesLibrary = card.add({
                     xtype: 'roleslibrary',
                     hidden: true,
-                    //autoRender: false,
                     itemId: 'rolesLibrary',
                     roleId: roleId,
+                    defaultRoleSettings: {
+                        roleId: roleId,
+                        settings: defaultRoleSettings
+                    },
                     listeners: {
                         activate: function() {
                             farmDesigner.updateTitle(null, 'Add new role');
@@ -435,6 +442,10 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                 });
             } else {
                 rolesLibrary.roleId = roleId;
+                rolesLibrary.defaultRoleSettings = {
+                    roleId: roleId,
+                    settings: defaultRoleSettings
+                };
             }
             card.layout.setActiveItem(rolesLibrary);
         },
@@ -446,12 +457,15 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
             farmRoleEditor.setCurrentRole(record);
             card.layout.setActiveItem(farmRoleEditor);
         },
-        showFarmSettings: function() {
+        showFarmSettings: function(tabId) {
             var me = this,
                 card = me.getComponent('farmDesignerCard');
             me.down('farmrolesview').getSelectionModel().deselectAll();
             me.getComponent('farmRoles').down('#farmSettingsBtn').setPressed(true);
             card.layout.setActiveItem('farmSettings');
+            if (tabId) {
+                card.getComponent('farmSettings').layout.setActiveItem(tabId);
+            }
         },
         addFarmRole: function(role) {
             var me = this,
@@ -480,7 +494,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
             }
 
             var exhistingBehavior;
-            Ext.Array.each(['postgresql', 'redis', 'mongodb', 'rabbitmq', 'mariadb'], function(behavior){
+            Ext.Array.each(['postgresql', 'redis', 'mongodb', 'mariadb'], function(behavior){
                 if (Ext.Array.contains(behaviors, behavior)) {
                     if (
                         farmRolesStore.queryBy(function(record) {
@@ -508,7 +522,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
 
             me.down('#farmRoleEditor').addFarmRoleDefaults(role);
 
-            cb = function() {
+            var cb = function() {
                 farmRolesStore.add(role);
                 msg = 'Role "' + role.get('alias') + '" added';
                 if (Scalr.flags['analyticsEnabled'] && !Ext.Array.contains(me.moduleParams['analytics']['unsupportedClouds'], role.get('platform'))) {
@@ -516,7 +530,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                 } else {
                     Scalr.message.Success(msg);
                 }
-            }
+            };
 
             if (role.hasBehavior('chef')) {
                 role.loadRoleChefSettings(function(data, status){
@@ -604,7 +618,6 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
         },
         save: function (launch) {
             var me = this,
-                farmSettings,
                 farmRoles = [],
                 card = me.getComponent('farmDesignerCard'),
                 farmSettings = card.getComponent('farmSettings');
@@ -629,7 +642,6 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                     scaling: rec.get('scaling'),
                     scripting: rec.get('scripting'),
                     scripting_params: rec.get('scripting_params'),
-                    config_presets: rec.get('config_presets'),
                     storages: rec.get('storages'),
                     variables: rec.get('variables')
                 };
@@ -650,6 +662,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                 params: {
                     farm: Ext.encode(farmSettings),
                     roles: Ext.encode(farmRoles),
+                    rolesToRemove: Ext.encode(farmRolesStore.rolesToRemove),
                     v2: 1,
                     changed: me.moduleParams['farm'] ? me.moduleParams['farm']['changed'] : '',
                     farmId: me.moduleParams['farmId'],
@@ -662,6 +675,9 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                         Scalr.event.fireEvent('close');
                 },
                 failure: function(data) {
+                    if (!Ext.isObject(data)) {
+                        return;
+                    }
                     if (data['errors']) {
                         me.saveErrorHandler(data['errors']);
                     }
@@ -765,7 +781,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
             }
 
             if (farmErrors.length || rolesErrors.length) {
-                errorTipText += ':<ul class="x-tip-errors-list"><li>' + Ext.Array.merge(farmErrors, rolesErrors).join('</li><li>') + '</li></ul>'
+                errorTipText += ':<ul class="x-tip-errors-list"><li>' + Ext.Array.merge(farmErrors, rolesErrors).join('</li><li>') + '</li></ul>';
                 Scalr.message.ErrorTip(errorTipText, errorTipEl);
 
             }
@@ -781,7 +797,7 @@ Scalr.regPage('Scalr.ui.farms.builder', function (loadParams, moduleParams) {
                 farmRoles.getSelectionModel().deselectAll()
                 record.set(data.role);
                 farmRoles.select(record);
-                farmDesigner.down('#maintab').down('[name="instanceType"]').refreshInvalidState();
+                farmDesigner.down('#maintab').down('[name="instance_type"]').refreshInvalidState();
             }
         }
     }, farmDesigner);

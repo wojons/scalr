@@ -2,7 +2,6 @@
 
 $windows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
 $sapi_type = php_sapi_name();
-$phpBranch = substr(PHP_VERSION, 0, 3);
 
 $PHPSITE = 'http://php.net/manual/en';
 
@@ -33,17 +32,11 @@ if (!$windows) {
     if (!function_exists('shm_attach') || !function_exists('msg_get_queue')) {
         $err[] = "System V semaphore must be enabled. Look at $PHPSITE/sem.installation.php";
     }
-
-
-//     //Check RRDTool
-//     if (class_exists('RRDUpdater')) {
-//         $err[] = "rrdtool extension must be installed. Look at http://oss.oetiker.ch/rrdtool/pub/contrib/";
-//     }
 }
 
 // Check PECL_HTTP
-if (version_compare(phpversion('http'), '2.5.3', '<')) {
-    $err[] = "Version of the pecl_http extension must be at least 2.5.3. Look at $PHPSITE/http.install.php";
+if (version_compare(phpversion('http'), '2.5.6', '<')) {
+    $err[] = "Version of the pecl_http extension must be greater than or equal 2.5.6. Look at $PHPSITE/http.install.php";
 }
 
 //SSH2
@@ -105,11 +98,6 @@ if (!function_exists('openssl_verify')) {
     $err[] = "Cannot find OpenSSL functions. Make sure that OpenSSL Functions enabled.";
 }
 
-// Check SOAP
-if (!class_exists('SoapClient')) {
-    $err[] = "Cannot find SoapClient class. Make sure that SoapClient Extension enabled. Look at $PHPSITE/soap.installation.php";
-}
-
 // Dev requirements
 if (!class_exists('ZMQ')) {
     $err[] = "ZMQ is used for some new features and should be installed. Look at $PHPSITE/zmq.requirements.php";
@@ -117,11 +105,9 @@ if (!class_exists('ZMQ')) {
     $err[] = "ZMQ is used for some new features. Version of the ZMQ extension must be >= 1.1.2.";
 }
 
-if (version_compare($phpBranch, '5.4', '<') ||
-    $phpBranch == '5.4' && version_compare(PHP_VERSION, '5.4.19', '<') ||
-    $phpBranch == '5.5' && version_compare(PHP_VERSION, '5.5.4', '<')) {
+if (version_compare(PHP_VERSION, '5.6.13', '<')) {
     //look into phpunit test app/src/Scalr/Tests/SoftwareDependencyTest.php
-    $err[] = "You have " . phpversion() . " PHP version. It must be >= 5.4.19 for 5.4 branch or >= 5.5.4 for 5.5 branch";
+    $err[] = "You have " . phpversion() . " PHP version must be greater than or equal 5.6.13";
 }
 
 // If all extensions are installed
@@ -167,10 +153,10 @@ if (count($err) == 0) {
         try {
             require_once __DIR__ . '/../src/prepend.inc.php';
 
-            $container = \Scalr::getContainer();
+            $container = Scalr::getContainer();
             $config = $container->config;
             $db = $container->adodb;
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             $err[] = "Could not initialize bootstrap. " . $e->getMessage();
         }
 
@@ -182,7 +168,9 @@ if (count($err) == 0) {
 
                 $phpTz = date_default_timezone_get();
 
-                if($sessionTz != 'SYSTEM' && $sessionTz != $phpTz) {
+                $time = gmdate('Y-m-d H:i:s');
+
+                if ($sessionTz != 'SYSTEM' && (new DateTimeZone($sessionTz))->getOffset($time) != (new DateTimeZone($phpTz))->getOffset($time)) {
                     $err[] = "MySQL session timezone ({$sessionTz}) is not system timezone and does not match php timezone ({$phpTz}).";
                 }
             }

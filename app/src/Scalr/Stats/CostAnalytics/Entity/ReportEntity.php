@@ -2,7 +2,11 @@
 
 namespace Scalr\Stats\CostAnalytics\Entity;
 
+use Scalr\DataType\AccessPermissionsInterface;
+use Scalr\DataType\ScopeInterface;
 use Scalr\Exception\AnalyticsException;
+use Scalr\Model\AbstractEntity;
+
 /**
  * ReportEntity
  *
@@ -11,7 +15,7 @@ use Scalr\Exception\AnalyticsException;
  * @Entity
  * @Table(name="reports",service="cadb")
  */
-class ReportEntity extends \Scalr\Model\AbstractEntity
+class ReportEntity extends AbstractEntity implements AccessPermissionsInterface, ScopeInterface
 {
 
     const SUBJECT_TYPE_CC = 1;
@@ -58,6 +62,14 @@ class ReportEntity extends \Scalr\Model\AbstractEntity
     public $subjectId;
 
     /**
+     * The account which is associated with the report.
+     *
+     * @Column(type="integer",nullable=true)
+     * @var int
+     */
+    public $accountId;
+
+    /**
      * Period
      *
      * @Column(type="integer")
@@ -94,4 +106,32 @@ class ReportEntity extends \Scalr\Model\AbstractEntity
 
         parent::save();
     }
+
+    /**
+     * {@inheritdoc}
+     * @see ScopeInterface::getScope()
+     */
+    public function getScope()
+    {
+        return !empty($this->accountId) ? static::SCOPE_ACCOUNT : static::SCOPE_SCALR;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see AccessPermissionsInterface::hasAccessPermissions()
+     */
+    public function hasAccessPermissions($user, $environment = null, $modify = null)
+    {
+        switch ($this->getScope()) {
+            case static::SCOPE_ACCOUNT:
+                return $this->accountId == $user->accountId;
+
+            case static::SCOPE_SCALR:
+                return $this->accountId === null;
+
+            default:
+                return false;
+        }
+    }
+
 }

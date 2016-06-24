@@ -16,7 +16,7 @@ class RequestBuilderV3 implements RequestBuilderInterface
      */
     public function makeRequest(OpenStackConfig $config)
     {
-        if ($config->getApiKey() !== null) {
+        if (!empty($config->getApiKey())) {
             $requestBody = [
                 'auth' => [
                     'identity' => [
@@ -25,7 +25,7 @@ class RequestBuilderV3 implements RequestBuilderInterface
                     ]
                 ]
             ];
-        } else if ($config->getPassword() !== null) {
+        } else if (!empty($config->getPassword())) {
             $requestBody = [
                 'auth' => [
                     'identity' => [

@@ -30,16 +30,35 @@ Scalr.utils.CreateProcessBox = function (config) {
         });
     }
 
+    keyEventBlockerHandler = function(e) {
+        e.stopEvent();
+    }
+
     return Scalr.utils.Window({
         title: config['msg'],
         width: 364,
         zIndexPriority: 10,
+        keyEventBlocker: Ext.getWin().on({
+            keydown: keyEventBlockerHandler,
+            keyup: keyEventBlockerHandler,
+            keypress: keyEventBlockerHandler,
+            destroyable: true,
+            capture: true
+        }),
         items: progressBar || {
             xtype: 'component',
             cls: 'x-panel-confirm-loading'
         },
         itemId: 'proccessBox',
-        closeOnEsc: false
+        closeOnEsc: false,
+        defaultFocusOrdered: null,
+        listeners: {
+            beforedestroy: function() {
+                if (this.keyEventBlocker) {
+                    this.keyEventBlocker.destroy();
+                }
+            }
+        }
     });
 };
 
@@ -76,7 +95,7 @@ Scalr.utils.Confirm = function (config) {
         config.objects.sort();
         var r = '<span style="font-family:OpenSansSemiBold">' + config.objects.shift() + '</span>';
         if (config.objects.length)
-            r = r + ' and <span data-qtip="' + config.objects.join("<br/>") + '" style="font-family:OpenSansSemiBold; border-bottom: 1px dashed #000080;">' + config.objects.length + ' others</span>';
+            r = r + ' and <span data-qtip="' + config.objects.join("<br/>") + '" style="font-family:OpenSansSemiBold; border-bottom: 1px dashed #000080;">' + config.objects.length + '&nbsp;others</span>';
 
         config.msg = config.msg.replace('%s', r);
     }
@@ -102,7 +121,6 @@ Scalr.utils.Confirm = function (config) {
                 minWidth: 150,
                 itemId: 'buttonOk',
                 hidden: config['hideOk'] || false,
-                cls: 'x-btn-defaultfocus',
                 disabled: config['disabled'] || false,
                 // TODO: add ability to run handler manually
                 handler: function () {
@@ -117,9 +135,13 @@ Scalr.utils.Confirm = function (config) {
                 }
             }, {
                 xtype: 'button',
-                text: 'Cancel',
+                text: config['cancelText'] || 'Cancel',
                 width: 150,
                 handler: function () {
+                    if (Ext.isFunction(config['cancelHandler'])) {
+                        var values = this.up('#box').down('#form') ? this.up('#box').down('#form').getValues() : {};
+                        config['cancelHandler'].call(config.scope || this.up('#box'), values, this.up('#box') ? this.up('#box').down('#form') : this)
+                    }
                     this.up('#box').close();
                 }
             }]
@@ -180,17 +202,6 @@ Scalr.utils.Confirm = function (config) {
 
     var c = Scalr.utils.Window(winConfig);
 
-    if (! Ext.isDefined(config.form)) {
-        c.keyMap.addBinding({
-            key: Ext.event.Event.ENTER,
-            fn: function () {
-                var btn = this.down('#buttonOk');
-                btn.handler.call(btn);
-            },
-            scope: c
-        });
-    }
-
     return c;
 };
 
@@ -206,19 +217,16 @@ Scalr.utils.Window = function(config) {
         width: 400,
         autoScroll: true,
         titleAlign: 'center',
-        closeOnEsc: true
+        defaultFocusOrdered: ['[isFormField]:focusable', 'button', 'component'],
+        closeOnEsc: true,
+        onEsc: function() {
+            if (this.closeOnEsc) {
+                this.close();
+            }
+        }
     });
 
     var c = Ext.widget(config);
-    c.keyMap = new Ext.util.KeyMap(Ext.getBody(), [{
-        key: Ext.event.Event.ESC,
-        fn: function (key, e) {
-            if (this.closeOnEsc && e.within(c.getEl()))
-                this.close();
-        },
-        scope: c
-    }]);
-
     var setSize = function () {
         if (! this.isDestroyed) {
             this.maxHeight = Ext.getBody().getHeight() - 55 - 5;
@@ -253,7 +261,6 @@ Scalr.utils.Window = function(config) {
     c.on('show', setPosition);
     Ext.on('resize', setSize, c);
     c.on('destroy', function () {
-        this.keyMap.destroy();
         Ext.un('resize', setSize, this);
     });
 
@@ -488,7 +495,7 @@ Scalr.utils.IsEqualValues = function (obj1, obj2) {
 Scalr.utils.getGravatarUrl = function (emailHash, size) {
     size = size || 'small';
     var sizes = {small: 48, large: 102},
-        defaultIcon = window.location.protocol + '//' + window.location.hostname + '/ui2/js/extjs-5.0/theme/images/topmenu/avatar-default-' + size + '.png';
+        defaultIcon = window.location.protocol + '//' + window.location.hostname + '/ui2/js/extjs-5.0/theme/images/topmenu/avatar-default-' + size + '.png?v1.0';
     return emailHash ? 'https://gravatar.com/avatar/' + emailHash + '?d=' + encodeURIComponent(defaultIcon) + '&s=' + sizes[size] : defaultIcon;
 }
 
@@ -674,6 +681,12 @@ Scalr.utils.isAllowed = function(resource, permission){
     return access;
 }
 
+Scalr.utils.isFarmAllowed = function(permission, data){
+    return Scalr.isAllowed('FARMS', permission) ||
+           data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', permission) ||
+           data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', permission);
+}
+
 Scalr.utils.getAclResourceMode = function(resource){
     var value = Scalr.acl[resource],
         mode;
@@ -718,8 +731,6 @@ Scalr.utils.getPlatformName = function(platform, fix) {
 
     if (fix === true) {
         if (platform.indexOf('rackspacenguk') === 0) {
-            name = '<span class="small">' + name.replace(' ', '<br/>') + '</span>';
-        } else if (platform === 'rackspace') {
             name = '<span class="small">' + name.replace(' ', '<br/>') + '</span>';
         } else if (platform === 'ocs') {
             name = '<span class="small">CloudScaling<br />OCS</span>';
@@ -781,6 +792,14 @@ Scalr.utils.loadCloudLocations = function(platform, callback, progressBox) {
         progressBox
     );
 };
+
+Scalr.utils.getEbsTypes = function() {
+    var betaEbsTypes = [
+        ['sc1', 'SC1'],
+        ['st1', 'ST1']
+    ];
+    return Scalr.flags.allowBetaEbsTypes ? Ext.Array.merge(Scalr.constants.ebsTypes, betaEbsTypes) : Scalr.constants.ebsTypes;
+}
 
 Scalr.utils.getMinStorageSizeByIops = function (iops) {
     // maximum IOPS:GB ratio has been increased from 10:1 to 30:1 for a volumes with storage size <= 133 GB
@@ -1024,20 +1043,37 @@ Scalr.utils.authWindow = function(flags) {
         if (e.getKey() == e.ENTER) {
             field.up('form').down('#buttonSubmit').handler();
         }
-    };
+    }, loginWarning = flags['loginWarning'];
+
+    if (loginWarning) {
+        loginWarning = Ext.String.htmlEncode(loginWarning).replace(/&lt;(\/?)(p|ul|li|br)&gt;/g, "<$1$2>");
+    }
 
     return Scalr.utils.Window({
         xtype: 'form',
         closeOnEsc: false,
         closeAction: 'hide',
         hidden: true,
-        width: 500,
+        width: loginWarning ? 800 : 500,
         layout: 'anchor',
         fieldDefaults: {
             anchor: '100%',
             labelWidth: 80
         },
-        items: {
+        showIfHidden: function() {
+            if (!this.isVisible()) {//show will bring window to top
+                this.show();
+            }
+        },
+        items: [ loginWarning ? {
+            xtype: 'displayfield',
+            style: {
+                backgroundColor: '#FEFDE0',
+                padding: '20px 22px',
+                margin: 0
+            },
+            value: loginWarning
+        } : null, {
             xtype: 'fieldset',
             title: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-scalr" style="vertical-align: middle">&nbsp;&nbsp;Welcome',
             cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
@@ -1129,6 +1165,9 @@ Scalr.utils.authWindow = function(flags) {
                 xtype: 'checkbox',
                 name: 'scalrKeepSession',
                 checked: true,
+                style: {
+                    marginLeft: '85px'
+                },
                 hidden: flags['authMode'] == 'ldap',
                 boxLabel: 'Remember me'
             }, {
@@ -1145,7 +1184,7 @@ Scalr.utils.authWindow = function(flags) {
                 name: 'userTimezone',
                 value: (new Date()).getTimezoneOffset()
             }]
-        },
+        }],
 
         dockedItems: [{
             xtype: 'container',
@@ -1191,9 +1230,9 @@ Scalr.utils.authWindow = function(flags) {
                                         });
                                     }
                                 } else {
-                                    // set default environment
+                                    // new login: reset environment, let's server to choose
                                     Scalr.application.updateContext(null, false, {
-                                        'X-Scalr-Envid': Scalr.storage.get('system-environment-id')
+                                        'X-Scalr-Envid': ''
                                     });
                                 }
 
@@ -1380,8 +1419,6 @@ Scalr.utils.authWindow = function(flags) {
                 } else {
                     if (Scalr.state.userNeedLogin)
                         me.down('#warningReLogin').show();
-
-                    me.down('[name="scalrLogin"]').focus();
                 }
             },
             hide: function() {
@@ -1434,6 +1471,9 @@ Scalr.utils.timeoutHandler = {
             params: params,
             method: post ? 'POST' : 'GET',
             timeout: this.timeoutRequest,
+            headers: {
+                'Scalr-Autoload-Request': 1
+            },
             scope: this,
             hideErrorMessage: true,
             callback: function (options, success, response) {
@@ -1456,7 +1496,7 @@ Scalr.utils.timeoutHandler = {
 
                         if (! response.isAuthenticated) {
                             Scalr.state.userNeedLogin = true;
-                            Scalr.utils.authWindow.show();
+                            Scalr.utils.authWindow.showIfHidden();
                         } else if (! response.equal) {
                             document.location.reload();
                             return;
@@ -1609,7 +1649,7 @@ Scalr.utils.fillFavorites = function() {
             cache = {
                 '#/logs/api': { text: 'API Log', href:  '#/logs/api', stateId: 'grid-logs-api-view' },
                 '#/logs/events': { text: 'Event Log', href: '#/logs/events', stateId: 'grid-logs-events-view' },
-                '#/logs/scripting': { text: 'Scripting Log', href: '#/logs/scripting', stateId: 'grid-logs-scripting-view' },
+                '#/logs/orchestration': { text: 'Orchestration Log', href: '#/logs/orchestration', stateId: 'grid-logs-orchestration-view' },
                 '#/logs/system': { text: 'System Log', href: '#/logs/system', stateId: 'grid-logs-system-view' },
                 '#/roles/manager': { text: 'Roles', href: '#/roles', stateId: 'grid-roles-manager' },
                 '#/farms/view': { text: 'Farms', href: '#/farms', stateId: 'grid-farms-view' },
@@ -1624,7 +1664,6 @@ Scalr.utils.fillFavorites = function() {
                 '#/scripts/events/view': { text: 'Custom Events', href: '#/scripts/events', stateId: 'grid-scripts-events-view' },
                 '#/images/view': { text: 'Images', href: '#/images', stateId: 'grid-images-view' },
                 '#/db/backups': { text: 'DB Backups', href: '#/db/backups', stateId: 'grid-db-backups-view' },
-                '#/services/configurations/presets/view': { text: 'Server Config Presets', href: '#/services/configurations/presets', stateId: 'grid-services-configurations-presets-view' },
                 '#/services/apache/vhosts/view': { text: 'Apache Virtual Hosts', href: '#/services/apache/vhosts', stateId: 'grid-apache-vhosts-view' },
 
                 '#/tools/aws/ec2/ebs/snapshots': { text: 'EBS Snapshots', href: '#/tools/aws/ec2/ebs/snapshots', stateId: 'grid-tools-aws-ec2-ebs-snapshots' },
@@ -1633,7 +1672,6 @@ Scalr.utils.fillFavorites = function() {
                 '#/tools/aws/ec2/eips': { text: 'AWS EIPs', href: '#/tools/aws/ec2/eips', stateId: 'grid-tools-aws-ec2-eips-view' },
                 '#/tools/aws/rds/instances': { text: 'RDS instances', href: '#/tools/aws/rds/instances', stateId: 'grid-tools-aws-rds-instances-view' },
                 '#/tools/aws/route53': { text: 'Route 53', href: '#/tools/aws/route53', stateId: 'grid-tools-aws-route53-view' },
-                '#/tools/rackspace/limits': { text: 'Rackspace Limits', href: '#/tools/rackspace/limits', stateId: 'grid-tools-rackspace-limits' },
                 '#/tools/gce/disks': { text: 'GCE Persistent disks', href: '#/tools/gce/disks', stateId: 'grid-tools-gce-disks-view' },
                 '#/tools/gce/addresses': { text: 'GCE Static IPs', href: '#/tools/gce/addresses', stateId: 'grid-tools-gce-addresses-view' },
                 '#/tools/gce/snapshots': { text: 'GCE Snapshots', href: '#/tools/gce/snapshots', stateId: 'grid-tools-gce-snapshots-view' }
@@ -1703,11 +1741,11 @@ Scalr.utils.getFavorites = function(scope) {
             text: 'System Log'
         });
 
-    if (Scalr.isAllowed('LOGS_SCRIPTING_LOGS'))
+    if (Scalr.isAllowed('LOGS_ORCHESTRATION_LOGS'))
         environment.push({
-            href: '#/logs/scripting',
-            stateId: 'grid-logs-scripting-view',
-            text: 'Scripting Log'
+            href: '#/logs/orchestration',
+            stateId: 'grid-logs-orchestration-view',
+            text: 'Orchestration Log'
         });
 
     // account scope
@@ -1839,6 +1877,7 @@ Scalr.utils.getScopeLegend = function(type, raw, scope) {
             image: scalrAccountEnv,
             metric: scalrEnv,
             event: scalrAccountEnv,
+            rolecategory: scalrAccountEnv,
             script: scalrAccountEnv,
             chefserver: scalrAccountEnv,
             webhook: scalrAccountEnv,
@@ -1890,14 +1929,20 @@ Scalr.utils.getScopeInfo = function(type, scope, id) {
                 account: '/account/services/chef/servers?chefServerId='
             }
         };
-    info.push('To make changes to this ' + Ext.String.capitalize(type)+ ', you need to ');
-    var s = 'access it from the ' + Ext.String.capitalize(scope) + ' Scope';
-    if (urls[type] && urls[type][scope]) {
-        info.push('<a href="#' + urls[type][scope] + id +'">'+s+'</a>');
+
+    if (type === 'metric' && scope === 'scalr') {
+        info.push('Scalr built-in scaling metrics cannot be changed or removed.');
     } else {
-        info.push(s);
+        info.push('To make changes to this ' + Ext.String.capitalize(type)+ ', you need to ');
+        var s = 'access it from the ' + Ext.String.capitalize(scope) + ' Scope';
+        if (urls[type] && urls[type][scope]) {
+            info.push('<a href="#' + urls[type][scope] + id +'">'+s+'</a>');
+        } else {
+            info.push(s);
+        }
+        info.push('.<br/><span style="font-family: OpenSansItalic;">Note: extra permissions may be required.</span>');
     }
-    info.push('.<br/><span style="font-family: OpenSansItalic;">Note: extra permissions may be required.</span>');
+
     return info.join('');
 };
 
@@ -1937,6 +1982,239 @@ Scalr.utils.getStatusHtml = function (entityName, status) {
     return Ext.String.format(mask, color, status);
 };
 
+Scalr.utils.announcementHelper = (function(){
+    var re = {
+        link: /\[([^|]*)\|(https?:\/\/)([^\]]+)]/gi,
+        paragraph: /(?:\s*\n\s*){2,}/g,
+        newline: /(?:\s*\n\s*)/g,
+        tags: /<\/?([a-z][a-z0-9]*)\b[^>]*>/gi,
+        tags2: /<!--[\s\S]*?-->|<\?(?:php)?[\s\S]*?\?>/gi,
+        angle: /[><]/g
+    };
+
+    return {
+
+        /**
+         * Get title for Announcement Message
+         *
+         */
+        title: function (title) {
+            return this.stripTags(title);
+        },
+
+        /**
+         * Format Announcement Message
+         *   - remove html/php tags, html comments, angle brackets
+         *   - replace `[TITLE|URL]` with tag `<a href="URL" target="_blank">TITLE</a>`
+         *   - replace two and more consecutive empty lines with tag `<p>`
+         *   - replace LF (line feed) with `<br/>`
+         */
+        formatMsg: function (text) {
+            //links + strip tags
+            text = this.links(text);
+            //paragraphs
+            text = '<p>' + text.split(re.paragraph).join('</p><p>') + '</p>';
+            //new lines
+            text = text.replace(re.newline, '<br/>');
+
+            return text;
+        },
+
+        /**
+         * Replace `[TITLE|URL]` with tag `<a href="URL" target="_blank">TITLE</a>`
+         * and remove html/php tags, html comments, angle brackets.
+         * URL must started with `http[s]://` and not contains `]`
+         * TITLE must not contains `|`
+         *
+         * @param  str String String to format
+         * @return String
+         */
+        links: function (str) {
+            var reLink = re.link, m, ret = '', idx = 0, title;
+
+            while ((m = reLink.exec(str)) !== null) {
+                // [1] - title, [2] - protocol, [3] - uri
+                ret += this.stripTags(str.substring(idx, m.index));
+                if (m[3]) {
+                    title = this.stripTags(m[1] || m[3]);
+                    ret += '<a href="'+ m[2] + encodeURI(m[3]) +'" target="_blank">'+ title +'</a>';
+                }
+                idx = reLink.lastIndex;
+            }
+
+            if (idx && idx < str.length) {
+                ret += this.stripTags(str.substring(idx));
+            }
+
+            return ret || this.stripTags(str);
+        },
+
+        /**
+         * Cleanup html/php tags, html comments, remove angle brackets
+         *
+         * @param  str String String to cleanup
+         * @return String
+         */
+        stripTags: function (str) {
+            return (!str) ? str : str.replace(re.tags2, '').replace(re.tags, '').replace(re.angle, '');
+        }
+    }
+}());
+
+Scalr.utils.announcement = (function(){
+    var ret = {
+        userId: undefined,
+        setCounter: true,
+        newCount: 0,
+        tms: {},
+        params: {
+            tm: 0
+        },
+        suspended: false,
+        request: null,
+        timeout: 325000,
+        defer: null,
+        tm: undefined,
+
+        start: function (timeout) {
+            var prevTimeout = this.timeout;
+
+            this.stop();
+            this.timeout = timeout || this.timeout;
+            this.suspended = false;
+            this.load();
+
+            return prevTimeout;
+        },
+        stop: function () {
+            this.suspended = true;
+            if (this.defer) {
+                clearTimeout(this.defer);
+                this.defer = null;
+            }
+            if (this.request) {
+                Ext.Ajax.abort(this.request);
+                this.request = null;
+            }
+        },
+        init: function (userId) {
+            this.userId = userId;
+            this.tms[userId] = Scalr.user.settings['ui.announcement.time'] || 0;
+            this.tm = this.tms[userId];
+            this.params.tm = this.tms[userId];
+
+            return this;
+        },
+        clear: function () {
+            this.userId = null;
+            this.params.tm = 0;
+            this.tm = null;
+            this.store.removeAll(true);
+            this.newCount = 0;
+            this.updateCountNew();
+
+            return this;
+        },
+        load: function () {
+            if (this.request) {
+                Ext.Ajax.abort(this.request);
+            }
+
+            this.request = Scalr.Request({
+                url: '/announcements/xListAnnouncements',
+                headers: {
+                    'Scalr-Autoload-Request': 1
+                },
+                success: function (data) {
+                    if (data.success) {
+                        this.loadData(data);
+                    }
+                    this.afterLoad();
+                },
+                failure: function () {
+                    this.afterLoad();
+                },
+                scope: this
+            });
+        },
+        afterLoad: function () {
+            this.request = null;
+            this.defer = this.suspended ? null : Ext.defer(this.load, this.timeout, this);
+        },
+        loadData: function (data) {
+            this.store.loadRawData(data);
+            this.tm = data['tm'];
+            this.newCount = this.store.sum('isNew');
+            this.updateCountNew();
+        },
+        updateCountNew: function () {
+            if (this.setCounter) {
+                var button = Ext.ComponentQuery.query('button[updateNewsCounter]')[0];
+
+                if (button.rendered) {
+                    button.updateNewsCounter(this.newCount);
+                }
+            }
+        },
+        resetNew: function () {
+
+            Scalr.Request({
+                url: '/announcements/xSetTm',
+                params: {tm: this.tm},
+                success: function (data) {
+                    if (data.tmUpdated) {
+                        Scalr.user.settings['ui.announcement.time'] = data.tm;
+                        this.params.tm = data.tm;
+                        this.loadData({
+                            data: Ext.Array.map(this.store.data.items, function(record){return record.data}),
+                            tm: data.tm
+                        });
+                    }
+                },
+                scope: this
+            });
+        }
+    };
+
+    ret.store = Ext.create('Ext.data.Store', {
+        fields: [
+            'type', 'time', 'title', 'url', 'msg', 'timestamp',
+            {
+                name: 'isNew',
+                calculate: function (data) {
+                    return data.timestamp > ret.params.tm ? 1 : 0;
+                }
+            }
+        ],
+        proxy: {
+            type: 'memory',
+            reader: {
+                type: 'json',
+                rootProperty: 'data'
+            }
+        }
+    });
+
+    return ret;
+}());
+
+Scalr.utils.replaceCurrentUrl = function (params, url) {
+    var newUrl = document.location.pathname + document.location.search,
+        paramsIndex,
+        hash = document.location.hash;
+
+    if (url) {
+        newUrl += url;
+    } else {
+        paramsIndex = hash.indexOf('?');
+        newUrl += paramsIndex != -1 ? hash.substr(0, paramsIndex) : hash;
+    }
+
+    newUrl += '?' + Ext.Object.toQueryString(params);
+
+    history.replaceState(null, null, newUrl);
+};
+
 Scalr.strings = {
     'aws.revoked_credentials': 'This environment\'s AWS access credentials have been revoked, and Scalr is no longer able to manage any of its infrastructure. Please <a href="#/account/environments/{envId}/clouds?platform=ec2">click here</a> to update environment with new and functional credentials.',
     'deprecated_warning': 'This feature has been <span class="x-semibold">Deprecated</span> and will be removed from Scalr in the future! Please limit your usage and DO NOT create major dependencies with this feature.',
@@ -1953,7 +2231,8 @@ Scalr.strings = {
     'vpc.private_subnet.info': 'Private networks have no direct access to the internet. Before launching instances in a private subnet, please make sure that a valid network route exists between the subnet and Scalr. As an alternative, you may use a VPC Router as a NAT Router for Scalr messages.  <br/>Please follow the instructions on the <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/PYB6">Scalr Wiki</a>',
 
     rdsDbInstanceVpcEnforced: 'A VPC Policy is active in this Environment, and restricts the location(s) and network(s) where DB instances can be launched.',
-    awsLoadBalancerVpcEnforced: 'A VPC Policy is active in this Environment, and restricts the location(s) and network(s) where Elastic Load Balancers can be created.'
+    awsLoadBalancerVpcEnforced: 'A VPC Policy is active in this Environment, and restricts the location(s) and network(s) where Elastic Load Balancers can be created.',
+    'announcement.editor.info': "Html/php tags, html comments and angle brackets ('&lt;', '&gt;') will be stripped.<br/>To insert links into message use construction '[<b><i>title</i></b>|<b><i>url</i></b>]',<br/><b><i>url</i></b> must be started with 'http://' or 'https://'."
 };
 /*
  CryptoJS v3.1.2
@@ -1976,6 +2255,7 @@ k)-899497514);j=k;k=e;e=g<<30|g>>>2;g=h;h=c}b[0]=b[0]+h|0;b[1]=b[1]+g|0;b[2]=b[2
 Scalr.Confirm = Scalr.utils.Confirm;
 Scalr.Request = Scalr.utils.Request;
 Scalr.isAllowed = Scalr.utils.isAllowed;
+Scalr.isFarmAllowed = Scalr.utils.isFarmAllowed;
 Scalr.isOpenstack = Scalr.utils.isOpenstack;
 Scalr.isCloudstack = Scalr.utils.isCloudstack;
 Scalr.isPlatformEnabled = Scalr.utils.isPlatformEnabled;

@@ -2,10 +2,13 @@
 
 namespace Scalr\Tests\Functional\Api\V2\SpecSchema\Constraint;
 
+use Scalr\Tests\Functional\Api\V2\ApiTest;
 use Scalr\Tests\Functional\Api\V2\SpecSchema\DataTypes\ApiEntity;
+use Scalr\Tests\Functional\Api\V2\SpecSchema\DataTypes\ObjectEntity;
 use Scalr\Tests\Functional\Api\V2\SpecSchema\DataTypes\Property;
 use Scalr\Tests\Functional\Api\V2\SpecSchema\DataTypes\AbstractSpecObject;
 use stdClass;
+use ROLE_BEHAVIORS;
 
 /**
  * Class Validator
@@ -13,16 +16,51 @@ use stdClass;
  * Validate SpecObject created form swagger specification with api response
  *
  * @author Andrii Penchuk <a.penchuk@scalr.com>
- * @since 5.6.14 (03.12.2015)
+ * @since 5.11 (03.12.2015)
  */
 class Validator
 {
 
+    /**
+     * List of ignore enum values in test
+     *
+     * @var array
+     */
     protected  static $ignoreEnumVal = [
-        'nebula', 'contrail', 'unknown'
+        'family' => ['unknown'],
+        'cloudPlatform' => ['nebula', 'contrail'],
+        'requiredIn' => [null],
+        'retrieveMethod' => [null],
+        'function' => [null]
     ];
 
     /**
+     * List of ignore required values
+     * This values is required but will not be included in response. Example privateKey in cloud credentials
+     * key based on object name in Api definitions
+     *
+     * @var array
+     */
+    protected static $ignoreRequiredVal = [
+        'AwsCloudCredentials' => ['secretKey'],
+        'GceCloudCredentials' => ['privateKey'],
+        'CloudstackCloudCredentials' => ['secretKey'],
+        'OpenstackCloudCredentials' => ['password'],
+        'ScalingMetric' => ['function', 'retrieveMethod', 'filePath']
+    ];
+
+    /**
+     * Mark test incomplete this discriminator not yet implemented
+     *
+     * @var array
+     */
+    protected static $ignoreDiscriminatorValues = [
+        'PlacementConfiguration' => 'placementConfigurationType'
+    ];
+
+    /**
+     * List of errors
+     *
      * @var array
      */
     protected $errors = [];
@@ -77,13 +115,13 @@ class Validator
             }
 
             //check property types
-            if (is_scalar($value)) {
+            if (is_scalar($value) || empty($value)) {
                 $this->checkProperty($value, $schema);
             }
 
             // check required field
             if (isset($schema->required)) {
-                $this->checkRequired($value, $schema->required);
+                $this->checkRequired($value, $schema);
             }
         } else {
             $value = is_array($value) ? get_object_vars(array_shift($value)) : get_object_vars($value);
@@ -106,14 +144,21 @@ class Validator
 
         if (isset($schema->discriminator)) {
             $discriminator = $schema->discriminator;
-            $type = $element->$discriminator;
-
-            if (empty($schema->concreteTypes[$type])) {
-                $this->appendError($type, " unexpected discriminator value");
+            if (!property_exists($element, $discriminator)) {
+                $propName = $schema->getObjectName();
+                if (isset(static::$ignoreDiscriminatorValues[$propName]) && $discriminator == static::$ignoreDiscriminatorValues[$propName]) {
+                    ApiTest::markTestIncomplete(sprintf('%s unexpected discriminator value', $discriminator));
+                } else {
+                    $this->appendError($discriminator, ' unexpected discriminator value');
+                }
                 return;
             }
 
-            $schema = $schema->concreteTypes[$type];
+            $schema = $this->getConcreteTypes($schema, $element->$discriminator);
+            if (!$schema) {
+                $this->appendError($element->$discriminator, ' unexpected concrete type value');
+            }
+
             unset($schema->discriminator);
             $this->check($element, $schema);
             return;
@@ -134,12 +179,13 @@ class Validator
     /**
      * Check required element
      *
-     * @param array $element  object with required element
-     * @param array $required list of required element in api specifications
+     * @param stdClass     $element object with required element
+     * @param ObjectEntity $schema  schema value generated of api specification
      */
-    protected function checkRequired($element, $required)
+    protected function checkRequired($element, $schema)
     {
-        foreach (array_diff_key(array_flip($required), (array) $element) as $key => $value) {
+        $ignore = isset(static::$ignoreRequiredVal[$schema->getObjectName()]) ? static::$ignoreRequiredVal[$schema->getObjectName()] : [];
+        foreach (array_diff_key(array_flip($schema->required), (array) $element, array_flip($ignore)) as $key => $value) {
             $this->appendError($key, 'this element is required.');
         }
     }
@@ -147,18 +193,18 @@ class Validator
     /**
      * Check each items in element
      *
-     * @param array              $element the list of items
+     * @param stdClass           $element the list of items
      * @param AbstractSpecObject $schema  items schema generated of api specification
      */
     protected function checkItems($element, $schema)
     {
-        if(isset($schema->items)) {
+        if (isset($schema->items)) {
             foreach ($element as $value) {
                 $this->check($value, $schema->items);
             }
         } else {
-            $this->checkRequired($element, $schema->entity->required);
-            $this->checkObject($element, $schema->entity);
+            $this->checkRequired($element, $schema->entity);
+            $this->checkObject( (object) $element, $schema->entity);
         }
         $this->checkProperty($element, $schema);
     }
@@ -171,6 +217,7 @@ class Validator
      */
     protected function checkProperty($element, Property $schema)
     {
+        $propertyName = $schema->getObjectName();
         //TODO:ape: check element don't empty because pagination type is string AND default is NULL
         if (!empty($element)) {
             switch ($schema->type) {
@@ -190,19 +237,27 @@ class Validator
                     $error = false;
             }
             if ($error) {
-                $this->appendError($schema->getObjectName(),
-                    sprintf('This type is\'t not consistency with Api. Type should be %s.', $schema->type)
-                );
+                $this->appendError($propertyName, sprintf('This type is\'t not consistency with Api. Type should be %s.', $schema->type));
             }
         }
 
-        // check enum properties
-        if (isset($schema->enum) && !in_array($element, $schema->enum) && !in_array($element, static::$ignoreEnumVal) ) {
-            $this->appendError($schema->getObjectName(),
-                sprintf('[%s] is not valid allowed value %s %s.', $element,
-                    ...(count($schema->enum) === 1 ? ['is', array_shift($schema->enum)] : ['are', implode(', ', $schema->enum)])
-                )
-            );
+        if (isset($schema->enum)) {
+            if($schema->getObjectName() == 'builtinAutomation' && empty(static::$ignoreEnumVal['builtinAutomation'])) {
+                static::$ignoreEnumVal['builtinAutomation'] = array_merge([null], array_flip(ROLE_BEHAVIORS::GetName(null, true)));
+            }
+            $enumVal = $schema->enum;
+            if(isset(static::$ignoreEnumVal[$propertyName])) {
+                $enumVal = array_merge($enumVal, static::$ignoreEnumVal[$propertyName]);
+            }
+
+            // check enum properties
+            if (!in_array($element, $enumVal)) {
+                $this->appendError($propertyName,
+                    sprintf('[%s] is not valid allowed value %s %s.', $element,
+                        ...(count($schema->enum) === 1 ? ['is', array_shift($schema->enum)] : ['are', implode(', ', $schema->enum)])
+                    )
+                );
+            }
         }
     }
 
@@ -210,12 +265,37 @@ class Validator
      * Check each sample element
      *
      * @param stdClass $element sample element not described in properties
-     * @param Property $schema  schema each sample element generated of api specification
+     * @param Property $schema schema each sample element generated of api specification
      */
     protected function checkSample($element, $schema)
     {
         foreach ($element as $value) {
             $this->checkProperty($value, $schema);
+        }
+    }
+
+    /**
+     * if element has concrete type return schema this element
+     *
+     * @param AbstractSpecObject $schema     schema value generated of api specification
+     * @param string             $objectName concrete type name
+     * @return bool|AbstractSpecObject
+     */
+    protected function getConcreteTypes($schema, $objectName)
+    {
+        if (!property_exists($schema, 'concreteTypes')) {
+            return false;
+        }
+
+        if (isset($schema->concreteTypes[$objectName])) {
+            return $schema->concreteTypes[$objectName];
+        }
+
+        foreach ($schema->concreteTypes as $schema) {
+            $schema = $this->getConcreteTypes($schema, $objectName);
+            if ($schema) {
+                return $schema;
+            }
         }
     }
 }

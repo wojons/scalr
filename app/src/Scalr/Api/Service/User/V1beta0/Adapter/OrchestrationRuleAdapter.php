@@ -8,6 +8,7 @@ use Scalr\Api\DataType\ApiEntityAdapter;
 use Scalr\Api\DataType\ErrorMessage;
 use Scalr\Api\Rest\Controller\ApiController;
 use Scalr\Api\Rest\Exception\ApiErrorException;
+use Scalr\DataType\ScopeInterface;
 use Scalr\Model\Entity\EventDefinition;
 use Scalr\Model\Entity\OrchestrationRule;
 use Scalr\Model\Entity\RoleScript;
@@ -196,6 +197,8 @@ class OrchestrationRuleAdapter extends ApiEntityAdapter
                             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property path");
                         }
 
+                        $this->validateString($action->path, 'Property path contains invalid characters');
+
                         $to->scriptPath = $action->path;
 
                         $to->scriptType = OrchestrationRule::ORCHESTRATION_RULE_TYPE_LOCAL;
@@ -343,7 +346,7 @@ class OrchestrationRuleAdapter extends ApiEntityAdapter
                         EVENT_TYPE::getScriptingEventsWithScope(),
                         EventDefinition::getList(
                             $this->controller->getUser()->id,
-                            $this->controller->getEnvironment()->id
+                            $this->controller->getScope() === ScopeInterface::SCOPE_ENVIRONMENT ? $this->controller->getEnvironment()->id : null
                         ))) === false) {
                     throw new ApiErrorException(404, ErrorMessage::ERR_OBJECT_NOT_FOUND, "Could not find out the event '{$entity->eventName}'");
                 }

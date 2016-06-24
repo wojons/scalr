@@ -30,8 +30,6 @@ Scalr::$emergencyMemory = str_repeat(' ', 10240);
 $logger = Scalr::getContainer()->logger('cron/service.php')->setLevel(Scalr::config('scalr.crontab.log_level'));
 
 $oPid = new PidFile(CACHEPATH . '/cron.service.pid', '/service.php');
-//If we start service each minute we should eliminate exrtra messages like "Another process already running..."
-$oPid->pidExistLevel = 'WARN';
 $oPid->setLogger($logger)->create();
 
 $interrupt = 0;

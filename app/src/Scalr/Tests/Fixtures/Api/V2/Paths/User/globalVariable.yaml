@@ -1,0 +1,110 @@
+paths:
+  - uri: /{envId}/farms/{farmId}/global-variables/
+    acl: fullAccess
+    operations:
+      - {method: post, response: 201, params: '&{3}GlobalVariableParams', body: '&{6}GlobalVariableData'}
+      - {method: post, response: 409, params: '&{3}GlobalVariableParams', body: '&{6}GlobalVariableData'}
+
+  - uri: /{envId}/farms/{farmId}/global-variables/{globalVariableName}/
+    acl: fullAccess
+    operations:
+      - {method: delete, response: 403, params: '&{0}GlobalVariableParams'} #test delete lover scope GV
+      - {method: patch,  response: 200, params: '&{0}GlobalVariableParams', body: '&{0}GlobalVariableData'} #GNT-102
+      - {method: patch,  response: 403, params: '&{0}GlobalVariableParams', body: '&{1}GlobalVariableData'} #GNT-102 change category
+      - {method: patch,  response: 403, params: '&{0}GlobalVariableParams', body: '&{2}GlobalVariableData'} #test modify category
+      - {method: patch,  response: 200, params: '&{0}GlobalVariableParams', body: '&{3}GlobalVariableData'} #test modify only value
+      - {method: patch,  response: 403, params: '&{0}GlobalVariableParams', body: '&{4}GlobalVariableData'} #test modify value and description
+      - {method: patch,  response: 403, params: '&{0}GlobalVariableParams', body: '&{5}GlobalVariableData'} #test modify format and value
+      - {method: patch,  response: 403, params: '&{3}GlobalVariableParams', body: '&{3}GlobalVariableData'} #test modify locked GV
+      - {method: patch,  response: 200, params: '&{9}GlobalVariableParams', body: '&{9}GlobalVariableData'} #test modify current scope GV
+      - {method: patch,  response: 200, params: '&{9}GlobalVariableParams', body: '&{10}GlobalVariableData'} #test modify requiredIn current scope GV
+      - {method: patch,  response: 200, params: '&{9}GlobalVariableParams', body: '&{11}GlobalVariableData'} #test modify flags current scope GV
+      - {method: delete, response: 200, params: '&{9}GlobalVariableParams'} #test delete current scope GV
+
+  - uri: /{envId}/farm-roles/{farmRoleId}/global-variables/
+    acl: fullAccess
+    operations:
+      - {method: post, response: 201, params: '&{4}GlobalVariableParams', body: '&{7}GlobalVariableData'}
+      - {method: post, response: 409, params: '&{4}GlobalVariableParams', body: '&{7}GlobalVariableData'}
+
+  - uri: /{envId}/farm-roles/{farmRoleId}/global-variables/{globalVariableName}/
+    acl: fullAccess
+    operations:
+      - {method: delete, response: 403, params: '&{1}GlobalVariableParams'} #test delete lover scope GV
+      - {method: patch,  response: 200, params: '&{1}GlobalVariableParams', body: '&{0}GlobalVariableData'} #GNT-102
+      - {method: patch,  response: 403, params: '&{1}GlobalVariableParams', body: '&{1}GlobalVariableData'} #GNT-102 change category
+      - {method: patch,  response: 403, params: '&{1}GlobalVariableParams', body: '&{2}GlobalVariableData'} #test modify category
+      - {method: patch,  response: 200, params: '&{1}GlobalVariableParams', body: '&{3}GlobalVariableData'} #test modify only value
+      - {method: patch,  response: 403, params: '&{1}GlobalVariableParams', body: '&{4}GlobalVariableData'} #test modify value and description
+      - {method: patch,  response: 403, params: '&{1}GlobalVariableParams', body: '&{5}GlobalVariableData'} #test modify format and value
+      - {method: patch,  response: 403, params: '&{4}GlobalVariableParams', body: '&{3}GlobalVariableData'} #test modify locked GV
+      - {method: patch,  response: 200, params: '&{10}GlobalVariableParams', body: '&{9}GlobalVariableData'} #test modify current scope GV
+      - {method: patch,  response: 400, params: '&{10}GlobalVariableParams', body: '&{10}GlobalVariableData'} #test modify requiredIn current scope GV
+      - {method: patch,  response: 200, params: '&{10}GlobalVariableParams', body: '&{11}GlobalVariableData'} #test modify flags current scope GV
+      - {method: delete, response: 200, params: '&{10}GlobalVariableParams'} #test delete current scope GV
+
+  - uri: /{envId}/roles/{roleId}/global-variables/
+    acl: fullAccess
+    operations:
+      - {method: post, response: 201, params: '&{5}GlobalVariableParams', body: '&{8}GlobalVariableData'}
+      - {method: post, response: 409, params: '&{5}GlobalVariableParams', body: '&{8}GlobalVariableData'}
+
+  - uri: /{envId}/roles/{roleId}/global-variables/{globalVariableName}/
+    acl: fullAccess
+    operations:
+      - {method: delete, response: 403, params: '&{2}GlobalVariableParams'} #test delete lover scope GV
+      - {method: patch,  response: 200, params: '&{2}GlobalVariableParams', body: '&{0}GlobalVariableData'} #GNT-102
+      - {method: patch,  response: 403, params: '&{2}GlobalVariableParams', body: '&{1}GlobalVariableData'} #GNT-102 change category
+      - {method: patch,  response: 403, params: '&{2}GlobalVariableParams', body: '&{2}GlobalVariableData'} #test modify category
+      - {method: patch,  response: 200, params: '&{2}GlobalVariableParams', body: '&{3}GlobalVariableData'} #test modify only value
+      - {method: patch,  response: 403, params: '&{2}GlobalVariableParams', body: '&{4}GlobalVariableData'} #test modify value and description
+      - {method: patch,  response: 403, params: '&{2}GlobalVariableParams', body: '&{5}GlobalVariableData'} #test modify format and value
+      - {method: patch,  response: 403, params: '&{5}GlobalVariableParams', body: '&{3}GlobalVariableData'}  #test modify locked GV
+      - {method: patch,  response: 200, params: '&{11}GlobalVariableParams', body: '&{9}GlobalVariableData'} #test modify current scope GV
+      - {method: patch,  response: 200, params: '&{11}GlobalVariableParams', body: '&{10}GlobalVariableData'} #test modify requiredIn current scope GV
+      - {method: patch,  response: 200, params: '&{11}GlobalVariableParams', body: '&{11}GlobalVariableData'} #test modify flags current scope GV
+      - {method: delete, response: 200, params: '&{11}GlobalVariableParams'} #test delete current scope GV
+
+GlobalVariableData:
+- {category: 'test-cat' ,   outputFormat: , locked: false, value: testValue, validationPattern:  , description: 'description'} #test GV #GNT-102
+- {category: 'test-cat' ,   outputFormat: , locked: false, value: testValue, validationPattern:  , description: 'description-change'} #test change description GV #GNT-102
+- {category: 'test-category' , description: "uwsgi site key for property"}
+- {value: newValue}
+- {value: newValue, description: new test description}
+- {value: '{}',  outputFormat: 'json'}
+- {category: 'test', outputFormat: , locked: false, value: 123456, validationPattern: '/\d+/' , description: 'test', name: farmGV} #6 farm GV
+- {category: 'test', outputFormat: , locked: false, value: 123456, validationPattern: '/\d+/' , description: 'test', name: farmRoleGV} #7 farm GV
+- {category: 'test', outputFormat: , locked: false, value: 123456, validationPattern: '/\d+/' , description: 'test', name: roleoleGV} #8 role GV
+- {category: 'new-category', description: 'new description', value: 'newvalue', validationPattern: '/\w+/'} #9
+- {requiredIn: farmrole} #10
+- {locked: false, hidden: true} #11
+
+GlobalVariableParams:
+- {farmId:     '&{0}Farm.id',     globalVariableName: '&{0}AccountGlobalVariable.name'} #0 Farm GV
+- {farmRoleId: '&{0}FarmRole.id', globalVariableName: '&{0}AccountGlobalVariable.name'} #1 FarmRole GV
+- {roleId:     '&{0}Role.id',     globalVariableName: '&{0}AccountGlobalVariable.name'} #2 Role GV
+- {farmId:     '&{0}Farm.id',     globalVariableName: '&{1}AccountGlobalVariable.name'} #3 Farm GV
+- {farmRoleId: '&{0}FarmRole.id', globalVariableName: '&{1}AccountGlobalVariable.name'} #4 FarmRole
+- {roleId:     '&{0}Role.id',     globalVariableName: '&{1}AccountGlobalVariable.name'} #5 Role GV
+- {farmId:     '&{0}Farm.id' }
+- {farmRoleId: '&{0}FarmRole.id'}
+- {roleId:     '&{0}Role.id'}
+- {farmId:     '&{0}Farm.id',     globalVariableName: '&{6}GlobalVariableData.name'} # 9 Farm scope GV
+- {farmRoleId: '&{0}FarmRole.id', globalVariableName: '&{7}GlobalVariableData.name'} # 10 Farm Role scope GV
+- {roleId:     '&{0}Role.id',     globalVariableName: '&{8}GlobalVariableData.name'} # 11 Role scope GV
+
+Farm:
+- {name: testGVFarm, comments: test-description}
+
+FarmRole:
+- {farmId: '&{0}Farm.id',  roleId: '&{0}Role.id', alias: test-scaling-farm-role, platform: ec2, cloudLocation: us-east-1}
+
+Role:
+- {name: testGVRole, catId: 1, osId: centos-5-x,  accountId: , envId: , behaviors: 'base,chef'}
+
+RoleImage:
+  - {roleId: '&Role.id', cloudLocation: '&FarmRole.cloudLocation',  platform: '&FarmRole.platform'}
+
+AccountGlobalVariable:
+- {accountId: , name: 'accountTestGV',  category: 'test-cat', validator: '', value: test, required: off, hidden: 0, format: '', final: 0, description: 'description'}
+- {accountId: , name: 'accountFinalGV', category: '',         validator: '', value: test2, required: off, hidden: 0, format: '', final: 1, description: ''}

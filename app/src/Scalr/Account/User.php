@@ -33,7 +33,6 @@ class Scalr_Account_User extends Scalr_Model
     const SETTING_UI_ENVIRONMENT = 'ui.environment'; // last used
     const SETTING_UI_TIMEZONE = 'ui.timezone';
     const SETTING_UI_STORAGE_TIME = 'ui.storage.time';
-    const SETTING_UI_CHANGELOG_TIME = 'ui.changelog.time';
 
     const SETTING_GRAVATAR_EMAIL = 'gravatar.email';
     const SETTING_LDAP_EMAIL = 'ldap.email';
@@ -60,16 +59,16 @@ class Scalr_Account_User extends Scalr_Model
     const VAR_SSH_CONSOLE_PREFERRED_PROVIDER = 'ssh.console.preferred_provider';
 
     protected $dbPropertyMap = array(
-        'id'			=> 'id',
-        'account_id'	=> 'accountId',
-        'status'		=> 'status',
-        'email'			=> array('property' => 'email', 'is_filter' => true),
-        'fullname'		=> 'fullname',
-        'password' 		=> array('property' => 'password'),
-        'type'			=> 'type',
-        'dtcreated'		=> array('property' => 'dtCreated', 'createSql' => 'NOW()', 'type' => 'datetime', 'update' => false),
-        'dtlastlogin'	=> array('property' => 'dtLastLogin', 'type' => 'datetime'),
-        'comments'		=> 'comments',
+        'id'            => 'id',
+        'account_id'    => 'accountId',
+        'status'        => 'status',
+        'email'         => array('property' => 'email', 'is_filter' => true),
+        'fullname'      => 'fullname',
+        'password'      => array('property' => 'password'),
+        'type'          => 'type',
+        'dtcreated'     => array('property' => 'dtCreated', 'createSql' => 'NOW()', 'type' => 'datetime', 'update' => false),
+        'dtlastlogin'   => array('property' => 'dtLastLogin', 'type' => 'datetime'),
+        'comments'      => 'comments',
         'loginattempts' => 'loginattempts',
     );
 
@@ -80,12 +79,12 @@ class Scalr_Account_User extends Scalr_Model
         $dtLastLogin,
         $type,
         $comments,
-        $loginattempts;
+        $email,
+        $loginattempts,
+        $accountId;
 
     protected
-        $email,
-        $password,
-        $accountId;
+        $password;
 
     protected $account;
     protected $permissions;
@@ -111,9 +110,9 @@ class Scalr_Account_User extends Scalr_Model
     /**
      * Loads user by the specified unique setting
      *
-     * @param     string  $name   The setting name
-     * @param     string  $value  The value
-     * @return    Scalr_Account_User
+     * @param   string  $name   The setting name
+     * @param   string  $value  The value
+     * @return  Scalr_Account_User
      */
     public function loadBySetting($name, $value)
     {
@@ -267,9 +266,9 @@ class Scalr_Account_User extends Scalr_Model
     /**
      * Returns user setting value by name
      *
-     * @param string $name
-     * @param bool $ignoreCache
-     * @return mixed $value
+     * @param   string $name
+     * @param   bool $ignoreCache
+     * @return  mixed $value
      */
     public function getSetting($name, $ignoreCache = false)
     {
@@ -287,9 +286,9 @@ class Scalr_Account_User extends Scalr_Model
 
     /**
      * Set user setting
-     * @param string $name
-     * @param mixed $value
-     * @return void
+     * @param   string $name
+     * @param   mixed $value
+     * @return  void
      */
     public function setSetting($name, $value)
     {
@@ -311,9 +310,9 @@ class Scalr_Account_User extends Scalr_Model
     /**
      * Returns user var value by name
      *
-     * @param string $name
-     * @param bool $ignoreCache
-     * @return mixed $value
+     * @param   string $name
+     * @param   bool $ignoreCache
+     * @return  mixed $value
      */
     public function getVar($name, $ignoreCache = false)
     {
@@ -330,9 +329,9 @@ class Scalr_Account_User extends Scalr_Model
 
     /**
      * Set user var
-     * @param string $name
-     * @param mixed $value
-     * @return void
+     * @param   string $name
+     * @param   mixed $value
+     * @return  void
      */
     public function setVar($name, $value)
     {
@@ -381,9 +380,9 @@ class Scalr_Account_User extends Scalr_Model
 
     /**
      * Set user dashboard
-     * @param integer $envId
-     * @param array $value
-     * @throws Scalr_Exception_Core
+     * @param   integer $envId
+     * @param   array $value
+     * @throws  Scalr_Exception_Core
      */
     public function setDashboard($envId, $value)
     {
@@ -512,6 +511,9 @@ class Scalr_Account_User extends Scalr_Model
         return $this->db->getOne("SELECT 1 FROM `account_users` WHERE email = ? AND account_id = ? LIMIT 1", [$email, $this->accountId]) ? true : false;
     }
 
+    /**
+     * @return  array
+     */
     public function getTeams()
     {
         return $this->db->getAll("
@@ -539,7 +541,7 @@ class Scalr_Account_User extends Scalr_Model
      * Gets roles by specified ID of environment
      *
      * @param   int   $envId       The ID of the client's environment
-     * @param   bool  $ingoreCache optional Ignore cache.
+     * @param   bool  $ignoreCache optional Ignore cache.
      * @return  \Scalr\Acl\Role\AccountRoleSuperposition Returns the list of the roles of account level by specified environment
      */
     public function getAclRolesByEnvironment($envId, $ignoreCache = false)
@@ -648,19 +650,24 @@ class Scalr_Account_User extends Scalr_Model
     /**
      * Gets environments of the current user filtered by name
      *
-     * @param string $filter optional Filter string
-     * @return array
+     * @param   string  $filter             optional    Filter string
+     * @param   bool    $orderByPriority    optional    Order by default_priority
+     * @return  array
      */
-    public function getEnvironments($filter = null)
+    public function getEnvironments($filter = null, $orderByPriority = false)
     {
         $like = '';
-
         if (isset($filter)) {
             $like = " AND ce.name LIKE '%" . $this->db->escape($filter) . "%'";
         }
 
+        $orderBy = '';
+        if ($orderByPriority) {
+            $orderBy = " ORDER BY ce.default_priority DESC";
+        }
+
         if ($this->canManageAcl()) {
-            return $this->db->getAll("SELECT ce.id, ce.name FROM client_environments ce WHERE ce.client_id = ?" . $like, [$this->getAccountId()]);
+            return $this->db->getAll("SELECT ce.id, ce.name, ce.default_priority FROM client_environments ce WHERE ce.client_id = ?" . $like . $orderBy, [$this->getAccountId()]);
         } else {
             $teams = array();
             foreach ($this->getTeams() as $team) {
@@ -669,12 +676,12 @@ class Scalr_Account_User extends Scalr_Model
 
             if (count($teams)) {
                 return $this->db->getAll("
-                    SELECT ce.id, ce.name FROM client_environments ce
+                    SELECT ce.id, ce.name, ce.default_priority FROM client_environments ce
                     JOIN account_team_envs te ON ce.id = te.env_id
                     WHERE te.team_id IN (" . implode(',', $teams) . ")"
                     . $like . "
                     GROUP BY ce.id
-                ");
+                " . $orderBy);
             }
         }
 
@@ -703,7 +710,7 @@ class Scalr_Account_User extends Scalr_Model
         }
 
         if (empty($environment)) {
-            $envs = $this->getEnvironments();
+            $envs = $this->getEnvironments(null, true);
 
             if (count($envs)) {
                 $envId = $envs[0]['id'];
@@ -721,9 +728,9 @@ class Scalr_Account_User extends Scalr_Model
     /**
      * Checks wheter this user is considered to be the team owner for the specified team.
      *
-     * @param   int     $teamId  The identifier of the team.
-     * @return  boolean Returns true if the user is considered to be the team owner for the specified team.
-     * @deprecated This function has been deprecated since new ACL
+     * @param       int     $teamId  The identifier of the team.
+     * @return      boolean Returns true if the user is considered to be the team owner for the specified team.
+     * @deprecated  This function has been deprecated since new ACL
      */
     public function isTeamOwner($teamId = null)
     {
@@ -747,9 +754,9 @@ class Scalr_Account_User extends Scalr_Model
      * Checks if the user is both AccountAdmin and member of the
      * specified environment
      *
-     * @param   int      $envId  The identifier of the environment
-     * @return  boolean
-     * @deprecated This function has been deprecated since new ACL
+     * @param       int      $envId  The identifier of the environment
+     * @return      boolean
+     * @deprecated  This function has been deprecated since new ACL
      */
     public function isTeamOwnerInEnvironment($envId)
     {
@@ -986,7 +993,7 @@ class Scalr_Account_User extends Scalr_Model
     }
 
     /**
-     * @return bool Returns true if lead is verified
+     * @return  bool Returns true if lead is verified
      */
     public function isLeadVerified()
     {
@@ -996,9 +1003,9 @@ class Scalr_Account_User extends Scalr_Model
     /**
      * Checks if user has access to project or cost center
      *
-     * @param string $projectId optional Id of the project
-     * @param string $ccId      optional Id of the cost center
-     * @return boolean          Returns false if user is not lead of the subject
+     * @param   string $projectId optional Id of the project
+     * @param   string $ccId      optional Id of the cost center
+     * @return  boolean           Returns false if user is not lead of the subject
      */
     public function isSubjectLead($projectId = null, $ccId = null)
     {
@@ -1017,37 +1024,5 @@ class Scalr_Account_User extends Scalr_Model
         }
 
         return true;
-    }
-
-    /**
-     * Checks whether Farm can be accessed by user
-     *
-     * @param       int         $farmId   ID of Farm
-     * @param       int         $envId    ID of Environment
-     * @param       string      $perm     optional Name of permission
-     * @return      boolean     Returns true if access is granted
-     */
-    public function hasAccessFarm($farmId, $envId, $perm = null)
-    {
-        try {
-            $farm = DBFarm::LoadByID($farmId);
-        } catch (Exception $e) {
-            return false;
-        }
-
-        if ($farm->EnvID != $envId)
-            return false;
-
-        $superposition = $this->getAclRolesByEnvironment($envId);
-        $result = $superposition->isAllowed(Acl::RESOURCE_FARMS, $perm);
-        if (!$result && $farm->teamId && $this->isInTeam($farm->teamId)) {
-            $result = $superposition->isAllowed(Acl::RESOURCE_TEAM_FARMS, $perm);
-        }
-
-        if (!$result && $farm->createdByUserId && $this->id == $farm->createdByUserId) {
-            $result = $superposition->isAllowed(Acl::RESOURCE_OWN_FARMS, $perm);
-        }
-
-        return $result;
     }
 }

@@ -3,6 +3,7 @@
 use Scalr\Acl\Acl;
 use Scalr\Modules\PlatformFactory;
 use Scalr\UI\Request\JsonData;
+use Scalr\UI\Utils;
 use Scalr\Model\Entity\SshKey;
 use Scalr\Model\Entity\Farm;
 
@@ -87,7 +88,7 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
         if (!$sshKey)
             throw new Exception('SSH key not found in database');
 
-        $this->checkPermissions($sshKey);
+        $this->request->checkPermissions($sshKey);
 
         $extension = $formatPpk ? 'ppk' : 'pem';
         $fileName = ($sshKey->cloudLocation) ? "{$sshKey->cloudKeyName}.{$sshKey->cloudLocation}.{$extension}" : "{$sshKey->cloudKeyName}.{$extension}";
@@ -116,7 +117,7 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
         if (!$sshKey)
             throw new Exception("SSH key not found in database");
 
-        $this->checkPermissions($sshKey);
+        $this->request->checkPermissions($sshKey);
 
         if (!$sshKey->publicKey)
             $sshKey->generatePublicKey();
@@ -151,7 +152,7 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
                 /* @var $sshKey SshKey */
                 $sshKey = SshKey::findPk($id);
                 if ($sshKey) {
-                    $this->checkPermissions($sshKey, true);
+                    $this->request->checkPermissions($sshKey, true);
 
                     if ($sshKey->type == SshKey::TYPE_GLOBAL) {
                         if ($sshKey->platform == SERVER_PLATFORMS::EC2) {
@@ -208,7 +209,7 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
 
         /* @var $sshKey SshKey */
         $sshKey = SshKey::findPk($sshKeyId);
-        $this->checkPermissions($sshKey, true);
+        $this->request->checkPermissions($sshKey, true);
 
         if ($sshKey->type == SshKey::TYPE_GLOBAL) {
             if ($sshKey->platform == SERVER_PLATFORMS::EC2) {
@@ -271,10 +272,10 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
                 ];
             }
         } else {
-            $farmSql = "SELECT id FROM farms WHERE env_id = ?";
-            $farmArgs = [$this->getEnvironmentId()];
-            list($farmSql, $farmArgs) = $this->request->prepareFarmSqlQuery($farmSql, $farmArgs, '', Acl::PERM_FARMS_SERVERS);
-            $farms = $this->db->GetCol($farmSql, $farmArgs);
+            $farms = $this->db->GetCol(
+                "SELECT id FROM farms f WHERE env_id = ? AND " . $this->request->getFarmSqlQuery(Acl::PERM_FARMS_SERVERS),
+                [$this->getEnvironmentId()]
+            );
 
             if ($this->request->isAllowed(Acl::RESOURCE_IMAGES_ENVIRONMENT, Acl::PERM_IMAGES_ENVIRONMENT_MANAGE)) {
                 $criteria[] = [
@@ -328,10 +329,10 @@ class Scalr_UI_Controller_Sshkeys extends Scalr_UI_Controller
             }
         }
 
-        $result = SshKey::find($criteria, null, \Scalr\UI\Utils::convertOrder($sort, ['id' => true], ['id', 'cloudKeyName', 'platform', 'cloudLocation']), $limit, $start, true);
+        $result = SshKey::find($criteria, null, Utils::convertOrder($sort, ['id' => true], ['id', 'cloudKeyName', 'platform', 'cloudLocation']), $limit, $start, true);
         $data = [];
         foreach ($result as $key) {
-            /* @var SshKey $key */
+            /* @var $key SshKey */
             $data[] = $this->getSshKeyObject($key);
         }
 

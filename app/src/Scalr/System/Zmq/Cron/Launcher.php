@@ -4,6 +4,7 @@ namespace Scalr\System\Zmq\Cron;
 use DateTime;
 use Exception;
 use Scalr\LoggerAwareTrait;
+use Scalr\Model\Entity\ScalrService;
 use Scalr\System\Zmq\Mdp\Client;
 use Scalr\System\Zmq\Zmsg;
 
@@ -45,12 +46,41 @@ class Launcher
     }
 
     /**
+     * Gets the list of all tasks
+     *
+     * @return \Scalr\System\Zmq\Cron\ServiceIterator
+     */
+    public function getAllTasks()
+    {
+        return new ServiceIterator();
+    }
+
+    /**
      * Launches tasks are due to run
      *
      * @return  int  Returns the number of the launched tasks
      */
     public function launch()
     {
+        $curTime = new DateTime('now');
+        if ($curTime->format('i') % 5 == 1) {
+            $services = [];
+
+            foreach (ScalrService::find() as $scalrService) {
+                $services[$scalrService->name] = $scalrService;
+            }
+
+            foreach ($this->getAllTasks() as $task) {
+                $config = $task->config();
+
+                if (!array_key_exists($task->getName(), $services)) {
+                    $task->getScalrService()->update(['state' => $config->enabled ? ScalrService::STATE_SCHEDULED : ScalrService::STATE_DISABLED]);
+                } elseif (!$config->enabled && $services['state'] != ScalrService::STATE_DISABLED) {
+                    $task->getScalrService()->update(['state' => ScalrService::STATE_DISABLED]);
+                }
+            }
+        }
+
         $count = 0;
         //Gets all scheduled task at this second
         foreach ($this->getScheduled() as $task) {

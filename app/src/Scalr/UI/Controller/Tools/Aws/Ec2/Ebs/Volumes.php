@@ -77,7 +77,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
 
         /* @var $vol VolumeData */
         $vol = $aws->ec2->volume->describe(
-            $this->getParam('volumeId'),
+            $id,
             !empty($filteringDecision->filter) ? $filteringDecision->filter : null
         )->get(0);
 
@@ -118,25 +118,31 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
     protected function getManagedFarms()
     {
         if ($this->managedFarms === null) {
-            $this->managedFarms = call_user_func_array([$this->db, 'GetCol'], $this->request->prepareFarmSqlQuery("
-                SELECT id FROM farms WHERE env_id = ?
-            ", [$this->getEnvironmentId()]));
+            $this->managedFarms = call_user_func_array(
+                [$this->db, 'GetCol'],
+                ["SELECT id FROM farms f WHERE env_id = ? AND " . $this->request->getFarmSqlQuery(), [$this->getEnvironmentId()]]
+            );
         }
 
         return $this->managedFarms;
     }
 
-    public function attachAction()
+    /**
+     * Attach volume
+     * @param    string     $cloudLocation
+     * @param    string     $volumeId
+     */
+    public function attachAction($cloudLocation, $volumeId)
     {
         $this->request->restrictAccess(Acl::RESOURCE_AWS_VOLUMES, Acl::PERM_AWS_VOLUMES_MANAGE);
 
-        $vol = $this->describeVolume($this->getParam('cloudLocation'), $this->getParam('volumeId'));
+        $vol = $this->describeVolume($cloudLocation, $volumeId);
 
         $servers = $this->getRunningServersByAvailabilityZone($vol->availabilityZone);
 
         if (count($servers) == 0) {
             throw new Exception(
-                "Either you have no running servers in the availablity zone of this volume "
+                "Either you have no running servers with scalr agent installed in the availablity zone of this volume "
                 . "or you don't have access permissions to these servers."
             );
         }
@@ -172,7 +178,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
                 LEFT JOIN farm_roles fr ON s.farm_roleid = fr.id
                 LEFT JOIN roles r ON r.id = fr.role_id
                 LEFT JOIN farms f ON f.id = s.farm_id
-                WHERE s.platform = ? AND s.status = ? AND s.env_id = ?
+                WHERE s.is_scalarized = 1 AND s.platform = ? AND s.status = ? AND s.env_id = ?
                 AND sp.value = ?
                 " . (!empty($restrictToFarms) ? "AND s.farm_id IN ('" . join("', '", $managedFarms) . "') " : "") . "
             ", [
@@ -236,9 +242,7 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
         $dBServer = DBServer::LoadByID($this->getParam('serverId'));
 
         //Check access permission to specified server
-        if (!$this->request->isFarmAllowed($dBServer->GetFarmObject())) {
-            throw new Scalr_Exception_InsufficientPermissions();
-        }
+        $this->request->checkPermissions($dBServer->GetFarmObject()->__getNewFarmObject(), Acl::PERM_FARMS_SERVERS);
 
         $errmsg = null;
         try {
@@ -422,7 +426,13 @@ class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Volumes extends Scalr_UI_Controller
             }
         }
 
-        if (in_array($type, [CreateVolumeRequestData::VOLUME_TYPE_STANDARD, CreateVolumeRequestData::VOLUME_TYPE_GP2, CreateVolumeRequestData::VOLUME_TYPE_IO1])) {
+        if (in_array($type, [
+            CreateVolumeRequestData::VOLUME_TYPE_STANDARD,
+            CreateVolumeRequestData::VOLUME_TYPE_GP2,
+            CreateVolumeRequestData::VOLUME_TYPE_IO1,
+            CreateVolumeRequestData::VOLUME_TYPE_ST1,
+            CreateVolumeRequestData::VOLUME_TYPE_SC1
+        ])) {
             $req->volumeType = $type;
             if ($type == CreateVolumeRequestData::VOLUME_TYPE_IO1) {
                 $req->iops = $iops ? $iops : 100;

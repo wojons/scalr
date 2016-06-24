@@ -1,4 +1,14 @@
 Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
+    var countPlatformInRecords = function (platform, records) {
+        var recordsWithPlatform = records.filter(function (record) {
+            if (record.get('platform') === platform) {
+                return record;
+            }
+        });
+
+        return recordsWithPlatform.length;
+    };
+
     var platforms = [];
 
     Ext.Object.each(Scalr.platforms, function(key, value) {
@@ -26,6 +36,7 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
         }, {
             xtype: 'displayfield',
             cls: 'x-form-field-warning',
+            anchor: '100%',
             value: 'The cloud image deletion process is asynchronous.<br/> If an error occurs, it will be reported here.',
             hidden: true
         }]
@@ -71,7 +82,7 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
         },
         listeners: {
             load: function(store, records, successful) {
-                if (successful && records.length == 1) {
+                if (successful && store.getCount() === 1) {
                     grid.setSelectedRecord(records[0]);
                 }
             }
@@ -107,7 +118,7 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                 text: 'Image',
                 dataIndex: 'name',
                 sortable: true,
-                flex: 1,
+                flex: 2,
                 xtype: 'templatecolumn',
                 tpl: new Ext.XTemplate('{[this.getScope(values.scope)]}&nbsp;&nbsp;{name}',
                     {
@@ -119,7 +130,7 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
             }, {
                 text: 'Location',
                 minWidth: 110,
-                flex: 1,
+                flex: 0.9,
                 dataIndex: 'platform',
                 sortable: true,
                 renderer: function (value, meta, record) {
@@ -144,8 +155,8 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                 xtype: 'templatecolumn',
                 tpl: '{[this.getOsById(values.osId)]}'
             },
-            { header: 'Created by', dataIndex: 'createdByEmail', flex: 0.5, maxWidth: 150, sortable: false },
-            { header: 'Created on', dataIndex: 'dtAdded', flex: 0.5, maxWidth: 170, sortable: true },
+            //{ header: 'Created by', dataIndex: 'createdByEmail', flex: 0.5, maxWidth: 150, sortable: false },
+            { header: 'Created on', dataIndex: 'dtAdded', flex: 0.8, maxWidth: 170, sortable: true },
             { header: 'Status', width: 100, minWidth: 100, dataIndex: 'status', sortable: false, xtype: 'statuscolumn', statustype: 'image', resizable: false },
 
         ],
@@ -155,7 +166,7 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
             pruneRemoved: true,
             getVisibility: function(record) {
                 return  !record.get('used') &&
-                        record.get('status') != 'delete' &&
+                        record.get('status') != 'pending_delete' &&
                         (
                             Scalr.user.type == 'ScalrAdmin' ||
                             record.get('accountId') && !record.get('envId') && Scalr.scope == 'account' && Scalr.isAllowed('IMAGES_ACCOUNT', 'manage') ||
@@ -317,12 +328,27 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                 tooltip: 'Select one or more images to delete them',
                 disabled: true,
                 handler: function() {
+                    var grid = this.up('grid'),
+                        record = form.getRecord(),
+                        records = grid.getSelectionModel().getSelection(),
+                        amountOfAzure = countPlatformInRecords('azure', records),
+                        isAzure = amountOfAzure > 0,
+                        isAllAzure = amountOfAzure === records.length,
+                        delForm = Ext.clone(deleteConfirmationForm),
+                        data = [],
+                        formWidth = 460;
+
+                    if (isAzure && !isAllAzure) {
+                        delForm.items[1].value = 'Remove image from cloud is not supported for Azure platform.<br/>' + delForm.items[1].value;
+                        formWidth = 530;
+                    }
+
                     var request = {
                         confirmBox: {
-                            msg: 'Remove selected image(s): %s ?',
+                            msg: 'Remove selected image(s): %s&nbsp;?',
                             type: 'delete',
-                            formWidth: 460,
-                            form: deleteConfirmationForm
+                            formWidth: formWidth,
+                            form: isAllAzure ? undefined : delForm
                         },
                         processBox: {
                             msg: 'Removing selected image(s) ...',
@@ -338,17 +364,19 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                             Ext.each(response.pending, function(hash){
                                 var image = imagesStore.getById(hash);
                                 if (image) {
-                                    image.set('status', 'delete');
+                                    image.set('status', 'pending_delete');
                                     image.commit(); // commit is needed to disable checkbox in selection
 
-                                    if (form.getForm().getRecord() && (image.id == form.getForm().getRecord().id)) {
-                                        form.down('#delete').disable();
+                                    if (record) {
+                                        if (image.getId() === record.getId()) {
+                                            form.loadRecord(image);
+                                        }
                                     }
                                 }
                             });
                             grid.getSelectionModel().deselectAll();
                         }
-                    }, grid = this.up('grid'), records = grid.getSelectionModel().getSelection(), data = [];
+                    };
 
                     request.confirmBox.objects = [];
                     for (var i = 0, len = records.length; i < len; i++) {
@@ -375,7 +403,7 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                 this.down('#main').setTitle(record.get('name'));
                 this.down('#delete').setDisabled(!(
                     !record.get('used') &&
-                    record.get('status') != 'delete' &&
+                    record.get('status') != 'pending_delete' &&
                     (
                         Scalr.user.type == 'ScalrAdmin' ||
                         record.get('accountId') && !record.get('envId') && Scalr.scope == 'account' && Scalr.isAllowed('IMAGES_ACCOUNT', 'manage') ||
@@ -383,7 +411,7 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                     )
                 ));
                 this.down('#copy').setDisabled(
-                    record.get('status') == 'delete' ||
+                    record.get('status') == 'pending_delete' ||
                     record.get('platform') != 'ec2' ||
                     record.get('envId') == null ||
                     Scalr.user.type == 'ScalrAdmin' ||
@@ -393,7 +421,7 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                 this.down('#addTo').setDisabled(record.get('status') != 'active' || os.status != 'active');
                 this.down('#edit').disable();
 
-                var nameReadOnly = record.get('status') == 'delete' || record.get('scope') != Scalr.scope;
+                var nameReadOnly = record.get('status') == 'pending_delete' || record.get('scope') != Scalr.scope;
                 if (Scalr.scope === 'environment') {
                     nameReadOnly = nameReadOnly ||  !record.get('envId') || !Scalr.isAllowed('IMAGES_ENVIRONMENT', 'manage');
                 } else if (Scalr.scope === 'account') {
@@ -565,6 +593,21 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                         return value;
                     }
                 }
+            }, {
+                xtype: 'displayfield',
+                name: 'isScalarized',
+                fieldLabel: 'Scalarizr',
+                renderer: function(value) {
+                    var record = this.up('form').getForm().getRecord();
+                    return value == 1 ? 'Installed ('+(record.get('agentVersion') || 'Unknown')+')' : 'Not installed';
+                }
+            }, {
+                xtype: 'displayfield',
+                name: 'hasCloudInit',
+                fieldLabel: 'Cloud-init',
+                renderer: function(value) {
+                    return value == 1 ? 'Installed' : 'Not installed';
+                }
             },{
                 xtype: 'displayfield',
                 name: 'createdByEmail',
@@ -647,7 +690,7 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                 hidden: true,
                 name: 'status',
                 renderer: function(value) {
-                    if (value == 'delete')
+                    if (value == 'pending_delete')
                         return 'Deleting';
                     else if (value == 'failed')
                         return 'Failed';
@@ -777,14 +820,14 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                 text: 'Delete',
                 cls: 'x-btn-red',
                 handler: function() {
-                    var form = this.up('form'), record = form.getForm().getRecord();
+                    var record = form.getRecord();
 
                     Scalr.Request({
                         confirmBox: {
                             msg: 'Delete "' + record.get('id') + '" image?',
                             type: 'delete',
                             formWidth: 460,
-                            form: deleteConfirmationForm
+                            form: record.get('platform') === 'azure' ? undefined : deleteConfirmationForm
                         },
                         params: {
                             images: Ext.encode([record.get('hash')])
@@ -803,11 +846,11 @@ Scalr.regPage('Scalr.ui.images.view', function (loadParams, moduleParams) {
                             Ext.each(response.pending, function(hash){
                                 var image = imagesStore.getById(hash);
                                 if (image) {
-                                    image.set('status', 'delete');
+                                    image.set('status', 'pending_delete');
                                     image.commit(); // commit is needed to disable checkbox in selection
-                                    if (hash == record.get('hash')) {
-                                        // also disable delete button
-                                        form.down('#delete').disable();
+
+                                    if (image.getId() === record.getId()) {
+                                        form.loadRecord(image);
                                     }
                                 }
                             });
@@ -874,12 +917,10 @@ Ext.define('Scalr.ui.ImagesViewRoleSelect', {
     layout: 'fit',
 
     initComponent: function() {
-        var me = this;
+        var me = this,
+            os = Scalr.utils.getOsById(me.image.osId) || {};
 
         me.title = 'Select role to add an image';
-        if (me.image.osId) {
-            me.title = me.title + '<br><span style="font-size: 11px">Showing only Roles matching Image OS: ' + Scalr.utils.getOsById(me.image.osId, 'name') + '</span>';
-        }
 
         me.callParent(arguments);
 
@@ -917,7 +958,14 @@ Ext.define('Scalr.ui.ImagesViewRoleSelect', {
                 focusedItemCls: 'no-focus',
                 emptyText: "No roles found",
                 deferEmptyText: false,
-                loadingText: 'Loading roles ...'
+                loadingText: 'Loading roles ...',
+                getRowClass: function (record, index, rowParams) {
+                    var cls = [];
+                    if (!record.get('canAddImage')) {
+                        cls.push('x-grid-row-disabled');
+                    }
+                    return cls.join(',');
+                }
             },
 
             columns: [
@@ -959,25 +1007,40 @@ Ext.define('Scalr.ui.ImagesViewRoleSelect', {
                 itemId: 'paging',
                 style: 'box-shadow:none;padding-left:0;padding-right:0',
                 dock: 'top',
+                defaults: {
+                    margin: '0 0 0 12'
+                },
                 items: [{
                     xtype: 'filterfield',
+                    margin: 0,
                     store: store
+                }, {
+                    xtype: 'button',
+                    cls: 'x-btn-compressed',
+                    pressed: true,
+                    hidden: !os.id,
+                    style: 'padding-left:6px;padding-right:8px',
+                    text: '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-osfamily-small x-icon-osfamily-small-'+os.family+'"/>&nbsp;' + Scalr.utils.beautifyOsFamily(os.family) + ' ' + (os.version || os.generation || os.id),
+                    disabled: true
+                },{
+                    xtype: 'button',
+                    cls: 'x-btn-compressed',
+                    pressed: true,
+                    style: 'padding-left:6px;padding-right:8px',
+                    hidden: me.image.isScalarized != 0 || me.image.hasCloudInit != 0,
+                    text:  'No Scalarizr',
+                    tooltip: 'Show Roles with no Scalarizr',
+                    disabled: true
                 }]
             }],
 
             listeners: {
-                beforeselect: function(grid, record) {
-                    if (! record.get('canAddImage')) {
-                        me.enableAddButton();
-                        return false;
-                    }
+                beforeselect: function(view, record) {
+                    return record.get('canAddImage');
                 },
-
                 selectionchange: function (selModel, selections) {
                     if (selections.length) {
-                        var roleId = selections[0].get('id');
-
-                        me.enableAddButton(roleId);
+                        me.enableAddButton(selections[0].get('canAddImage') ? selections[0].get('id') : null);
                         return;
                     }
                     me.enableAddButton();

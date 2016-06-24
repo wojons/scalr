@@ -11,121 +11,137 @@ class Scalr_UI_Controller_Dashboard extends Scalr_UI_Controller
 
     public function defaultAction()
     {
-        if ($this->user->getType() == Scalr_Account_User::TYPE_SCALR_ADMIN) {
-            $this->response->page('ui/dashboard/admin.js');
-
-        } else if ($this->user->getType() == Scalr_Account_User::TYPE_FIN_ADMIN) {
+        $userType = $this->user->getType();
+        if ($userType == Scalr_Account_User::TYPE_FIN_ADMIN) {
             self::loadController('Dashboard', 'Scalr_UI_Controller_Admin_Analytics')->defaultAction();
 
         } else {
-            $loadJs = array('ui/dashboard/columns.js');
+            $js    = ['ui/dashboard/columns.js'];
+            $css   = ['ui/dashboard/view.css'];
+            $envId = $this->getEnvironmentId(true);
+            $panel = $this->user->getDashboard($envId);
             $scope = $this->request->getScope();
-            $cloudynEnabled = \Scalr::config('scalr.cloudyn.master_email') ? true : false;
-            $billingEnabled = \Scalr::config('scalr.billing.enabled') ? true : false;
+            $isNewCustomer = false;
 
-            $panel = $this->user->getDashboard($this->getEnvironmentId(true));
+            //flags, parameters, additional stylesheets, etc
+            if ($scope === 'scalr') {
+                $flags  = [];
+                $params = [];
+
+            } else {
+                $client = Client::Load($this->user->getAccountId());
+                $isNewCustomer = !$client->GetSettingValue(CLIENT_SETTINGS::DATE_FARM_CREATED);
+
+                $cloudynEnabled = \Scalr::config('scalr.cloudyn.master_email') ? true : false;
+                $billingEnabled = \Scalr::config('scalr.billing.enabled') ? true : false;
+
+                $plotter = $this->getContainer()->config->get('scalr.load_statistics.connections.plotter');
+                $monitoringUrl = $plotter['scheme'] . '://' . $plotter['host'] . ':' . $plotter['port'];
+
+                $css[]  = 'ui/analytics/analytics.css';
+
+                $flags  = [
+                    'cloudynEnabled' => $cloudynEnabled,
+                    'billingEnabled' => $billingEnabled
+                ];
+                $params = ['monitoringUrl' => $monitoringUrl];
+            }
 
             if (empty($panel['configuration'])) {
-                // default configurations
-                $client = Client::Load($this->user->getAccountId());
-                if ($client->GetSettingValue(CLIENT_SETTINGS::DATE_FARM_CREATED)) {
-                    // old customer
-                    if ($scope == 'account') {
-                        $panel['configuration'] = array(
-                            array(
-                                array('name' => 'dashboard.announcement', 'params' => array('newsCount' => 5))
-                            ),
-                            array(
-                                array('name' => 'dashboard.environments')
-                            ),
-                        );
+                if ($scope === 'scalr') {
+                    $panel['configuration'] = [
+                        [['name' => 'dashboard.scalrhealth']],
+                        [['name' => 'dashboard.gettingstarted']]
+                    ];
 
-                        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER && $billingEnabled)
-                            array_unshift($panel['configuration'], array(array('name' => 'dashboard.billing')));
+                } elseif ($isNewCustomer) {
+                    if ($scope === 'account') {
+                        $panel['configuration'] = [
+                            [['name' => 'dashboard.newuser']],
+                            [['name' => 'dashboard.announcement', 'params' => ['newsCount' => 8]]]
+                        ];
+                        if ($userType == Scalr_Account_User::TYPE_ACCOUNT_OWNER && $billingEnabled) {
+                            array_unshift($panel['configuration'][1], ['name' => 'dashboard.billing']);
+                        }
 
                     } else {
-                        $panel['configuration'] = array(
-                            array(
-                                array('name' => 'dashboard.status'),
-                                array('name' => 'dashboard.addfarm')
-                            ),
-                            array(
-                                array('name' => 'dashboard.announcement', 'params' => array('newsCount' => 5))
-                            ),
-                            array(
-                                array('name' => 'dashboard.lasterrors', 'params' => array('errorCount' => 10))
-                            )
-                        );
+                        $panel['configuration'] = [
+                            [['name' => 'dashboard.addfarm']],
+                            [['name' => 'dashboard.newuser']],
+                            [['name' => 'dashboard.announcement', 'params' => ['newsCount' => 8]]]
+                        ];
                     }
+
                 } else {
-                    if ($scope == 'account') {
-                        // new customer
-                        $panel['configuration'] = array(
-                            array(
-                                array('name' => 'dashboard.newuser')
-                            ),
-                            array(
-                                array('name' => 'dashboard.announcement', 'params' => array('newsCount' => 5))
-                            )
-                        );
-                        if ($this->user->getType() == Scalr_Account_User::TYPE_ACCOUNT_OWNER && $billingEnabled)
-                            array_unshift($panel['configuration'][1], array('name' => 'dashboard.billing'));
+                    if ($scope === 'account') {
+                        $panel['configuration'] = [
+                            [['name' => 'dashboard.announcement', 'params' => ['newsCount' => 8]]],
+                            [['name' => 'dashboard.environments']]
+                        ];
+
+                        if ($userType == Scalr_Account_User::TYPE_ACCOUNT_OWNER && $billingEnabled) {
+                            array_unshift($panel['configuration'], [['name' => 'dashboard.billing']]);
+                        }
 
                     } else {
-                        // new customer
-                        $panel['configuration'] = array(
-                            array(
-                                array('name' => 'dashboard.addfarm')
-                            ),
-                            array(
-                                array('name' => 'dashboard.newuser')
-                            ),
-                            array(
-                                array('name' => 'dashboard.announcement', 'params' => array('newsCount' => 5))
-                            )
-                        );
+                        $panel['configuration'] = [
+                            [
+                                ['name' => 'dashboard.status'],
+                                ['name' => 'dashboard.addfarm']
+                            ],
+                            [['name' => 'dashboard.announcement', 'params' => ['newsCount' => 8]]],
+                            [['name' => 'dashboard.lasterrors', 'params' => ['errorCount' => 10]]]
+                        ];
                     }
                 }
 
-                $this->user->setDashboard($this->getEnvironmentId(true), $panel);
-                $panel = $this->user->getDashboard($this->getEnvironmentId(true));
+                $this->user->setDashboard($envId, $panel);
+                $panel = $this->user->getDashboard($envId);
             }
 
-            // section for adding required widgets
-            if ($scope == 'environment') {
+            //required widgets
+            $panelChanged = false;
+            if ($scope === 'scalr') {
+                if (!in_array('dashboard.scalrhealth', $panel['widgets'])) {
+                    if (!isset($panel['configuration'][0])) {
+                        $panel['configuration'][0] = [];
+                    }
+                    array_unshift($panel['configuration'][0], ['name' => 'dashboard.scalrhealth']);
+
+                    $panelChanged = true;
+                }
+
+            } elseif ($scope === 'environment') {
                 if ($cloudynEnabled &&
                     !in_array('cloudynInstalled', $panel['flags']) &&
                     !in_array('dashboard.cloudyn', $panel['widgets']) &&
                     !!$this->environment->isPlatformEnabled(SERVER_PLATFORMS::EC2))
                 {
-                    if (! isset($panel['configuration'][0])) {
-                        $panel['configuration'][0] = array();
+                    if (!isset($panel['configuration'][0])) {
+                        $panel['configuration'][0] = [];
                     }
-                    array_unshift($panel['configuration'][0], array('name' => 'dashboard.cloudyn'));
+                    array_unshift($panel['configuration'][0], ['name' => 'dashboard.cloudyn']);
                     $panel['flags'][] = 'cloudynInstalled';
-                    $this->user->setDashboard($this->getEnvironmentId(), $panel);
-                    $panel = $this->user->getDashboard($this->getEnvironmentId());
+
+                    $panelChanged = true;
                 }
+            }
+
+            if ($panelChanged) {
+                $this->user->setDashboard($envId, $panel);
+                $panel = $this->user->getDashboard($envId);
             }
 
             $panel = $this->fillDash($panel);
 
-            $conf = $this->getContainer()->config->get('scalr.load_statistics.connections.plotter');
-            $monitoringUrl = "{$conf['scheme']}://{$conf['host']}:{$conf['port']}";
-
             $this->response->page('ui/dashboard/view.js',
-                array(
+                [
                     'panel' => $panel,
-                    'flags' => array(
-                        'cloudynEnabled' => $cloudynEnabled,
-                        'billingEnabled' => $billingEnabled
-                    ),
-                    'params' => array(
-                        'monitoringUrl' => $monitoringUrl
-                    )
-                ),
-                $loadJs,
-                array('ui/dashboard/view.css', 'ui/analytics/analytics.css')
+                    'flags' => $flags,
+                    'params' => $params
+                ],
+                $js,
+                $css
             );
         }
     }

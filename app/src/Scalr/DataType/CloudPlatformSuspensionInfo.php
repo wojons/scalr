@@ -257,6 +257,7 @@ class CloudPlatformSuspensionInfo
                stristr($message, "Unable to sign AWS API request. Please, check your X.509") ||
                stristr($message, "Invalid cloud credentials") ||
                stristr($message, "missing required param: 'project'") ||
+               stristr($message, "Unauthorized") ||
                stristr($message, "Username or api key is invalid") ||
                strstr($message, "The request you have made requires authentication");
 

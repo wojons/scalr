@@ -261,10 +261,16 @@ Scalr.regPage('Scalr.ui.monitoring.view', function (loadParams, moduleParams) {
                     dataIndex: 'text',
                     flex: 1,
                     renderer : function (value, metaData, record) {
-                        var params = record.get('params');
+                        var params = record.get('params'),
+                            isScalarized = record.get('isScalarized'),
+                            warning = '';
 
                         if (params.index) {
                             return value;
+                        }
+
+                        if (isScalarized !== undefined && isScalarized == 0) {
+                            warning = '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-warning" style="vertical-align:middle;margin:0 2px 0 12px" data-qtip="Statistics is not available for agentless servers" />&nbsp;';
                         }
 
                         var farmRoleId = params.farmRoleId;
@@ -274,7 +280,7 @@ Scalr.regPage('Scalr.ui.monitoring.view', function (loadParams, moduleParams) {
                             : 'scalr-ui-monitoring-tree-node-farm';
 
                         return farmRoleId
-                            ? '<span>role: </span><span>' + value + '</span>'
+                            ? '<span>' + warning + 'role: </span><span>' + value + '</span>'
                             : '<span>Farm: </span><span>' + value + '</span>';
                     }
                 }],
@@ -297,8 +303,10 @@ Scalr.regPage('Scalr.ui.monitoring.view', function (loadParams, moduleParams) {
                         checkboxes = me.el.query('.x-tree-checkbox');
 
                     Ext.each(checkboxes, function (checkbox, i) {
+                        var record = me.view.getRecord(Ext.get(checkbox).up('.x-grid-row')),
+                            isScalarized = record ? record.get('isScalarized') : undefined;
                         //console.log(i, me.compareMode, checkbox);
-                        Ext.get(checkbox).setVisible(me.compareMode);
+                        Ext.get(checkbox).setVisible(me.compareMode && (isScalarized === undefined || isScalarized == 1));
                     });
                 },
 
@@ -441,6 +449,12 @@ Scalr.regPage('Scalr.ui.monitoring.view', function (loadParams, moduleParams) {
                             me.getRootNode().childNodes
                         );
                         */
+                    },
+                    beforeselect: function(view, record) {
+                        var isScalarized = record.get('isScalarized');
+                        if (isScalarized !== undefined && isScalarized == 0) {
+                            return false;
+                        }
                     },
                     select: function (context, record) {
                         var me = this;

@@ -2,13 +2,13 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
     var iconCls = 'x-icon-leftmenu',
         tabsConfig = [
             {name: 'overview', title: 'Role overview', cls: 'x-btn-tab-small-dark'},
-            {name: 'images', title: 'Images'},
+            {name: 'images', title: 'Images', disabled: !moduleParams['role']['osId'] && !loadParams['image'], tooltip: !moduleParams['role']['osId'] && !loadParams['image'] ? 'Please select Role OS before adding Images' : ''},
             {name: 'scripting', title: 'Orchestration'},
             {name: 'variables', title: '<span style="position:relative;top:-10px">Global<br/>variables</span>'}
         ];
     tabsConfig.push({name: 'chef', title: 'Chef', cls: 'x-btn-tab-small-dark', hidden: !Ext.Array.contains(moduleParams['role']['behaviors'], 'chef')});
     if (Scalr.scope === 'account') {
-        tabsConfig.push({name: 'environments', title: 'Permissions', cls: 'x-btn-tab-small-dark'});
+        tabsConfig.push({name: 'environments', title: 'Permissions', cls: 'x-btn-tab-small-dark', iconClsName: 'permissions'});
     }
 
     if (!Ext.isArray(moduleParams['role']['images'])) {
@@ -19,12 +19,16 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
     }
 
     if (loadParams['image']) {
+        moduleParams['role']['isScalarized'] = loadParams['image']['isScalarized'];
         moduleParams['role']['images'].push({
             hash: loadParams['image']['hash'],
             imageId: loadParams['image']['id'],
             platform: loadParams['image']['platform'],
             cloudLocation: loadParams['image']['cloudLocation'],
             name: loadParams['image']['name'],
+            hash: loadParams['image']['hash'],
+            isScalarized: loadParams['image']['isScalarized'],
+            hasCloudInit: loadParams['image']['hasCloudInit'],
             extended: loadParams['image']
         });
 
@@ -75,9 +79,11 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
                 return {
                     text: tab.title,
                     tabId: tab.name,
+                    disabled: tab.disabled,
+                    tooltip: tab.tooltip,
                     cls: tab.cls || '',
                     hidden: !!tab.hidden,
-                    iconCls: iconCls + ' ' + iconCls + '-' + tab.name
+                    iconCls: iconCls + ' ' + iconCls + '-' + (tab.iconClsName || tab.name)
                 };
             })
         },{
@@ -95,7 +101,7 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
                     var me = this,
                         valid = true,
                         error,
-                        roleParams = moduleParams['role'],
+                        roleParams = Ext.clone(moduleParams['role']),
                         tabButton;
                     panel.items.each(function(item){
                         if (Ext.isFunction(item.getSubmitValues)) {
@@ -115,10 +121,9 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
                         }
                     });
                     if (valid) {
-                        var params = Ext.apply({}, roleParams);
-                        Ext.Object.each(params, function(key, value){
-                            if (!Ext.isPrimitive(params[key])) {
-                                params[key] = Ext.encode(value);
+                        Ext.Object.each(roleParams, function(key, value){
+                            if (!Ext.isPrimitive(roleParams[key])) {
+                                roleParams[key] = Ext.encode(value);
                             }
                         });
                         Scalr.Request({
@@ -126,13 +131,17 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
                                 type: 'save'
                             },
                             url: '/roles/xSave/',
-                            params: params,
+                            params: roleParams,
                             success: function (data) {
-                                if (params.roleId == 0) {
-                                    Scalr.event.fireEvent('redirect', '#' + Scalr.utils.getUrlPrefix() + '/roles?roleId=' + data.role.id);
+                                Scalr.event.fireEvent('update', '/roles/edit', data.role, data.categories);
+                                if (loadParams['redirectToBack']) {
+                                    Scalr.event.fireEvent('close');
                                 } else {
-                                    Scalr.event.fireEvent('update', '/roles/edit', data.role);
-                                    Scalr.event.fireEvent('redirect', '#' + Scalr.utils.getUrlPrefix() + '/roles');
+                                    if (roleParams.roleId == 0 || moduleParams.role.catId != data.role.catId) {
+                                        Scalr.event.fireEvent('redirect', '#' + Scalr.utils.getUrlPrefix() + '/roles?roleId=' + data.role.id);
+                                    } else {
+                                        Scalr.event.fireEvent('redirect', '#' + Scalr.utils.getUrlPrefix() + '/roles');
+                                    }
                                 }
                             }
                         });
@@ -177,6 +186,17 @@ Scalr.regPage('Scalr.ui.roles.edit', function (loadParams, moduleParams) {
                         osidchange: function(osId) {
                             moduleParams['role']['osId'] = osId;
                             this.down('#scripts').refreshScripts(moduleParams);
+                            var imagesBtn = panel.getDockedComponent('tabs').down('[tabId="images"]');
+                            if (osId) {
+                                if (imagesBtn.disabled) {
+                                    imagesBtn.enable().setTooltip('');
+                                }
+                            } else {
+                                imagesBtn.disable().setTooltip('Please select Role OS before adding Images');
+                            }
+                        },
+                        isscalarizedchange: function(isScalarized) {
+                            moduleParams['role']['isScalarized'] = isScalarized;
                         }
                     }
                 });

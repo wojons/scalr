@@ -26,21 +26,12 @@ final class EVENT_TYPE
     const MYSQL_BACKUP_COMPLETE = "MysqlBackupComplete";
     const MYSQL_BACKUP_FAIL = "MysqlBackupFail";
 
-    const MYSQL_REPLICATION_FAIL = "MySQLReplicationFail";
-    const MYSQL_REPLICATION_RECOVERED = "MySQLReplicationRecovered";
-
     const EBS_VOLUME_MOUNTED = "EBSVolumeMounted";
     const BEFORE_INSTANCE_LAUNCH = "BeforeInstanceLaunch";
     const BEFORE_HOST_TERMINATE = "BeforeHostTerminate";
     const BEFORE_HOST_UP = "BeforeHostUp";
 
-    const DNS_ZONE_UPDATED = "DNSZoneUpdated";
-
     const EBS_VOLUME_ATTACHED = "EBSVolumeAttached";
-
-    CONST ROLE_OPTION_CHANGED = "RoleOptionChanged";
-
-    const SERVICE_CONFIGURATION_PRESET_CHANGED = "ServiceConfigurationPresetChanged";
 
     public static function GetEventDescription($event_type)
     {
@@ -60,15 +51,10 @@ final class EVENT_TYPE
             self::MYSQL_BACKUP_COMPLETE 		=> _("MySQL backup completed successfully."),
             self::MYSQL_BACKUP_FAIL 			=> _("MySQL backup failed."),
             self::INSTANCE_IP_ADDRESS_CHANGED 	=> _("Public IP address of the instance was changed upon reboot or within Elastic IP assignments."),
-            self::MYSQL_REPLICATION_FAIL 		=> _("MySQL replication failure."),
-            self::MYSQL_REPLICATION_RECOVERED 	=> _("MySQL replication recovered after failure."),
             self::EBS_VOLUME_MOUNTED			=> _("Single EBS volume or array of EBS volumes attached and mounted to instance."),
             self::BEFORE_INSTANCE_LAUNCH		=> _("New instance will be launched in a few minutes"),
             self::BEFORE_HOST_TERMINATE			=> _("Instance will be terminated in 3 minutes"),
-            self::DNS_ZONE_UPDATED				=> _("DNS zone updated"),
             self::EBS_VOLUME_ATTACHED			=> _("EBS volume attached to instance."),
-            self::ROLE_OPTION_CHANGED			=> _("Role option/parameter was changed"),
-            self::SERVICE_CONFIGURATION_PRESET_CHANGED => _("Service configuration preset was modified"),
             self::CHECK_FAILED => _("Check failed"),
             self::CHECK_RECOVERED => _("Check recovered")
         );
@@ -84,12 +70,10 @@ final class EVENT_TYPE
             EVENT_TYPE::INSTANCE_IP_ADDRESS_CHANGED => EVENT_TYPE::GetEventDescription(EVENT_TYPE::INSTANCE_IP_ADDRESS_CHANGED),
             EVENT_TYPE::EBS_VOLUME_ATTACHED => EVENT_TYPE::GetEventDescription(EVENT_TYPE::EBS_VOLUME_ATTACHED),
             EVENT_TYPE::EBS_VOLUME_MOUNTED => EVENT_TYPE::GetEventDescription(EVENT_TYPE::EBS_VOLUME_MOUNTED),
-            //EVENT_TYPE::NEW_MYSQL_MASTER => EVENT_TYPE::GetEventDescription(EVENT_TYPE::NEW_MYSQL_MASTER),
             EVENT_TYPE::BEFORE_HOST_UP => EVENT_TYPE::GetEventDescription(EVENT_TYPE::BEFORE_HOST_UP),
             EVENT_TYPE::HOST_UP => EVENT_TYPE::GetEventDescription(EVENT_TYPE::HOST_UP),
             EVENT_TYPE::BEFORE_HOST_TERMINATE => EVENT_TYPE::GetEventDescription(EVENT_TYPE::BEFORE_HOST_TERMINATE),
             EVENT_TYPE::HOST_DOWN => EVENT_TYPE::GetEventDescription(EVENT_TYPE::HOST_DOWN),
-            //EVENT_TYPE::DNS_ZONE_UPDATED => EVENT_TYPE::GetEventDescription(EVENT_TYPE::DNS_ZONE_UPDATED),
             EVENT_TYPE::REBOOT_COMPLETE => EVENT_TYPE::GetEventDescription(EVENT_TYPE::REBOOT_COMPLETE),
             EVENT_TYPE::RESUME_COMPLETE => EVENT_TYPE::GetEventDescription(EVENT_TYPE::RESUME_COMPLETE),
             EVENT_TYPE::CHECK_FAILED => EVENT_TYPE::GetEventDescription(EVENT_TYPE::CHECK_FAILED),

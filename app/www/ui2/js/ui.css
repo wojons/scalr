@@ -151,6 +151,10 @@
 
 
 /*fieldicons plugin*/
+.x-label-with-fieldicon .x-form-item-label-inner{
+    padding-top: 0!important;
+}
+
 .x-field-icons {
     position: absolute;
     top: 6px;
@@ -297,6 +301,10 @@ a.x-colored-status.yellow {
     background-color: #FDD5C1;
 }
 
+.x-colored-status.transparent {
+    background-color: transparent;
+}
+
 .x-grid-buffered-loader{
     background: #fff
 }
@@ -367,4 +375,149 @@ a.x-colored-status.yellow {
 
 .x-dataview-list .x-grid-drop-indicator *{
     display: none;
+}
+
+/* Announcements */
+.x-announcements-client-popup, .x-announcements-client-dashboard {
+    font-size: 13px;
+}
+
+.x-announcements-div {
+    width: 100%;
+    border-bottom: 1px solid #f7f7f7;
+    background-color: #fff
+}
+
+.x-announcements-div:last-child {
+    border-bottom-width: 0;
+}
+
+.x-announcements-client-popup .x-announcements-div {
+    padding: 8px 5px 5px 11px;
+    min-height: 59px;
+}
+.x-announcements-client-dashboard .x-announcements-div {
+    padding: 5px 5px 5px 12px;
+    min-height: 52px;
+}
+
+.x-announcements-desc, .x-announcements-info {
+    font-size: 11px;
+    font-family: OpenSansBold,arial,sans-serif;
+    text-transform: uppercase
+}
+
+.x-announcements-info {
+    float: right;
+    color: #f05140;
+    vertical-align: super;
+}
+
+.x-announcements-client-popup .x-announcements-info {
+    line-height: 32px;
+}
+
+.x-announcements-client-dashboard .x-announcements-info {
+    line-height: 22px;
+}
+
+.x-announcements-type {
+    float: left;
+}
+
+.x-announcements-client-popup .x-announcements-type {
+    margin-right: 11px;
+}
+
+.x-announcements-client-dashboard .x-announcements-type {
+    margin-top: 11px;
+    margin-right: 12px;
+}
+
+.x-announcements-title.x-announcements-title-msg {
+    color: #224164;
+    font-style: italic;
+    font-family: OpenSansSemibold;
+}
+
+.x-announcements-message-msg {
+    margin-top: 4px;
+    max-height: 346px;
+    overflow-y: auto;
+}
+
+.x-announcements-message-msg p {
+    margin-top: 0;
+    margin-bottom: 3px;
+}
+
+.x-announcements-client-popup .x-announcements-data {
+    margin: 4px 0 0 63px;
+}
+
+.x-announcements-client-dashboard .x-announcements-data {
+    margin: 4px 0 0 34px;
+}
+
+.x-announcements-client-popup .x-announcements-icon {
+    width: 52px;
+    height: 34px;
+    background: url('/ui2/images/ui/announcement/news-sprite.png') no-repeat center;
+    background-size: 52px 136px;
+}
+
+.x-announcements-client-popup .x-announcements-icon-scalrblog {
+    background-position: 0 0;
+}
+
+.x-announcements-client-popup .x-announcements-icon-message {
+    background-position: 0 -34px;
+}
+
+.x-announcements-client-popup .x-announcements-icon-changelog {
+    background-position: 0 -68px;
+}
+
+.x-announcements-client-popup .x-announcements-icon-info {
+    background-position: 0 -102px;
+    margin: 6px 14px 0 0;
+    padding-left: 14px;
+}
+
+.x-announcements-client-dashboard .x-announcements-icon {
+    width: 22px;
+    height: 22px;
+    background: url('/ui2/images/widget/announcement/news-widget-sprite.png') no-repeat center;
+    background-size: 22px 66px;
+}
+
+.x-announcements-client-dashboard .x-announcements-icon-scalrblog {
+    background-position: 0 0;
+}
+
+.x-announcements-client-dashboard .x-announcements-icon-message {
+    background-position: 0 -22px;
+}
+
+.x-announcements-client-dashboard .x-announcements-icon-changelog {
+    background-position: 0 -44px;
+}
+
+.x-announcements-client-dashboard .x-announcements-icon-info {
+    background-position: 0 -66px; /* not mistake - dashboard has no image 'info' */
+    margin: 0 14px 0 0;
+}
+
+@media only screen and (-webkit-min-device-pixel-ratio: 1.5),
+only screen and (-o-min-device-pixel-ratio: 3/2),
+only screen and (min--moz-device-pixel-ratio: 1.5),
+only screen and (min-device-pixel-ratio: 1.5) {
+
+    .x-announcements-client-popup .x-announcements-icon {
+        background-image: url('/ui2/images/ui/announcement/news-sprite-retina.png');
+    }
+
+    .x-announcements-client-dashboard .x-announcements-icon {
+        background-image: url('/ui2/images/widget/announcement/news-widget-sprite-retina.png');
+    }
 }

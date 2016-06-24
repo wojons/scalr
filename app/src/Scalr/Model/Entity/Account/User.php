@@ -38,7 +38,7 @@ class User extends AbstractEntity
      * The identifier of the User
      *
      * @Id
-     * @GeteratedValue
+     * @GeneratedValue
      * @Column(type="integer")
      * @var int
      */
@@ -264,9 +264,9 @@ class User extends AbstractEntity
      */
     public function canManageAcl()
     {
-        return $this->getType() == self::TYPE_ACCOUNT_OWNER ||
-               $this->getType() == self::TYPE_ACCOUNT_SUPER_ADMIN ||
-               $this->getType() == self::TYPE_ACCOUNT_ADMIN;
+        return $this->type == self::TYPE_ACCOUNT_OWNER ||
+               $this->type == self::TYPE_ACCOUNT_SUPER_ADMIN ||
+               $this->type == self::TYPE_ACCOUNT_ADMIN;
     }
 
     /**
@@ -276,7 +276,7 @@ class User extends AbstractEntity
      */
     public function isAccountOwner()
     {
-        return $this->getType() == self::TYPE_ACCOUNT_OWNER;
+        return $this->type == self::TYPE_ACCOUNT_OWNER;
     }
 
     /**
@@ -286,7 +286,7 @@ class User extends AbstractEntity
      */
     public function isAccountAdmin()
     {
-        return $this->getType() == self::TYPE_ACCOUNT_ADMIN || $this->getType() == self::TYPE_ACCOUNT_SUPER_ADMIN;
+        return $this->type == self::TYPE_ACCOUNT_ADMIN || $this->type == self::TYPE_ACCOUNT_SUPER_ADMIN;
     }
 
     /**
@@ -296,7 +296,7 @@ class User extends AbstractEntity
      */
     public function isAccountSuperAdmin()
     {
-        return $this->getType() == self::TYPE_ACCOUNT_SUPER_ADMIN;
+        return $this->type == self::TYPE_ACCOUNT_SUPER_ADMIN;
     }
 
     /**
@@ -306,7 +306,7 @@ class User extends AbstractEntity
      */
     public function isScalrAdmin()
     {
-        return $this->getType() == self::TYPE_SCALR_ADMIN;
+        return $this->type == self::TYPE_SCALR_ADMIN;
     }
 
     /**
@@ -316,7 +316,7 @@ class User extends AbstractEntity
      */
     public function isFinAdmin()
     {
-        return $this->getType() == self::TYPE_FIN_ADMIN;
+        return $this->type == self::TYPE_FIN_ADMIN;
     }
 
     /**
@@ -326,7 +326,7 @@ class User extends AbstractEntity
      */
     public function isTeamUser()
     {
-        return $this->getType() == self::TYPE_TEAM_USER;
+        return $this->type == self::TYPE_TEAM_USER;
     }
 
     /**
@@ -574,37 +574,5 @@ class User extends AbstractEntity
     public function getAccount()
     {
         return Client::findPk($this->accountId);
-    }
-
-    /**
-     * Checks whether Farm can be accessed by user
-     *
-     * @param       int         $farmId   ID of Farm
-     * @param       int         $envId    ID of Environment
-     * @param       string      $perm     optional Name of permission
-     * @return      boolean     Returns true if access is granted
-     */
-    public function hasAccessFarm($farmId, $envId, $perm = null)
-    {
-        /* @var Farm $farm */
-        $farm = Farm::findPk($farmId);
-
-        if (! $farm)
-            return false;
-
-        if ($farm->envId != $envId)
-            return false;
-
-        $superposition = $this->getAclRolesByEnvironment($envId);
-        $result = $superposition->isAllowed(Acl::RESOURCE_FARMS, $perm);
-        if (!$result && $farm->teamId && $this->inTeam($farm->teamId)) {
-            $result = $superposition->isAllowed(Acl::RESOURCE_TEAM_FARMS, $perm);
-        }
-
-        if (!$result && $farm->createdById && $this->id == $farm->createdById) {
-            $result = $superposition->isAllowed(Acl::RESOURCE_OWN_FARMS, $perm);
-        }
-
-        return $result;
     }
 }

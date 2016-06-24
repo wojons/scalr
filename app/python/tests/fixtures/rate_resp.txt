@@ -15,6 +15,18 @@
             "IncludedQuantity": 0.0
         },
         {
+            "MeterId": "0a6c7eb6-0290-4e92-a112-4de73442b666",
+            "MeterName": "Compute Hours",
+            "MeterCategory": "Virtual Machines",
+            "MeterSubCategory": "Red Hat Enterprise Linux (2 core)",
+            "Unit": "Hours",
+            "MeterTags": [],
+            "MeterRegion": "US East",
+            "MeterRates": {"0": 0.01},
+            "EffectiveDate": "2014-02-11T00:00:00Z",
+            "IncludedQuantity": 0.0
+        },
+        {
             "MeterId": "d23a5753-ff85-4ddf-af28-8cc5cf2d3882",
             "MeterName": "Standard IO - Page Blob/Disk (GB)",
             "MeterCategory": "Storage",

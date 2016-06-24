@@ -25,6 +25,8 @@ def deref(obj, global_data, inject_in_ref=None):
     ref = obj.get("$ref")
     if ref is None:  # Not a reference, ignore
         return obj
+    old_obj = copy.deepcopy(obj)
+    del old_obj["$ref"]
     _, ref_type, ref_name = ref.split("/")
     obj = global_data[ref_type][ref_name]
 
@@ -35,7 +37,9 @@ def deref(obj, global_data, inject_in_ref=None):
         for k, v in inject_in_ref.items():
             append_or_initialize_list(obj, k, v)
 
-    return copy.deepcopy(obj)
+    new_obj = copy.deepcopy(obj)
+    in_place_replace_dict(new_obj, old_obj)
+    return new_obj
 
 
 def deref_recurse(container, global_data, inject_in_ref=None):
@@ -107,12 +111,12 @@ def process_composition(name, definition, global_data):
             # Check the referenced object for polymorphism. If that's the case, then inject *this* object
             # into "x-concreteTypes"
             inject = {}
-            if "discriminator" in deref(el, global_data):
+            if set(["discriminator", "x-discriminator"]).intersection(deref(el, global_data)):
                 inject.update({"x-concreteTypes": {"$ref": "#/definitions/{0}".format(name)}})
             el = deref(el, global_data, inject_in_ref=inject)
 
         for k, v in el.items():
-            if k == "discriminator":
+            if k in ["discriminator", "x-discriminator"]:
                 # TODO ... Remove this when polymorphism stops crashing the Swagger editor (but update autodoc first).
 
                 # This is polymorphism, not composition. Bail out
@@ -181,11 +185,11 @@ def pre_process(src_filename):
         }
     }
 
-    all_responses["deleteSuccessResponse"] = copy.deepcopy(base_response_properties)
-
     # Pre-process all definitions
     for name, definition in list(all_definitions.items()):  # list() -> Python 3
         if name.startswith("Api"):
+            if name == "ApiErrorResponse":
+                all_definitions[name]["properties"] = base_response_properties
             # "Api..." is for API objects only.
             continue
 
@@ -197,15 +201,16 @@ def pre_process(src_filename):
             all_parameters[id_param_name] = {
                 "name": id_param_name,
                 "in": "path",
-                "type": definition["properties"]["id"]["type"],
                 "required": True,
-                "description": "The ID of a {0} object.".format(name),
                 "x-references": {"$ref": "#/definitions/{0}".format(name)},
             }
+            all_parameters[id_param_name].update(definition["properties"]["id"])
+            all_parameters[id_param_name]["description"] = "The ID of a {0} object.".format(name)
+            all_parameters[id_param_name].pop("readOnly", None)
 
-        obj_param_name = "{0}Object".format(str_lower_first(name))
+        obj_param_name = "{0}Object".format(name)
         all_parameters[obj_param_name] = {
-            "name": obj_param_name,
+            "name": str_lower_first(obj_param_name),
             "description": "The JSON representation of a {0} object.".format(name),
             "in": "body",
             "schema": {"$ref": "#/definitions/{0}".format(name)},
@@ -213,7 +218,7 @@ def pre_process(src_filename):
         }
 
         # Responses
-        list_response_name = "{0}List".format(str_lower_first(name))
+        list_response_name = "{0}List".format(name)
         list_response_definition = {
             "description": "A list of {0} objects.".format(name),
             "schema": {
@@ -221,11 +226,11 @@ def pre_process(src_filename):
             }
         }
 
-        detail_response_name = "{0}Detail".format(str_lower_first(name))
+        detail_response_name = "{0}Details".format(name)
         detail_response_definition = {
             "description": "The JSON representation of a {0} object.".format(name),
             "schema": {
-                "$ref": "#/definitions/{0}DetailResponse".format(name)
+                "$ref": "#/definitions/{0}DetailsResponse".format(name)
             }
         }
 
@@ -259,11 +264,12 @@ def pre_process(src_filename):
         }
         list_response_definition["properties"].update(copy.deepcopy(base_response_properties))
 
-        detail_response_name = "{0}DetailResponse".format(name)
+        detail_response_name = "{0}DetailsResponse".format(name)
         detail_response_definition = {
             "properties": {
                 "data": {
                     "$ref": "#/definitions/{0}".format(name),
+                    "readOnly": True,
                 },
             },
             "x-derived": {"$ref": "#/definitions/{0}".format(name)},
@@ -277,7 +283,7 @@ def pre_process(src_filename):
 
         # Create a generic foreign key
         if "id" in definition.get("properties", {}):
-            extra_definitions.append(("{0}ForeignKey".format(name), {
+            definition_fk = {
                 "required": ["id"],
                 "properties": {
                     "id": {
@@ -286,7 +292,12 @@ def pre_process(src_filename):
                 },
                 "x-references": {"$ref": "#/definitions/{0}".format(name)},
                 "x-derived": {"$ref": "#/definitions/{0}".format(name)},
-            }))
+            }
+
+            if "description" in definition["properties"]["id"]:
+                definition_fk["properties"]["id"]["description"] = definition["properties"]["id"]["description"]
+
+            extra_definitions.append(("{0}ForeignKey".format(name), definition_fk))
 
         # Check what we should add. Declared but unused definitions are a warning
         # in Swagger and they crash the editor
@@ -342,12 +353,14 @@ def pre_process(src_filename):
             # Inject 400 and 500
             responses = method.get("responses", {})
             for code, ref in [
-                (400, '#/responses/clientError'),
-                (401, '#/responses/authenticationError'),
-                (403, '#/responses/permissionsError'),
-                (404, '#/responses/notFoundError'),
-                (409, '#/responses/conflictError'),
-                (500, '#/responses/serverError'),
+                (400, '#/responses/ClientError'),
+                (401, '#/responses/AuthenticationError'),
+                (403, '#/responses/PermissionsError'),
+                (404, '#/responses/NotFoundError'),
+                (409, '#/responses/ConflictError'),
+                (500, '#/responses/ServerError'),
+                (501, '#/responses/NotImplementedError'),
+                (503, '#/responses/ServiceUnavailableError')
             ]:
                 if code not in responses:
                     responses[code] = {"$ref": ref}

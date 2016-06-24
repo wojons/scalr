@@ -3,6 +3,7 @@
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectPropertyEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
+use Scalr\Stats\CostAnalytics\Forecast;
 use Scalr\Stats\CostAnalytics\Iterator\ChartPeriodIterator;
 use Scalr\Stats\CostAnalytics\Entity\TagEntity;
 use Scalr\Exception\AnalyticsException;
@@ -10,12 +11,13 @@ use Scalr\Stats\CostAnalytics\Entity\SettingEntity;
 use Scalr\Stats\CostAnalytics\Entity\NotificationEntity;
 use Scalr\Stats\CostAnalytics\Entity\ReportEntity;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
+use Scalr\UI\Controller\Admin\Analytics\NotificationTrait;
 use Scalr\UI\Request\JsonData;
 use Scalr\UI\Request\Validator;
 
 class Scalr_UI_Controller_Admin_Analytics_Projects extends Scalr_UI_Controller
 {
-    use Scalr\Stats\CostAnalytics\Forecast;
+    use Forecast, NotificationTrait;
 
     public function hasAccess()
     {
@@ -237,109 +239,49 @@ class Scalr_UI_Controller_Admin_Analytics_Projects extends Scalr_UI_Controller
 
     /**
      * @param string $projectId
+     * @throws Scalr_Exception_InsufficientPermissions
      */
     public function notificationsAction($projectId)
     {
-        $this->response->page('ui/admin/analytics/projects/notifications.js', array(
-            'notifications' => NotificationEntity::find([['subjectType' => NotificationEntity::SUBJECT_TYPE_PROJECT],['subjectId' => $projectId]])->getArrayCopy(),
-            'reports'       => ReportEntity::find([['subjectType' => ReportEntity::SUBJECT_TYPE_PROJECT],['subjectId' => $projectId]])->getArrayCopy(),
-        ), array(), array('ui/admin/analytics/notifications/view.css'));
+        $project = ProjectEntity::findPk($projectId);
+        /* @var $project ProjectEntity */
+        if (!$project->hasAccessPermissions($this->getUser())) {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+
+        $this->response->page('ui/admin/analytics/projects/notifications.js', [
+            'notifications.projects' => NotificationEntity::find([['subjectType' => NotificationEntity::SUBJECT_TYPE_PROJECT],['subjectId' => $projectId]])->getArrayCopy(),
+            'reports'                => ReportEntity::find([['subjectType' => ReportEntity::SUBJECT_TYPE_PROJECT],['subjectId' => $projectId]])->getArrayCopy(),
+        ], [], ['ui/admin/analytics/notifications/view.css']);
     }
 
     /**
      * @param string $projectId
      * @param JsonData $notifications
+     * @throws Scalr_Exception_InsufficientPermissions
      */
     public function xSaveNotificationsAction($projectId, JsonData $notifications)
     {
+        $project = ProjectEntity::findPk($projectId);
+        /* @var $project ProjectEntity */
+        if (!$project->hasAccessPermissions($this->getUser())) {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+
         $data = [];
 
         foreach ($notifications as $id => $settings) {
             if ($id == 'reports') {
-                $this->saveReports($projectId, $settings);
+                $this->saveReports($settings, $projectId);
                 $data[$id] = ReportEntity::find([['subjectType' => ReportEntity::SUBJECT_TYPE_PROJECT],['subjectId' => $projectId]])->getArrayCopy();
-            } elseif ($id == 'notifications') {
-                $this->saveNotifications($projectId, NotificationEntity::SUBJECT_TYPE_PROJECT, $settings);
+            } elseif ($id == 'notifications.projects') {
+                $this->saveNotifications(NotificationEntity::SUBJECT_TYPE_PROJECT, $settings, $projectId);
                 $data[$id] = NotificationEntity::find([['subjectType' => NotificationEntity::SUBJECT_TYPE_PROJECT],['subjectId' => $projectId]])->getArrayCopy();
             }
         }
 
         $this->response->data($data);
         $this->response->success('Notifications successfully saved');
-    }
-
-    private function saveNotifications($projectId, $subjectType, $settings)
-    {
-        $uuids = array();
-
-        foreach ($settings['items'] as $item) {
-            $notification = new NotificationEntity();
-
-            if ($item['uuid']) {
-                $notification->findPk($item['uuid']);
-            }
-
-            $notification->subjectType = $subjectType;
-            $notification->subjectId = $projectId;
-            $notification->notificationType = $item['notificationType'];
-            $notification->threshold = $item['threshold'];
-            $notification->recipientType = $item['recipientType'];
-            $notification->emails = $item['emails'];
-            $notification->status = $item['status'];
-            $notification->save();
-            $uuids[] = $notification->uuid;
-        }
-
-        foreach (NotificationEntity::find([['subjectType' => NotificationEntity::SUBJECT_TYPE_PROJECT],['subjectId' => $projectId]]) as $notification) {
-            if (!in_array($notification->uuid, $uuids)) {
-                $notification->delete();
-            }
-        }
-    }
-
-    private function saveReports($projectId, $settings)
-    {
-        $uuids = array();
-
-        foreach ($settings['items'] as $item) {
-            $report = new ReportEntity();
-
-            if ($item['uuid']) {
-                $report->findPk($item['uuid']);
-            }
-
-            $report->subjectType = $item['subjectType'];
-
-            $subject = null;
-
-            if ($report->subjectType == ReportEntity::SUBJECT_TYPE_CC) {
-                $subject = $this->getContainer()->analytics->ccs->get($item['subjectId']);
-            } elseif ($report->subjectType == ReportEntity::SUBJECT_TYPE_PROJECT) {
-                $subject = $this->getContainer()->analytics->projects->get($item['subjectId']);
-            } else {
-                $report->subjectType = null;
-                $report->subjectId = null;
-            }
-
-            if ($report->subjectType) {
-                if ($item['subjectId'] && !$subject) {
-                    throw new Scalr_UI_Exception_NotFound();
-                }
-                $report->subjectId = $item['subjectId'] ? $item['subjectId'] : null;
-            }
-
-            $report->period = $item['period'];
-            $report->emails = $item['emails'];
-            $report->status = $item['status'];
-            $report->save();
-            $uuids[] = $report->uuid;
-        }
-
-        foreach (ReportEntity::find([['subjectType' => ReportEntity::SUBJECT_TYPE_PROJECT],['subjectId' => $projectId]]) as $report) {
-            if (!in_array($report->uuid, $uuids)) {
-                $report->delete();
-            }
-        }
     }
 
     /**

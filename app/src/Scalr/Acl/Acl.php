@@ -20,6 +20,10 @@ class Acl
 {
     const NAME_MANAGE = 'manage';
 
+    const NAME_CREATE = 'create';
+    const NAME_UPDATE = 'update';
+    const NAME_DELETE = 'delete';
+
     // Associative groups of the ACL resources.
     // This group is needed just to visually separate resources by belonging to group.
     const GROUP_ACCOUNT = 'Account management';
@@ -32,13 +36,14 @@ class Acl
     const GROUP_SERVICES = 'Services';
     const GROUP_LOGS = 'Logs';
     const GROUP_DNS = 'Dns';
-    const GROUP_DEPLOYMENTS = 'Deployments';
     const GROUP_DATABASES = 'Databases';
     const GROUP_AWS = 'AWS';
     const GROUP_CLOUDSTACK = 'CloudStack';
     const GROUP_OPENSTACK = 'OpenStack';
     const GROUP_GCE = 'GCE';
     const GROUP_ANALYTICS = 'Analytics';
+    const GROUP_DISCOVERY_MANAGER = 'Discovery manager';
+
     // .. add more associative groups here
     // const GROUP_FOOGROUP = 'Fooname';
 
@@ -82,7 +87,7 @@ class Acl
     const RESOURCE_SECURITY_SECURITY_GROUPS = 0x132;
 
     const RESOURCE_LOGS_API_LOGS = 0x140;
-    const RESOURCE_LOGS_SCRIPTING_LOGS = 0x141;
+    const RESOURCE_LOGS_ORCHESTRATION_LOGS = 0x141;
     const RESOURCE_LOGS_SYSTEM_LOGS = 0x142;
     const RESOURCE_LOGS_EVENT_LOGS = 0x143;
 
@@ -104,10 +109,6 @@ class Acl
     const RESOURCE_DB_DATABASE_STATUS = 0x171;
     const RESOURCE_DB_SERVICE_CONFIGURATION = 0x172;
 
-    const RESOURCE_DEPLOYMENTS_APPLICATIONS = 0x180;
-    const RESOURCE_DEPLOYMENTS_SOURCES = 0x181;
-    const RESOURCE_DEPLOYMENTS_TASKS = 0x182;
-
     const RESOURCE_DNS_ZONES = 0x190;
 
     const RESOURCE_GOVERNANCE_ENVIRONMENT = 0x161;
@@ -120,11 +121,15 @@ class Acl
     const RESOURCE_ANALYTICS_ACCOUNT = 0x241;
     const RESOURCE_ANALYTICS_ENVIRONMENT = 0x242;
 
+    const RESOURCE_ANALYTICS_PROJECTS_ACCOUNT = 0x245;
+
     const RESOURCE_ORCHESTRATION_ACCOUNT = 0x250;
     const RESOURCE_SCRIPTS_ACCOUNT = 0x106;
     const RESOURCE_SCRIPTS_ENVIRONMENT = 0x105;
 
-    const RESOURCE_ORPHANED_SERVERS = 0x1A0;
+    const RESOURCE_DISCOVERY_SERVERS = 0x1A0;
+
+    const RESOURCE_ANNOUNCEMENTS = 0x260;
 
     // ... add more resource_id here
     // const RESOURCE_FOO = 0x101;
@@ -174,12 +179,15 @@ class Acl
 
     const PERM_DNS_ZONES_MANAGE = self::NAME_MANAGE;
 
-    const PERM_FARMS_MANAGE = self::NAME_MANAGE;
+    const PERM_FARMS_CREATE = self::NAME_CREATE;
+    const PERM_FARMS_UPDATE = self::NAME_UPDATE;
+    const PERM_FARMS_DELETE = self::NAME_DELETE;
     const PERM_FARMS_CLONE = 'clone';
     const PERM_FARMS_LAUNCH_TERMINATE = 'launch-terminate';
     const PERM_FARMS_CHANGE_OWNERSHIP = 'change-ownership';
     const PERM_FARMS_SERVERS = 'servers';
     const PERM_FARMS_STATISTICS = 'statistics';
+    const PERM_FARMS_PROJECTS = 'change-projects';
 
     const PERM_ROLES_ENVIRONMENT_MANAGE = self::NAME_MANAGE;
     const PERM_ROLES_ENVIRONMENT_CLONE = 'clone';
@@ -208,9 +216,13 @@ class Acl
 
     const PERM_GENERAL_CUSTOM_EVENTS_FIRE = 'fire';
 
-    const PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS = 'manage-projects';
+    const PERM_ANALYTICS_PROJECTS_ACCOUNT_CREATE = self::NAME_CREATE;
+    const PERM_ANALYTICS_PROJECTS_ACCOUNT_UPDATE = self::NAME_UPDATE;
+    const PERM_ANALYTICS_PROJECTS_ACCOUNT_DELETE = self::NAME_DELETE;
 
-    const PERM_ANALYTICS_ACCOUNT_ALLOCATE_BUDGET = 'allocate-budget';
+    const PERM_ANALYTICS_PROJECTS_ALLOCATE_BUDGET = 'allocate-budget';
+
+    const PERM_DISCOVERY_SERVERS_IMPORT = 'import';
 
     // ... add more permission_id for existing resource here
     // const PERM_FOORESOURCE_FOOPERMISSIONNAME
@@ -1719,15 +1731,7 @@ class Acl
         }
 
         if (is_string($resourceId)) {
-            $sName = 'Scalr\\Acl\\Acl::RESOURCE_' . strtoupper($resourceId);
-            if (defined($sName)) {
-                $resourceId = constant($sName);
-            } else {
-                throw new \InvalidArgumentException(sprintf(
-                    'Cannot find ACL resource %s by specified symbolic name %s.',
-                    $sName, $resourceId
-                ));
-            }
+            $resourceId = self::getResourceIdByMnemonic($resourceId);
         }
 
         return (bool) ($environment ? $user->getAclRolesByEnvironment($environment->id)->isAllowed($resourceId, $permissionId) :
@@ -1787,4 +1791,52 @@ class Acl
 
         throw new NotYetImplementedException(sprintf("%s nothing knows about %s class", __METHOD__, get_class($object)));
     }
+
+    /**
+     * Converts resource mnemonic to resourceId
+     * Method interprets $resourceMnemonic as RESOURCE_$resourceMnemonic_$scope,
+     *
+     * @param   string  $resourceMnemonic               Name of resource
+     * @param   string  $scope optional    Name of permission
+     * @return  int     resourceId
+     * @throws  \InvalidArgumentException
+     */
+    public static function getResourceIdByMnemonic($resourceMnemonic, $scope = null)
+    {
+        $sName = 'Scalr\\Acl\\Acl::RESOURCE_' . strtoupper($resourceMnemonic) . (!is_null($scope) ? '_' . strtoupper($scope) : '');
+        if (defined($sName)) {
+            $resourceId = constant($sName);
+        } else {
+            throw new \InvalidArgumentException(sprintf(
+                'Cannot find ACL resource %s',
+                $sName
+            ));
+        }
+        return $resourceId;
+    }
+
+    /**
+     * Converts permission mnemonic to permissionId
+     * Method interprets $permissionMnemonic as PERM_$resourceMnemonic_$scope_$permissionMnemonic
+     *
+     * @param   string  $resourceMnemonic   Name of resource
+     * @param   string  $permissionMnemonic Name of permission
+     * @param   string  $scope optional
+     * @return  string  permissionId
+     * @throws  InvalidArgumentException
+     */
+    public static function getPermissionIdByMnemonic($resourceMnemonic, $permissionMnemonic, $scope = null)
+    {
+        $sName = 'Scalr\Acl\Acl::PERM_' . strtoupper($resourceMnemonic) . (!is_null($scope) ? '_' . strtoupper($scope) : ''). '_' . strtoupper($permissionMnemonic);
+        if (defined($sName)) {
+            $permissionId = constant($sName);
+        } else {
+            throw new \InvalidArgumentException(sprintf(
+                'Cannot find ACL permission %s',
+                $sName
+            ));
+        }
+        return $permissionId;
+    }
+
 }

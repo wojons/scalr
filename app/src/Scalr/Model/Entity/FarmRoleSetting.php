@@ -56,12 +56,10 @@ class FarmRoleSetting extends Setting
     const BALANCING_HC_HASH = 'lb.healthcheck.hash';
     const BALANCING_AZ_HASH = 'lb.avail_zones.hash';
 
-    /** RACKSPACE Settings **/
-    const RS_FLAVOR_ID = 'rs.flavor-id';
+    const INSTANCE_TYPE = 'instance_type';
 
     /** Azure Settings **/
     const SETTING_AZURE_RESOURCE_GROUP      =       'azure.resource-group';
-    const SETTING_AZURE_VM_SIZE             =       'azure.vm-size';
     const SETTING_AZURE_STORAGE_ACCOUNT     =       'azure.storage-account';
     const SETTING_AZURE_AVAIL_SET           =       'azure.availability-set';
     const SETTING_AZURE_VIRTUAL_NETWORK     =       'azure.virtual-network';
@@ -70,7 +68,6 @@ class FarmRoleSetting extends Setting
     const SETTING_AZURE_SECURITY_GROUPS_LIST      =       'azure.security_groups.list';
 
     /** OPENSTACK Settings **/
-    const OPENSTACK_FLAVOR_ID = 'openstack.flavor-id';
     const OPENSTACK_IP_POOL = 'openstack.ip-pool';
     const OPENSTACK_NETWORKS = 'openstack.networks';
     const OPENSTACK_SECURITY_GROUPS_LIST = 'openstack.security_groups.list';
@@ -78,16 +75,16 @@ class FarmRoleSetting extends Setting
     const OPENSTACK_AVAIL_ZONE = 'openstack.availability_zone';
 
     /** GCE Settings **/
-    const GCE_MACHINE_TYPE = 'gce.machine-type';
     const GCE_NETWORK = 'gce.network';
+    const GCE_SUBNET = 'gce.subnet';
     const GCE_CLOUD_LOCATION = 'gce.cloud-location';
     const GCE_ON_HOST_MAINTENANCE = 'gce.on-host-maintenance';
     const GCE_USE_STATIC_IPS = 'gce.use_static_ips';
     const GCE_STATIC_IPS_MAP = 'gce.static_ips.map';
     const GCE_REGION = 'gce.region';
+    const GCE_INSTANCE_PERMISSIONS = 'gce.instance_permissions';
 
     /** Cloudstack Settings **/
-    const CLOUDSTACK_SERVICE_OFFERING_ID = 'cloudstack.service_offering_id';
     const CLOUDSTACK_NETWORK_OFFERING_ID = 'cloudstack.network_offering_id';
     const CLOUDSTACK_DISK_OFFERING_ID = 'cloudstack.disk_offering_id';
     const CLOUDSTACK_NETWORK_ID = 'cloudstack.network_id';
@@ -101,7 +98,6 @@ class FarmRoleSetting extends Setting
     const CLOUDSTACK_STATIC_NAT_PRIVATE_MAP = 'cloudstack.static_nat.private_map';
 
     /** AWS EC2 Settings **/
-    const AWS_INSTANCE_TYPE = 'aws.instance_type';
     const AWS_AVAIL_ZONE = 'aws.availability_zone';
     const AWS_USE_ELASIC_IPS = 'aws.use_elastic_ips';
     const AWS_ELASIC_IPS_MAP = 'aws.elastic_ips.map';
@@ -214,8 +210,6 @@ class FarmRoleSetting extends Setting
     const SYSTEM_REBOOT_TIMEOUT = 'system.timeouts.reboot';
     const SYSTEM_LAUNCH_TIMEOUT = 'system.timeouts.launch';
     const SYSTEM_NEW_PRESETS_USED = 'system.new_presets_used';
-
-    const INFO_INSTANCE_TYPE_NAME = 'info.instance_type_name';
 
     // grow storage
     const STORAGE_GROW_OPERATION_ID = 'storage.grow_operation_id';

@@ -1,0 +1,45 @@
+paths:
+  - uri: /{envId}/projects/
+    acl: fullAccess
+    operations:
+      - {method: post, response: 201, body: '&ProjectsData'}
+      - {method: post, response: 400, body: '&ProjectsData'}
+      - {method: post, response: 400, body: '&ProjectsData'}
+      - {method: post, response: 404, body: '&ProjectsData'}
+      - {method: get,  response: 200}
+  - uri: /{envId}/projects/
+    acl: readOnly
+    operations:
+      - {method: post, response: 403, body: '&{0}ProjectsData'}
+      - {method: post, response: 403, body: '&{1}ProjectsData'}
+      - {method: post, response: 403, body: '&{2}ProjectsData'}
+      - {method: post, response: 403, body: '&{3}ProjectsData'}
+  - uri: /{envId}/projects/
+    acl: noAccess
+    operations:
+      - {method: post, response: 403, body: '&{0}ProjectsData'}
+      - {method: get,  response: 403}
+  - uri: /{envId}/projects/{projectId}/
+    operations:
+      - {method: get,  response: 200, params: '&{4}ProjectsData', filterable: '&{5}ProjectsData'}
+      - {method: get,  response: 200, params: '&{4}ProjectsData', filterable: '&{6}ProjectsData'}
+  - uri: /{envId}/projects/{projectId}/
+    acl: noAccess
+    operations:
+      - {method: get,  response: 403, params: '&{4}ProjectsData', filterable: '&{5}ProjectsData'}
+      - {method: get,  response: 403, params: '&{4}ProjectsData', filterable: '&{6}ProjectsData'}
+
+ProjectsData:
+  - {name: foo bar, billingCode: foo, leadEmail: foobar@example.com, description: foo bar, costCenter.id: '118ba2e3-9751-4106-9157-c787c78fb803'}
+  - {name:     ,    billingCode: foo, leadEmail: foobar@example.com, description: foo bar, costCenter.id: '118ba2e3-9751-4106-9157-c787c78fb803'}
+  - {name: foo ,    billingCode: foo, leadEmail:                   , description: foo bar, costCenter.id: '118ba2e3-9751-4106-9157-c787c78fb803'}
+  - {name: foo ,    billingCode: foo, leadEmail: foobar@example.com, description: foo bar, costCenter.id: 'fake'}
+  - {projectId:  '&{0}Projects.id'}
+  - {billingCode: '&{0}ProjectProperties.billingCode'}
+  - {name: '&{0}Projects.name'}
+
+Projects:
+  - {name: test archived project1, archived: true, properties: '&{0}ProjectProperties'}
+
+ProjectProperties:
+  - {billingCode: foo, leadEmail: foobar@example.com, description: foo bar}

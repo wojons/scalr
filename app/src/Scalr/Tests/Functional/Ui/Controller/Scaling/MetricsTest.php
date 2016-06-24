@@ -82,8 +82,8 @@ class MetricsTest extends WebTestCase
                 'envId' => $this->logicalNot($this->identicalTo(0)),
                 'name'  => $this->matchesRegularExpression($this->namePattern),
                 'filePath',
-                'retrieveMethod'    => $this->matchesRegularExpression('/^(read|execute)$/'),
-                'calcFunction'  => $this->matchesRegularExpression('/^(avg|sum|max)$/'),
+                'retrieveMethod' => $this->logicalOr($this->matchesRegularExpression('/^(read|execute)$/'), $this->isNull()),
+                'calcFunction'   => $this->logicalOr($this->matchesRegularExpression('/^(avg|sum|max)$/'), $this->isNull()),
                 'algorithm' => $this->matchesRegularExpression('/^(Sensor|DateTime)$/'),
                 'alias' => $this->logicalNot($this->isEmpty())
             ],

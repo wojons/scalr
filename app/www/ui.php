@@ -54,12 +54,14 @@ try {
     // public controller for link like /public/*; don't check CSRF
     $publicController = !strncmp('public', $path, strlen('public'));
 
-    $session = Scalr_Session::getInstance();
+    $headers = Scalr::getAllHeaders();
+
+    $session = Scalr_Session::getInstance(isset($headers['Scalr-Autoload-Request']));
 
     $time1 = microtime(true);
 
     try {
-        $request = Scalr_UI_Request::initializeInstance(Scalr_UI_Request::REQUEST_TYPE_UI, Scalr::getAllHeaders(), $_SERVER, $_REQUEST, $_FILES, $session->getUserId(), null);
+        $request = Scalr_UI_Request::initializeInstance(Scalr_UI_Request::REQUEST_TYPE_UI, $headers, $_SERVER, $_REQUEST, $_FILES, $session->getUserId(), null);
     } catch (Exception $e) {
         if ($path == 'guest/logout') {
             // hack

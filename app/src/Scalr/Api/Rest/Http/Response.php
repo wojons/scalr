@@ -278,6 +278,16 @@ class Response
     }
 
     /**
+     * Gets all headers
+     *
+     * @return array Returns all HTTP headers as array
+     */
+    public function getHeaders()
+    {
+        return $this->headers;
+    }
+
+    /**
      * Removes specified header
      *
      * @param   string    $name  A header name

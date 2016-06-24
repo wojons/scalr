@@ -27,8 +27,8 @@ use Scalr\Service\Aws\AbstractApi;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\Client\QueryClient\CloudFrontQueryClient;
 use Scalr\Service\Aws\CloudFront;
-use \DateTime;
-use \DateTimeZone;
+use DateTime;
+use DateTimeZone;
 
 /**
  * CloudFront Api messaging.

@@ -36,14 +36,18 @@ class Scalr_Net_Scalarizr_Client
 
     const HASH_ALGO = 'SHA1';
 
-    private $dbServer,
-        $port,
-        $cryptoTool,
-        $isVPC = false;
+    private $dbServer;
+
+    private $port;
+
+    private $cryptoTool;
+
+    private $isVPC = false;
 
     protected $namespace;
 
     public $timeout = 15;
+
     public $debug;
 
     public static function getClient($dbServer, $namespace = null, $port = 8010)
@@ -78,8 +82,8 @@ class Scalr_Net_Scalarizr_Client
                 break;
 
             case "image":
-                  return new Scalr_Net_Scalarizr_Services_Image($dbServer, $port);
-                   break;
+                return new Scalr_Net_Scalarizr_Services_Image($dbServer, $port);
+                break;
 
             default:
                 return new Scalr_Net_Scalarizr_Client($dbServer, $port);
@@ -93,14 +97,17 @@ class Scalr_Net_Scalarizr_Client
         $this->port = $port;
 
         if ($this->dbServer->farmId)
-            if (DBFarm::LoadByID($this->dbServer->farmId)->GetSetting(Entity\FarmSetting::EC2_VPC_ID))
+            if (DBFarm::LoadByID($this->dbServer->farmId)->GetSetting(Entity\FarmSetting::EC2_VPC_ID)) {
                 $this->isVPC = true;
+        }
 
         $this->cryptoTool = \Scalr::getContainer()->srzcrypto($this->dbServer->GetKey(true));
     }
 
-    public function __get($name) {
+    public function __get($name)
+    {
         $className = "Scalr_Net_Scalarizr_Services_".ucfirst($name);
+
         if (class_exists($className)) {
             $this->{$name} = new $className($this->dbServer, $this->port);
         }
@@ -165,6 +172,7 @@ class Scalr_Net_Scalarizr_Client
             "X-Signature" => $signature,
             "X-Server-Id" => $this->dbServer->serverId
         ));
+
         $request->append($jsonRequest);
 
         try {
@@ -175,23 +183,27 @@ class Scalr_Net_Scalarizr_Client
             $this->debug['fullResponse'] = $response->toString();
 
             if ($response->getResponseCode() == 200) {
-
                 $body = $this->cryptoTool->decrypt($response->getBody()->toString());
 
                 $jResponse = @json_decode($body);
 
-                if ($jResponse->error)
+                if (!empty($jResponse->error)) {
                     throw new Exception("{$jResponse->error->message} ({$jResponse->error->code}): {$jResponse->error->data}");
+                }
 
                 return $jResponse;
             } else {
-                throw new Exception(sprintf("Unable to perform request to scalarizr: %s (%s)", $response->getBody()->toString(), $response->getResponseCode()));
+                throw new Exception(sprintf(
+                    "Unable to perform request to scalarizr: %s (%s)",
+                    $response->getBody()->toString(), $response->getResponseCode()
+                ));
             }
-        } catch(\http\Exception $e) {
-            if (isset($e->innerException))
+        } catch (\http\Exception $e) {
+            if (isset($e->innerException)) {
                 $msg = $e->innerException->getMessage();
-            else
+            } else {
                 $msg = $e->getMessage();
+            }
 
             if (stristr($msg, "Namespace not found")) {
                 $msg = "Feature not supported by installed version of scalarizr. Please update it to the latest version and try again.";
@@ -201,13 +213,16 @@ class Scalr_Net_Scalarizr_Client
         }
     }
 
-    private function walkSerialize ($object, &$retval, $normalizationMethod) {
-        if ($object === null)
+    private function walkSerialize ($object, &$retval, $normalizationMethod)
+    {
+        if ($object === null) {
             return false;
+        }
 
         foreach ($object as $k=>$v) {
-            if ($v === null)
+            if ($v === null) {
                 $v = '';
+            }
 
             $valueType = gettype($v);
             $objectType = gettype($retval);
@@ -216,29 +231,31 @@ class Scalr_Net_Scalarizr_Client
 
             if (is_object($v) || is_array($v)) {
                 if ($objectType == 'object') {
-                    if (is_array($v))
+                    if (is_array($v)) {
                         $retval->{$normalizedString} = array();
-                    else
+                    } else {
                         $retval->{$normalizedString} = new stdClass();
+                    }
 
                     call_user_func_array(array($this, 'walkSerialize'), array($v, &$retval->{$normalizedString}, $normalizationMethod));
-                }
-                else {
-                    if (is_array($v))
+                } else {
+                    if (is_array($v)) {
                         $retval[$normalizedString] = array();
-                    else
+                    } else {
                         $retval[$normalizedString] = new stdClass();
+                    }
 
                     call_user_func_array(array($this, 'walkSerialize'), array($v, &$retval[$normalizedString], $normalizationMethod));
                 }
             } else {
-                if (is_object($retval))
-                   $retval->{$normalizedString} = $v;
-                else {
-                    if (!is_int($k))
+                if (is_object($retval)) {
+                    $retval->{$normalizedString} = $v;
+                } else {
+                    if (!is_int($k)) {
                         $retval[$normalizedString] = $v;
-                    else
+                    } else {
                         $retval[] = $v;
+                    }
                 }
             }
         }
@@ -247,13 +264,17 @@ class Scalr_Net_Scalarizr_Client
     private function underScope($name)
     {
         $parts = preg_split("/[A-Z]/", $name, -1, PREG_SPLIT_OFFSET_CAPTURE | PREG_SPLIT_NO_EMPTY);
+
         $ret = "";
+
         foreach ($parts as $part) {
             if ($part[1]) {
                 $ret .= "_" . strtolower($name{$part[1]-1});
             }
+
             $ret .= $part[0];
         }
+
         return $ret;
     }
 

@@ -122,6 +122,13 @@ class ErrorMessage extends ApiMessage
     const ERR_OBJECT_IN_USE = 'ObjectInUse';
 
     /**
+     * Configuration Mismatch
+     * HTTP Status Code: 409
+     * Example Message: Configuration mismatch between the object and the replacement object.
+     */
+    const ERR_CONFIGURATION_MISMATCH = 'ConfigurationMismatch';
+
+    /**
      * Object Not Found
      *
      * HTTP Status Code: 404
@@ -137,6 +144,15 @@ class ErrorMessage extends ApiMessage
      */
     const ERR_LIMIT_EXCEEDED = 'LimitExceeded';
 
+
+    /**
+     * Service unavailable
+     *
+     * HTTP Status Code: 503
+     * Example Message: The service is currently unavailable
+     */
+    const ERR_SERVICE_UNAVAILABLE = 'ServiceUnavailable';
+
     /**
      * Object locked
      *
@@ -144,4 +160,37 @@ class ErrorMessage extends ApiMessage
      * Example Message: Farm locked by user N with comment 'some comment'. Please unlock it first
      */
     const ERR_LOCKED = 'Locked';
+
+    /**
+     * Object or action is deprecated
+     *
+     * HTTP status Code: 409
+     * Example Message: The Role that you are trying to use is deprecated
+     */
+    const ERR_DEPRECATED = 'Deprecated';
+
+    /**
+     * Object in unacceptable state
+     *
+     * HTTP status Code: 409
+     * Example Message: The Server that you are trying to use is in unacceptable state
+     */
+    const ERR_UNACCEPTABLE_STATE = 'UnacceptableState';
+
+    /**
+     * Object does not exist on cloud
+     *
+     * HTTP status Code: 409
+     * Example Message: The Server that you are trying to use does not exist on the cloud
+     */
+    const ERR_OBJECT_NOT_FOUND_ON_CLOUD = 'ObjectNotFoundOnCloud';
+
+    /**
+     * Object's configuration on the cloud prevents request from being performed
+     *
+     * HTTP status Code: 409
+     * Example Message: The action you are trying to perform conflicts with Server's configuration on the cloud.
+     */
+    const ERR_UNACCEPTABLE_OBJECT_CONFIGURATION = 'UnacceptableObjectConfiguration';
+
 }

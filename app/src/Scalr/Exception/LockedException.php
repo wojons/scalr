@@ -3,6 +3,7 @@
 namespace Scalr\Exception;
 
 use Exception;
+use InvalidArgumentException;
 use Scalr\Model\Entity\Account\User;
 
 /**
@@ -38,6 +39,10 @@ class LockedException extends ScalrException
      */
     public function __construct($lockedBy, $object = null, $comment = '', $code = 0, Exception $previous = null)
     {
+        if (is_array($object)) {
+            throw new InvalidArgumentException("Second argument can not be an array");
+        }
+
         $this->lockedBy = $lockedBy;
         $this->object = $object;
 
@@ -51,7 +56,8 @@ class LockedException extends ScalrException
         }
 
         if (is_object($object)) {
-            $object = array_pop(preg_split('\\', get_class($object)));
+            $nameParts = explode('\\', get_class($object));
+            $object = array_pop($nameParts);
         }
 
         parent::__construct((empty($object) ? "Locked" : "{$object} locked" ) . " by {$userName}{$comment}", $code, $previous);

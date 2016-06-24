@@ -129,8 +129,8 @@ use Scalr\Service\Aws\Ec2Exception;
 use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\EntityManager;
 use Scalr\Service\Aws\Client\ClientInterface;
-use \DateTimeZone;
-use \DateTime;
+use DateTimeZone;
+use DateTime;
 use Scalr\Service\Aws\Ec2\DataType\RegionInfoList;
 
 /**
@@ -511,16 +511,6 @@ class Ec2Api extends AbstractApi
 
             if (!empty($options['GroupId'])) {
                 $entity = $this->ec2->getEntityManagerEnabled() ? $this->ec2->securityGroup->get($options['GroupId']) : null;
-            } else if (!empty($options['GroupName'])) {
-                //Undesirable workaround.
-                //You can have an EC2 security group with the same name as a VPC security group
-                //(each group has a unique security group ID separate from the name).
-                /*
-                $entity = $this
-                    ->getEntityManager()->getRepository('Ec2:SecurityGroup')
-                    ->findOneBy(array('groupName' => $options['GroupName']))
-                ;
-                */
             }
 
             if (isset($entity)) {
@@ -1112,7 +1102,8 @@ class Ec2Api extends AbstractApi
                 $item = new ResourceTagSetData();
                 $item->setEc2($this->ec2);
                 $item->key = $this->exist($v->key) ? (string) $v->key : null;
-                $item->value = $this->exist($v->value) ? (string) $v->value : null;
+                //Empty tag is in the XML as <value/> but actually it has empty string meaning
+                $item->value = $this->exist($v->value) ? (string) $v->value : '';
                 $list->append($item);
                 unset($item);
             }
@@ -2312,7 +2303,7 @@ class Ec2Api extends AbstractApi
     {
         $result = false;
 
-        $options['ImageId'] = (string) $imageId;
+        $options = ['ImageId' => (string) $imageId];
 
         $response = $this->client->call(ucfirst(__FUNCTION__), $options);
 
@@ -2356,7 +2347,8 @@ class Ec2Api extends AbstractApi
     {
         $result = null;
 
-        $options['KeyName'] = (string)$keyName;
+        $options = ['KeyName' => (string) $keyName];
+
         $response = $this->client->call(ucfirst(__FUNCTION__), $options);
 
         if ($response->getError() === false) {
@@ -2385,7 +2377,7 @@ class Ec2Api extends AbstractApi
     {
         $result = false;
 
-        $options['KeyName'] = (string)$keyName;
+        $options = ['KeyName' => (string)$keyName];
 
         $response = $this->client->call(ucfirst(__FUNCTION__), $options);
 
@@ -2410,8 +2402,8 @@ class Ec2Api extends AbstractApi
      *
      * Describes one or more of your key pairs.
      *
-     * @param   ListDataType    $keyNameList  The list of the names
-     * @param   array           $filter       Array of the key => value properties.
+     * @param   ListDataType    $keyNameList  optional The list of the names
+     * @param   array           $filter       optional Array of the key => value properties.
      * @return  KeyPairList     Returns KeyPairList on success
      * @throws  ClientException
      * @throws  Ec2Exception
@@ -3631,7 +3623,7 @@ class Ec2Api extends AbstractApi
     /**
      * Loads NetworkInterfaceAttachmentData from simple xml object
      *
-     * @param   \SimpleXMLElement $sxml
+     * @param   \SimpleXMLElement $v
      * @return  NetworkInterfaceAttachmentData Returns NetworkInterfaceAttachmentData
      */
     protected function _loadNetworkInterfaceAttachmentData(\SimpleXMLElement $v)
@@ -3938,19 +3930,23 @@ class Ec2Api extends AbstractApi
                 $this->ec2->networkInterface->get($options['NetworkInterfaceId']) : null;
 
             switch ($options['Attribute']) {
-                case NetworkInterfaceAttributeType::ATTR_DESCRIPTION :
+                case NetworkInterfaceAttributeType::ATTR_DESCRIPTION:
                     $result = (string)$ptr->value;
                     break;
-                case NetworkInterfaceAttributeType::ATTR_SOURCE_DEST_CHECK :
+
+                case NetworkInterfaceAttributeType::ATTR_SOURCE_DEST_CHECK:
                     $result = ((string)$ptr->value == 'true');
                     break;
-                case NetworkInterfaceAttributeType::ATTR_ATTACHMENT :
+
+                case NetworkInterfaceAttributeType::ATTR_ATTACHMENT:
                     $result = $this->_loadNetworkInterfaceAttachmentData($ptr);
                     break;
-                case NetworkInterfaceAttributeType::ATTR_GROUP_SET :
+
+                case NetworkInterfaceAttributeType::ATTR_GROUP_SET:
                     $result = $this->_loadGroupList($ptr);
                     break;
-                default :
+
+                default:
                     throw new \InvalidArgumentException(sprintf(
                         'Unexpected attribute "%s" in %s call',
                         $options['Attribute'], $action
@@ -4037,8 +4033,9 @@ class Ec2Api extends AbstractApi
                 ));
             }
             $result = true;
-            $entity = $this->ec2->getEntityManagerEnabled() ?
-                $this->ec2->networkInterface->get($options['NetworkInterfaceId']) : null;
+            if ($this->ec2->getEntityManagerEnabled()) {
+                $this->ec2->networkInterface->get($options['NetworkInterfaceId']);
+            }
             //It does not update attribute value stored in the entity manager.
         }
         return $result;
@@ -4929,35 +4926,35 @@ class Ec2Api extends AbstractApi
             $ptr = $sxml->{$options['Attribute']};
 
             switch ($options['Attribute']) {
-                case InstanceAttributeType::TYPE_EBS_OPTIMIZED :
-                case InstanceAttributeType::TYPE_SOURCE_DEST_CHECK :
-                case InstanceAttributeType::TYPE_DISABLE_API_TERMINATION :
+                case InstanceAttributeType::TYPE_EBS_OPTIMIZED:
+                case InstanceAttributeType::TYPE_SOURCE_DEST_CHECK:
+                case InstanceAttributeType::TYPE_DISABLE_API_TERMINATION:
                     $result = ((string)$ptr->value == 'true');
                     break;
 
-                case InstanceAttributeType::TYPE_INSTANCE_TYPE :
-                case InstanceAttributeType::TYPE_KERNEL :
-                case InstanceAttributeType::TYPE_RAMDISK :
-                case InstanceAttributeType::TYPE_USER_DATA :
-                case InstanceAttributeType::TYPE_INSTANCE_INITIATED_SHUTDOWN_BEHAVIOR :
-                case InstanceAttributeType::TYPE_ROOT_DEVICE_NAME :
-                case InstanceAttributeType::TYPE_SRIOV_NET_SUPPORT :
+                case InstanceAttributeType::TYPE_INSTANCE_TYPE:
+                case InstanceAttributeType::TYPE_KERNEL:
+                case InstanceAttributeType::TYPE_RAMDISK:
+                case InstanceAttributeType::TYPE_USER_DATA:
+                case InstanceAttributeType::TYPE_INSTANCE_INITIATED_SHUTDOWN_BEHAVIOR:
+                case InstanceAttributeType::TYPE_ROOT_DEVICE_NAME:
+                case InstanceAttributeType::TYPE_SRIOV_NET_SUPPORT:
                     $result = (string)$ptr->value;
                     break;
 
-                case InstanceAttributeType::TYPE_BLOCK_DEVICE_MAPPING :
+                case InstanceAttributeType::TYPE_BLOCK_DEVICE_MAPPING:
                     $result = $this->_loadInstanceBlockDeviceMappingResponseList($ptr);
                     break;
 
-                case InstanceAttributeType::TYPE_GROUP_SET :
+                case InstanceAttributeType::TYPE_GROUP_SET:
                     $result = $this->_loadGroupList($ptr);
                     break;
 
-                case InstanceAttributeType::TYPE_PRODUCT_CODES :
+                case InstanceAttributeType::TYPE_PRODUCT_CODES:
                     $result = $this->_loadProductCodeSetList($ptr);
                     break;
 
-                default :
+                default:
                     throw new \InvalidArgumentException(sprintf(
                         'Unexpected attribute "%s" in %s call',
                         $options['Attribute'], $action

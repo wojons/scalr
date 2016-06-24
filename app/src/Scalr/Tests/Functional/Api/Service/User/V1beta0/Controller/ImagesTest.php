@@ -18,6 +18,8 @@ use Scalr\Tests\Functional\Api\ApiTestCase;
  */
 class ImagesTest extends ApiTestCase
 {
+    const TEST_TYPE = ApiTestCase::TEST_TYPE_CLOUD_DEPENDENT;
+
     /**
      * @test
      */
@@ -401,11 +403,31 @@ class ImagesTest extends ApiTestCase
         $this->assertErrorMessageErrorEquals(ErrorMessage::ERR_SCOPE_VIOLATION, $delete);
         $this->assertErrorMessageStatusEquals(403, $delete);
 
-        $delete = $this->request($uri . '/' . $copyBody->data->id, Request::METHOD_DELETE);
-        $this->assertEquals(200, $delete->response->getStatus());
-
         $delete = $this->request($uri . '/' . $imageBody->data->id, Request::METHOD_DELETE);
         $this->assertEquals(200, $delete->response->getStatus());
+
+        //test delete from cloud copy image
+        $delete = $this->request($uri . '/' . $copyBody->data->id, Request::METHOD_DELETE, ['deleteFromCloud' => true]);
+        $this->assertEquals(202, $delete->response->getStatus());
+
+        $fetch = $this->request($uri . '/' . $copyBody->data->id, Request::METHOD_GET);
+        $this->assertFetchResponseNotEmpty($fetch);
+        $this->assertEquals($fetch->getBody()->data->status, Image::STATUS_DELETE);
+
+        $describe = $this->request($uri, Request::METHOD_GET, ['status' => Request::METHOD_DELETE, 'id' => $copyBody->data->id]);
+        $this->assertDescribeResponseNotEmpty($describe);
+
+        $modify = $this->request($uri . '/' . $copyBody->data->id, Request::METHOD_PATCH, [], ['name' => $testName . 'modify']);
+        $this->assertEquals(409, $modify->response->getStatus());
+
+        $copy = $this->request($uri . '/' .  $copyBody->data->id . '/actions/copy', Request::METHOD_POST, [], [
+            'cloudLocation' =>  $imageBody->data->cloudLocation,
+            'cloudPlatform' =>  $imageBody->data->cloudPlatform
+        ]);
+        $this->assertEquals(409, $copy->response->getStatus());
+
+        $delete = $this->request($uri . '/' . $copyBody->data->id, Request::METHOD_DELETE);
+        $this->assertEquals(409, $delete->response->getStatus());
     }
 
 }

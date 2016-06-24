@@ -3,7 +3,7 @@
 namespace Scalr\Upgrade;
 
 use Scalr\Exception;
-use \IteratorAggregate;
+use IteratorAggregate;
 
 /**
  * AbstractEntity

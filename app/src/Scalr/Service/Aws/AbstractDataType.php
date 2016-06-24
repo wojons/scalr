@@ -498,7 +498,7 @@ abstract class AbstractDataType extends AbstractServiceRelatedType
      *
      * @param    string    $uriParameterName  optional Parameter name
      * @param    bool      $member            optional Should it add member prefix
-     * @return   string    Returns query parameters array looks like array ( '[parameterName.member.][propName[.member.m]]' => value )
+     * @return   array     Returns query parameters array looks like array ( '[parameterName.member.][propName[.member.m]]' => value )
      *                     Values are not url encoded.
      */
     public function getQueryArray($uriParameterName = null, $member = true)
@@ -582,7 +582,7 @@ abstract class AbstractDataType extends AbstractServiceRelatedType
      * Gets query parameters array without member prefix
      *
      * @param   string    $uriParameterName  optional Parameter name.
-     * @return  string    Returns query parameters array looks like array ( '[parameterName.][propName[.n]]' => value )
+     * @return  array     Returns query parameters array looks like array ( '[parameterName.][propName[.n]]' => value )
      *                    Values are not url encoded.
      */
     public function getQueryArrayBare($uriParameterName = null)

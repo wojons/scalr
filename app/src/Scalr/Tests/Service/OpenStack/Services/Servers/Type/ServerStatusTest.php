@@ -3,7 +3,7 @@ namespace Scalr\Tests\Service\OpenStack\Services\Servers\Type;
 
 use Scalr\Service\OpenStack\Services\Servers\Type\ServerStatus;
 use Scalr\Tests\Service\OpenStack\OpenStackTestCase;
-use \ReflectionClass;
+use ReflectionClass;
 
 /**
  * ServerStatusTest

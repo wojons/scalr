@@ -2,7 +2,7 @@
 
 namespace Scalr\Stats\CostAnalytics\Events;
 
-use \DBFarm;
+use DBFarm;
 use Scalr\Stats\CostAnalytics\Entity\AccountTagEntity;
 use Scalr\Stats\CostAnalytics\Entity\TagEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;

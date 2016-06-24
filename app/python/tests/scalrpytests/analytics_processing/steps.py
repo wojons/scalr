@@ -94,6 +94,7 @@ def mock_download_aws_billing_file_ok():
     bucket = mock.MagicMock(name='bucket')
     keys = []
     for name in [
+            '123-aws-billing-detailed-line-items-with-resources-and-tags-2015-03.csv.zip',
             '123-aws-billing-detailed-line-items-with-resources-and-tags-2015-04.csv.zip',
             '123-aws-billing-detailed-line-items-with-resources-and-tags-2015-05.csv.zip',
             '333-aws-billing-detailed-line-items-with-resources-and-tags-2015-05.csv.zip']:
@@ -167,7 +168,7 @@ def analytics_process():
     billing.AzureBilling.ratecard_url = 'http://127.0.0.1:8080/subscriptions_{subscription_id}_RateCard'
     billing.AzureBilling.usage_url = 'http://127.0.0.1:8080/subscriptions_{subscription_id}_UsageAggregates'
     billing.AzureBilling.token_url = 'http://127.0.0.1:8080/token_{tenant_id}'
-    analytics_processing.launch_delay = 0
+    analytics_processing.LAUNCH_DELAY = 0
 
     lib.world.mock_download_aws_billing_file()
 

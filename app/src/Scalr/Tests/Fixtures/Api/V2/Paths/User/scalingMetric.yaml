@@ -1,0 +1,84 @@
+paths:
+  - uri: /{envId}/scaling-metrics/
+    acl: fullAccess
+    operations:
+      - {method: post, response: 400, body: '&ScalingMetricData'}
+      - {method: post, response: 400, body: '&ScalingMetricData'}
+      - {method: post, response: 400, body: '&ScalingMetricData'}
+      - {method: post, response: 400, body: '&ScalingMetricData'}
+      - {method: post, response: 400, body: '&ScalingMetricData'}
+      - {method: post, response: 400, body: '&ScalingMetricData'}
+      - {method: post, response: 400, body: '&ScalingMetricData'}
+      - {method: post, response: 400, body: '&ScalingMetricData'}
+      - {method: post, response: 201, body: '&ScalingMetricData'}
+      - {method: post, response: 409, body: '&{8}ScalingMetricData'}
+      - {method: post, response: 400, body: '&{12}ScalingMetricData'} #SCALRCORE-3288
+      - {method: get,  response: 200}
+  - uri: /{envId}/scaling-metrics/
+    acl: readOnly
+    operations:
+      - {method: post, response: 403, body: '&ScalingMetricData'}
+      - {method: get,  response: 200}
+  - uri: /{envId}/scaling-metrics/
+    acl: noAccess
+    operations:
+      - {method: post, response: 403, body: '&ScalingMetricData'}
+      - {method: get,  response: 403}
+
+  - uri: /{envId}/scaling-metrics/{metricName}/
+    acl: fullAccess
+    operations:
+      - {method: get,    response: 200, params: '&{0}ScalingMetricParams'}
+      - {method: patch,  response: 200, params: '&{0}ScalingMetricParams', body: {function: sum, retrieveMethod: read}}
+      - {method: patch,  response: 200, params: '&{0}ScalingMetricParams', body: {filePath: 'file:///var/www/index.html'}}
+      - {method: patch,  response: 200, params: '&{0}ScalingMetricParams', body: '&{9}ScalingMetricData'}
+      - {method: patch,  response: 409, params: '&{0}ScalingMetricParams', body: {name: 'LoadAverages'}}
+      - {method: patch,  response: 200, params: '&{0}ScalingMetricParams', body: '&{10}ScalingMetricData'}
+      - {method: patch,  response: 409, params: '&{1}ScalingMetricParams', body: '&{11}ScalingMetricData'}
+      - {method: delete, response: 200, params: '&{1}ScalingMetricParams'}
+      - {method: delete, response: 404, params: '&{1}ScalingMetricParams'}
+      - {method: delete, response: 409, params: '&{2}ScalingMetricParams'}
+      - {method: delete, response: 403, params: '&{3}ScalingMetricParams'}
+
+  - uri: /{envId}/scaling-metrics/{metricName}/
+    acl: readOnly
+    operations:
+      - {method: get,    response: 200, params: '&{3}ScalingMetricParams'}
+      - {method: patch,  response: 403, params: '&{0}ScalingMetricParams', body: {function: sum, retrieveMethod: read}}
+
+  - uri: /{envId}/scaling-metrics/{metricName}/
+    acl: noAccess
+    operations:
+      - {method: get,    response: 403, params: '&{3}ScalingMetricParams'}
+      - {method: patch,  response: 403, params: '&{0}ScalingMetricParams', body: {function: sum, retrieveMethod: read}}
+
+ScalingMetricData:
+  - {name: testIvScalingMetric, function: avg,     inverted: true, retrieveMethod: execute, filePath: 'file:///var/www/'}          #0
+  - {name: smal,                function: average, inverted: true, retrieveMethod: execute, filePath: 'file:///var/www/'}          #1
+  - {name: foo barr,            function: average, inverted: true, retrieveMethod: read,    filePath: 'file:///var/www/'}          #2
+  - {name: testIvScalingMetric, inverted: true, retrieveMethod: execute, filePath: 'file:///var/www/'}                             #3
+  - {function: average,  inverted: true, retrieveMethod: execute, filePath: 'file:///var/www/'}                                    #4
+  - {name: testIvScalingMetric, inverted: true, retrieveMethod: fake, filePath: 'file:///var/www/'}                                #5
+  - {name: testIvScalingMetric, function: average,  inverted: true, filePath: 'file:///var/www/'}                                  #6
+  - {name: '&{0}ScalingMetricParams.metricName', function: average, retrieveMethod: execute}                                                          #7
+  - {name: '&{0}ScalingMetricParams.metricName', function: average, retrieveMethod: execute, filePath: 'file:///var/www/index.html', inverted: true}  #8
+  - {name: '&{0}ScalingMetricParams.metricName'}
+  - {name: '&{1}ScalingMetricParams.metricName'}
+  - {name: '&{2}ScalingMetricParams.metricName'}
+  - {name: 'test><sctript>notValid</script>', function: average, inverted: true, retrieveMethod: execute, filePath: 'file:///var/www/'} #12 XSS check
+
+ScalingMetricParams:
+  - {metricName: testScalingMetric}
+  - {metricName: changedMetricName}
+  - {metricName: usedMetrics}
+  - {metricName: LoadAverages}
+
+FarmRole:
+  - {farmId: 9800000,  roleId: 38242, alias: test-scaling-farm-role, platform: ec2, cloudLocation: us-east-1}
+
+CustomMetrics:
+  - {name: '&{2}ScalingMetricParams.metricName', retrieveMethod: 'read', calcFunction: 'avg', algorithm: 'Sensor', alias: 'custom'}
+
+FarmRoleScalingMetrics:
+  - {metricId: '&CustomMetrics.id', farmRoleId: '&FarmRole.id', settings: {max: 100, min: 10}}
+

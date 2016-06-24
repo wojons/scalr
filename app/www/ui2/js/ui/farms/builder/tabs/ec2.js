@@ -31,7 +31,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Ec2', {
         var me = this;
         if (!me.isEnabled(record)) return;
         var fullname = name.join('.');
-        if (fullname === 'settings.aws.instance_type') {
+        if (fullname === 'settings.instance_type' && record.get('platform') === 'ec2') {
             var settings = record.get('settings', true),
                 field;
 

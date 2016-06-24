@@ -40,6 +40,7 @@ class BundleTask
     public $farmId;
     public $cloudLocation;
     public $object;
+    public $objectScope;
 
     public $createdById;
     public $createdByEmail;
@@ -88,6 +89,7 @@ class BundleTask
         'cloud_location'=> 'cloudLocation',
         'meta_data'		=> 'metaData',
         'object'        => 'object',
+        'object_scope'  => 'objectScope',
         'os_family'		=> 'osFamily',
         'os_name'		=> 'osName',
         'os_version'	=> 'osVersion',
@@ -199,23 +201,10 @@ class BundleTask
     {
         $snapshot = $this->getSnapshotDetails();
 
-        $envId = $this->envId;
-        /* @var Entity\Server $server */
-        $server = Entity\Server::findOneByServerId($this->serverId);
-        if (!empty($server->farmRoleId)) {
-            /* @var Entity\FarmRole $farmRole */
-            $farmRole = Entity\FarmRole::findPk($server->farmRoleId);
-            if (!empty($farmRole->roleId)) {
-                /* @var Entity\Role $role */
-                $role = Entity\Role::findPk($farmRole->roleId);
-                $envId = $role->getScope() == ScopeInterface::SCOPE_ACCOUNT ? NULL : $envId;
-            }
-        }
-
         $image = new Image();
         $image->id = $this->snapshotId;
         $image->accountId = $this->clientId;
-        $image->envId = $envId;
+        $image->envId = $this->envId;
         $image->bundleTaskId = $this->id;
         $image->platform = $this->platform;
         $image->cloudLocation = $this->cloudLocation;
@@ -225,10 +214,18 @@ class BundleTask
         $image->source = Image::SOURCE_BUNDLE_TASK;
         $image->status = Image::STATUS_ACTIVE;
         $image->agentVersion = $snapshot['szr_version'];
+        $image->isScalarized = 1;
+        $image->hasCloudInit = 0;
 
         $image->checkImage();
-        if (!$image->name)
+        if (!$image->name) {
             $image->name = $this->roleName . '-' . date('YmdHi');
+        }
+
+        // before checkImage we should set current envId, so that request to cloud could fill required fields, after that set correct envId
+        if ($this->objectScope == ScopeInterface::SCOPE_ACCOUNT) {
+            $image->envId = null;
+        }
 
         $image->osId = $this->osId;
         $image->save();
@@ -472,6 +469,7 @@ class BundleTask
             rolename	= ?,
             description	= ?,
             object = ?,
+            object_scope = ?,
             cloud_location = ?
         ", array(
             $ServerSnapshotCreateInfo->DBServer->clientId,
@@ -485,6 +483,7 @@ class BundleTask
             $ServerSnapshotCreateInfo->roleName,
             $ServerSnapshotCreateInfo->description,
             $ServerSnapshotCreateInfo->object,
+            'environment', // default value
             $ServerSnapshotCreateInfo->DBServer->GetCloudLocation()
         ));
 
@@ -601,6 +600,64 @@ class BundleTask
             ['envId'         => $this->envId],
             ['platform'      => $this->platform],
             ['cloudLocation' => in_array($this->platform, [SERVER_PLATFORMS::GCE, SERVER_PLATFORMS::AZURE]) ? '' : $this->cloudLocation]
+        ]);
+    }
+
+    /**
+     * Check if given name is already used in any running bundletask of this account or environment
+     *
+     * @param   string  $name       Name of Role
+     * @param   int     $accountId  Identifier of Account
+     * @param   int     $envId      Identifier of Environment
+     * @return  int|bool            Returns identifier of the Active BundleTask that matches the specified criteria or false otherwise
+     */
+    public static function getActiveTaskIdByName($name, $accountId, $envId)
+    {
+        return Scalr::getDb()->GetOne("
+            SELECT id
+            FROM bundle_tasks
+            WHERE rolename = ?
+            AND object = ?
+            AND (client_id = ? AND object_scope = ? OR env_id = ? AND object_scope = ?)
+            AND status NOT IN (?, ?)
+        ", [
+            $name,
+            self::BUNDLETASK_OBJECT_ROLE,
+            $accountId,
+            ScopeInterface::SCOPE_ACCOUNT,
+            $envId,
+            ScopeInterface::SCOPE_ENVIRONMENT,
+            SERVER_SNAPSHOT_CREATION_STATUS::SUCCESS,
+            SERVER_SNAPSHOT_CREATION_STATUS::FAILED
+        ]);
+    }
+
+    /**
+     * Check if there any running bundletask that will affect given role
+     *
+     * @param   int     $roleId     Identifier of Role
+     * @param   int     $envId      Identifier of Account
+     * @param   string  $object     Object of BundleTask (role, image)
+     * @return  int|bool            Returns identifier of the Active BundleTask that matches the specified criteria or false otherwise
+     */
+    public static function getActiveTaskIdByRoleId($roleId, $envId, $object)
+    {
+        return Scalr::getDb()->GetOne("
+            SELECT id
+            FROM bundle_tasks
+            WHERE prototype_role_id = ?
+            AND env_id = ?
+            AND object = ?
+            AND status NOT IN (?,?)
+            AND replace_type IN(?,?)
+        ", [
+            $roleId,
+            $envId,
+            $object,
+            SERVER_SNAPSHOT_CREATION_STATUS::SUCCESS,
+            SERVER_SNAPSHOT_CREATION_STATUS::FAILED,
+            SERVER_REPLACEMENT_TYPE::REPLACE_ALL,
+            SERVER_REPLACEMENT_TYPE::REPLACE_FARM
         ]);
     }
 }

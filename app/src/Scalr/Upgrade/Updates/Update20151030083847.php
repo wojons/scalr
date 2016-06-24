@@ -39,7 +39,7 @@ class Update20151030083847 extends AbstractUpdate implements SequenceInterface
             'server_variables' => 'server_id'
         ];
 
-        $this->db->StartTrans();
+        $this->db->BeginTrans();
         try {
             foreach ($tableKeys as $table => $key) {
                 $srs = $this->db->Execute("SELECT * FROM `{$table}` WHERE `validator` != ''");

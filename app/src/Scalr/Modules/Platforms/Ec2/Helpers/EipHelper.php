@@ -4,9 +4,10 @@ namespace Scalr\Modules\Platforms\Ec2\Helpers;
 
 use Scalr\Service\Aws\Ec2\DataType\AssociateAddressRequestData;
 use Scalr\Model\Entity;
-use \DBServer;
-use \DBFarm;
-use \DBFarmRole;
+use DBServer;
+use DBFarm;
+use DBFarmRole;
+use Exception;
 
 class EipHelper
 {
@@ -20,7 +21,7 @@ class EipHelper
      *
      * @param   DBServer           $dbServer  DBServer object
      * @param   string             $ipAddress Public IP address to associate with server.
-     * @throws  \Exception
+     * @throws  Exception
      */
     private static function associateIpAddress(DBServer $dbServer, $ipAddress, $allocationId = null)
     {
@@ -46,9 +47,9 @@ class EipHelper
                 $aws->ec2->address->associate($request);
                 $retval = true;
                 break;
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                 if (!stristr($e->getMessage(), "does not belong to you") || $assign_retries == 3) {
-                    throw new \Exception($e->getMessage());
+                    throw new Exception($e->getMessage());
                 } else {
                     // Waiting...
                     \Scalr::getContainer()->logger(__CLASS__)->debug(_("Waiting 2 seconds..."));
@@ -75,7 +76,7 @@ class EipHelper
             $info = $aws->ec2->address->describe($ipaddress);
             if (count($info)) return true;
             else return false;
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return false;
         }
     }
@@ -97,13 +98,15 @@ class EipHelper
             $aws = $dbFarm->GetEnvironmentObject()->aws($dbFarmRole->CloudLocation);
 
             $isVPC = $dbFarm->GetSetting(Entity\FarmSetting::EC2_VPC_ID);
-        } catch (\Exception $e) {
-            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(
-                new \FarmLogMessage($dbServer->farmId, sprintf(
-                    _("Cannot allocate elastic ip address for instance %s on farm %s (0)"),
-                    $dbServer->serverId, $dbFarm->Name
-            )));
-            
+        } catch (Exception $e) {
+            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(new \FarmLogMessage(
+                $dbServer,
+                sprintf(_("Cannot allocate elastic ip address for instance %s on farm %s (0)"),
+                    !empty($dbServer->serverId) ? $dbServer->serverId : null,
+                    !empty($dbFarm->Name) ? $dbFarm->Name : null
+                )
+            ));
+
             return false;
         }
 
@@ -118,9 +121,10 @@ class EipHelper
 
         if ($ip['ipaddress']) {
             if (!self::checkElasticIp($ip['ipaddress'], $aws)) {
-                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->warn(new \FarmLogMessage($dbServer->farmId, sprintf(
-                    _("Elastic IP '%s' does not belong to you. Allocating new one."), $ip['ipaddress']
-                )));
+                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->warn(new \FarmLogMessage(
+                    $dbServer,
+                    sprintf(_("Elastic IP '%s' does not belong to you. Allocating new one."), !empty($ip['ipaddress']) ? $ip['ipaddress'] : null)
+                ));
                 $db->Execute("DELETE FROM elastic_ips WHERE ipaddress=?", array($ip['ipaddress']));
                 $ip = false;
             }
@@ -144,12 +148,14 @@ class EipHelper
                         $domain = 'vpc';
 
                     $address = $aws->ec2->address->allocate($domain);
-                } catch (\Exception $e) {
-                    \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(new \FarmLogMessage($dbServer->farmId, sprintf(
-                        _("Cannot allocate new elastic ip for instance '%s': %s"),
-                        $dbServer->serverId,
-                        $e->getMessage()
-                    )));
+                } catch (Exception $e) {
+                    \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(new \FarmLogMessage(
+                        $dbServer,
+                        sprintf(_("Cannot allocate new elastic ip for instance '%s': %s"),
+                            !empty($dbServer->serverId) ? $dbServer->serverId : null,
+                            $e->getMessage()
+                        )
+                    ));
                     return false;
                 }
 
@@ -179,9 +185,7 @@ class EipHelper
                     'allocation_id' => $address->allocationId
                 );
 
-                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(
-                    new \FarmLogMessage($dbServer->farmId, sprintf(_("Allocated new IP: %s"), $ip['ipaddress']))
-                );
+                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->info(new \FarmLogMessage($dbServer, sprintf(_("Allocated new IP: %s"), $ip['ipaddress'])));
                 // Waiting...
                 sleep(5);
             } else
@@ -211,11 +215,13 @@ class EipHelper
             ));
             */
         } else {
-            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(
-                new \FarmLogMessage($dbServer->farmId, sprintf(
-                    _("Cannot allocate elastic ip address for instance %s on farm %s (2)"),
-                    $dbServer->serverId, $dbFarm->Name
-            )));
+            \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(new \FarmLogMessage(
+                $dbServer,
+                sprintf(_("Cannot allocate elastic ip address for instance %s on farm %s (2)"),
+                    !empty($dbServer->serverId) ? $dbServer->serverId : null,
+                    !empty($dbFarm->Name) ? $dbFarm->Name : null
+                )
+            ));
             return false;
         }
 
@@ -242,7 +248,8 @@ class EipHelper
             while ($eip = $eips->FetchRow()) {
                 try {
                     $aws->ec2->address->disassociate($eip['ipaddress']);
-                } catch (\Exception $e) { }
+                } catch (Exception $e) {
+                }
             }
 
             $db->Execute("
@@ -275,7 +282,8 @@ class EipHelper
 
                 try {
                     $dbServer = DBServer::LoadByFarmRoleIDAndIndex($DBFarmRole->ID, $serverIndex);
-                } catch (\Exception $e) {}
+                } catch (Exception $e) {
+                }
 
                 // Allocate new IP if needed
                 if ((!$ipAddress || $ipAddress == '0.0.0.0') && $dbServer) {
@@ -360,7 +368,8 @@ class EipHelper
                             $event = new \IPAddressChangedEvent($dbServer, $ipAddress, $dbServer->localIp);
                             \Scalr::FireEvent($dbServer->farmId, $event);
                         }
-                    } catch (\Exception $e) {}
+                    } catch (Exception $e) {
+                    }
                 } else {
                     \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->fatal(sprintf(
                         _("Cannot allocate elastic ip address for instance %s on farm %s (2)"),

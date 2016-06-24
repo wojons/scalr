@@ -228,6 +228,26 @@ class Projects
     }
 
     /**
+     * Gets the list of projects within environment
+     *
+     * @param  int $envId   Identifier of the Environment
+     * @return array        Returns array of the ProjectEntity objects
+     */
+    public function getUsedInEnvironment($envId)
+    {
+        $projectIds = $this->db->GetCol("
+            SELECT DISTINCT s.value FROM farms f
+            JOIN farm_settings s ON s.farmid = f.id AND s.name = ?
+            WHERE f.env_id = ? AND s.value != ''
+        ", [
+            Entity\FarmSetting::PROJECT_ID,
+            $envId
+        ]);
+
+        return $projectIds ? ProjectEntity::find([['projectId' => ['$in' => $projectIds]]]) : [];
+    }
+
+    /**
      * Checks if user has permissions to project in environment or account scope
      *
      * @param string $projectId     Identifier of the project
@@ -259,6 +279,53 @@ class Projects
                 $where;
 
         return $this->db->GetOne($sql);
+    }
+
+    /**
+     * Gets available projects for account scope
+     *
+     * @param int        $accountId     Current user object
+     * @param string     $query         optional Search criteria
+     * @return \Scalr\Model\Collections\ArrayCollection
+     */
+    public function getAccountProjects($accountId, $query = null)
+    {
+        $collection = $this->findByKey($query, ['accountId' => $accountId], true);
+
+        //Select identifiers of all projects assigned to farms from the account
+        $assignedProjects = [];
+
+        $rs = $this->db->Execute("
+            SELECT DISTINCT fs.value
+            FROM farms f
+            JOIN farm_settings fs ON f.id = fs.farmid
+            WHERE fs.name = ?
+            AND f.clientid = ?
+        ", [Entity\FarmSetting::PROJECT_ID, $accountId]);
+
+        while ($rec = $rs->fetchRow()) {
+            $assignedProjects[$rec['value']] = true;
+        }
+
+        //Adjusts missing projects.
+        //This is going to be very rare event.
+        foreach ($collection as $projectEntity) {
+            if (isset($assignedProjects[$projectEntity->projectId])) {
+                unset($assignedProjects[$projectEntity->projectId]);
+            }
+        }
+
+        foreach ($assignedProjects as $projectId => $v) {
+            $project = ProjectEntity::findPk($projectId);
+            /* @var $project ProjectEntity */
+            $projectBillingCode = $project->getProperty(ProjectPropertyEntity::NAME_BILLING_CODE);
+
+            if (empty($query) || (stripos($project->name, $query) !== false || stripos($projectBillingCode, $query) !== false)) {
+                $collection->append($project);
+            }
+        }
+
+        return $collection;
     }
 
 }

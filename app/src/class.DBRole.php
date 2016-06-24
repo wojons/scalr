@@ -24,7 +24,8 @@ class DBRole
         $addedByUserId,
         $dtLastUsed,
         $addedByEmail,
-        $osId;
+        $osId,
+        $isScalarized = 1;
 
     private
         $db,
@@ -56,6 +57,7 @@ class DBRole
         'os_id'			=> 'osId',
         'is_quick_start'=> 'isQuickStart',
         'is_deprecated' => 'isDeprecated',
+        'is_scalarized' => 'isScalarized',
 
         'dtadded'         => 'dateAdded',
         'dt_last_used'    => 'dtLastUsed',
@@ -275,9 +277,10 @@ class DBRole
                 behaviors	= ?,
 
                 added_by_userid = ?,
-                added_by_email = ?,
+                added_by_email  = ?,
 
-                os_id		= ?
+                os_id		    = ?,
+                is_scalarized	= ?
             ", array(
                 $this->name,
                 $this->description,
@@ -291,7 +294,8 @@ class DBRole
                 $this->addedByUserId,
                 $this->addedByEmail,
 
-                $this->osId
+                $this->osId,
+                $this->isScalarized
             ));
 
             $this->id = $this->db->Insert_ID();
@@ -508,7 +512,8 @@ class DBRole
                 os_id           = ?,
                 dtadded         = NOW(),
                 added_by_userid = ?,
-                added_by_email  = ?
+                added_by_email  = ?,
+                is_scalarized   = ?
             ", array(
                 $newRoleName,
                 $accountId ? ROLE_TYPE::CUSTOM : ROLE_TYPE::SHARED,
@@ -520,7 +525,8 @@ class DBRole
                 2,
                 $this->osId,
                 $user->getId(),
-                $user->getEmail()
+                $user->getEmail(),
+                $this->isScalarized
             ));
 
             $newRoleId = $this->db->Insert_Id();
@@ -640,6 +646,7 @@ class DBRole
 
         $osId = $BundleTask->osId;
         $meta = $BundleTask->getSnapshotDetails();
+        $envId = $BundleTask->objectScope == ScopeInterface::SCOPE_ACCOUNT ? null : $BundleTask->envId;
 
         if (!$osId) {
             if ($proto_role) {
@@ -683,7 +690,7 @@ class DBRole
             $BundleTask->roleName,
             ROLE_TYPE::CUSTOM,
             $BundleTask->clientId,
-            $BundleTask->envId,
+            $envId,
             $catId,
             $BundleTask->description,
             $proto_role['behaviors'],

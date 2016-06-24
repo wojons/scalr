@@ -221,7 +221,7 @@ class VirtualMachines extends AbstractApi
         $path = '/subscriptions/' . $subscriptionId
             . '/resourceGroups/' . $resourceGroup
             . ComputeService::ENDPOINT_MICROSOFT_COMPUTE
-            . '/virtualMachines/' . $name . '/poweroff';
+            . '/virtualMachines/' . $name . '/powerOff';
 
         $request = $this->getClient()->prepareRequest($path, 'POST', $this->getApiVersion(), $this->getServiceUrl());
 

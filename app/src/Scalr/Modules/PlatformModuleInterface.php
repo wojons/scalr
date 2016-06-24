@@ -3,6 +3,8 @@
 namespace Scalr\Modules;
 
 use DBServer;
+use Exception;
+use Scalr\Model\Entity\Account\Environment;
 use Scalr\Model\Entity\CloudInstanceType;
 use Scalr\Modules\Platforms\OrphanedServer;
 
@@ -195,7 +197,7 @@ interface PlatformModuleInterface
      * @param  string             $instanceTypeId           Instance type identifier
      * @param  \Scalr_Environment $env                      The Scalr environment object
      * @param  string             $cloudLocation   optional The cloud location
-     * @return CloudInstanceType  Cloud Instance Type entity
+     * @return CloudInstanceType|array  Cloud Instance Type entity or array for Ec2 platform
      */
     public function getInstanceType($instanceTypeId, \Scalr_Environment $env, $cloudLocation = null);
 
@@ -225,11 +227,12 @@ interface PlatformModuleInterface
      * for the specified environment and location
      * that are not managed by Scalr
      *
-     * @param  \Scalr_Environment $environment   Environment Object
+     * @param  Environment        $environment   Environment Entity
      * @param  string             $cloudLocation Location name
+     * @param  array              $instanceIds   optional  List of instanceId to filter
      * @return OrphanedServer[] Returns array of orphaned servers
      */
-    public function getOrphanedServers(\Scalr_Environment $environment, $cloudLocation);
+    public function getOrphanedServers(Environment $environment, $cloudLocation, $instanceIds = null);
 
     /**
      * Gets string which is used to retrieve instance is from server_properties table

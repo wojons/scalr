@@ -123,6 +123,9 @@ class AwsCloudCredentialsAdapter extends CloudCredentialsAdapter
                     break;
             }
 
+            if (empty($ccProps[Entity\CloudCredentialsProperty::AWS_SECRET_KEY])) {
+                throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property secretKey");
+            }
             //Validates both access and secret keys
             try {
                 $aws = $this->controller->getContainer()->aws(

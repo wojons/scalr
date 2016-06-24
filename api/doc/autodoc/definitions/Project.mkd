@@ -82,20 +82,8 @@ To filter on this field, use: `id=...`.
 ## Swagger Definition ##
 
     {
-      "x-usedIn": [
-        "/{envId}/projects/{projectId}/", 
-        "/{envId}/projects/"
-      ], 
-      "x-createOnly": [
-        "costCenter", 
-        "billingCode", 
-        "leadEmail"
-      ], 
       "properties": {
         "billingCode": {
-          "type": "string"
-        }, 
-        "name": {
           "type": "string"
         }, 
         "costCenter": {
@@ -105,23 +93,38 @@ To filter on this field, use: `id=...`.
           "type": "string"
         }, 
         "id": {
+          "maxLength": 36, 
+          "minLength": 36, 
+          "pattern": "[A-Fa-f0-9]{8}-([A-Fa-f0-9]{4}-){3}[A-Fa-f0-9]{12}", 
           "readOnly": true, 
           "type": "string"
         }, 
         "leadEmail": {
           "type": "string"
+        }, 
+        "name": {
+          "type": "string"
         }
       }, 
-      "x-filterable": [
-        "id", 
-        "name", 
-        "costCenter", 
-        "billingCode"
-      ], 
       "required": [
-        "costCenter", 
         "billingCode", 
+        "costCenter", 
         "leadEmail", 
         "name"
+      ], 
+      "x-createOnly": [
+        "billingCode", 
+        "costCenter", 
+        "leadEmail"
+      ], 
+      "x-filterable": [
+        "billingCode", 
+        "costCenter", 
+        "id", 
+        "name"
+      ], 
+      "x-usedIn": [
+        "/{envId}/projects/", 
+        "/{envId}/projects/{projectId}/"
       ]
     }

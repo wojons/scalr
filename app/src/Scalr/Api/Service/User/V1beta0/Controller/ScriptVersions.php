@@ -15,7 +15,7 @@ use Scalr\Model\Entity\Script;
 use Scalr\Model\Entity\ScriptVersion;
 
 /**
- * User/Version-1beta0/ScriptsVersion API Controller
+ * User/ScriptsVersion API Controller
  *
  * @author N.V.
  */

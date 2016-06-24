@@ -186,11 +186,7 @@ class Scalr_Db_Msr
                     //Nothing todo
                 }
             } catch (Exception $e) {
-                \Scalr::getContainer()->logger(__CLASS__)->error(new FarmLogMessage(
-                    $dbServer->farmId,
-                    "Cannot save storage snapshot: {$e->getMessage()}",
-                    !empty($dbServer->serverId) ? $dbServer->serverId : null
-                ));
+                \Scalr::getContainer()->logger(__CLASS__)->error(new FarmLogMessage($dbServer, "Cannot save storage snapshot: {$e->getMessage()}"));
             }
         }
     }
@@ -242,11 +238,7 @@ class Scalr_Db_Msr
 
                 $dbFarmRole->SetSetting(self::VOLUME_ID, $storageVolume->id, Entity\FarmRoleSetting::TYPE_LCL);
             } catch (Exception $e) {
-                \Scalr::getContainer()->logger(__CLASS__)->error(new FarmLogMessage(
-                    $dbServer->farmId,
-                    "Cannot save storage volume: {$e->getMessage()}",
-                    !empty($dbServer->serverId) ? $dbServer->serverId : null
-                ));
+                \Scalr::getContainer()->logger(__CLASS__)->error(new FarmLogMessage($dbServer, "Cannot save storage volume: {$e->getMessage()}"));
             }
         }
 

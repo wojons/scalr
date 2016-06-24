@@ -35,7 +35,7 @@ class ScriptAdapter extends ApiEntityAdapter
         ],
 
         //The alterable properties
-        self::RULE_TYPE_ALTERABLE   => ['name', 'description', 'osType', 'timeoutDefault', 'blockingDefault'],
+        self::RULE_TYPE_ALTERABLE   => ['name', 'description', 'timeoutDefault', 'blockingDefault'],
 
         self::RULE_TYPE_FILTERABLE  => ['id', 'name', 'osType', 'blockingDefault', 'scope'],
         self::RULE_TYPE_SORTING     => [self::RULE_TYPE_PROP_DEFAULT => ['id' => true]],
@@ -58,15 +58,18 @@ class ScriptAdapter extends ApiEntityAdapter
                 /* @var $to Script */
                 switch ($from->scope) {
                     case ScopeInterface::SCOPE_SCALR:
-                        break;
-
-                    case ScopeInterface::SCOPE_ENVIRONMENT:
-                        $to->envId = $this->controller->getEnvironment()->id;
-                        $to->accountId = $this->controller->getUser()->getAccountId();
+                        $to->accountId = null;
+                        $to->envId = null;
                         break;
 
                     case ScopeInterface::SCOPE_ACCOUNT:
                         $to->accountId = $this->controller->getUser()->getAccountId();
+                        $to->envId = null;
+                        break;
+
+                    case ScopeInterface::SCOPE_ENVIRONMENT:
+                        $to->accountId = $this->controller->getUser()->getAccountId();
+                        $to->envId = $this->controller->getEnvironment()->id;
                         break;
 
                     default:

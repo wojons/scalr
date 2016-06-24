@@ -4,6 +4,7 @@ use Scalr\Acl\Acl;
 use Scalr\Model\Entity\Image;
 use Scalr\Model\Entity\Os;
 use Scalr\UI\Request\JsonData;
+use Scalr\UI\Utils;
 use Scalr\Modules\PlatformFactory;
 use Scalr\DataType\ScopeInterface;
 use Scalr\Model\Entity\Role;
@@ -22,7 +23,7 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
 
     public function viewAction()
     {
-        $this->restrictAccess('IMAGES');
+        $this->request->restrictAccess('IMAGES');
 
         $this->response->page('ui/images/view.js', [
             'platforms' => Image::getPlatforms($this->user->getAccountId() ?: null, $this->getEnvironmentId(true))
@@ -43,29 +44,30 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
 
     public function registerAction()
     {
-        $this->restrictAccess('IMAGES', 'MANAGE');
+        $this->request->restrictAccess('IMAGES', 'MANAGE');
         $this->response->page('ui/images/register.js');
     }
 
     /**
-     * @param string $query
-     * @param string $platform
-     * @param string $cloudLocation
-     * @param string $scope
-     * @param string $osFamily
-     * @param string $osId
-     * @param string $id
-     * @param string $hash
-     * @param JsonData $sort
-     * @param int $start
-     * @param int $limit
-     * @param JsonData $hideLocation
-     * @param bool $hideNotActive
-     * @throws Exception
+     * @param   string      $query
+     * @param   string      $platform
+     * @param   string      $cloudLocation
+     * @param   string      $scope
+     * @param   string      $osFamily
+     * @param   string      $osId
+     * @param   string      $id
+     * @param   string      $hash
+     * @param   int         $isScalarized
+     * @param   JsonData    $sort
+     * @param   int         $start
+     * @param   int         $limit
+     * @param   bool        $hideNotActive
+     * @param   bool        $useHashAsFilter
+     * @throws  Exception
      */
-    public function xListAction($query = null, $platform = null, $cloudLocation = null, $scope = null, $osFamily = null, $osId = null, $id = null, $hash = null, JsonData $sort, $start = 0, $limit = 20, JsonData $hideLocation, $hideNotActive = false)
+    public function xListAction($query = null, $platform = null, $cloudLocation = null, $scope = null, $osFamily = null, $osId = null, $id = null, $hash = null, $isScalarized = null, JsonData $sort, $start = 0, $limit = 20, $hideNotActive = false, $useHashAsFilter = false)
     {
-        $this->restrictAccess('IMAGES');
+        $this->request->restrictAccess('IMAGES');
 
         $osIds = $criteria = [];
         $accountId = $this->user->getAccountId() ?: NULL;
@@ -85,7 +87,7 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
             ]];
         }
 
-        if ($hash) {
+        if ($hash && !$useHashAsFilter) {
             $criteria[] = ['hash' => $hash];
         } else {
             if ($query) {
@@ -99,6 +101,10 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
 
             if ($cloudLocation) {
                 $criteria[] = ['cloudLocation' => $cloudLocation];
+            }
+
+            if ($isScalarized) {
+                $criteria[] = ['$or' => [['isScalarized' => 1], ['hasCloudInit' => 1]]];
             }
 
             if ($scope == ScopeInterface::SCOPE_SCALR) {
@@ -131,31 +137,19 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
                 $criteria[] = ['id' => [ '$like' => $id . '%']];
             }
 
-            if ($hideLocation) {
-                foreach ($hideLocation as $platform => $locations) {
-                    foreach ($locations as $loc) {
-                        if ($loc) {
-                            $criteria[] = ['$or' => [
-                                ['platform' => ['$ne' => $platform]],
-                                ['cloudLocation' => ['$ne' => $loc]]
-                            ]];
-                        } else {
-                            $criteria[] = ['platform' => ['$ne' => $platform]];
-                        }
-                    }
-                }
-            }
-
             if ($hideNotActive) {
                 $criteria[] = ['status' => Image::STATUS_ACTIVE];
             }
 
+            if ($hash) {
+                $criteria[] = ['hash' => $hash];
+            }
         }
 
         $image = new Image();
         $os = new Os();
 
-        $order = \Scalr\UI\Utils::convertOrder($sort, ['dtAdded' => false], ['id', 'platform', 'cloudLocation', 'name', 'osId', 'dtAdded', 'architecture', 'createdByEmail', 'source', 'type']);
+        $order = Utils::convertOrder($sort, ['dtAdded' => false], ['id', 'platform', 'cloudLocation', 'name', 'osId', 'dtAdded', 'architecture', 'createdByEmail', 'source', 'type']);
         if (!empty($order)) {
             $sOrder = '';
             foreach ($order as $k => $v) {
@@ -195,19 +189,7 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
             $image = new Image();
             $image->load($rec);
 
-            $s = get_object_vars($image);
-            $dtAdded = $image->getDtAdded();
-
-            $s['dtAdded'] = $dtAdded ? Scalr_Util_DateTime::convertTz($dtAdded) : '';
-            $s['dtLastUsed'] = $image->dtLastUsed ? Scalr_Util_DateTime::convertTz($image->dtLastUsed) : '';
-            $s['used'] = $image->getUsed($accountId, $envId);
-            $s['software'] = $image->getSoftwareAsString();
-            $s['osFamily'] = $image->getOs()->family;
-            $s['osGeneration'] = $image->getOs()->generation;
-            $s['osVersion'] = $image->getOs()->version;
-            $s['os'] = $image->getOs()->name;
-            $s['scope'] = $image->getScope();
-            $data[] = $s;
+            $data[] = $this->convertEntityToArray($image);
         }
 
         $this->response->data([
@@ -217,12 +199,39 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
     }
 
     /**
+     * Convert entity to array of values, which are appropriate for UI
+     *
+     * @param   Image   $image
+     * @return  array
+     */
+    public function convertEntityToArray($image)
+    {
+        $accountId = $this->user->getAccountId() ?: NULL;
+        $envId = $this->getEnvironmentId(true);
+
+        $s = get_object_vars($image);
+        $dtAdded = $image->getDtAdded();
+
+        $s['dtAdded'] = $dtAdded ? Scalr_Util_DateTime::convertTz($dtAdded) : '';
+        $s['dtLastUsed'] = $image->dtLastUsed ? Scalr_Util_DateTime::convertTz($image->dtLastUsed) : '';
+        $s['used'] = $image->getUsed($accountId, $envId);
+        $s['software'] = $image->getSoftwareAsString();
+        $s['osFamily'] = $image->getOs()->family;
+        $s['osGeneration'] = $image->getOs()->generation;
+        $s['osVersion'] = $image->getOs()->version;
+        $s['os'] = $image->getOs()->name;
+        $s['scope'] = $image->getScope();
+
+        return $s;
+    }
+
+    /**
      * @param string $osFamily
      * @param string $osVersion
      */
     public function xGetRoleImagesAction($osFamily, $osVersion)
     {
-        $this->restrictAccess('IMAGES', 'MANAGE');
+        $this->request->restrictAccess('IMAGES', 'MANAGE');
 
         $data = [];
 
@@ -267,7 +276,7 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
         if (! $image)
             throw new Exception('Image not found');
 
-        $this->checkPermissions($image, true);
+        $this->request->checkPermissions($image, true);
 
         if (!$this->getEnvironment()->isPlatformEnabled(SERVER_PLATFORMS::EC2))
             throw new Exception('You can migrate image between regions only on EC2 cloud');
@@ -308,7 +317,7 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
         if (! $image)
             throw new Exception('Image not found');
 
-        $this->checkPermissions($image, true);
+        $this->request->checkPermissions($image, true);
 
         $newImage = $image->migrateEc2Location($destinationRegion, $this->request->getUser());
 
@@ -379,11 +388,13 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
      * @param   string   $ec2Type
      * @param   bool     $ec2Hvm
      * @param   JsonData $software
+     * @param   bool    $isScalarized
+     * @param   bool    $hasCloudInit
      * @throws  Scalr_Exception_Core
      */
-    public function xSaveAction($imageId, $platform, $osId, $name, $cloudLocation = '', $architecture = '', $size = null, $ec2Type = null, $ec2Hvm = null, JsonData $software = null)
+    public function xSaveAction($imageId, $platform, $osId, $name, $cloudLocation = '', $architecture = '', $size = null, $ec2Type = null, $ec2Hvm = null, JsonData $software = null, $isScalarized = 0, $hasCloudInit = 0)
     {
-        $this->restrictAccess('IMAGES', 'MANAGE');
+        $this->request->restrictAccess('IMAGES', 'MANAGE');
 
         if ($platform == SERVER_PLATFORMS::GCE || $platform == SERVER_PLATFORMS::AZURE) {
             $cloudLocation = '';
@@ -418,6 +429,8 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
         $image->platform = $platform;
         $image->cloudLocation = $cloudLocation;
         $image->architecture = 'x86_64';
+        $image->isScalarized = $isScalarized ? 1 : 0;
+        $image->hasCloudInit = $hasCloudInit ? 1 : 0;
 
         if ($this->request->getScope() == ScopeInterface::SCOPE_ENVIRONMENT) {
             if ($image->checkImage() === false) {
@@ -464,7 +477,7 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
      */
     public function xUpdateNameAction($hash, $name)
     {
-        $this->restrictAccess('IMAGES', 'MANAGE');
+        $this->request->restrictAccess('IMAGES', 'MANAGE');
 
         if (! \Scalr\Model\Entity\Role::isValidName($name)) {
             $this->response->failure('Invalid name for image');
@@ -477,7 +490,7 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
             $this->response->failure('Image not found');
             return;
         }
-        $this->checkPermissions($image, true);
+        $this->request->checkPermissions($image, true);
 
         $image->name = $name;
         $image->save();
@@ -494,7 +507,7 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
      */
     public function xRemoveAction(JsonData $images, $removeFromCloud = false)
     {
-        $this->restrictAccess('IMAGES', 'MANAGE');
+        $this->request->restrictAccess('IMAGES', 'MANAGE');
         $errors = [];
         $processed = [];
         $pending = [];
@@ -504,10 +517,10 @@ class Scalr_UI_Controller_Images extends Scalr_UI_Controller
                 /* @var $im Image */
                 $im = Image::findPk($hash);
                 if ($im) {
-                    $this->checkPermissions($im, true);
+                    $this->request->checkPermissions($im, true);
 
                     if (! $im->getUsed()) {
-                        if ($removeFromCloud && $this->user->isUser()) {
+                        if ($removeFromCloud && $this->user->isUser() && $im->platform != SERVER_PLATFORMS::AZURE) {
                             if ($im->isUsedGlobal()) {
                                 throw new Exception(sprintf("Unable to delete %s, this Image may be:\n- Still registered in another Environment or Account\n- Currently in-use by a Server in another Environment", $im->id));
                             }

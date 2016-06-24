@@ -43,7 +43,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
             removedDevices,
             ephemeralDevices,
             ephemeralDevicesNumber;
-        if (name.join('.') === 'settings.aws.instance_type') {
+        if (record.get('platform') === 'ec2' && name.join('.') === 'settings.instance_type') {
 
             record.loadInstanceTypeInfo(function(instanceTypeInfo){
                 var field,
@@ -60,7 +60,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     field = me.down('[name="ebs.encrypted"]');
                     if (field) {
                         field.encryptionSupported = ebsEncryptionSupported;
-                        field.setReadOnly(!ebsEncryptionSupported);
+                        field.refreshFieldState();
                     }
                 } else {
                     storages = record.get('storages') || {};
@@ -88,7 +88,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                                     'ec2_ephemeral.name': 'ephemeral' + i,
                                     'ec2_ephemeral.size': ephemeralDevices['size']
                                 }
-                            }, i == 0 && osFamily !== 'windows' ? {
+                            }, i == 0 && osFamily !== 'windows' && record.get('isScalarized') == 1 ? {
                                 mount: true,
                                 mountPoint: '/mnt',
                                 fs: 'ext3'
@@ -216,7 +216,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                         'ec2_ephemeral.name': 'ephemeral' + i,
                         'ec2_ephemeral.size': me.tabData['ephemeralDevices']['size']
                     }
-                }, i == 0 && osFamily !== 'windows' ? {
+                }, i == 0 && osFamily !== 'windows' && me.currentRole.get('isScalarized') == 1? {
                     mount: true,
                     mountPoint: '/mnt',
                     fs: 'ext3'
@@ -285,7 +285,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                             me.tabData['ephemeralDevices'] = instanceTypeInfo ? instanceTypeInfo.instancestore : null;
                             //ebsencryption
                             field.encryptionSupported = ebsEncryptionSupported;
-                            field.setReadOnly(!ebsEncryptionSupported);
+                            field.refreshFieldState();
 
                             field = me.down('[name="ebs.kms_key_id"]');
                             field.toggleIcon('governance', kmsKeys !== undefined)
@@ -298,13 +298,15 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                                         }
                                     },
                                     function(data, status){
-                                        field.store.load({data: data['keys']});
+                                        if (status) {
+                                            me.tabData['kmsKeys'] = data['keys'];
+                                        }
                                         status ? handler() : me.deactivateTab();
                                     },
                                     me
                                 );
                             } else {
-                                field.store.load({data: kmsKeys});
+                                me.tabData['kmsKeys'] = kmsKeys;
                                 status ? handler() : me.deactivateTab();
                             }
                         });
@@ -332,13 +334,13 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
             field,
             errors = record.get('errors', true) || {},
             invalidIndex,
-            volumeTypes;
+            volumeTypes,
+            storageGrid = me.down('#configuration');
 
         if (Ext.isObject(errors) && Ext.isObject(errors['storages'])) {
             invalidIndex = errors['storages'].invalidIndex;
         }
 
-        field = me.down('#configuration');
         if (me.tabData['rootDeviceConfig']) {
             if (settings['base.root_device_config']) {
                 rootStorage = Ext.decode(settings['base.root_device_config']);
@@ -357,14 +359,16 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                 storage['usage'] = storagesUsage[storage['id']];
             }
         });
-        field.store.loadData(storagesToLoad);
+        storageGrid.store.loadData(storagesToLoad);
         if (platform === 'ec2') {
             me.refreshEc2EphemeralDevices();
         }
-        var grouping = field.getView().findFeature('grouping');
+        var grouping = storageGrid.getView().findFeature('grouping');
         if (grouping.groupCache['Ephemeral storage']) {
             grouping.collapse('Ephemeral storage');
         }
+        storageGrid.getView().findFeature('addbutton').setDisabled(record.get('isScalarized') != 1, 'Additional storage is not available for agentless roles');
+        
 
         if (Scalr.isCloudstack(platform)) {
             me.down('[name="csvol.disk_offering_id"]').store.load({data: me.tabData['diskOfferings'] || []});
@@ -385,8 +389,9 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
         if (os.family !== 'windows') {
             data.push({ fs: 'ext3', description: 'Ext3' });
             if ((os.family == 'centos' && record.get('image', true)['architecture'] == 'x86_64') ||
-                (os.family == 'ubuntu' && Ext.Array.contains(['10.04', '12.04', '14.04'], os.generation))
-                ) {
+                (os.family == 'ubuntu' && Ext.Array.contains(['10.04', '12.04', '14.04'], os.generation)) ||
+                (os.family == 'debian' && Ext.Array.contains(['7', '8'], os.generation))
+            ) {
                 data.push({ fs: 'ext4', description: 'Ext4'});
                 data.push({ fs: 'xfs', description: 'XFS'});
             }
@@ -397,16 +402,19 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
         field = me.down('[name="fs"]');
         field.reset();
         field.store.loadData(data);
-        field.fsIsAvailableForPlatformAndOsFamily = os.family !== 'windows' || platform === 'ec2';
-        field.setDisabled(!field.fsIsAvailableForPlatformAndOsFamily);
-        field.setVisible(field.fsIsAvailableForPlatformAndOsFamily);
-
+        me.mountIsAllowed = (os.family !== 'windows' || platform === 'ec2') && record.get('isScalarized') == 1;
+        field.setDisabled(!me.mountIsAllowed);
+        field.setVisible(me.mountIsAllowed);
+        
+        if (platform === 'ec2') {
+            me.down('[name="ebs.kms_key_id"]').store.load({data: me.tabData['kmsKeys']});
+        }
+        
         me.down('#editor').hide();
 
         if (Ext.isNumeric(invalidIndex)) {
-            var grid = me.down('#configuration');
             cb = function(){
-                grid.setSelectedRecord(grid.store.getAt(invalidIndex + (me.tabData['rootDeviceConfig'] ? 1 : 0)));
+                storageGrid.setSelectedRecord(storageGrid.store.getAt(invalidIndex + (me.tabData['rootDeviceConfig'] ? 1 : 0)));
                 me.down('#editor').isValid();
             };
             if (me.rendered) {
@@ -621,7 +629,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
             handler: function() {
                 var currentRole = this.grid.up('#storage').currentRole,
                     form = this.grid.up('#storage').down('#editor'),
-                    osFamily = Scalr.utils.getOsById(currentRole.get('osId'), 'family');
+                    osFamily = Scalr.utils.getOsById(currentRole.get('osId'), 'family'),
                     storageDefaults = {
                         reUse: Scalr.getDefaultValue('STORAGE_RE_USE')
                     };
@@ -638,7 +646,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                         storageDefaults['type'] = 'gce_persistent';
                     }
                 }
-
+                
                 this.grid.clearSelectedRecord();
                 form.loadRecord(this.grid.store.createModel(storageDefaults));
                 if (!form.hasInvalidField()) {
@@ -664,7 +672,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
         store: {
             model: Scalr.getModel({
                 fields: [
-                    'id', 'type', 'fs', 'settings', 'mount', 'mountPoint', 'label', 'reUse',
+                    'id', 'type', 'fs', 'settings', 'mount', 'mountPoint', 'mountOptions', 'label', 'reUse',
                     {name: 'status', defaultValue: ''},
                     'rebuild',
                     {name: 'isRootDevice', defaultValue: false},
@@ -770,7 +778,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     '<tpl if="status!=\'Pending delete\'&&!isRootDevice&&type!=\'ec2_ephemeral\'">' +
                         '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-grid-icon x-grid-icon-delete" title="Delete storage" />'+
                     '</tpl>',
-                width: 68,
+                width: 58,
+                tdCls: 'x-grid-cell-nopadding',
                 sortable: false,
                 resizable: false,
                 dataIndex: 'id',
@@ -852,6 +861,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
             },
             toggleReadOnly: function(record) {
                 var isRootDevice = record.get('isRootDevice'),
+                    tab = this.up('#storage'),
                     fsCount,
                     field;
                 field = this.down('[name="type"]');
@@ -859,7 +869,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
 
                 field = this.down('[name="fs"]');
                 fsCount = field.store.getCount();
-                if (field.fsIsAvailableForPlatformAndOsFamily) {
+                if (tab.mountIsAllowed) {
                     field.setDisabled(isRootDevice || !record.get('mount'));
                     field.setVisible(!isRootDevice);
                 }
@@ -868,9 +878,14 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                 }
                 field.setReadOnly(fsCount === 1 && field.getValue());
 
-                this.down('#mountCt').setVisible(field.fsIsAvailableForPlatformAndOsFamily || isRootDevice);
+                field = this.down('#mountCt');
+                var title = field.originalTitle;
+                if (!isRootDevice && !tab.mountIsAllowed) {
+                    title += ' &nbsp;<img src="'+ Ext.BLANK_IMAGE_URL+'" class="x-icon-question" data-qtip="'+ (tab.currentRole.get('isScalarized') == 1 ? 'Option is not available for this Farm Role.' : 'Scalarizr automation is required to use this setting, but it is not enabled for this Farm Role.') + '"/>';
+                }
+                field.setTitle(title);
 
-                this.down('[name="mount"]').setReadOnly(isRootDevice);
+                this.down('[name="mount"]').setReadOnly(isRootDevice || !tab.mountIsAllowed);
                 this.down('[name="mountPoint"]').setReadOnly(isRootDevice);
                 if (isRootDevice) {
                     this.down('[name="reUse"]').hide();
@@ -962,9 +977,10 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                             ebs.setVisible(value == 'ebs' || value == 'raid.ebs');
                             ebs.setDisabled(value != 'ebs' && value != 'raid.ebs');
                             ebsSnapshots.setVisible(value == 'ebs' && platform == 'ec2');
-                            ebsEncrypted.setVisible(value == 'ebs' && platform == 'ec2').setValue(false);
+                            ebsEncrypted.setVisible(value == 'ebs' && platform == 'ec2');
+                            ebsEncrypted.setValue(value == 'ebs' && ebsEncrypted.encryptionSupported && (Scalr.getGovernance('ec2', 'aws.storage') || {})['require_encryption']);
                             editor.down('[name="ebs.type"]').setReadOnly(platform !== 'ec2', false);
-
+                            
                             raid.setVisible(value == 'raid.ebs' || value == 'raid.csvol' || value == 'raid.cinder');
                             raid.setDisabled(value != 'raid.ebs' && value != 'raid.csvol' && value != 'raid.cinder');
 
@@ -1052,7 +1068,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
             }, {
                 xtype: 'fieldset',
                 itemId: 'mountCt',
-                title: 'Automatically mount device',
+                originalTitle: 'Automatically mount device',
+                title: '&nbsp;',
                 checkboxName: 'mount',
                 checkboxToggle: true,
                 collapsible: true,
@@ -1069,18 +1086,21 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                 },
                 onChange: function(checked) {
                     var me = this,
+                        tab = me.up('#storage'),
                         form = me.up('form'),
                         fsField = me.down('[name="fs"]'),
                         mountPointField = me.down('#mountPoint'),
                         mountPointNtfsField = me.down('#mountPointNtfs'),
                         labelField = me.down('[name="label"]'),
+                        mountOptionsField = me.down('[name="mountOptions"]'),
                         isNtfs = fsField.getValue() === 'ntfs';
                     if (checked) {
-                        if (fsField.fsIsAvailableForPlatformAndOsFamily) {
+                        if (tab.mountIsAllowed) {
                             fsField.enable();
                         }
                         if (isNtfs) {
                             mountPointField.hide().disable();
+                            mountOptionsField.hide().disable();
                             mountPointNtfsField.show().enable();
                             if (!form.isRecordLoading && !mountPointNtfsField.getValue()) {
                                 mountPointNtfsField.setValue(mountPointNtfsField.store.first());
@@ -1088,11 +1108,13 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                             labelField.show().enable();
                         } else {
                             mountPointField.enable().show();
+                            mountOptionsField.enable().show();
                             mountPointNtfsField.hide().disable();
                             labelField.hide().disable();
                         }
                     } else {
                         mountPointField.disable();
+                        mountOptionsField.disable();
                         mountPointNtfsField.disable();
                         fsField.disable();
                         labelField.disable();
@@ -1184,6 +1206,21 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                         return /\t/.test(value) ? 'Tab character is not allowed here' : true;
                     },
                     name: 'label'
+                },{
+                    xtype: 'textfield',
+                    disabled: true,
+                    hidden: true,
+                    fieldLabel: 'Options',
+                    flex: 1,
+                    name: 'mountOptions',
+                    emptyText: 'ex. noatime,data=journal,...',
+                    plugins: [{
+                        ptype: 'fieldicons',
+                        position: 'outer',
+                        icons: [{
+                            id: 'warning', tooltip: 'Setting invalid mount options can make your instance non-bootable<br/> and can cause corruption of data.'
+                        }]
+                    }]
                 }]
             }, {
                 xtype:'fieldset',
@@ -1313,7 +1350,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     fieldLabel: 'EBS type',
                     items: [{
                         xtype: 'combo',
-                        store: Scalr.constants.ebsTypes,
+                        store: Scalr.utils.getEbsTypes(),
                         valueField: 'id',
                         displayField: 'name',
                         editable: false,
@@ -1393,9 +1430,9 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                             if (encryptionField.encryptionSupported) {
                                 if (comp.snapshotData) {
                                     encryptionField.setValue(comp.snapshotData.encrypted ? 1 : 0);
-                                    encryptionField.setReadOnly(true);
+                                    encryptionField.refreshFieldState();
                                 } else {
-                                    encryptionField.setReadOnly(!!value);
+                                    encryptionField.refreshFieldState();
                                 }
                             }
                         }
@@ -1444,17 +1481,25 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     value: '0',
                     plugins: {
                         ptype: 'fieldicons',
-                        icons: ['question', {id: 'szrversion', tooltipData: {version: '2.9.25'}}]
+                        icons: ['question', 'governance']
+                    },
+                    refreshFieldState: function() {
+                        var requireEncryption = (Scalr.getGovernance('ec2', 'aws.storage') || {})['require_encryption'],
+                            encryptionSupported = this.encryptionSupported,
+                            snapshot = this.prev('[name="ebs.snapshot"]').getValue();
+                        this.toggleIcon('governance', !!requireEncryption);
+                        if (snapshot || !encryptionSupported) {
+                            this.setReadOnly(true);
+                            this.toggleIcon('question', true);
+                            this.updateIconTooltip('question', snapshot ? 'EBS encryption is set according to snapshot settings' : 'EBS encryption is not supported by selected instance type');
+                        } else {
+                            this.toggleIcon('question', false);
+                            this.setReadOnly(requireEncryption && this.getValue());
+                        }
                     },
                     listeners: {
-                        writeablechange: function(comp, readOnly) {
-                            this.toggleIcon('question', readOnly);
-                            if (readOnly) {
-                                this.updateIconTooltip('question', this.encryptionSupported ? 'EBS encryption is set according to snapshot settings' : 'EBS encryption is not supported by selected instance type');
-                            }
-                            comp.next('[name="ebs.kms_key_id"]').setVisible(!readOnly && comp.getValue() == 1).reset();
-                        },
                         change: function(comp, value) {
+                            this.refreshFieldState();
                             comp.next('[name="ebs.kms_key_id"]').setVisible(value == 1).reset();
                         }
                     }
@@ -1697,14 +1742,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
                     editable: false,
                     queryMode: 'local',
                     value: 'pd-standard',
-                    name: 'gce_persistent.type',
-                    plugins: {
-                        ptype: 'fieldicons',
-                        position: 'outer',
-                        icons: [
-                            {id: 'szrversion', tooltipData: {version: '3.5.19'}}
-                        ]
-                    }
+                    name: 'gce_persistent.type'
                 }]
             }, {
                 xtype:'fieldset',
@@ -1806,8 +1844,8 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Storage', {
 });
 
 Ext.define('Scalr.ui.SnapshotSelect', {
-	extend: 'Ext.form.FieldSet',
-	alias: 'widget.snapshotselect',
+    extend: 'Ext.form.FieldSet',
+    alias: 'widget.snapshotselect',
 
     cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
     layout: 'fit',
@@ -1853,10 +1891,6 @@ Ext.define('Scalr.ui.SnapshotSelect', {
             }],
             viewConfig: {
                 emptyText: 'No snapshots found',
-                //deferEmptyText: false,
-                /*focusedItemCls: 'no-focus',
-                emptyText: 'No security groups found',
-                loadingText: 'Loading security groups ...',*/
                 listeners: {
                     viewready: function() {
                         store.applyProxyParams();
@@ -1907,8 +1941,14 @@ Ext.define('Scalr.ui.SnapshotSelect', {
     },
     updateButtonState: function(selection) {
         var btnOk = this.up('#box').down('#buttonOk');
-        if (selection && selection.get('encrypted') && !this.encryptionSupported) {
-            btnOk.setDisabled(true).setTooltip('Encrypted EBS storage is not supported by current instance type.');
+        if (selection) {
+            if (selection.get('encrypted') && !this.encryptionSupported) {
+                btnOk.setDisabled(true).setTooltip('Encrypted EBS storage is not supported by current instance type.');
+            } else if (!selection.get('encrypted') && (Scalr.getGovernance('ec2', 'aws.storage') || {})['require_encryption']) {
+                btnOk.setDisabled(true).setTooltip('Governance policy requires to use encrypted Storage only.');
+            } else {
+                btnOk.setDisabled(false).setTooltip('');
+            }
         } else {
             btnOk.setDisabled(!selection).setTooltip('');
         }

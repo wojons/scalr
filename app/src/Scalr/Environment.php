@@ -1,12 +1,12 @@
 <?php
 
+use Scalr\Model\AbstractEntity;
 use Scalr\Modules\Platforms\Azure\AzurePlatformModule;
 use Scalr\Modules\Platforms\Cloudstack\CloudstackPlatformModule;
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
 use Scalr\Modules\Platforms\GoogleCE\GoogleCEPlatformModule;
 use Scalr\Modules\Platforms\Idcf\IdcfPlatformModule;
 use Scalr\Modules\Platforms\Openstack\OpenstackPlatformModule;
-use Scalr\Modules\Platforms\Rackspace\RackspacePlatformModule;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 use Scalr\DataType\ScopeInterface;
 use Scalr\Model\Entity;
@@ -129,11 +129,12 @@ class Scalr_Environment extends Scalr_Model
 
     protected $dbTableName = "client_environments";
     protected $dbPropertyMap = array(
-        'id'		=> 'id',
-        'name'		=> array('property' => 'name', 'is_filter' => true),
-        'client_id'	=> array('property' => 'clientId', 'is_filter' => true),
-        'dt_added'	=> array('property' => 'dtAdded', 'createSql' => 'NOW()', 'type' => 'datetime', 'update' => false),
-        'status'    => 'status'
+        'id'                  => 'id',
+        'name'                => array('property' => 'name', 'is_filter' => true),
+        'client_id'           => array('property' => 'clientId', 'is_filter' => true),
+        'dt_added'            => array('property' => 'dtAdded', 'createSql' => 'NOW()', 'type' => 'datetime', 'update' => false),
+        'status'              => 'status',
+        'default_priority'    => 'defaultPriority'
     );
 
     public
@@ -141,7 +142,8 @@ class Scalr_Environment extends Scalr_Model
         $name,
         $clientId,
         $dtAdded,
-        $status;
+        $status,
+        $defaultPriority;
 
     private $cache = array(),
         $globalVariablesCache = array();
@@ -162,8 +164,8 @@ class Scalr_Environment extends Scalr_Model
 
     const SETTING_CC_ID    = 'cc_id';
 
-    const SETTING_CLOUDYN_ENABLED		= 'cloudyn.enabled';
-    const SETTING_CLOUDYN_AWS_ACCESSKEY	= 'cloudyn.aws.accesskey';
+    const SETTING_CLOUDYN_ENABLED       = 'cloudyn.enabled';
+    const SETTING_CLOUDYN_AWS_ACCESSKEY = 'cloudyn.aws.accesskey';
     const SETTING_CLOUDYN_ACCOUNTID     = 'cloudyn.accountid';
 
     const SETTING_API_LIMIT_ENABLED     = 'api.limit.enabled';
@@ -223,6 +225,7 @@ class Scalr_Environment extends Scalr_Model
             //Adds Scalr_Environment as second parameter
             $arguments[1] = $this;
         }
+
         //Retrieves an instance from the DI container
         return $this->__call('aws', $arguments);
     }
@@ -297,9 +300,9 @@ class Scalr_Environment extends Scalr_Model
      *
      * @return Entity\CloudCredentials
      */
-    public function cloudCredentials($cloud)
+    public function keychain($cloud)
     {
-        return $this->getContainer()->cloudCredentials($cloud, $this->id);
+        return $this->getContainer()->keychain($cloud, $this->id);
     }
 
     /**
@@ -319,58 +322,64 @@ class Scalr_Environment extends Scalr_Model
         }
 
         $cloudCredentials = new Entity\CloudCredentials();
-        $envCloudCredentials = new Entity\EnvironmentCloudCredentials();
         $cloudCredProps = new Entity\CloudCredentialsProperty();
 
-        $criteria = array_merge($credentialsFilter, [
-            \Scalr\Model\AbstractEntity::STMT_FROM => $cloudCredentials->table(),
-            \Scalr\Model\AbstractEntity::STMT_WHERE => ''
-        ]);
+        $criteria = $credentialsFilter;
+        $from[] = empty($criteria[AbstractEntity::STMT_FROM]) ? " {$cloudCredentials->table()} " : $criteria[AbstractEntity::STMT_FROM];
+        $where = empty($criteria[AbstractEntity::STMT_WHERE]) ? [] : [$criteria[AbstractEntity::STMT_WHERE]];
+
+        $envCloudCredentials = new Entity\EnvironmentCloudCredentials();
+
+        $from[] = "
+            JOIN {$envCloudCredentials->table('cecc')} ON
+                {$cloudCredentials->columnId()} = {$envCloudCredentials->columnCloudCredentialsId('cecc')} AND
+                {$cloudCredentials->columnCloud()} = {$envCloudCredentials->columnCloud('cecc')}
+        ";
+
+        $where[] = "{$envCloudCredentials->columnEnvId('cecc')} = {$envCloudCredentials->qstr('envId', $this->id)}";
 
         if (!empty($clouds)) {
-            $criteria[\Scalr\Model\AbstractEntity::STMT_FROM] .= "
-                JOIN {$envCloudCredentials->table('cecc')} ON
-                    {$cloudCredentials->columnId()} = {$envCloudCredentials->columnCloudCredentialsId('cecc')} AND
-                    {$cloudCredentials->columnCloud()} = {$envCloudCredentials->columnCloud('cecc')}
-            ";
-
-            $clouds = implode(", ", array_map(function ($cloud) use ($envCloudCredentials) {
-                return $envCloudCredentials->qstr('cloud', $cloud);
+            $clouds = implode(", ", array_map(function ($cloud) use ($cloudCredentials) {
+                return $cloudCredentials->qstr('cloud', $cloud);
             }, $clouds));
 
-            $criteria[\Scalr\Model\AbstractEntity::STMT_WHERE] = "
-                {$envCloudCredentials->columnEnvId('cecc')} = {$envCloudCredentials->qstr('envId', $this->id)} AND
-                {$envCloudCredentials->columnCloud('cecc')} IN ({$clouds})
-            ";
+            $where[] = "{$cloudCredentials->columnCloud()} IN ({$clouds})";
         }
 
         if (!empty($propertiesFilter)) {
             foreach ($propertiesFilter as $property => $propCriteria) {
-                $criteria[\Scalr\Model\AbstractEntity::STMT_FROM] .= "
-                    LEFT JOIN {$cloudCredProps->table('ccp')} ON
-                        {$cloudCredentials->columnId()} = {$cloudCredProps->columnCloudCredentialsId('ccp')} AND
-                        {$cloudCredProps->columnName('ccp')} = {$cloudCredProps->qstr('name', $property)}
+                $alias = "ccp_" . trim($cloudCredentials->db()->qstr($property), "'");
+
+                $from[] = "
+                    LEFT JOIN {$cloudCredProps->table($alias)} ON
+                        {$cloudCredentials->columnId()} = {$cloudCredProps->columnCloudCredentialsId($alias)} AND
+                        {$cloudCredProps->columnName($alias)} = {$cloudCredProps->qstr('name', $property)}
                 ";
 
-                $conjunction = empty($criteria[\Scalr\Model\AbstractEntity::STMT_WHERE]) ? "" : "AND";
+                $built = $cloudCredProps->_buildQuery($propCriteria, 'AND', $alias);
 
-                $criteria[\Scalr\Model\AbstractEntity::STMT_WHERE] .= "
-                    {$conjunction} {$cloudCredProps->_buildQuery($propCriteria, 'AND', 'ccp')}
-                ";
+                if (!empty($built['where'])) {
+                    $where[] = $built['where'];
+                }
             }
+        }
+
+        $criteria[AbstractEntity::STMT_FROM] = implode("\n", $from);
+
+        if (!empty($where)) {
+            $criteria[AbstractEntity::STMT_WHERE] = "(" . implode(") AND (", $where) . ")";
         }
 
         /* @var $cloudsCredentials Entity\CloudCredentials[] */
         $cloudsCredentials = Entity\CloudCredentials::find($criteria);
 
         $result = [];
-        $cont = \Scalr::getContainer();
         foreach ($cloudsCredentials as $cloudCredentials) {
             $result[$cloudCredentials->cloud] = $cloudCredentials;
 
             if ($cacheResult) {
                 $cloudCredentials->bindEnvironment($this->id);
-                $cloudCredentials->cache($cont);
+                $cloudCredentials->cache();
             }
         }
 
@@ -419,6 +428,7 @@ class Scalr_Environment extends Scalr_Model
         $this->name = $name;
         $this->clientId = $clientId;
         $this->status = self::STATUS_ACTIVE;
+        $this->defaultPriority = 0;
         $this->save();
 
         if (\Scalr::getContainer()->analytics->enabled) {
@@ -511,7 +521,7 @@ class Scalr_Environment extends Scalr_Model
 
     public function isPlatformEnabled($platform)
     {
-        return $this->cloudCredentials($platform)->isEnabled();
+        return $this->keychain($platform)->isEnabled();
     }
 
     public function getEnabledPlatforms($cacheResult = false, $clouds = null)
@@ -553,8 +563,8 @@ class Scalr_Environment extends Scalr_Model
             $formats = \Scalr::config("scalr.system.global_variables.format");
 
             $systemVars = array(
-                'env_id'		=> $this->id,
-                'env_name'		=> $this->name,
+                'env_id'        => $this->id,
+                'env_name'      => $this->name,
             );
 
             // Get list of Server system vars
@@ -577,8 +587,9 @@ class Scalr_Environment extends Scalr_Model
 
         //Parse variable
         $keys = array_keys($this->globalVariablesCache);
-        $f = create_function('$item', 'return "{".$item."}";');
-        $keys = array_map($f, $keys);
+        $keys = array_map(function ($item) {
+            return '{' . $item . '}';
+        }, $keys);
         $values = array_values($this->globalVariablesCache);
 
         $retval = str_replace($keys, $values, $value);
@@ -617,10 +628,10 @@ class Scalr_Environment extends Scalr_Model
 
     public function enablePlatform($platform, $enabled = true)
     {
-        $cloudCredentials = $this->cloudCredentials($platform);
+        $cloudCredentials = $this->keychain($platform);
         if (!($enabled || empty($cloudCredentials->id))) {
-            $cloudCredentials->delete();
-            $cloudCredentials->release($this->getContainer());
+            $cloudCredentials->environments[$this->id]->delete();
+            $cloudCredentials->release();
         }
     }
 
@@ -713,10 +724,6 @@ class Scalr_Environment extends Scalr_Model
             $this->db->Execute("DELETE FROM apache_vhosts WHERE env_id=?", array($this->id));
             $this->db->Execute("DELETE FROM autosnap_settings WHERE env_id=?", array($this->id));
             $this->db->Execute("DELETE FROM bundle_tasks WHERE env_id=?", array($this->id));
-            $this->db->Execute("DELETE FROM dm_applications WHERE env_id=?", array($this->id));
-            $this->db->Execute("DELETE FROM dm_deployment_tasks WHERE env_id=?", array($this->id));
-
-            $this->db->Execute("DELETE FROM dm_sources WHERE env_id=?", array($this->id));
             $this->db->Execute("DELETE FROM dns_zones WHERE env_id=?", array($this->id));
             $this->db->Execute("DELETE FROM ec2_ebs WHERE env_id=?", array($this->id));
             $this->db->Execute("DELETE FROM elastic_ips WHERE env_id=?", array($this->id));
@@ -729,6 +736,9 @@ class Scalr_Environment extends Scalr_Model
                 /* @var $server \DBServer */
                 $server->Remove();
             }
+
+            Entity\EnvironmentCloudCredentials::deleteByEnvId($this->id);
+            Entity\CloudCredentials::deleteByEnvId($this->id);
 
             $this->db->Execute("DELETE FROM `account_team_envs` WHERE env_id = ?", array($this->id));
 
@@ -885,11 +895,7 @@ class Scalr_Environment extends Scalr_Model
                 GoogleCEPlatformModule::KEY,
                 GoogleCEPlatformModule::PROJECT_ID,
                 GoogleCEPlatformModule::SERVICE_ACCOUNT_NAME,
-                GoogleCEPlatformModule::JSON_KEY,
-
-                RackspacePlatformModule::API_KEY,
-                RackspacePlatformModule::IS_MANAGED,
-                RackspacePlatformModule::USERNAME,
+                GoogleCEPlatformModule::JSON_KEY
             );
             self::$encryptedVariables = array_fill_keys($cfg, true);
         }

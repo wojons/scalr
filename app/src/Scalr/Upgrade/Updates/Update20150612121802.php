@@ -13,7 +13,7 @@ class Update20150612121802 extends AbstractUpdate implements SequenceInterface
 
     protected $description = 'Update services_ssl_cert table. Add foreign key to environments.';
 
-    protected $ignoreChanges = false;
+    protected $ignoreChanges = true;
 
     protected $dbservice = 'adodb';
 

@@ -32,31 +32,30 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
         $https = $this->GetArg("https");
 
         $virtual_hosts = $this->DB->GetAll("SELECT * FROM apache_vhosts WHERE farm_roleid=?",
-            array($this->DBServer->farmRoleId)
+            [$this->DBServer->farmRoleId]
         );
 
         $VhostsDOMNode = $ResponseDOMDocument->createElement("vhosts");
 
         $DBFarmRole = $this->DBServer->GetFarmRoleObject();
 
-        if ($DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::NGINX))
-        {
+        if ($DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::NGINX)) {
             //Still used for compatibility mode.
-
             $vhost_info = $this->DB->GetRow("SELECT * FROM apache_vhosts WHERE farm_id=? AND is_ssl_enabled='1' LIMIT 1",
-                array($this->DBServer->farmId)
+                [$this->DBServer->farmId]
             );
 
-            if ($vhost_info)
-            {
+            if ($vhost_info) {
                 $template = file_get_contents(APPPATH."/templates/services/nginx/ssl.vhost.tpl");
+
                 if ($template) {
                     $vars = unserialize($vhost_info['httpd_conf_vars']);
                     $vars['host'] = $vhost_info['name'];
                     $vKeys = array_keys($vars);
 
-                    $f = create_function('$item', 'return "{\$".$item."}";');
-                    $keys = array_map($f, $vKeys);
+                    $keys = array_map(function ($item) {
+                        return '{$' . $item . '}';
+                    }, $vKeys);
                     $vValues = array_values($vars);
 
                     $contents = str_replace($keys, $vValues, $template);
@@ -73,31 +72,29 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
 
                     $VhostDOMNode->appendChild($RawDOMNode);
                     $VhostsDOMNode->appendChild($VhostDOMNode);
-                }
-                else
+                } else {
                     throw new Exception("Virtualhost template not found in database. (farm roleid: {$DBFarmRole->ID})");
+                }
             }
-        }
-        elseif ($DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::APACHE))
-        {
-            while (count($virtual_hosts) > 0)
-            {
+        } elseif ($DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::APACHE)) {
+            while (count($virtual_hosts) > 0) {
                 $virtualhost = array_shift($virtual_hosts);
 
-                if ($virtualhost['is_ssl_enabled'])
-                {
+                if ($virtualhost['is_ssl_enabled']) {
                     $nonssl_vhost = $virtualhost;
                     $nonssl_vhost['is_ssl_enabled'] = 0;
                     array_push($virtual_hosts, $nonssl_vhost);
                 }
 
                 //Filter by name
-                if ($this->GetArg("name") !== null && $this->GetArg("name") != $virtualhost['name'])
+                if ($this->GetArg("name") !== null && $this->GetArg("name") != $virtualhost['name']) {
                     continue;
+                }
 
                 // Filter by https
-                if ($this->GetArg("https") !== null && $virtualhost['is_ssl_enabled'] != $this->GetArg("https"))
+                if ($this->GetArg("https") !== null && $virtualhost['is_ssl_enabled'] != $this->GetArg("https")) {
                     continue;
+                }
 
                 $VhostDOMNode =  $ResponseDOMDocument->createElement("vhost");
                 $VhostDOMNode->setAttribute("hostname", $virtualhost['name']);
@@ -108,14 +105,16 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
                 $vars['host'] = $virtualhost['name'];
                 $vKeys = array_keys($vars);
 
-                $f = create_function('$item', 'return "{\$".$item."}";');
-                $keys = array_map($f, $vKeys);
+                $keys = array_map(function ($item) {
+                    return '{$' . $item . '}';
+                }, $vKeys);
                 $vValues = array_values($vars);
 
-                if (!$virtualhost['is_ssl_enabled'])
+                if (!$virtualhost['is_ssl_enabled']) {
                     $template = $virtualhost['httpd_conf'];
-                else
+                } else {
                     $template = $virtualhost['httpd_conf_ssl'];
+                }
 
                 $contents = str_replace($keys, $vValues, $template);
 
@@ -134,11 +133,14 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
         return $ResponseDOMDocument;
     }
 
+    /**
+     * @deprecated No longer supported. Method here for backward compatibility
+     *
+     * @return DOMDocument
+     */
     protected function ListRoleParams()
     {
         $ResponseDOMDocument = $this->CreateResponse();
-
-        // No longer supported. Method here for backward compatibility
 
         return $ResponseDOMDocument;
     }
@@ -153,36 +155,40 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
 
         $ResponseDOMDocument = $this->CreateResponse();
 
-        if (in_array($this->DBServer->status, array(SERVER_STATUS::PENDING_TERMINATE, SERVER_STATUS::TERMINATED, SERVER_STATUS::SUSPENDED)))
+        if (in_array($this->DBServer->status, array(SERVER_STATUS::PENDING_TERMINATE, SERVER_STATUS::TERMINATED, SERVER_STATUS::SUSPENDED))) {
             return $ResponseDOMDocument;
+        }
 
         $hostName = $this->GetArg("hostname") ? " AND name=".$this->qstr($this->GetArg("hostname")) : "";
 
         if ($this->GetArg("id")) {
             $sslInfo = Entity\SslCertificate::findPk($this->GetArg("id"));
-            if ($sslInfo->envId != $this->DBServer->envId)
+
+            if ($sslInfo->envId != $this->DBServer->envId) {
                 $sslInfo = null;
+            }
         } else {
             if ($this->DBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::NGINX)) {
-                $vhost_info = $this->DB->GetRow("SELECT * FROM apache_vhosts WHERE farm_id=? AND is_ssl_enabled='1' {$hostName} LIMIT 1",
-                    array($this->DBServer->farmId)
-                );
-            }
-            else {
-                $vhost_info = $this->DB->GetRow("SELECT * FROM apache_vhosts WHERE farm_roleid=? AND is_ssl_enabled='1' {$hostName} LIMIT 1",
-                    array($this->DBServer->farmRoleId)
-                );
+                $vhost_info = $this->DB->GetRow("SELECT * FROM apache_vhosts WHERE farm_id=? AND is_ssl_enabled='1' {$hostName} LIMIT 1", [
+                    $this->DBServer->farmId
+                ]);
+            } else {
+                $vhost_info = $this->DB->GetRow("SELECT * FROM apache_vhosts WHERE farm_roleid=? AND is_ssl_enabled='1' {$hostName} LIMIT 1", [
+                    $this->DBServer->farmRoleId
+
+                ]);
             }
 
             if ($vhost_info) {
                 $sslInfo = Entity\SslCertificate::findPk($vhost_info['ssl_cert_id']);
-                if ($sslInfo->envId != $this->DBServer->envId)
+
+                if ($sslInfo->envId != $this->DBServer->envId) {
                     $sslInfo = null;
+                }
             }
         }
 
         if ($sslInfo) {
-
             $vhost = $ResponseDOMDocument->createElement("virtualhost");
             $vhost->setAttribute("name", $sslInfo->name);
 
@@ -206,7 +212,9 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
 
     /**
      * List farm roles and hosts list for each role
+     *
      * Allowed args: role=(String Role Name) | behaviour=(app|www|mysql|base|memcached)
+     *
      * @return DOMDocument
      */
     protected function ListRoles()
@@ -219,35 +227,30 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
         $sql_query = "SELECT id FROM farm_roles WHERE farmid=?";
         $sql_query_args = array($this->DBServer->farmId);
 
-        // Filter by behaviour
-        if ($this->GetArg("behaviour"))
-        {
+            // Filter by behaviour
+        if ($this->GetArg("behaviour")) {
             $sql_query .= " AND role_id IN (SELECT role_id FROM role_behaviors WHERE behavior=?)";
             array_push($sql_query_args, $this->GetArg("behaviour"));
         }
 
         // Filter by role
-        if ($this->GetArg("role"))
-        {
+        if ($this->GetArg("role")) {
             $sql_query .= " AND role_id IN (SELECT id FROM roles WHERE name=?)";
             array_push($sql_query_args, $this->GetArg("role"));
         }
 
-        if ($this->GetArg("role-id"))
-        {
+        if ($this->GetArg("role-id")) {
             $sql_query .= " AND role_id = ?";
             array_push($sql_query_args, $this->GetArg("role-id"));
         }
 
-        if ($this->GetArg("farm-role-id"))
-        {
+        if ($this->GetArg("farm-role-id")) {
             $sql_query .= " AND id = ?";
             array_push($sql_query_args, $this->GetArg("farm-role-id"));
         }
 
         $farm_roles = $this->DB->GetAll($sql_query, $sql_query_args);
-        foreach ($farm_roles as $farm_role)
-        {
+        foreach ($farm_roles as $farm_role) {
             $DBFarmRole = DBFarmRole::LoadByID($farm_role['id']);
 
             // Create role node
@@ -257,6 +260,8 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
             $RoleDOMNode->setAttribute('alias', $DBFarmRole->Alias);
             $RoleDOMNode->setAttribute('id', $DBFarmRole->ID);
             $RoleDOMNode->setAttribute('role-id', $DBFarmRole->RoleID);
+            $RoleDOMNode->setAttribute('scaling-min-instances', $DBFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MIN_INSTANCES));
+            $RoleDOMNode->setAttribute('scaling-max-instances', $DBFarmRole->GetSetting(Entity\FarmRoleSetting::SCALING_MAX_INSTANCES));
 
             $HostsDomNode = $ResponseDOMDocument->createElement('hosts');
             $RoleDOMNode->appendChild($HostsDomNode);
@@ -275,32 +280,59 @@ class ScalrEnvironment20081125 extends ScalrEnvironment
             $servers = $this->DB->GetAll($serversSql, $serversArgs);
 
             // Add hosts to response
-            if (count($servers) > 0)
-            {
-                foreach ($servers as $server)
-                {
+            if (count($servers) > 0) {
+                foreach ($servers as $server) {
                     $DBServer = DBServer::LoadByID($server['server_id']);
 
+                    $serverProperties = $DBServer->GetAllProperties();
+
                     $HostDOMNode = $ResponseDOMDocument->createElement("host");
+                    $HostDOMNode->setAttribute('scalr-server-id', $DBServer->serverId);
+                    $HostDOMNode->setAttribute('cloud-server-id', $DBServer->GetCloudServerID());
                     $HostDOMNode->setAttribute('internal-ip', $DBServer->localIp);
                     $HostDOMNode->setAttribute('external-ip', $DBServer->remoteIp);
                     $HostDOMNode->setAttribute('index', $DBServer->index);
                     $HostDOMNode->setAttribute('status', $DBServer->status);
                     $HostDOMNode->setAttribute('cloud-location', $DBServer->GetCloudLocation());
                     $HostDOMNode->setAttribute('cloud-location-zone', $DBServer->cloudLocationZone);
-                    $HostDOMNode->setAttribute('hostname', $DBServer->GetProperty(Scalr_Role_Behavior::SERVER_BASE_HOSTNAME));
+                    $HostDOMNode->setAttribute('hostname', $serverProperties[Scalr_Role_Behavior::SERVER_BASE_HOSTNAME]);
 
-                    if ($DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MONGODB))
-                    {
-                        $HostDOMNode->setAttribute('replica-set-index', (int)$DBServer->GetProperty(Scalr_Role_Behavior_MongoDB::SERVER_REPLICA_SET_INDEX));
-                        $HostDOMNode->setAttribute('shard-index', (int)$DBServer->GetProperty(Scalr_Role_Behavior_MongoDB::SERVER_SHARD_INDEX));
+                    if (array_key_exists(SERVER_PROPERTIES::LAUNCHED_BY_EMAIL, $serverProperties)) {
+                        $launchedByEmail = $serverProperties[SERVER_PROPERTIES::LAUNCHED_BY_EMAIL];
+                    } else {
+                        $launchedByEmail = Entity\Account\User::findPk($DBServer->GetFarmObject()->ownerId)->email;
                     }
 
-                    if ($DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL))
-                        $HostDOMNode->setAttribute('replication-master', (int)$DBServer->GetProperty(SERVER_PROPERTIES::DB_MYSQL_MASTER));
+                    $HostDOMNode->setAttribute('launched-by', $launchedByEmail);
 
-                    if ($DBFarmRole->GetRoleObject()->getDbMsrBehavior())
-                        $HostDOMNode->setAttribute('replication-master', (int)$DBServer->GetProperty(Scalr_Db_Msr::REPLICATION_MASTER));
+                    if (array_key_exists(SERVER_PROPERTIES::LAUNCH_REASON_ID, $serverProperties)) {
+                        $HostDOMNode->setAttribute('launch-reason-id', $serverProperties[SERVER_PROPERTIES::LAUNCH_REASON_ID]);
+                    }
+
+
+                    if ($DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MONGODB)) {
+                        $HostDOMNode->setAttribute('replica-set-index', (int)$serverProperties[Scalr_Role_Behavior_MongoDB::SERVER_REPLICA_SET_INDEX]);
+                        $HostDOMNode->setAttribute('shard-index', (int)$serverProperties[Scalr_Role_Behavior_MongoDB::SERVER_SHARD_INDEX]);
+                    }
+
+                    if ($DBFarmRole->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL)) {
+                        if (array_key_exists(SERVER_PROPERTIES::DB_MYSQL_MASTER, $serverProperties)) {
+                            $isMySqlMaster = (int)$serverProperties[SERVER_PROPERTIES::DB_MYSQL_MASTER];
+                        } else {
+                            $isMySqlMaster = 0;
+                        }
+                        $HostDOMNode->setAttribute('replication-master', $isMySqlMaster);
+                    }
+
+                    if ($DBFarmRole->GetRoleObject()->getDbMsrBehavior()) {
+                        if (array_key_exists(Scalr_Db_Msr::REPLICATION_MASTER, $serverProperties)) {
+                            $isMaster = (int)$serverProperties[Scalr_Db_Msr::REPLICATION_MASTER];
+                        } else {
+                            $isMaster = 0;
+                        }
+
+                        $HostDOMNode->setAttribute('replication-master', $isMaster);
+                    }
 
                     $HostsDomNode->appendChild($HostDOMNode);
                 }

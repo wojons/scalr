@@ -167,6 +167,16 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
 
             $err['domainName'] = "'{$this->getParam('domainName')}' virtualhost already exists";
 
+            if (preg_match('/[^\x01-\x7f]/', $this->getParam('nonSslTemplate'))) {
+                $err['nonSslTemplate'] = _("Template contains non-ASCII symbols or null");
+            }
+
+            if ($this->getParam('isSslEnabled') === 'on') {
+                if (preg_match('/[^\x01-\x7f]/', $this->getParam('sslTemplate'))) {
+                    $err['sslTemplate'] = _("Template contains non-ASCII symbols or null");
+                }
+            }
+
         } catch (Exception $e) {
             $err[] = $e->getMessage();
         }
@@ -196,10 +206,10 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
             $vHost->httpdConf = $this->getParam("nonSslTemplate", true);
 
             $vHost->templateOptions = serialize(array(
-                "document_root" 	=> trim($this->getParam('documentRoot')),
-                "logs_dir"			=> trim($this->getParam('logsDir')),
-                "server_admin"		=> trim($this->getParam('serverAdmin')),
-                "server_alias"		=> trim($this->getParam('serverAlias'))
+                "document_root"     => trim($this->getParam('documentRoot')),
+                "logs_dir"          => trim($this->getParam('logsDir')),
+                "server_admin"      => trim($this->getParam('serverAdmin')),
+                "server_alias"      => trim($this->getParam('serverAlias'))
             ));
 
             //SSL stuff
@@ -248,17 +258,8 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
             'sort' => array('type' => 'json')
         ));
 
-        $sql = 'SELECT * FROM `apache_vhosts` WHERE env_id = ? AND :FILTER:';
+        $sql = "SELECT `apache_vhosts`.* FROM `apache_vhosts` LEFT JOIN `farms` f ON f.id = `apache_vhosts`.`farm_id` WHERE `apache_vhosts`.env_id = ? AND :FILTER: AND " . $this->request->getFarmSqlQuery();
         $args = array($this->getEnvironmentId());
-
-        if (!$this->request->isAllowed(Acl::RESOURCE_FARMS)) {
-            $farmSql = "SELECT id FROM farms WHERE env_id = ?";
-            $farmArgs = [$this->getEnvironmentId()];
-            list($farmSql, $farmArgs) = $this->request->prepareFarmSqlQuery($farmSql, $farmArgs);
-
-            $sql .= " AND `farm_id` IN (" . $farmSql . ")";
-            $args = array_merge($args, $farmArgs);
-        }
 
         if ($this->getParam('farmId')) {
             $sql .= ' AND farm_id = ?';
@@ -275,7 +276,7 @@ class Scalr_UI_Controller_Services_Apache_Vhosts extends Scalr_UI_Controller
             $args[] = $this->getParam('vhostId');
         }
 
-        $response = $this->buildResponseFromSql2($sql, array('id', 'name', 'farm_id', 'farm_roleid', 'last_modified', 'is_ssl_enabled'), array('name'), $args);
+        $response = $this->buildResponseFromSql2($sql, array('id', 'name', 'farm_id', 'farm_roleid', 'last_modified', 'is_ssl_enabled'), array('apache_vhosts.name'), $args);
 
         foreach ($response['data'] as &$row) {
             $row['last_modified'] = Scalr_Util_DateTime::convertTz($row['last_modified']);

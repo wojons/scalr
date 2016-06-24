@@ -165,7 +165,9 @@ class Scalr_UI_Controller_Webhooks_Endpoints extends Scalr_UI_Controller
         if (count($processed) == $num) {
             $this->response->success('Selected endpoint(s) successfully removed');
         } else {
-            array_walk($errors, function(&$item) { $item = '- ' . $item; });
+            array_walk($errors, function (&$item) {
+                $item = '- ' . $item;
+            });
             $this->response->warning(sprintf("Successfully removed only %d from %d endpoints. \nFollowing errors occurred:\n%s", count($processed), $num, join($errors, '')));
         }
 

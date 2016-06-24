@@ -14,10 +14,10 @@ class IdcfPlatformModule extends CloudstackPlatformModule
     }
 
     public function getLocations(\Scalr_Environment $environment = null) {
-        return array(
-            "jp-east-t1v"	=> "IDCF / jp-east-t1v",
-            "jp-east-f2v"	=> "IDCF / jp-east-f2v",
-        );
+        return [
+            "jp-east-t1v"   => "IDCF / jp-east-t1v",
+            "jp-east-f2v"   => "IDCF / jp-east-f2v",
+        ];
     }
 
     public function PutAccessData(\DBServer $DBServer, \Scalr_Messaging_Msg $message)
@@ -37,7 +37,7 @@ class IdcfPlatformModule extends CloudstackPlatformModule
         $put |= $message instanceof \Scalr_Messaging_Msg_DbMsr_NewMasterUp;
 
         if ($put) {
-            $ccProps = $DBServer->GetEnvironmentObject()->cloudCredentials($DBServer->platform)->properties;
+            $ccProps = $DBServer->GetEnvironmentObject()->keychain($DBServer->platform)->properties;
 
             $accessData = new \stdClass();
             $accessData->apiKey = $ccProps[CloudCredentialsProperty::CLOUDSTACK_API_KEY];

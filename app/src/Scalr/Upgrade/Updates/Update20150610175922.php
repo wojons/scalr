@@ -13,7 +13,7 @@ class Update20150610175922 extends AbstractUpdate implements SequenceInterface
 
     protected $description = 'Update scaling_metrics table.';
 
-    protected $ignoreChanges = false;
+    protected $ignoreChanges = true;
 
     protected $dbservice = 'adodb';
 

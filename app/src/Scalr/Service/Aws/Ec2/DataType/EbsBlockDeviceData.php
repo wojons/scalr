@@ -41,7 +41,7 @@ class EbsBlockDeviceData extends AbstractEc2DataType
 
     /**
      * The volume type.
-     * Valid values: standard | io1 | gp2
+     * Valid values: standard | io1 | gp2 | sc1 | st1
      * @var string
      */
     public $volumeType;
@@ -77,7 +77,7 @@ class EbsBlockDeviceData extends AbstractEc2DataType
      *          The ID of the snapshot.
      *
      * @param   string     $volumeType          optional
-     *          The volume type. Valid values: standard | io1 | gp2
+     *          The volume type. Valid values: standard | io1 | gp2 | st1 | sc1
      *
      * @param   int        $iops                optional
      *          The number of I/O operations per second (IOPS) that the volume supports.

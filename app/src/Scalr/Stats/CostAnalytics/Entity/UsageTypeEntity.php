@@ -40,6 +40,11 @@ class UsageTypeEntity extends \Scalr\Model\AbstractEntity
     const NAME_COMPUTE_BOX_USAGE = 'BoxUsage';
 
     /**
+     * The Usage Type name for Other - Software
+     */
+    const NAME_OTHER_SOFTWARE = 'Software';
+
+    /**
      * The Usage Type name for cloud storage ebs
      */
     const NAME_STORAGE_EBS = 'EBS';

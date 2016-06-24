@@ -55,7 +55,7 @@ class SshkeysTest extends WebTestCase
             $this->markTestSkipped(sprintf("EC2 platform is not enabled."));
         }
 
-        $ccProps = $env->cloudCredentials(SERVER_PLATFORMS::EC2)->properties;
+        $ccProps = $env->keychain(SERVER_PLATFORMS::EC2)->properties;
         $this->assertNotNull($ccProps[Entity\CloudCredentialsProperty::AWS_ACCESS_KEY]);
         $this->assertNotNull($ccProps[Entity\CloudCredentialsProperty::AWS_SECRET_KEY]);
         $this->assertNotNull($ccProps[Entity\CloudCredentialsProperty::AWS_PRIVATE_KEY]);

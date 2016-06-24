@@ -25,7 +25,7 @@ use Scalr\Model\Entity;
 class Image extends AbstractEntity implements ScopeInterface, AccessPermissionsInterface
 {
     const STATUS_ACTIVE = 'active';
-    const STATUS_DELETE = 'delete';
+    const STATUS_DELETE = 'pending_delete';
     const STATUS_FAILED = 'failed';
 
     const SOURCE_MANUAL = 'Manual';
@@ -37,6 +37,7 @@ class Image extends AbstractEntity implements ScopeInterface, AccessPermissionsI
      * Hash (primary key)
      *
      * @Id
+     * @GeneratedValue("CUSTOM")
      * @Column(type="uuid")
      * @var string
      */
@@ -165,6 +166,18 @@ class Image extends AbstractEntity implements ScopeInterface, AccessPermissionsI
     public $agentVersion;
 
     /**
+     * @Column(type="integer")
+     * @var int
+     */
+    public $isScalarized = 1;
+
+    /**
+     * @Column(type="integer")
+     * @var int
+     */
+    public $hasCloudInit = 0;
+
+    /**
      * @var Scalr_Environment
      */
     protected $_environment = null;
@@ -218,37 +231,7 @@ class Image extends AbstractEntity implements ScopeInterface, AccessPermissionsI
         if ($this->platform == \SERVER_PLATFORMS::GCE || $this->platform == \SERVER_PLATFORMS::AZURE)
             $this->cloudLocation = ''; // image on GCE or Azure doesn't require cloudLocation
 
-        $hash = self::calculateHash($this->envId, $this->id, $this->platform, $this->cloudLocation);
-        if (! $this->hash) {
-            $this->hash = $hash;
-        } else if ($this->hash != $hash) {
-            throw new Exception('Hash are mismatched in entity Image');
-        }
-
         parent::save();
-    }
-
-    /**
-     * Calculates uuid for the specified entity
-     *
-     * @param   int       $envId
-     * @param   string    $id
-     * @param   string    $platform       Cloud platform
-     * @param   string    $cloudLocation  Cloud location
-     * @return  string    Returns UUID
-     */
-    public static function calculateHash($envId, $id, $platform, $cloudLocation)
-    {
-        $hash = sha1(sprintf("%s;%s;%s;%s", $envId ? $envId : 0, $id, $platform, $cloudLocation));
-
-        return sprintf(
-            "%s-%s-%s-%s-%s",
-            substr($hash, 0, 8),
-            substr($hash, 8, 4),
-            substr($hash, 12, 4),
-            substr($hash, 16, 4),
-            substr($hash, 20, 12)
-        );
     }
 
     /**
@@ -579,6 +562,8 @@ class Image extends AbstractEntity implements ScopeInterface, AccessPermissionsI
         $newImage->createdById = $user->getId();
         $newImage->createdByEmail = $user->getEmail();
         $newImage->status = Image::STATUS_ACTIVE;
+        $newImage->isScalarized = $this->isScalarized;
+        $newImage->hasCloudInit = $this->hasCloudInit;
         $newImage->save();
         $newImage->setSoftware($this->getSoftware());
 

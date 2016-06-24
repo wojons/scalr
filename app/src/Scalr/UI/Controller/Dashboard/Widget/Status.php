@@ -18,7 +18,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
         /* @var $endpoint Endpoint */
         $endpoint =
             $this->getEnvironment()
-                 ->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE] == Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE_GOV_CLOUD
+                 ->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE] == Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE_GOV_CLOUD
                 ? new GovEndpoint()
                 : new Endpoint();
 
@@ -42,26 +42,30 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
             $data = (array) json_decode(file_get_contents($awsCachePath));
         } else {
             $req = new Request();
-            $req->setOptions(array(
+
+            $req->setOptions([
                 'redirect'       => 10,
-                'verifypeer'     => false,
-                'verifyhost'     => false,
                 'timeout'        => 30,
                 'connecttimeout' => 30,
-                'cookiesession' => true
-            ));
-            
+                'cookiesession'  => true
+            ]);
+
+            $req->setSslOptions([
+                'verifypeer' => false,
+                'verifyhost' => false
+            ]);
+
             if (\Scalr::config('scalr.aws.use_proxy') && in_array(\Scalr::config('scalr.connections.proxy.use_on'), array('both', 'scalr'))) {
                 $proxySettings = \Scalr::config('scalr.connections.proxy');
             }
-            
+
             if (!empty($proxySettings)) {
                 $req->setOptions([
                     'proxyhost' => $proxySettings['host'],
                     'proxyport' => $proxySettings['port'],
                     'proxytype' => $proxySettings['type']
                 ]);
-            
+
                 if ($proxySettings['user']) {
                     $req->setOptions([
                         'proxyauth'     => "{$proxySettings['user']}:{$proxySettings['pass']}",
@@ -69,10 +73,13 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
                     ]);
                 }
             }
+
             $req->setRequestMethod("GET");
             $req->setRequestUrl($endpoint->statUrl);
+
             try {
                 $response = \Scalr::getContainer()->http->sendRequest($req);
+
                 if ($response->getResponseCode() == 200) {
                     $html = $response->getBody()->toString();
                 } else {
@@ -81,8 +88,7 @@ class Scalr_UI_Controller_Dashboard_Widget_Status extends Scalr_UI_Controller_Da
             } catch (\http\Exception $e) {
                 return [];
             }
-            
-            //$html = @file_get_contents($endpoint->statUrl);
+
             if ($html) {
                 $dom = new DOMDocument();
                 $dom->validateOnParse = false;

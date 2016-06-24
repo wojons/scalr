@@ -42,6 +42,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             url: '/tools/aws/route53/hostedzones/xList'
         },
         remoteSort: true,
+        autoLoad: true,
         listeners: {
             load: function () {
                 zonesForm.hide();
@@ -134,6 +135,7 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             url: '/tools/aws/route53/healthchecks/xList'
         },
         remoteSort: true,
+        autoLoad: true,
         listeners: {
             load: function () {
                 healthChecksForm.hide();
@@ -201,7 +203,6 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 },
                 url: '/tools/aws/route53/hostedzones/xDelete',
                 params: {
-                    cloudLocation: me.down('#cloudLocation').getValue(),
                     zoneId: Ext.encode(zonesIds)
                 },
                 success: function () {
@@ -219,7 +220,6 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 },
                 url: '/tools/aws/route53/hostedzones/xCreate',
                 params: {
-                    cloudLocation: me.down('#cloudLocation').getValue(),
                     domainName: name,
                     description: comment
                 },
@@ -256,17 +256,9 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             items: [{
                 xtype: 'filterfield',
                 store: zonesStore,
-                width: 110,
+                flex: 1,
+                maxWidth: 220,
                 margin: 0
-            }, {
-                xtype: 'cloudlocationfield',
-                platforms: [ 'ec2' ],
-                gridStore: zonesStore,
-                listeners: {
-                    change: function () {
-                        zonesGrid.getSelectionModel().deselectAll();
-                    }
-                }
             }, {
                 xtype: 'tbfill',
                 flex: 0.01
@@ -288,6 +280,8 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                     zonesForm.down('[name=comment]').enable();
 
                     recordsGrid.down('[name=addRecordButton]').disable();
+
+                    recordsGrid.disableColumnHeaders();
 
                     recordsStore.removeAll();
 
@@ -329,12 +323,12 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 recordsGrid.down('#refresh').enable();
                 recordsGrid.down('filterfield').enable();
                 recordsGrid.down('[name=addRecordButton]').enable();
+                recordsGrid.enableColumnHeaders();
 
                 var zoneId = record.get('zoneId');
                 var cache = recordsGrid.recordsCache[zoneId];
 
                 recordsStore.getProxy().extraParams = {
-                    cloudLocation: zonesGrid.down('#cloudLocation').getValue(),
                     zoneId: record.get('zoneId')
                 };
 
@@ -422,8 +416,14 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
         }],
 
         viewConfig: {
-            emptyText: 'No record sets',
-            loadingText: 'Loading record sets...'
+            preserveScrollOnRefresh: true,
+            plugins: {
+                ptype: 'dynemptytext',
+                emptyText: 'No Record Sets found.',
+                emptyTextNoItems: 'You have no Record Sets added yet.'
+            },
+            loadingText: 'Loading Record Sets...',
+            deferEmptyText: false
         },
 
         selModel:
@@ -470,7 +470,6 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                         var cache = me.recordsCache[zoneId];
 
                         recordsStore.getProxy().extraParams = {
-                            cloudLocation: zonesGrid.down('#cloudLocation').getValue(),
                             zoneId: zoneId
                         };
 
@@ -577,7 +576,6 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 scope: this,
                 params: {
                     dnsName: null,
-                    cloudLocation: zonesGrid.down('#cloudLocation').getValue(),
                     zoneId: recordsStore.getProxy().extraParams.zoneId,
                     action: action,
                     oldRecordSet: oldRecordSetParams
@@ -616,7 +614,6 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 },
                 url: '/tools/aws/route53/recordsets/xDelete',
                 params: {
-                    cloudLocation: zonesGrid.down('#cloudLocation').getValue(),
                     zoneId: recordsStore.getProxy().extraParams.zoneId,
                     recordSets: Ext.encode(recordSetsParams)
                 },
@@ -894,7 +891,6 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 },
                 url: '/tools/aws/route53/healthchecks/xDelete',
                 params: {
-                    cloudLocation: me.down('#cloudLocation').getValue(),
                     healthId: Ext.encode(healthId)
                 },
                 success: function () {
@@ -949,15 +945,6 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                 flex: 1,
                 maxWidth: 220,
                 margin: 0
-            }, {
-                xtype: 'cloudlocationfield',
-                platforms: [ 'ec2' ],
-                gridStore: healthChecksStore,
-                listeners: {
-                    change: function () {
-                        healthChecksGrid.getSelectionModel().deselectAll();
-                    }
-                }
             }, {
                 xtype: 'tbfill',
                 flex: 0.01
@@ -1076,9 +1063,6 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                     },
                     url: '/tools/aws/route53/healthchecks/xCreate',
                     form: form,
-                    params: {
-                        cloudLocation: healthChecksGrid.down('#cloudLocation').getValue()
-                    },
                     success: function () {
                         me.hide();
                         me.getForm().reset(true);
@@ -1507,7 +1491,6 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
                     msg: 'Loading alias targets...'
                 },
                 params: {
-                    cloudLocation: zonesGrid.down('#cloudLocation').getValue(),
                     zoneId: recordsStore.getProxy().extraParams.zoneId,
                     name: me.down('[name=name]').getSubmitValue()
                 },
@@ -1539,7 +1522,6 @@ Scalr.regPage('Scalr.ui.tools.aws.route53.view', function (loadParams, modulePar
             Scalr.Request({
                 url: '/tools/aws/route53/recordsets/xGetS3Targets',
                 params: {
-                    cloudLocation: zonesGrid.down('#cloudLocation').getValue(),
                     zoneId: recordsStore.getProxy().extraParams.zoneId,
                     name: recordSetName
                 },

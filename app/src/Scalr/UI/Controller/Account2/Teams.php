@@ -63,7 +63,9 @@ class Scalr_UI_Controller_Account2_Teams extends Scalr_UI_Controller
         $users = $team->getUsers();
         if (!empty($users)) {
             $uroles = $this->getContainer()->acl->getUserRoleIdsByTeam(
-                array_map(create_function('$a', 'return $a["id"];'), $users),
+                array_map(function ($a) {
+                    return $a['id'];
+                }, $users),
                 $team->id, $team->accountId
             );
             foreach ($users as &$user) {

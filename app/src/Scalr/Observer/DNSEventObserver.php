@@ -2,80 +2,100 @@
 namespace Scalr\Observer;
 
 use Exception;
+use RebootCompleteEvent;
+use NewMysqlMasterUpEvent;
+use NewDbMsrMasterUpEvent;
+use IPAddressChangedEvent;
+use FarmLaunchedEvent;
+use DBFarm;
+use DBDNSZone;
+use DNS_ZONE_STATUS;
+use FarmTerminatedEvent;
+use ROLE_BEHAVIORS;
+use SERVER_STATUS;
+use DBServer;
+use Scalr_Role_Behavior_MongoDB;
+use ResumeCompleteEvent;
+use HostUpEvent;
+use BeforeHostTerminateEvent;
+use HostDownEvent;
 
 class DNSEventObserver extends AbstractEventObserver
 {
     public $ObserverName = 'DNS';
 
-    function __construct()
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Observer\AbstractEventObserver::OnRebootComplete()
+     */
+    public function OnRebootComplete(RebootCompleteEvent $event)
     {
-        parent::__construct();
-    }
-
-    public function OnRebootComplete(\RebootCompleteEvent $event)
-    {
-
     }
 
     /**
-     * @deprecated
+     * {@inheritdoc}
+     * @see \Scalr\Observer\AbstractEventObserver::OnNewMysqlMasterUp()
      */
-    public function OnNewMysqlMasterUp(\NewMysqlMasterUpEvent $event)
-    {
-        $this->updateZoneServerRecords($event->DBServer->serverId, $event->DBServer->farmId, true);
-    }
-
-    public function OnNewDbMsrMasterUp(\NewDbMsrMasterUpEvent $event)
+    public function OnNewMysqlMasterUp(NewMysqlMasterUpEvent $event)
     {
         $this->updateZoneServerRecords($event->DBServer->serverId, $event->DBServer->farmId, true);
     }
 
     /**
-     * Public IP address for instance changed
-     *
-     * @param array $instanceinfo
-     * @param string $new_ip_address
+     * {@inheritdoc}
+     * @see \Scalr\Observer\AbstractEventObserver::OnNewDbMsrMasterUp()
      */
-    public function OnIPAddressChanged(\IPAddressChangedEvent $event)
+    public function OnNewDbMsrMasterUp(NewDbMsrMasterUpEvent $event)
+    {
+        $this->updateZoneServerRecords($event->DBServer->serverId, $event->DBServer->farmId, true);
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Observer\AbstractEventObserver::OnIPAddressChanged()
+     */
+    public function OnIPAddressChanged(IPAddressChangedEvent $event)
     {
         $this->updateZoneServerRecords($event->DBServer->serverId, $event->DBServer->farmId);
     }
 
     /**
-     * Farm launched
-     *
-     * @param bool $mark_instances_as_active
+     * {@inheritdoc}
+     * @see \Scalr\Observer\AbstractEventObserver::OnFarmLaunched()
      */
-    public function OnFarmLaunched(\FarmLaunchedEvent $event)
+    public function OnFarmLaunched(FarmLaunchedEvent $event)
     {
         //SYSTEM DNS RECORD
         if (\Scalr::config('scalr.dns.static.enabled')) {
             try {
-                $hash = \DBFarm::LoadByID($event->GetFarmID())->Hash;
+                $hash = DBFarm::LoadByID($event->GetFarmID())->Hash;
                 $pdnsDb = \Scalr::getContainer()->dnsdb;
                 $pdnsDb->Execute("INSERT INTO `domains` SET `name`=?, `type`=?, `scalr_farm_id`=?", array("{$hash}." . \Scalr::config('scalr.dns.static.domain_name'),'NATIVE', $event->GetFarmID()));
-            } catch (Exception $e) {}
+            } catch (Exception $e) {
+                \Scalr::logException($e);
+            }
         }
 
-        $zones = \DBDNSZone::loadByFarmId($event->GetFarmID());
-        if (count($zones) == 0)
+        $zones = DBDNSZone::loadByFarmId($event->GetFarmID());
+
+        if (count($zones) == 0) {
             return;
+        }
 
         foreach ($zones as $zone) {
-            if ($zone->status == \DNS_ZONE_STATUS::INACTIVE) {
-                $zone->status = \DNS_ZONE_STATUS::PENDING_CREATE;
+            if ($zone->status == DNS_ZONE_STATUS::INACTIVE) {
+                $zone->status = DNS_ZONE_STATUS::PENDING_CREATE;
                 $zone->isZoneConfigModified = 1;
                 $zone->save();
             }
         }
     }
+
     /**
-     * Farm terminated
-     *
-     * @param bool $remove_zone_from_DNS
-     * @param bool $keep_elastic_ips
+     * {@inheritdoc}
+     * @see \Scalr\Observer\AbstractEventObserver::OnFarmTerminated()
      */
-    public function OnFarmTerminated(\FarmTerminatedEvent $event)
+    public function OnFarmTerminated(FarmTerminatedEvent $event)
     {
         //SYSTEM DNS ZONES
         if (\Scalr::config('scalr.dns.static.enabled')) {
@@ -83,116 +103,156 @@ class DNSEventObserver extends AbstractEventObserver
             $pdnsDb->Execute("DELETE FROM `domains` WHERE scalr_farm_id = ?", array($event->GetFarmID()));
         }
 
-        if (!$event->RemoveZoneFromDNS)
+        if (!$event->RemoveZoneFromDNS) {
             return;
+        }
 
-        $zones = \DBDNSZone::loadByFarmId($event->GetFarmID());
-        if (count($zones) == 0)
+        $zones = DBDNSZone::loadByFarmId($event->GetFarmID());
+
+        if (count($zones) == 0) {
             return;
+        }
 
-        foreach ($zones as $zone)
-        {
-            if ($zone->status != \DNS_ZONE_STATUS::PENDING_DELETE)
-            {
-                $zone->status = \DNS_ZONE_STATUS::INACTIVE;
+        foreach ($zones as $zone) {
+            if ($zone->status != DNS_ZONE_STATUS::PENDING_DELETE) {
+                $zone->status = DNS_ZONE_STATUS::INACTIVE;
                 $zone->save();
             }
         }
     }
 
     /**
-     * Instance sent hostUp event
-     *
-     * @param array $instanceinfo
+     * {@inheritdoc}
+     * @see \Scalr\Observer\AbstractEventObserver::OnResumeComplete()
      */
-    public function OnHostUp(\HostUpEvent $event)
+    public function OnResumeComplete(ResumeCompleteEvent $event)
     {
-        $update_all = $event->DBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(\ROLE_BEHAVIORS::MYSQL) ? true : false;
-        $this->updateZoneServerRecords($event->DBServer->serverId, $event->DBServer->farmId, $update_all);
-    }
-
-    public function OnBeforeHostTerminate(\BeforeHostTerminateEvent $event)
-    {
-        $update_all = false;
-        try {
-            $update_all = $event->DBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(\ROLE_BEHAVIORS::MYSQL) ? true : false;
-        }
-        catch(Exception $e){}
+        $update_all = $event->DBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL) ? true : false;
 
         $this->updateZoneServerRecords($event->DBServer->serverId, $event->DBServer->farmId, $update_all);
     }
 
     /**
-     * Instance terminated
-     *
-     * @param array $instanceinfo
+     * {@inheritdoc}
+     * @see \Scalr\Observer\AbstractEventObserver::OnHostUp()
      */
-    public function OnHostDown(\HostDownEvent $event)
+    public function OnHostUp(HostUpEvent $event)
+    {
+        $update_all = $event->DBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(ROLE_BEHAVIORS::MYSQL) ? true : false;
+
+        $this->updateZoneServerRecords($event->DBServer->serverId, $event->DBServer->farmId, $update_all);
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Observer\AbstractEventObserver::OnBeforeHostTerminate()
+     */
+    public function OnBeforeHostTerminate(BeforeHostTerminateEvent $event)
+    {
+        $update_all = false;
+
+        try {
+            $update_all = $event->DBServer
+                ->GetFarmRoleObject()
+                ->GetRoleObject()
+                ->hasBehavior(ROLE_BEHAVIORS::MYSQL) ? true : false;
+        } catch (Exception $e) {
+        }
+
+        $this->updateZoneServerRecords($event->DBServer->serverId, $event->DBServer->farmId, $update_all);
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Observer\AbstractEventObserver::OnHostDown()
+     */
+    public function OnHostDown(HostDownEvent $event)
     {
         $update_all = false;
         try {
-            $update_all = $event->DBServer->GetFarmRoleObject()->GetRoleObject()->hasBehavior(\ROLE_BEHAVIORS::MYSQL) ? true : false;
+            $update_all = $event->DBServer->GetFarmRoleObject()
+                ->GetRoleObject()
+                ->hasBehavior(ROLE_BEHAVIORS::MYSQL) ? true : false;
+        } catch (Exception $e) {
         }
-        catch(Exception $e){}
 
         $this->updateZoneServerRecords($event->DBServer->serverId, $event->DBServer->farmId, $update_all, true);
     }
 
-    private function updateZoneServerRecords($server_id, $farm_id, $reset_all_system_records = false, $skip_status_check = false)
+    /**
+     * Updates Zone Records
+     *
+     * @param   string   $serverId              The identifier of the Server
+     * @param   int      $farmId                The identifier of the Farm
+     * @param   bool     $resetAllSystemRecords optional
+     * @param   bool     $skipStatusCheck       optional
+     * @throws  Exception
+     */
+    private function updateZoneServerRecords($serverId, $farmId, $resetAllSystemRecords = false, $skipStatusCheck = false)
     {
-        $zones = \DBDNSZone::loadByFarmId($farm_id);
-        foreach ($zones as $DBDNSZone)
-        {
-            if (!$skip_status_check && ($DBDNSZone->status == \DNS_ZONE_STATUS::PENDING_DELETE || $DBDNSZone->status == \DNS_ZONE_STATUS::INACTIVE))
+        $zones = DBDNSZone::loadByFarmId($farmId);
+        foreach ($zones as $DBDNSZone) {
+            if (!$skipStatusCheck && ($DBDNSZone->status == DNS_ZONE_STATUS::PENDING_DELETE || $DBDNSZone->status == DNS_ZONE_STATUS::INACTIVE)) {
                 continue;
-
-            if (!$reset_all_system_records)
-            {
-                $DBDNSZone->updateSystemRecords($server_id);
-                $DBDNSZone->save();
             }
-            else
-            {
+
+            if (!$resetAllSystemRecords) {
+                $DBDNSZone->updateSystemRecords($serverId);
+                $DBDNSZone->save();
+            } else {
                 $DBDNSZone->save(true);
             }
         }
 
         //UPDATE SYSTEM records
         try {
-            $this->updateSystemZone($server_id, $farm_id, $reset_all_system_records, $skip_status_check);
+            $this->updateSystemZone($serverId, $farmId, $resetAllSystemRecords, $skipStatusCheck);
         } catch (Exception $e) {
             \Scalr::getContainer()->logger('SysDNS')->fatal("Cannot save system DNS zone: {$e->getMessage()}");
         }
     }
 
-    private function updateSystemZone($server_id, $farm_id, $reset_all_system_records = false, $skip_status_check = false)
+    /**
+     * Updates System Zone
+     *
+     * @param   string   $serverId              The identifier of the Server
+     * @param   int      $farmId                The identifier of the Farm
+     * @param   bool     $resetAllSystemRecords optional
+     * @param   bool     $skipStatusCheck       optional
+     * @throws  Exception
+     */
+    private function updateSystemZone($serverId, $farmId, $resetAllSystemRecords = false, $skipStatusCheck = false)
     {
         //UPDATE RECORDS ONLY FOR SERVER
-        if (!\Scalr::config('scalr.dns.static.enabled'))
+        if (!\Scalr::config('scalr.dns.static.enabled')) {
             return true;
+        }
 
         $pdnsDb = \Scalr::getContainer()->dnsdb;
 
         $deleteMySQL = false;
         $deleteDbMsr = false;
 
-        //$this->DB->BeginTrans();
-
         try {
             try {
-                $server = \DBServer::LoadByID($server_id);
+                $server = DBServer::LoadByID($serverId);
                 $dbRole = $server->GetFarmRoleObject()->GetRoleObject();
-            } catch (Exception $e) {}
-
+            } catch (Exception $e) {
+            }
 
             $domain = $pdnsDb->GetRow("SELECT id, name FROM domains WHERE scalr_farm_id = ? LIMIT 1", array($server->farmId));
+
             $domainId = $domain['id'];
             $domainName = $domain['name'];
-            if (!$domainId)
+
+            if (!$domainId) {
                 return;
+            }
+
+            $records = [];
 
             // Set index records
-            if ($server && $server->status == \SERVER_STATUS::RUNNING) {
+            if ($server && $server->status == SERVER_STATUS::RUNNING) {
                 $records[] = array("int.{$server->index}.{$server->farmRoleId}", $server->localIp, $server->serverId);
                 $records[] = array("ext.{$server->index}.{$server->farmRoleId}", $server->remoteIp, $server->serverId);
 
@@ -201,12 +261,12 @@ class DNSEventObserver extends AbstractEventObserver
                     $records[] = array("ext.{$server->farmRoleId}", $server->remoteIp, $server->serverId);
                 }
 
-                if ($server->GetProperty(\Scalr_Role_Behavior_MongoDB::SERVER_IS_ROUTER)) {
+                if ($server->GetProperty(Scalr_Role_Behavior_MongoDB::SERVER_IS_ROUTER)) {
                     $records[] = array("int.mongo", $server->localIp, $server->serverId, 'mongodb');
                     $records[] = array("ext.mongo", $server->remoteIp, $server->serverId, 'mongodb');
                 }
 
-                if ($dbRole->hasBehavior(\ROLE_BEHAVIORS::NGINX)) {
+                if ($dbRole->hasBehavior(ROLE_BEHAVIORS::NGINX)) {
                     //$records[] = array("int.api.cloudfoundry", $server->localIp, $server->serverId, 'cloudfoundry');
                     //$records[] = array("ext.api.cloudfoundry", $server->remoteIp, $server->serverId, 'cloudfoundry');
 
@@ -216,14 +276,20 @@ class DNSEventObserver extends AbstractEventObserver
             }
 
             if ($dbRole) {
-                $isMysql = $dbRole->hasBehavior(\ROLE_BEHAVIORS::MYSQL);
+                $isMysql = $dbRole->hasBehavior(ROLE_BEHAVIORS::MYSQL);
+
                 if ($isMysql) {
                     // Clear records
                     $deleteMySQL = true;
                     $mysqlMasterServer = null;
                     $mysqlSlaves = 0;
 
-                    $servers = $this->DB->Execute("SELECT server_id, local_ip, remote_ip FROM servers WHERE `farm_roleid` = ? and `status`=?", array($server->farmRoleId, \SERVER_STATUS::RUNNING));
+                    $servers = $this->DB->Execute("
+                        SELECT server_id, local_ip, remote_ip
+                        FROM servers
+                        WHERE `farm_roleid` = ? and `status`=?
+                    ", [$server->farmRoleId, SERVER_STATUS::RUNNING]);
+
                     while ($s = $servers->FetchRow()) {
                         if ($this->DB->GetOne("SELECT value FROM server_properties WHERE server_id = ? AND name = ? LIMIT 1", array($s['server_id'], \SERVER_PROPERTIES::DB_MYSQL_MASTER)) == 1) {
                             $records[] = array("int.master.mysql", $s['local_ip'], $s['server_id'], 'mysql');
@@ -246,6 +312,7 @@ class DNSEventObserver extends AbstractEventObserver
                 }
 
                 $dbmsr = $dbRole->getDbMsrBehavior();
+
                 if ($dbmsr) {
                     $recordPrefix = $dbmsr;
 
@@ -254,15 +321,27 @@ class DNSEventObserver extends AbstractEventObserver
                     $mysqlMasterServer = null;
                     $mysqlSlaves = 0;
 
-                    $servers = $this->DB->Execute("SELECT server_id, local_ip, remote_ip FROM servers WHERE `farm_roleid` = ? and `status`=?", array($server->farmRoleId, \SERVER_STATUS::RUNNING));
+                    $servers = $this->DB->Execute("
+                        SELECT server_id, local_ip, remote_ip
+                        FROM servers
+                        WHERE `farm_roleid` = ?
+                        AND `status`=?
+                    ", [$server->farmRoleId, SERVER_STATUS::RUNNING]);
+
                     while ($s = $servers->FetchRow()) {
-                        if ($this->DB->GetOne("SELECT value FROM server_properties WHERE server_id = ? AND name = ? LIMIT 1", array($s['server_id'], \Scalr_Db_Msr::REPLICATION_MASTER)) == 1) {
+                        if ($this->DB->GetOne("
+                                SELECT value FROM server_properties
+                                WHERE server_id = ? AND name = ? LIMIT 1
+                            ", [$s['server_id'], \Scalr_Db_Msr::REPLICATION_MASTER]) == 1
+                        ) {
                             $records[] = array("int.master.{$recordPrefix}", $s['local_ip'], $s['server_id'], $dbmsr);
                             $records[] = array("ext.master.{$recordPrefix}", $s['remote_ip'], $s['server_id'], $dbmsr);
+
                             $mysqlMasterServer = $s;
                         } else {
                             $records[] = array("int.slave.{$recordPrefix}", $s['local_ip'], $s['server_id'], $dbmsr);
                             $records[] = array("ext.slave.{$recordPrefix}", $s['remote_ip'], $s['server_id'], $dbmsr);
+
                             $mysqlSlaves++;
                         }
 
@@ -286,26 +365,40 @@ class DNSEventObserver extends AbstractEventObserver
             }
             */
 
-            $pdnsDb->Execute("DELETE FROM records WHERE server_id = ?", array($server_id));
-            if ($deleteMySQL)
+            $pdnsDb->Execute("DELETE FROM records WHERE server_id = ?", array($serverId));
+
+            if ($deleteMySQL) {
                 $pdnsDb->Execute("DELETE FROM records WHERE `service` = ? AND domain_id = ?", array('mysql', $domainId));
-            if ($deleteDbMsr)
+            }
+
+            if ($deleteDbMsr) {
                 $pdnsDb->Execute("DELETE FROM records WHERE `service` = ? AND domain_id = ?", array($dbmsr, $domainId));
+            }
 
             if (count($records) > 0) {
                 foreach ($records as $r) {
-                    $pdnsDb->Execute("INSERT INTO records SET
-                        `domain_id`=?, `name`=?, `type`=?, `content`=?, `ttl`=?, `server_id`=?, `service`=?
-                    ",
-                    array($domainId, "$r[0].{$domainName}", "A", "{$r[1]}", 20, $r[2], $r[3]));
+                    $pdnsDb->Execute("
+                        INSERT INTO records
+                        SET `domain_id`=?,
+                            `name`=?,
+                            `type`=?,
+                            `content`=?,
+                            `ttl`=?,
+                            `server_id`=?,
+                            `service`=?
+                    ", [
+                        $domainId,
+                        "$r[0].{$domainName}",
+                        "A",
+                        "{$r[1]}",
+                        20,
+                        $r[2],
+                        (count($r) == 4) ? $r[3] : null
+                    ]);
                 }
             }
         } catch (Exception $e) {
-            //$this->DB->RollbackTrans();
-            //throw new Exception ("Cannot save system zone. Error: " . $e->getMessage(), $e->getCode());
             throw $e;
         }
-
-        //$this->DB->CommitTrans();
     }
 }

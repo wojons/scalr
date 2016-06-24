@@ -1,6 +1,6 @@
 # `POST /api/v1beta0/user/{envId}/farm-roles/{farmRoleId}/orchestration-rules/` #
 
-Associate a new Orchestration Rule with this Farm Role
+Associates a new Orchestration Rule with this Farm Role.
 
 ## Request Parameters #
 
@@ -10,7 +10,7 @@ Path parameters are included in the URL.
 
 #### `envId` ####
 
-The ID of the Environment scoping this request
+The ID of the Environment scoping this request.
 
 Parameter of type: `integer`.
 
@@ -50,13 +50,13 @@ An object of type: [`OrchestrationRule`](./../../../../../../../../definitions/O
 The JSON representation of a OrchestrationRule object.
 
 The response body is an object of type:
-[`OrchestrationRuleDetailResponse`](./../../../../../../../../definitions/OrchestrationRuleDetailResponse.mkd).
+[`OrchestrationRuleDetailsResponse`](./../../../../../../../../definitions/OrchestrationRuleDetailsResponse.mkd).
 
 
 
 ### 400 ###
 
-A client-side error was made
+A client-side error was made.
 
 The response body is an object of type:
 [`ApiErrorResponse`](./../../../../../../../../definitions/ApiErrorResponse.mkd).
@@ -70,7 +70,7 @@ The following errors **may** be returned by this endpoint.
 
 ### 401 ###
 
-Request was not authenticated
+Request was not authenticated.
 
 The response body is an object of type:
 [`ApiErrorResponse`](./../../../../../../../../definitions/ApiErrorResponse.mkd).
@@ -82,7 +82,7 @@ The following errors **may** be returned by this endpoint.
 
 ### 403 ###
 
-Insufficient permissions
+Insufficient permissions.
 
 The response body is an object of type:
 [`ApiErrorResponse`](./../../../../../../../../definitions/ApiErrorResponse.mkd).
@@ -95,19 +95,19 @@ The following errors **may** be returned by this endpoint.
 
 ### 404 ###
 
-Resource not found
+Resource not found.
 
 The response body is an object of type:
 [`ApiErrorResponse`](./../../../../../../../../definitions/ApiErrorResponse.mkd).
 
 The following errors **may** be returned by this endpoint.
 
-+ `ObjectNotFound`: The URL you are trying to access does not exist Check the error message for more information.
++ `ObjectNotFound`: The URL you are trying to access does not exist. Check the error message for more information.
 
 
 ### 409 ###
 
-Conflict with current state
+Conflict with current state.
 
 The response body is an object of type:
 [`ApiErrorResponse`](./../../../../../../../../definitions/ApiErrorResponse.mkd).
@@ -116,11 +116,35 @@ The following errors **may** be returned by this endpoint.
 
 + `ObjectInUse`: The changes you are trying to make aren't possible while this object is in use. Check the error message for more information.
 + `UnicityViolation`: The changes you are trying to make violate a unicity constraint. Check the error message for more information.
++ `Locked`: Some of the objects being changed is locked for changing. Check the error message for more information.
++ `NotEnabledPlatform`: Cloud platform is not enabled. Check the error message for more information.
++ `OperatingSystemMismatch`: The Operating system mismatch. Check the error message for more information.
++ `ConfigurationMismatch`: Some of the configuration settings cannot be applied, conflicts or wrong. Check the error message for more information.
++ `Deprecated`: Some of the object or action is deprecated. Check the error message for more information.
++ `UnacceptableState`: The action can't be perfomed due to object's state. Check the error message for more information.
 
 
 ### 500 ###
 
-A server-side error occured
+A server-side error occured.
+
+The response body is an object of type:
+[`ApiErrorResponse`](./../../../../../../../../definitions/ApiErrorResponse.mkd).
+
+
+
+### 501 ###
+
+Error is raised when the feature is not implemented in Scalr.
+
+The response body is an object of type:
+[`ApiErrorResponse`](./../../../../../../../../definitions/ApiErrorResponse.mkd).
+
+
+
+### 503 ###
+
+The service is currently unavailable.
 
 The response body is an object of type:
 [`ApiErrorResponse`](./../../../../../../../../definitions/ApiErrorResponse.mkd).
@@ -132,21 +156,20 @@ The response body is an object of type:
 ## Swagger Definition ##
 
     {
-      "post": {
-        "description": "Associate a new Orchestration Rule with this Farm Role", 
-        "parameters": [
-          {
-            "required": true, 
-            "in": "body", 
-            "description": "The JSON representation of a OrchestrationRule object.", 
-            "name": "orchestrationRuleObject", 
-            "schema": {
-              "$ref": "#/definitions/OrchestrationRule"
-            }
-          }
-        ], 
+      "get": {
+        "description": "Describes all Orchestration Rules associated with this Farm Role, including Rules from other Scopes (those are read-only).", 
         "responses": {
+          "200": {
+            "description": "A list of OrchestrationRule objects.", 
+            "schema": {
+              "$ref": "#/definitions/OrchestrationRuleListResponse"
+            }
+          }, 
           "400": {
+            "description": "A client-side error was made.", 
+            "schema": {
+              "$ref": "#/definitions/ApiErrorResponse"
+            }, 
             "x-errorCodes": [
               {
                 "description": "Your request is structurally incorrect, and was not understood by the API.", 
@@ -160,25 +183,25 @@ The response body is an object of type:
                 "description": "Your request wasn't understood by the API.", 
                 "name": "BadRequest"
               }
-            ], 
-            "description": "A client-side error was made", 
-            "schema": {
-              "$ref": "#/definitions/ApiErrorResponse"
-            }
+            ]
           }, 
           "401": {
+            "description": "Request was not authenticated.", 
+            "schema": {
+              "$ref": "#/definitions/ApiErrorResponse"
+            }, 
             "x-errorCodes": [
               {
                 "description": "Your request authentication failed to validate.", 
                 "name": "BadAuthentication"
               }
-            ], 
-            "description": "Request was not authenticated", 
-            "schema": {
-              "$ref": "#/definitions/ApiErrorResponse"
-            }
+            ]
           }, 
           "403": {
+            "description": "Insufficient permissions.", 
+            "schema": {
+              "$ref": "#/definitions/ApiErrorResponse"
+            }, 
             "x-errorCodes": [
               {
                 "description": "Your request should be made in a different Scope.", 
@@ -188,19 +211,30 @@ The response body is an object of type:
                 "description": "Your request requires permissions you do not have.", 
                 "name": "PermissionViolation"
               }
-            ], 
-            "description": "Insufficient permissions", 
-            "schema": {
-              "$ref": "#/definitions/ApiErrorResponse"
-            }
+            ]
           }, 
-          "500": {
-            "description": "A server-side error occured", 
+          "404": {
+            "description": "Resource not found.", 
             "schema": {
               "$ref": "#/definitions/ApiErrorResponse"
-            }
+            }, 
+            "x-errorCodes": [
+              {
+                "description": "The route you are trying to access does not exist.", 
+                "name": "EndpointNotFound", 
+                "noDoc": true
+              }, 
+              {
+                "description": "The URL you are trying to access does not exist.", 
+                "name": "ObjectNotFound"
+              }
+            ]
           }, 
           "409": {
+            "description": "Conflict with current state.", 
+            "schema": {
+              "$ref": "#/definitions/ApiErrorResponse"
+            }, 
             "x-errorCodes": [
               {
                 "description": "The changes you are trying to make aren't possible while this object is in use.", 
@@ -209,32 +243,47 @@ The response body is an object of type:
               {
                 "description": "The changes you are trying to make violate a unicity constraint.", 
                 "name": "UnicityViolation"
+              }, 
+              {
+                "description": "Some of the objects being changed is locked for changing.", 
+                "name": "Locked"
+              }, 
+              {
+                "description": "Cloud platform is not enabled.", 
+                "name": "NotEnabledPlatform"
+              }, 
+              {
+                "description": "The Operating system mismatch.", 
+                "name": "OperatingSystemMismatch"
+              }, 
+              {
+                "description": "Some of the configuration settings cannot be applied, conflicts or wrong.", 
+                "name": "ConfigurationMismatch"
+              }, 
+              {
+                "description": "Some of the object or action is deprecated.", 
+                "name": "Deprecated"
+              }, 
+              {
+                "description": "The action can't be perfomed due to object's state.", 
+                "name": "UnacceptableState"
               }
-            ], 
-            "description": "Conflict with current state", 
+            ]
+          }, 
+          "500": {
+            "description": "A server-side error occured.", 
             "schema": {
               "$ref": "#/definitions/ApiErrorResponse"
             }
           }, 
-          "201": {
-            "description": "The JSON representation of a OrchestrationRule object.", 
+          "501": {
+            "description": "Error is raised when the feature is not implemented in Scalr.", 
             "schema": {
-              "$ref": "#/definitions/OrchestrationRuleDetailResponse"
+              "$ref": "#/definitions/ApiErrorResponse"
             }
           }, 
-          "404": {
-            "x-errorCodes": [
-              {
-                "noDoc": true, 
-                "description": "The route you are trying to access does not exist", 
-                "name": "EndpointNotFound"
-              }, 
-              {
-                "description": "The URL you are trying to access does not exist", 
-                "name": "ObjectNotFound"
-              }
-            ], 
-            "description": "Resource not found", 
+          "503": {
+            "description": "The service is currently unavailable.", 
             "schema": {
               "$ref": "#/definitions/ApiErrorResponse"
             }
@@ -243,27 +292,48 @@ The response body is an object of type:
       }, 
       "parameters": [
         {
-          "required": true, 
-          "type": "integer", 
-          "description": "The ID of the Environment scoping this request", 
+          "description": "The ID of the Environment scoping this request.", 
           "in": "path", 
-          "name": "envId"
+          "name": "envId", 
+          "required": true, 
+          "type": "integer"
         }, 
         {
-          "x-references": {
-            "$ref": "#/definitions/FarmRole"
-          }, 
           "description": "The ID of a FarmRole object.", 
           "in": "path", 
+          "name": "farmRoleId", 
           "required": true, 
           "type": "integer", 
-          "name": "farmRoleId"
+          "x-references": {
+            "$ref": "#/definitions/FarmRole"
+          }
         }
       ], 
-      "get": {
-        "description": "List Orchestration Rules associated with this Farm Role, including Rules from other Scopes (those are read-only).", 
+      "post": {
+        "description": "Associates a new Orchestration Rule with this Farm Role.", 
+        "parameters": [
+          {
+            "description": "The JSON representation of a OrchestrationRule object.", 
+            "in": "body", 
+            "name": "orchestrationRuleObject", 
+            "required": true, 
+            "schema": {
+              "$ref": "#/definitions/OrchestrationRule"
+            }
+          }
+        ], 
         "responses": {
+          "201": {
+            "description": "The JSON representation of a OrchestrationRule object.", 
+            "schema": {
+              "$ref": "#/definitions/OrchestrationRuleDetailsResponse"
+            }
+          }, 
           "400": {
+            "description": "A client-side error was made.", 
+            "schema": {
+              "$ref": "#/definitions/ApiErrorResponse"
+            }, 
             "x-errorCodes": [
               {
                 "description": "Your request is structurally incorrect, and was not understood by the API.", 
@@ -277,25 +347,25 @@ The response body is an object of type:
                 "description": "Your request wasn't understood by the API.", 
                 "name": "BadRequest"
               }
-            ], 
-            "description": "A client-side error was made", 
-            "schema": {
-              "$ref": "#/definitions/ApiErrorResponse"
-            }
+            ]
           }, 
           "401": {
+            "description": "Request was not authenticated.", 
+            "schema": {
+              "$ref": "#/definitions/ApiErrorResponse"
+            }, 
             "x-errorCodes": [
               {
                 "description": "Your request authentication failed to validate.", 
                 "name": "BadAuthentication"
               }
-            ], 
-            "description": "Request was not authenticated", 
-            "schema": {
-              "$ref": "#/definitions/ApiErrorResponse"
-            }
+            ]
           }, 
           "403": {
+            "description": "Insufficient permissions.", 
+            "schema": {
+              "$ref": "#/definitions/ApiErrorResponse"
+            }, 
             "x-errorCodes": [
               {
                 "description": "Your request should be made in a different Scope.", 
@@ -305,19 +375,30 @@ The response body is an object of type:
                 "description": "Your request requires permissions you do not have.", 
                 "name": "PermissionViolation"
               }
-            ], 
-            "description": "Insufficient permissions", 
-            "schema": {
-              "$ref": "#/definitions/ApiErrorResponse"
-            }
+            ]
           }, 
-          "500": {
-            "description": "A server-side error occured", 
+          "404": {
+            "description": "Resource not found.", 
             "schema": {
               "$ref": "#/definitions/ApiErrorResponse"
-            }
+            }, 
+            "x-errorCodes": [
+              {
+                "description": "The route you are trying to access does not exist.", 
+                "name": "EndpointNotFound", 
+                "noDoc": true
+              }, 
+              {
+                "description": "The URL you are trying to access does not exist.", 
+                "name": "ObjectNotFound"
+              }
+            ]
           }, 
           "409": {
+            "description": "Conflict with current state.", 
+            "schema": {
+              "$ref": "#/definitions/ApiErrorResponse"
+            }, 
             "x-errorCodes": [
               {
                 "description": "The changes you are trying to make aren't possible while this object is in use.", 
@@ -326,32 +407,47 @@ The response body is an object of type:
               {
                 "description": "The changes you are trying to make violate a unicity constraint.", 
                 "name": "UnicityViolation"
+              }, 
+              {
+                "description": "Some of the objects being changed is locked for changing.", 
+                "name": "Locked"
+              }, 
+              {
+                "description": "Cloud platform is not enabled.", 
+                "name": "NotEnabledPlatform"
+              }, 
+              {
+                "description": "The Operating system mismatch.", 
+                "name": "OperatingSystemMismatch"
+              }, 
+              {
+                "description": "Some of the configuration settings cannot be applied, conflicts or wrong.", 
+                "name": "ConfigurationMismatch"
+              }, 
+              {
+                "description": "Some of the object or action is deprecated.", 
+                "name": "Deprecated"
+              }, 
+              {
+                "description": "The action can't be perfomed due to object's state.", 
+                "name": "UnacceptableState"
               }
-            ], 
-            "description": "Conflict with current state", 
+            ]
+          }, 
+          "500": {
+            "description": "A server-side error occured.", 
             "schema": {
               "$ref": "#/definitions/ApiErrorResponse"
             }
           }, 
-          "200": {
-            "description": "A list of OrchestrationRule objects.", 
+          "501": {
+            "description": "Error is raised when the feature is not implemented in Scalr.", 
             "schema": {
-              "$ref": "#/definitions/OrchestrationRuleListResponse"
+              "$ref": "#/definitions/ApiErrorResponse"
             }
           }, 
-          "404": {
-            "x-errorCodes": [
-              {
-                "noDoc": true, 
-                "description": "The route you are trying to access does not exist", 
-                "name": "EndpointNotFound"
-              }, 
-              {
-                "description": "The URL you are trying to access does not exist", 
-                "name": "ObjectNotFound"
-              }
-            ], 
-            "description": "Resource not found", 
+          "503": {
+            "description": "The service is currently unavailable.", 
             "schema": {
               "$ref": "#/definitions/ApiErrorResponse"
             }

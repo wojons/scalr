@@ -8,14 +8,15 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
     protected $dbPrimaryKey = "id";
     protected $dbMessageKeyNotFound = "FarmRoleMetric #%s not found in database";
 
-    protected $dbPropertyMap = array(
-        'id'				=> 'id',
-        'farm_roleid'		=> array('property' => 'farmRoleId', 'is_filter' => true),
-        'metric_id'			=> array('property' => 'metricId', 'is_filter' => true),
-        'dtlastpolled'		=> array('property' => 'dtLastPolled', 'createSql' => 'NOW()', 'updateSql' => 'NOW()', 'type' => 'datetime', 'update' => true),
-        'last_value'		=> array('property' => 'lastValue'),
-        'settings'			=> array('property' => 'settingsRaw')
-    );
+    protected $dbPropertyMap = [
+        'id' => 'id',
+        'farm_roleid'   => ['property' => 'farmRoleId', 'is_filter' => true],
+        'metric_id'     => ['property' => 'metricId', 'is_filter' => true],
+        'dtlastpolled'  => ['property' => 'dtLastPolled', 'type' => 'datetime'],
+        'last_value'    => ['property' => 'lastValue'],
+        'settings'      => ['property' => 'settingsRaw'],
+        'last_data'     => ['property' => 'lastData', 'type' => 'serialize'],
+    ];
 
     public
         $id,
@@ -23,7 +24,8 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
         $metricId,
         $dtLastPolled,
         $instancesNumber,
-        $lastValue;
+        $lastValue,
+        $lastData;
 
     /**
      * Related ScalingMetric instance
@@ -65,7 +67,7 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
 
     public function setSettings($settings)
     {
-        foreach ($settings as $k=>$v)
+        foreach ($settings as $k => $v)
             $this->setSetting($k, $v);
     }
 
@@ -99,18 +101,18 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
                 $this->logger->warn(new FarmLogMessage(
                     $dbFarmRole->FarmID,
                     sprintf("Unable to read Scaling Metric (%s) on farmrole %s value: %s",
-                    	$this->getMetric()->alias, $dbFarmRole->ID, $e->getMessage()
+                        $this->getMetric()->alias, $dbFarmRole->ID, $e->getMessage()
                     )
                 ));
 
                 return Scalr_Scaling_Decision::NOOP;
             }
 
-            $this->logger->info(sprintf(_("Raw sensor value (id: %s, metric_id: %s, metric name: %s): %s"),
+            $this->logger->debug(sprintf(_("Raw sensor value (id: %s, metric_id: %s, metric name: %s): %s"),
                 $this->id,
                 $this->metricId,
                 $this->getMetric()->name,
-                serialize($sensorValue)
+                json_encode($sensorValue)
             ));
 
             switch ($this->getMetric()->calcFunction) {
@@ -135,7 +137,9 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
             }
 
             $this->lastValue = round($value, 5);
-            $this->save();
+            // Sets the Server time to avoid differences between Database and Server time
+            $this->dtLastPolled = time();
+            $this->save(false, ['settings', 'metric_id']);
 
             $invert = $sensor instanceof Scalr_Scaling_Sensors_Custom ? $this->getMetric()->isInvert : $sensor->isInvert;
         } else {
@@ -145,7 +149,7 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
         if ($this->getMetric()->name == 'DateAndTime') {
             $decision = $algo->makeDecision($dbFarmRole, $this, $invert);
             $this->instancesNumber = $algo->instancesNumber;
-            $this->lastValue = $algo->lastValue;
+            $this->lastValue = isset($algo->lastValue) ? $algo->lastValue : null;
 
             return $decision;
         } elseif ($this->getMetric()->name == 'FreeRam') {
@@ -171,5 +175,28 @@ class Scalr_Scaling_FarmRoleMetric extends Scalr_Model
         }
 
         return $this->metric;
+    }
+
+    /**
+     * Save current object to database
+     *
+     * @param bool  $forceInsert    optional Force insert. (false by default)
+     * @param array $ignoredFields  optional Fields that are not updated
+     * @return Scalr_Model Return current object
+     *
+     * @throws  Exception
+     */
+    public function save($forceInsert = false, array $ignoredFields = null)
+    {
+        foreach ($ignoredFields ?: [] as $ignoredField) {
+            if (array_key_exists($ignoredField, $this->dbPropertyMap)) {
+                if (!is_array($this->dbPropertyMap[$ignoredField])) {
+                    $this->dbPropertyMap[$ignoredField] = ['property' => $this->dbPropertyMap[$ignoredField]];
+                }
+                $this->dbPropertyMap[$ignoredField]['update'] = false;
+            }
+        }
+
+        return parent::save($forceInsert);
     }
 }

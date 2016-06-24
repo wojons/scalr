@@ -100,6 +100,7 @@ class UsersTest extends WebTestCase
         $response = $this->internalRequest('/account/users/xSave', array(
             'email'    => $userEmail,
             'fullname' => $username,
+            'password' => \Scalr::GenerateSecurePassword(8)
         ));
 
         $this->assertTrue(isset($response['success']) && $response['success'], 'Cannot create user');

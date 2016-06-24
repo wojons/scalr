@@ -57,13 +57,13 @@ class Definition
                 //resource_id => [name, description, resourceGroup, [[pemission_id => description)])
                 Acl::RESOURCE_CLOUD_CREDENTIALS_ENVIRONMENT => [
                     'Cloud credentials (environment scope)',
-                    "{$allows}to manage cloud credentials in the environment scope",
+                    $allows . "to manage cloud credentials in the environment scope",
                     Acl::GROUP_CLOUD_CREDENTIALS
                 ],
 
                 Acl::RESOURCE_CLOUD_CREDENTIALS_ACCOUNT => [
                     'Cloud credentials (account scope)',
-                    "{$allows}to manage cloud credentials in the account scope",
+                    $allows . "to manage cloud credentials in the account scope",
                     Acl::GROUP_CLOUD_CREDENTIALS
                 ],
 
@@ -73,12 +73,14 @@ class Definition
                     Acl::GROUP_FARMS_SERVERS,
                     [
                         //permission_id must be in the lowercase and less than 64 characters.
-                        Acl::PERM_FARMS_MANAGE              => $allows . 'to manage (create/configure/delete) farms.',
+                        Acl::PERM_FARMS_UPDATE              => $allows . 'to configure farms.',
+                        Acl::PERM_FARMS_DELETE              => $allows . 'to delete farms.',
                         Acl::PERM_FARMS_CLONE               => $allows . 'to clone farms.',
                         Acl::PERM_FARMS_LAUNCH_TERMINATE    => $allows . 'to launch/terminate farms.',
                         Acl::PERM_FARMS_CHANGE_OWNERSHIP    => $allows . 'to change owner or team',
                         Acl::PERM_FARMS_SERVERS             => $allows . 'to manage servers',
-                        Acl::PERM_FARMS_STATISTICS          => $allows . 'to access statistics'
+                        Acl::PERM_FARMS_STATISTICS          => $allows . 'to access statistics',
+                        Acl::PERM_FARMS_PROJECTS            => $allows . "to update farms projects"
                     ],
                     //Resource Mode object that must be instance of ModeInterface
                     null
@@ -90,12 +92,14 @@ class Definition
                     Acl::GROUP_FARMS_SERVERS,
                     [
                         //permission_id must be in the lowercase and less than 64 characters.
-                        Acl::PERM_FARMS_MANAGE              => $allows . 'to manage (create/configure/delete) farms.',
+                        Acl::PERM_FARMS_UPDATE              => $allows . 'to configure farms.',
+                        Acl::PERM_FARMS_DELETE              => $allows . 'to delete farms.',
                         Acl::PERM_FARMS_CLONE               => $allows . 'to clone farms.',
                         Acl::PERM_FARMS_LAUNCH_TERMINATE    => $allows . 'to launch/terminate farms.',
                         Acl::PERM_FARMS_CHANGE_OWNERSHIP    => $allows . 'to change owner or team',
                         Acl::PERM_FARMS_SERVERS             => $allows . 'to manage servers',
-                        Acl::PERM_FARMS_STATISTICS          => $allows . 'to access statistics'
+                        Acl::PERM_FARMS_STATISTICS          => $allows . 'to access statistics',
+                        Acl::PERM_FARMS_PROJECTS            => $allows . "to update farms projects"
                     ]
                 ],
 
@@ -105,12 +109,14 @@ class Definition
                     Acl::GROUP_FARMS_SERVERS,
                     [
                         //permission_id must be in the lowercase and less than 64 characters.
-                        Acl::PERM_FARMS_MANAGE              => $allows . 'to manage (create/configure/delete) farms.',
+                        Acl::PERM_FARMS_CREATE              => $allows . 'to create farms.',
+                        Acl::PERM_FARMS_UPDATE              => $allows . 'to configure farms.',
+                        Acl::PERM_FARMS_DELETE              => $allows . 'to delete farms.',
                         Acl::PERM_FARMS_CLONE               => $allows . 'to clone farms.',
                         Acl::PERM_FARMS_LAUNCH_TERMINATE    => $allows . 'to launch/terminate farms.',
-                        Acl::PERM_FARMS_CHANGE_OWNERSHIP   => $allows . 'to change owner or team',
                         Acl::PERM_FARMS_SERVERS             => $allows . 'to manage servers',
-                        Acl::PERM_FARMS_STATISTICS          => $allows . 'to access statistics'
+                        Acl::PERM_FARMS_STATISTICS          => $allows . 'to access statistics',
+                        Acl::PERM_FARMS_PROJECTS            => $allows . "to update farms projects"
                     ]
                 ],
 
@@ -343,9 +349,9 @@ class Definition
                     Acl::GROUP_LOGS
                 ],
 
-                Acl::RESOURCE_LOGS_SCRIPTING_LOGS => [
-                    'Scripting Log',
-                    $allows . 'access to the Scripting Log.',
+                Acl::RESOURCE_LOGS_ORCHESTRATION_LOGS => [
+                    'Orchestration Log',
+                    $allows . 'access to the Orchestration Log.',
                     Acl::GROUP_LOGS
                 ],
 
@@ -450,24 +456,6 @@ class Definition
                     Acl::GROUP_DATABASES
                 ],
 
-                Acl::RESOURCE_DEPLOYMENTS_APPLICATIONS => [
-                    'Applications',
-                    $allows . 'access to applications.',
-                    Acl::GROUP_DEPLOYMENTS
-                ],
-
-                Acl::RESOURCE_DEPLOYMENTS_SOURCES => [
-                    'Sources',
-                    $allows . 'access to sources.',
-                    Acl::GROUP_DEPLOYMENTS
-                ],
-
-                Acl::RESOURCE_DEPLOYMENTS_TASKS => [
-                    'Tasks',
-                    $allows . 'access to tasks.',
-                    Acl::GROUP_DEPLOYMENTS
-                ],
-
                 Acl::RESOURCE_DNS_ZONES => [
                     'Zones',
                     $allows . 'access to DNS zones.',
@@ -564,11 +552,7 @@ class Definition
                 Acl::RESOURCE_ANALYTICS_ACCOUNT => [
                     'Cost Analytics (account scope)',
                     $allows . ' access to Cost Analytics in the account scope',
-                    Acl::GROUP_ACCOUNT,
-                    [
-                        Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS => $allows . 'to edit/create projects in the account scope.',
-                        Acl::PERM_ANALYTICS_ACCOUNT_ALLOCATE_BUDGET => $allows . "to set/edit projects' budgets in the account scope.",
-                    ]
+                    Acl::GROUP_ACCOUNT
                 ],
 
                 Acl::RESOURCE_ANALYTICS_ENVIRONMENT => [
@@ -577,10 +561,31 @@ class Definition
                     Acl::GROUP_ENVIRONMENT
                 ],
 
-                Acl::RESOURCE_ORPHANED_SERVERS => [
-                    'Orphaned servers',
+                Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT => [
+                    'Projects (account scope)',
+                    $allows . " access to Projects in account scope",
+                    Acl::GROUP_ACCOUNT,
+                    [
+                        Acl::PERM_ANALYTICS_PROJECTS_ACCOUNT_CREATE => $allows . "to create projects.",
+                        Acl::PERM_ANALYTICS_PROJECTS_ACCOUNT_UPDATE => $allows . "to edit projects.",
+                        Acl::PERM_ANALYTICS_PROJECTS_ACCOUNT_DELETE => $allows . "to delete projects.",
+                        Acl::PERM_ANALYTICS_PROJECTS_ALLOCATE_BUDGET => $allows . "to set up budgets.",
+                    ]
+                ],
+
+                Acl::RESOURCE_DISCOVERY_SERVERS => [
+                    'Servers',
                     $allows . ' to manage servers created outside of Scalr',
-                    Acl::GROUP_ENVIRONMENT
+                    Acl::GROUP_DISCOVERY_MANAGER,
+                    [
+                        Acl::PERM_DISCOVERY_SERVERS_IMPORT => $allows . "to import servers"
+                    ]
+                ],
+
+                Acl::RESOURCE_ANNOUNCEMENTS => [
+                    'Announcements',
+                    $allows . 'to manage announcements.',
+                    Acl::GROUP_ACCOUNT
                 ],
 
                 // ... add more resources here

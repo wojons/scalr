@@ -1,0 +1,47 @@
+paths:
+  - uri: /cost-centers/
+    acl: fullAccess
+    operations:
+      - {method: get,  response: 200, filterable: '&CostCentersData'}
+      - {method: get,  response: 200, filterable: '&CostCentersData'}
+      - {method: get,  response: 400, filterable: '&CostCentersData'}
+      - {method: get,  response: 400, filterable: '&CostCentersData'}
+      - {method: get,  response: 200}
+  - uri: /cost-centers/
+    acl: noAccess
+    operations:
+      - {method: get,  response: 403, filterable: '&CostCentersData'}
+      - {method: get,  response: 403, filterable: '&CostCentersData'}
+      - {method: get,  response: 403, filterable: '&CostCentersData'}
+      - {method: get,  response: 403, filterable: '&CostCentersData'}
+      - {method: get,  response: 403, filterable: '&CostCentersData'}
+      - {method: get,  response: 403}
+  - uri: /cost-centers/{costCenterId}/
+    acl: fullAccess
+    operations:
+      - {method: get,  response: 200, params: '&{4}CostCentersData'}
+      - {method: get,  response: 200, params: '&{4}CostCentersData', filterable: '&{4}CostCentersData'}
+      - {method: get,  response: 200, params: '&{4}CostCentersData', filterable: '&{0}CostCenterProperties'}
+  - uri: /cost-centers/{costCenterId}/
+    acl: noAccess
+    operations:
+      - {method: get,  response: 403, params: '&{4}CostCentersData'}
+      - {method: get,  response: 403, params: '&{4}CostCentersData', filterable: '&{5}CostCentersData'}
+      - {method: get,  response: 403, params: '&{4}CostCentersData', filterable: '&{0}CostCenterProperties'}
+
+CostCentersData:
+  - {id: 118ba2e3-9751-4106-9157-c787c78fb803}
+  - {billingCode: CC-Main account}
+  - {name: {foo: bar}}
+  - {name: [foo, barr]}
+  - {costCenterId: '&{0}CostCentersData.id'}
+  - {name: '&{0}CostCenters.name'}
+
+CostCenters:
+  - {name: testAccount CC1, properties: '&CostCenterProperties'}
+
+AccountCostCenter:
+ - {ccId: '&CostCenters.id'}
+
+CostCenterProperties:
+  - {billingCode: CC-account}

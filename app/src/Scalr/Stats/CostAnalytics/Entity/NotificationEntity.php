@@ -2,6 +2,10 @@
 
 namespace Scalr\Stats\CostAnalytics\Entity;
 
+use Scalr\DataType\AccessPermissionsInterface;
+use Scalr\DataType\ScopeInterface;
+use Scalr\Model\AbstractEntity;
+
 /**
  * NotificationEntity
  *
@@ -10,9 +14,8 @@ namespace Scalr\Stats\CostAnalytics\Entity;
  * @Entity
  * @Table(name="notifications",service="cadb")
  */
-class NotificationEntity extends \Scalr\Model\AbstractEntity
+class NotificationEntity extends AbstractEntity implements AccessPermissionsInterface, ScopeInterface
 {
-
     const SUBJECT_TYPE_CC = 1;
 
     const SUBJECT_TYPE_PROJECT = 2;
@@ -57,6 +60,14 @@ class NotificationEntity extends \Scalr\Model\AbstractEntity
      * @var string
      */
     public $subjectId;
+
+    /**
+     * The account which is associated with the notification.
+     *
+     * @Column(type="integer",nullable=true)
+     * @var int
+     */
+    public $accountId;
 
     /**
      * The type of the notification
@@ -107,4 +118,32 @@ class NotificationEntity extends \Scalr\Model\AbstractEntity
         $this->recipientType = 1;
         $this->emails = '';
     }
+
+    /**
+     * {@inheritdoc}
+     * @see ScopeInterface::getScope()
+     */
+    public function getScope()
+    {
+        return !empty($this->accountId) ? static::SCOPE_ACCOUNT : static::SCOPE_SCALR;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see AccessPermissionsInterface::hasAccessPermissions()
+     */
+    public function hasAccessPermissions($user, $environment = null, $modify = null)
+    {
+        switch ($this->getScope()) {
+            case static::SCOPE_ACCOUNT:
+                return $this->accountId == $user->accountId;
+
+            case static::SCOPE_SCALR:
+                return $this->accountId === null;
+
+            default:
+                return false;
+        }
+    }
+
 }

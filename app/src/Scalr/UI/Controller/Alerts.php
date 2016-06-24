@@ -1,6 +1,6 @@
 <?php
 use Scalr\Acl\Acl;
-use \Scalr\Server\Alerts;
+use Scalr\Server\Alerts;
 
 class Scalr_UI_Controller_Alerts extends Scalr_UI_Controller
 {
@@ -8,7 +8,7 @@ class Scalr_UI_Controller_Alerts extends Scalr_UI_Controller
 
     public function hasAccess()
     {
-        return parent::hasAccess() && $this->request->isFarmAllowed();
+        return parent::hasAccess() && $this->request->isAllowed([Acl::RESOURCE_FARMS, Acl::RESOURCE_TEAM_FARMS, Acl::RESOURCE_OWN_FARMS]);
     }
 
     public function defaultAction()
@@ -23,30 +23,29 @@ class Scalr_UI_Controller_Alerts extends Scalr_UI_Controller
 
     public function xListAction($serverId = null, $farmId = null, $farmRoleId = null, $status = null)
     {
-        $sql = "SELECT sa.* FROM server_alerts sa LEFT JOIN farms f ON f.id = sa.farm_id WHERE sa.env_id = ?";
+        $sql = "SELECT sa.* FROM server_alerts sa LEFT JOIN farms f ON f.id = sa.farm_id WHERE sa.env_id = ? AND " . $this->request->getFarmSqlQuery();
         $args = [$this->getEnvironmentId()];
 
         if ($serverId) {
-            $sql .= ' AND sa.server_id = ?';
+            $sql .= " AND sa.server_id = ?";
             $args[] = $serverId;
         }
 
         if ($farmId) {
-            $sql .= ' AND sa.farm_id = ?';
+            $sql .= " AND sa.farm_id = ?";
             $args[] = $farmId;
 
             if ($farmRoleId) {
-                $sql .= ' AND sa.farm_roleid = ?';
+                $sql .= " AND sa.farm_roleid = ?";
                 $args[] = $farmRoleId;
             }
         }
 
         if ($status) {
-            $sql .= ' AND sa.status = ?';
+            $sql .= " AND sa.status = ?";
             $args[] = $status;
         }
 
-        list($sql, $args) = $this->request->prepareFarmSqlQuery($sql, $args, 'f');
         $response = $this->buildResponseFromSql2($sql, ['metric', 'status', 'dtoccured', 'dtlastcheck', 'dtsolved', 'details'], ['server_id', 'details'], $args);
 
         foreach ($response['data'] as $i => $row) {

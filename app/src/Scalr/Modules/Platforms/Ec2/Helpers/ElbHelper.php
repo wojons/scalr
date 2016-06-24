@@ -4,7 +4,7 @@ namespace Scalr\Modules\Platforms\Ec2\Helpers;
 
 use Scalr\Model\Entity\CloudResource;
 use Scalr\Model\Entity;
-use \DBFarmRole;
+use DBFarmRole;
 
 class ElbHelper
 {
@@ -56,8 +56,19 @@ class ElbHelper
                     $service->farmRoleId = $DBFarmRole->ID;
                 } else {
                     if ($service->envId == $DBFarmRole->GetFarmObject()->EnvID) {
+                        try {
+                            if ($service->farmRoleId) {
+                                $oldDbFarmRole = \DBFarmRole::LoadByID($service->farmRoleId);
+                            }
+                        } catch (\Exception $e) {}
+                        
                         $service->farmRoleId = $DBFarmRole->ID;
                         $service->farmId = $DBFarmRole->FarmID;
+                        
+                        if ($oldDbFarmRole) {
+                            $oldDbFarmRole->ClearSettings("aws.elb.");
+                        }
+                        
                     } else {
                         $DBFarmRole->SetSetting(Entity\FarmRoleSetting::AWS_ELB_ID, $oldSettings[Entity\FarmRoleSetting::AWS_ELB_ID]);
                         throw new \Exception("ELB already used on another scalr account/environment");

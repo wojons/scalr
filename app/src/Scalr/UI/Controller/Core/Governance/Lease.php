@@ -70,16 +70,21 @@ class Scalr_UI_Controller_Core_Governance_Lease extends Scalr_UI_Controller
 
                 try {
                     $mailer = Scalr::getContainer()->mailer;
-                    $user = new Scalr_Account_User();
-                    $user->loadById($dbFarm->createdByUserId);
+                    if ($dbFarm->ownerId) {
+                        $user = Entity\Account\User::findPk($dbFarm->ownerId);
 
-                    if ($this->getContainer()->config('scalr.auth_mode') == 'ldap') {
-                        if ($user->getSetting(Scalr_Account_User::SETTING_LDAP_EMAIL))
-                            $mailer->addTo($user->getSetting(Scalr_Account_User::SETTING_LDAP_EMAIL));
-                        else
-                            $mailer->addTo($user->getEmail());
+                        if (\Scalr::config('scalr.auth_mode') == 'ldap') {
+                            $email = $user->getSetting(Entity\Account\User\UserSetting::NAME_LDAP_EMAIL);
+                            if (!$email) {
+                                $email = $user->email;
+                            }
+                        } else {
+                            $email = $user->email;
+                        }
+
+                        $mailer->addTo($email);
                     } else {
-                        $mailer->addTo($user->getEmail());
+                        $mailer = null;
                     }
                 } catch (Exception $e) {
                     $mailer = null;

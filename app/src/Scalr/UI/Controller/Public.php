@@ -83,7 +83,10 @@ class Scalr_UI_Controller_Public extends Scalr_UI_Controller
             if ($branch) {
                 // strip illegal chars
                 $branch = preg_replace('/[^A-Za-z\/0-9_.-]/', '', $branch);
-                $branch = str_replace(array(".", '/'), array('', '-'), $branch);
+                if ($repo !== 'snapshot') {
+                    // for snapshot don't cut "." (dot)
+                    $branch = str_replace(array(".", '/'), array('', '-'), $branch);
+                }
             }
 
             $repoUrls = $repos[$repo];
@@ -177,7 +180,7 @@ class Scalr_UI_Controller_Public extends Scalr_UI_Controller
 
             foreach ($envs as $env) {
                 $e = \Scalr_Environment::init()->loadById($env['id']);
-                $ccProps = $e->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties;
+                $ccProps = $e->keychain(SERVER_PLATFORMS::AZURE)->properties;
 
                 $authCode = $ccProps[Entity\CloudCredentialsProperty::AZURE_AUTH_CODE];
                 $step = $ccProps[Entity\CloudCredentialsProperty::AZURE_AUTH_STEP];
@@ -201,7 +204,7 @@ class Scalr_UI_Controller_Public extends Scalr_UI_Controller
                     try {
                         $azure->getAccessTokenByAuthCode($code);
                     } catch (Exception $e) {
-                        $cloudCredentials = $environment->cloudCredentials(SERVER_PLATFORMS::AZURE);
+                        $cloudCredentials = $environment->keychain(SERVER_PLATFORMS::AZURE);
                         $tenantName = $cloudCredentials->properties[Entity\CloudCredentialsProperty::AZURE_TENANT_NAME];
                         $cloudCredentials->delete();
                         $message = "Failed to get access to tenant {$tenantName}";
@@ -223,6 +226,129 @@ class Scalr_UI_Controller_Public extends Scalr_UI_Controller
         } else {
             $this->response->setRedirect("{$baseUrl}/#/public/azure?code={$code}");
         }
+    }
+
+    /**
+     * SAML 2.0 Auth test endpoint
+     *
+     * FIXME remove termporary saml2 acs endpoint
+     */
+    public function samlAction()
+    {
+        /* FIXME We'll enable \Scalr::config('scalr.auth_mode') !== 'saml' when it is production ready
+        if (\Scalr::config('scalr.auth_mode') !== 'saml') {
+            $this->response->setHttpResponseCode(404);
+            return;
+        }
+        */
+
+        @session_start();
+
+        //This is necessary for test container as OneLogin_Saml2_Utils::getSelfHost() method relies on HTTP_HOST / SERVER_PORT
+        $_SERVER['HTTP_HOST'] = $_SERVER['HTTP_X_FORWARDED_HOST'];
+
+        $auth = $this->getContainer()->saml;
+
+        $body = '';
+
+        if (isset($_GET['sso'])) {
+            $auth->login();
+        } else if (isset($_GET['slo'])) {
+            $auth->logout(
+                null,
+                [],
+                (isset($_SESSION['samlNameId']) ? $_SESSION['samlNameId'] : null),
+                (isset($_SESSION['samlSessionIndex']) ? $_SESSION['samlSessionIndex'] : null)
+            );
+        } else if (isset($_GET['acs'])) {
+            $auth->processResponse();
+
+            $errors = $auth->getErrors();
+
+            if (!empty($errors)) {
+                $body .= '<p>' . implode(', ', $errors) . '</p>';
+            }
+
+            if (!$auth->isAuthenticated()) {
+                $body .= "<p>Not authenticated</p>";
+                $this->response->body = $body;
+                return;
+            }
+
+            $_SESSION['samlUserdata'] = $auth->getAttributes();
+            $_SESSION['samlNameId'] = $auth->getNameId();
+            $_SESSION['samlSessionIndex'] = $auth->getSessionIndex();
+
+            if (isset($_POST['RelayState']) && OneLogin_Saml2_Utils::getSelfURL() != $_POST['RelayState']) {
+                $auth->redirectTo($_POST['RelayState']);
+                return;
+            }
+        } else if (isset($_GET['sls'])) {
+            $auth->processSLO();
+
+            $errors = $auth->getErrors();
+
+            if (empty($errors)) {
+                $body .= '<p>Sucessfully logged out</p>';
+            } else {
+                $body .= '<p>' . implode(', ', $errors) . '</p>';
+            }
+        } else if (isset($_GET['metadata'])) {
+            $settings = $auth->getSettings();
+
+            // Now we only validate SP settings
+            $metadata = $settings->getSPMetadata();
+            $errors = $settings->validateMetadata($metadata);
+
+            if (empty($errors)) {
+                $this->response->setHeader('Content-Type', 'text/xml');
+                $this->response->body = $metadata;
+                return;
+            } else {
+                throw new OneLogin_Saml2_Error(
+                    'Invalid SP metadata: ' . implode(', ', $errors),
+                    OneLogin_Saml2_Error::METADATA_SP_INVALID
+                );
+            }
+        }
+
+        if (isset($_SESSION['samlUserdata'])) {
+            if (!empty($_SESSION['samlUserdata'])) {
+                $attributes = $_SESSION['samlUserdata'];
+                $body .= '<style type="text/css">'
+                      . '  th, td { border: 1px solid black; padding: 2px 4px; }'
+                      . '  ul { padding: 1px 2px; margin: 0px; }'
+                      . '  ul li { list-style-type: none; }'
+                      . '</style>';
+                $body .= 'Scalr requires following attributes:<br>';
+                $body .= '<table><thead><th>Name</th><th>Values</th></thead><tbody>';
+
+                $body .= '<tr><td>Email</td><td><ul><li>' . htmlentities($_SESSION['samlNameId']) . '</li></ul></td></tr>';
+                $body .= '<tr><td>Groups</td><td><ul><li>' . (!empty($_SESSION['samlUserdata']['Groups']) ? join(', ', array_map('htmlentities', (array)$_SESSION['samlUserdata']['Groups'])) : '<b color="red">not provided</b>') . '</li></ul></td></tr>';
+                $body .= '</tbody></table>';
+
+                $body .= "<br><br>";
+                $body .= 'Your Identity Provider responded with attributes:<br>';
+                $body .= '<table><thead><th>Name</th><th>Values</th></thead><tbody>';
+                $body .= '<tr><td>Email</td><td><ul><li>' . htmlentities($_SESSION['samlNameId']) . '</li></ul></td></tr>';
+                foreach ($attributes as $attributeName => $attributeValues) {
+                    $body .= '<tr><td>' . htmlentities($attributeName) . '</td><td><ul>';
+                    foreach ($attributeValues as $attributeValue) {
+                        $body .= '<li>' . htmlentities($attributeValue) . '</li>';
+                    }
+                    $body .= '</ul></td></tr>';
+                }
+                $body .= '</tbody></table>';
+            } else {
+                $body .= "<p>You don't have any attribute</p>";
+            }
+
+            $body .= '<p><a href="?slo">single logout</a></p>';
+        } else {
+            $body .= '<p><a href="?sso">single sign on</a></p>';
+        }
+
+        $this->response->body = $body;
     }
 
     public function azureAction()

@@ -3,6 +3,7 @@
 namespace Scalr\Modules\Platforms\Ec2\Helpers;
 
 use Scalr\Service\Aws\Ec2\DataType\VolumeFilterNameType;
+use Exception;
 
 class Ec2Helper
 {
@@ -54,7 +55,7 @@ class Ec2Helper
                 } else {
                     return;
                 }
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                 $object->Log(sprintf("Scalr was unable to add tags for AMI (%s): %s", $object->snapshotId, $e->getMessage()));
             }
         } elseif ($object instanceof \DBServer) {
@@ -64,58 +65,62 @@ class Ec2Helper
                 $aws = $dbServer->GetEnvironmentObject()->aws($dbServer);
 
                 if ($dbServer->farmId != 0) {
-                    $ind = $aws->ec2->instance->describe($dbServer->GetProperty(\EC2_SERVER_PROPERTIES::INSTANCE_ID))
-                               ->get(0)->instancesSet->get(0);
+                    $instanceList = $aws->ec2->instance->describe($dbServer->GetProperty(\EC2_SERVER_PROPERTIES::INSTANCE_ID))->get(0);
 
-                    $metaTagFound = false;
-                    foreach ($ind->tagSet as $tag) {
-                        /* @var $tag \Scalr\Service\Aws\Ec2\DataType\ResourceTagSetData */
-                        if ($tag->key == \Scalr_Governance::SCALR_META_TAG_NAME) {
-                            $metaTagFound = true;
-                            break;
+                    if (!empty($instanceList->instancesSet)) {
+                        $ind = $instanceList->instancesSet->get(0);
+
+                        $metaTagFound = false;
+                        foreach ($ind->tagSet as $tag) {
+                            /* @var $tag \Scalr\Service\Aws\Ec2\DataType\ResourceTagSetData */
+                            if ($tag->key == \Scalr_Governance::SCALR_META_TAG_NAME) {
+                                $metaTagFound = true;
+                                break;
+                            }
                         }
-                    }
 
-                    if ($metaTagFound) {
-                        return;
-                    }
-
-                    $instanceTags = [];
-                    $volumeTags = [];
-                    foreach ($dbServer->getAwsTags(true) as $k => $v) {
-                        $instanceTags[] = ['key' => $k, 'value' => $v];
-
-                        if ($k != 'Name') {
-                            $volumeTags[] = ['key' => $k, 'value' => $v];
+                        if ($metaTagFound) {
+                            return;
                         }
-                    }
 
-                    $res = $ind->createTags($instanceTags);
+                        $instanceTags = [];
+                        $volumeTags = [];
+                        foreach ($dbServer->getAwsTags(true) as $k => $v) {
+                            $instanceTags[] = ['key' => $k, 'value' => $v];
 
-                    // We also need to tag root device
-                    if ($ind->rootDeviceType == 'ebs') {
-                        $filter = array(array(
-                            'name'  => VolumeFilterNameType::attachmentInstanceId(),
-                            'value' => $dbServer->GetCloudServerID()
-                        ), array(
-                            'name'  => VolumeFilterNameType::attachmentDevice(),
-                            'value' => '/dev/sda1'
-                        ));
+                            if ($k != 'Name') {
+                                $volumeTags[] = ['key' => $k, 'value' => $v];
+                            }
+                        }
 
-                        $ebs = $aws->ec2->volume->describe(null, $filter);
-                        foreach ($ebs as $volume) {
-                            /* @var $volume \Scalr\Service\Aws\Ec2\DataType\VolumeData */
-                            $volume->createTags($volumeTags);
+                        $ind->createTags($instanceTags);
+
+                        // We also need to tag root device
+                        if ($ind->rootDeviceType == 'ebs') {
+                            $filter = array(array(
+                                'name'  => VolumeFilterNameType::attachmentInstanceId(),
+                                'value' => $dbServer->GetCloudServerID()
+                            ), array(
+                                'name'  => VolumeFilterNameType::attachmentDevice(),
+                                'value' => '/dev/sda1'
+                            ));
+
+                            $ebs = $aws->ec2->volume->describe(null, $filter);
+                            foreach ($ebs as $volume) {
+                                /* @var $volume \Scalr\Service\Aws\Ec2\DataType\VolumeData */
+                                $volume->createTags($volumeTags);
+                            }
                         }
                     }
                 }
-            } catch (\Exception $e) {
-                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(
-                    new \FarmLogMessage($dbServer->farmId, sprintf(
-                        _("Scalr was unable to add tags to the server/volume '{$dbServer->serverId}': %s"),
+            } catch (Exception $e) {
+                \Scalr::getContainer()->logger(\LOG_CATEGORY::FARM)->error(new \FarmLogMessage(
+                    $dbServer,
+                    sprintf(_("Scalr was unable to add tags to the server/volume '%s': %s"),
+                        !empty($dbServer->serverId) ? $dbServer->serverId : null,
                         $e->getMessage()
-                    ), $dbServer->serverId)
-                );
+                    )
+                ));
             }
         } else {
             return;

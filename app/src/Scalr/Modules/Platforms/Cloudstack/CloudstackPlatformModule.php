@@ -2,7 +2,6 @@
 
 namespace Scalr\Modules\Platforms\Cloudstack;
 
-use Scalr\Model\Collections\SettingsCollection;
 use Scalr\Model\Entity\CloudInstanceType;
 use Scalr\Modules\Platforms\AbstractCloudstackPlatformModule;
 use Scalr\Modules\Platforms\Cloudstack\Adapters\StatusAdapter;
@@ -19,19 +18,25 @@ use Scalr\Service\CloudStack\Services\Volume\DataType\VolumeResponseData;
 use Scalr\Model\Entity\Image;
 use Scalr\Model\Entity;
 use Scalr\Model\Entity\SshKey;
-use \DBServer;
+use DBServer;
+use Exception;
 use Scalr_Environment;
-use \SERVER_PLATFORMS;
-use \SERVER_PROPERTIES;
-use \CLOUDSTACK_SERVER_PROPERTIES;
-use \SERVER_SNAPSHOT_CREATION_STATUS;
-use \SERVER_SNAPSHOT_CREATION_TYPE;
-use \BundleTask;
-use \DBFarmRole;
-use \Scalr_Server_LaunchOptions;
-use \SERVER_STATUS;
-use \FarmLogMessage;
+use SERVER_PLATFORMS;
+use SERVER_PROPERTIES;
+use CLOUDSTACK_SERVER_PROPERTIES;
+use SERVER_SNAPSHOT_CREATION_STATUS;
+use SERVER_SNAPSHOT_CREATION_TYPE;
+use BundleTask;
+use DBFarmRole;
+use Scalr_Server_LaunchOptions;
+use SERVER_STATUS;
+use FarmLogMessage;
 use Scalr\Model\Entity\CloudLocation;
+use Scalr_Messaging_Msg_Rebundle;
+use Scalr_Governance;
+use stdClass;
+use Scalr_Messaging_Msg;
+use InvalidArgumentException;
 
 class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implements \Scalr\Modules\PlatformModuleInterface
 {
@@ -55,7 +60,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
      *
      * @param   string    $platform  The name of the cloudstack based platform
      */
-    public function __construct($platform = \SERVER_PLATFORMS::CLOUDSTACK)
+    public function __construct($platform = SERVER_PLATFORMS::CLOUDSTACK)
     {
         parent::__construct($platform);
     }
@@ -64,20 +69,19 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::getLocations()
      */
-    public function getLocations(\Scalr_Environment $environment = null)
+    public function getLocations(Scalr_Environment $environment = null)
     {
-        if (!$environment || !$environment->isPlatformEnabled($this->platform)) {
-            return array();
-        }
-        try {
-            $cs = $environment->cloudstack($this->platform);
+        $retval = [];
 
-            foreach ($cs->zone->describe() as $zone) {
-                $retval[$zone->name] = ucfirst($this->platform)." / {$zone->name}";
-            }
+        if ($environment && $environment->isPlatformEnabled($this->platform)) {
+            try {
+                $cs = $environment->cloudstack($this->platform);
 
-        } catch (\Exception $e) {
-            return array();
+                foreach ($cs->zone->describe() as $zone) {
+                    $retval[$zone->name] = ucfirst($this->platform) . " / {$zone->name}";
+                }
+
+            } catch (Exception $e) {}
         }
 
         return $retval;
@@ -87,13 +91,13 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::hasCloudPrices()
      */
-    public function hasCloudPrices(\Scalr_Environment $env)
+    public function hasCloudPrices(Scalr_Environment $env)
     {
         if (!$this->container->analytics->enabled) return false;
 
         $platform = $this->platform ?: SERVER_PLATFORMS::CLOUDSTACK;
 
-        $url = $env->cloudCredentials($platform)->properties[Entity\CloudCredentialsProperty::CLOUDSTACK_API_URL];
+        $url = $env->keychain($platform)->properties[Entity\CloudCredentialsProperty::CLOUDSTACK_API_URL];
 
         if (empty($url)) return false;
 
@@ -164,7 +168,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
         try {
             $info = $cs->instance->describe(array('id' => $DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID)));
             $info = !empty($info[0]) ? $info[0] : null;
-        } catch (\Exception $e) {}
+        } catch (Exception $e) {}
 
         if (!empty($info) && property_exists($info, 'id') && $info->id == $DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID))
             return $this->determineServerIps($cs, $info);
@@ -175,7 +179,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
         );
     }
 
-    public function GetServersList(\Scalr_Environment $environment, $region, $skipCache = false)
+    public function GetServersList(Scalr_Environment $environment, $region, $skipCache = false)
     {
         if (!$region) {
             return array();
@@ -185,9 +189,8 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
 
             try {
                 $results = $cs->instance->describe(array('zoneid' => $region));
-            }
-            catch(\Exception $e) {
-                throw new \Exception(sprintf("Cannot get list of servers for platform {$this->platform}: %s", $e->getMessage()));
+            } catch (Exception $e) {
+                throw new Exception(sprintf("Cannot get list of servers for platform {$this->platform}: %s", $e->getMessage()));
             }
 
 
@@ -245,14 +248,15 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
             $cs->instance->destroy($DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID), true);
 
             try {
-                if ($DBServer->GetRealStatus()->getName() == 'Destroyed')
+                if ($DBServer->GetRealStatus()->getName() == 'Destroyed') {
                     $cs->instance->expunge($DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID));
-
-            } catch (\Exception $e) {}
+                }
+            } catch (Exception $e) {
+            }
         } catch (NotFoundException $e) {
             throw new InstanceNotFoundException($e->getMessage(), $e->getCode(), $e);
         }
-        
+
         return true;
     }
 
@@ -301,7 +305,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
     public function RebootServer(DBServer $DBServer, $soft = true)
     {
         if ($soft) {
-            throw new \Exception("Soft reboot not supported by cloud");
+            throw new Exception("Soft reboot not supported by cloud");
         }
 
         $cs = $DBServer->GetEnvironmentObject()->cloudstack($this->platform);
@@ -327,7 +331,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
         $cs = $image->getEnvironment()->cloudstack($this->platform);
         try {
             $cs->template->delete($image->id, $image->cloudLocation);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             throw $e;
         }
 
@@ -343,7 +347,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
         try {
             $DBServer = DBServer::LoadByID($BundleTask->serverId);
 
-            if ($BundleTask->bundleType != \SERVER_SNAPSHOT_CREATION_TYPE::CSTACK_WINDOWS)
+            if ($BundleTask->bundleType != SERVER_SNAPSHOT_CREATION_TYPE::CSTACK_WINDOWS)
                 return;
 
             $meta = $BundleTask->getSnapshotDetails();
@@ -378,7 +382,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
 
                         //TODO: Check job and update Image size.
 
-                    } catch (\Exception $e) {
+                    } catch (Exception $e) {
                         $BundleTask->SnapshotCreationFailed(sprintf("Unable to register new template: %s", $e->getMessage()));
                         return false;
                     }
@@ -393,7 +397,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                 }
             }
 
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             $BundleTask->SnapshotCreationFailed($e->getMessage());
         }
     }
@@ -407,7 +411,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
         $DBServer = DBServer::LoadByID($BundleTask->serverId);
         if ($BundleTask->osFamily == 'windows' || $DBServer->osType == 'windows') {
 
-            $BundleTask->bundleType = \SERVER_SNAPSHOT_CREATION_TYPE::CSTACK_WINDOWS;
+            $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::CSTACK_WINDOWS;
             $BundleTask->Log(sprintf(_("Selected platform snapshot type: %s"), $BundleTask->bundleType));
             $createImage = true;
 
@@ -415,7 +419,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
             $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
             $BundleTask->bundleType = SERVER_SNAPSHOT_CREATION_TYPE::CSTACK_DEF;
 
-            $msg = new \Scalr_Messaging_Msg_Rebundle(
+            $msg = new Scalr_Messaging_Msg_Rebundle(
                 $BundleTask->id,
                 $BundleTask->roleName,
                 array()
@@ -433,7 +437,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
         }
 
         if ($createImage) {
-            $BundleTask->status = \SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
+            $BundleTask->status = SERVER_SNAPSHOT_CREATION_STATUS::IN_PROGRESS;
 
             try {
                 $cs = $DBServer->GetEnvironmentObject()->cloudstack($this->platform);
@@ -441,7 +445,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                 $volInfo = $volList[0];
                 /* @var $volInfo VolumeResponseData */
 
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                 $BundleTask->SnapshotCreationFailed(sprintf("Getting ROOT volume details for new snapshot failed: %s", $e->getMessage()));
                 return false;
             }
@@ -456,7 +460,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                 $createSnapshotData->domainid = $volInfo->domainid;
                 $createSnapshotData->account = $volInfo->account;
                 $snapInfo = $cs->snapshot->create($createSnapshotData);
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                 $BundleTask->SnapshotCreationFailed(sprintf("Unable to initialize snapshot creation process: %s", $e->getMessage()));
                 return false;
             }
@@ -495,11 +499,11 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
         if (!$DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID)) {
             return false;
         }
-        
+
         try {
             $iinfo = $cs->instance->describe(array('id' => $DBServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID)));
             $iinfo = (!empty($iinfo[0])) ? $iinfo[0] : null;
-        
+
             if (!empty($iinfo->id)) {
                 $localIp = null;
                 $remoteIp = null;
@@ -524,7 +528,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                     'Public IP'		=> $remoteIp,
                     'Hypervisor'            => $iinfo->hypervisor
                 );
-    
+
                 if (!empty($iinfo->publicip)) {
                     $retval['Public IP'] = $iinfo->publicip;
                 }
@@ -533,15 +537,15 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                     foreach ($iinfo->securitygroup as $sg) {
                         $retval['Security groups'] .= "{$sg->name}, ";
                     }
-    
+
                     $retval['Security groups'] = trim($retval['Security groups'], ", ");
                 }
-    
+
                 return $retval;
             }
         } catch (NotFoundException $e) {
             return false;
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             throw $e;
         }
 
@@ -555,7 +559,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
     public function LaunchServer(DBServer $DBServer, Scalr_Server_LaunchOptions $launchOptions = null)
     {
         $environment = $DBServer->GetEnvironmentObject();
-        $governance = new \Scalr_Governance($environment->id);
+        $governance = new Scalr_Governance($environment->id);
 
         $diskOffering = null;
         $size = null;
@@ -569,7 +573,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
             $dbRole = $farmRole->GetRoleObject();
 
             $launchOptions->imageId = $dbRole->__getNewRoleObject()->getImage($this->platform, $DBServer->GetFarmRoleObject()->CloudLocation)->imageId;
-            $launchOptions->serverType = $DBServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::CLOUDSTACK_SERVICE_OFFERING_ID);
+            $launchOptions->serverType = $DBServer->GetFarmRoleObject()->GetSetting(Entity\FarmRoleSetting::INSTANCE_TYPE);
             $launchOptions->cloudLocation = $DBServer->GetFarmRoleObject()->CloudLocation;
 
             /*
@@ -608,9 +612,8 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
         $launchOptions->architecture = 'x86_64';
 
         \Scalr::getContainer()->logger("CloudStack")->warn(new FarmLogMessage(
-            $DBServer->farmId,
-            "[ServerLaunch] Network ID: {$networkId}, NetworkType: {$networkType}, SharedIp: {$sharedIp}",
-            $DBServer->serverId
+            $DBServer,
+            "[ServerLaunch] Network ID: {$networkId}, NetworkType: {$networkType}, SharedIp: {$sharedIp}"
         ));
 
         if (!$sharedIp && !$useStaticNat && $networkId != 'SCALR_MANUAL') {
@@ -620,17 +623,13 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                         $farmRole->SetSetting(Entity\FarmRoleSetting::CLOUDSTACK_NETWORK_TYPE, $network->type, Entity\FarmRoleSetting::TYPE_LCL);
                         $networkType = $network->type;
 
-                        \Scalr::getContainer()->logger("CloudStack")->warn(new FarmLogMessage(
-                            $DBServer->farmId,
-                            "[ServerLaunch] Network found. Type: {$networkType}",
-                            $DBServer->serverId
-                        ));
+                        \Scalr::getContainer()->logger("CloudStack")->warn(new FarmLogMessage($DBServer, "[ServerLaunch] Network found. Type: {$networkType}"));
                     }
                 }
             }
 
             if (($networkId && ($networkType == 'Virtual' || $networkType == 'Isolated')) || !$networkType) {
-                $sharedIpId = $environment->cloudCredentials($DBServer->platform)->properties[Entity\CloudCredentialsProperty::CLOUDSTACK_SHARED_IP_ID . ".{$launchOptions->cloudLocation}"];
+                $sharedIpId = $environment->keychain($DBServer->platform)->properties[Entity\CloudCredentialsProperty::CLOUDSTACK_SHARED_IP_ID . ".{$launchOptions->cloudLocation}"];
 
                 $sharedIpFound = false;
 
@@ -639,7 +638,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                         $requestObject = new ListIpAddressesData();
                         $requestObject->id = $sharedIpId;
                         $info = $cs->listPublicIpAddresses($requestObject);
-                    } catch (\Exception $e) {
+                    } catch (Exception $e) {
                         \Scalr::getContainer()->logger('CLOUDSTACK')->error("SHARED IP CHECK: {$e->getMessage()}");
                     }
 
@@ -656,11 +655,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                 if ($instancesConnectionPolicy === null)
                     $instancesConnectionPolicy = $config('scalr.instances_connection_policy');
 
-                \Scalr::getContainer()->logger("CloudStack")->warn(new FarmLogMessage(
-                    $DBServer->farmId,
-                    "[ServerLaunch] Shared IP ID: {$sharedIpId}",
-                    $DBServer->serverId
-                ));
+                \Scalr::getContainer()->logger("CloudStack")->warn(new FarmLogMessage($DBServer, "[ServerLaunch] Shared IP ID: {$sharedIpId}"));
 
                 if ((!$sharedIpId || !$sharedIpFound) && $instancesConnectionPolicy != 'local') {
                     \Scalr::getContainer()->logger('CLOUDSTACK')->error("No shared IP. Generating new one");
@@ -683,10 +678,10 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                             $ipInfo = !empty($ipInfo[0]) ? $ipInfo[0] : null;
 
                             if (!$ipInfo) {
-                                throw new \Exception("Cannot allocate IP address: listPublicIpAddresses -> failed");
+                                throw new Exception("Cannot allocate IP address: listPublicIpAddresses -> failed");
                             }
                             if ($ipInfo->state == 'Allocated') {
-                                $environment->cloudCredentials($DBServer->platform)->properties->saveSettings([
+                                $environment->keychain($DBServer->platform)->properties->saveSettings([
                                     Entity\CloudCredentialsProperty::CLOUDSTACK_SHARED_IP_ID . ".{$launchOptions->cloudLocation}"    => $ipId,
                                     Entity\CloudCredentialsProperty::CLOUDSTACK_SHARED_IP . ".{$launchOptions->cloudLocation}"       => $ipInfo->ipaddress,
                                     Entity\CloudCredentialsProperty::CLOUDSTACK_SHARED_IP_INFO . ".{$launchOptions->cloudLocation}"  => serialize($ipInfo),
@@ -697,11 +692,11 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                             } else if ($ipInfo->state == 'Allocating') {
                                 sleep(1);
                             } else {
-                                throw new \Exception("Cannot allocate IP address: ipAddress->state = {$ipInfo->state}");
+                                throw new Exception("Cannot allocate IP address: ipAddress->state = {$ipInfo->state}");
                             }
                         }
                     } else {
-                        throw new \Exception("Cannot allocate IP address: associateIpAddress -> failed");
+                        throw new Exception("Cannot allocate IP address: associateIpAddress -> failed");
                     }
                 }
             }
@@ -729,12 +724,8 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
             if ($features['securitygroupsenabled'] && $zoneSecurityGroupsEnabled == 1) {
                 $sgs = $this->GetServerSecurityGroupsList($DBServer, $cs, $governance);
             }
-        } catch (\Exception $e) {
-            \Scalr::getContainer()->logger("CloudStack")->error(new FarmLogMessage(
-                $DBServer->farmId,
-                "Unable to get list of securoty groups: {$e->getMessage()}",
-                $DBServer->serverId
-            ));
+        } catch (Exception $e) {
+            \Scalr::getContainer()->logger("CloudStack")->error(new FarmLogMessage($DBServer, "Unable to get list of securoty groups: {$e->getMessage()}"));
         }
 
         $sshKey = new SshKey();
@@ -761,12 +752,8 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                     $sshKey->save();
                 }
             }
-        } catch (\Exception $e) {
-            \Scalr::getContainer()->logger("CloudStack")->error(new FarmLogMessage(
-                $DBServer->farmId,
-                "Unable to generate keypair: {$e->getMessage()}",
-                $DBServer->serverId
-            ));
+        } catch (Exception $e) {
+            \Scalr::getContainer()->logger("CloudStack")->error(new FarmLogMessage($DBServer, "Unable to generate keypair: {$e->getMessage()}"));
         }
 
         $vResult = $cs->instance->deploy([
@@ -791,11 +778,11 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
             );
             /* @var $instanceTypeInfo CloudInstanceType */
             $DBServer->SetProperties([
-                \CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID      => $vResult->id,
-                \CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $launchOptions->cloudLocation,
-                \CLOUDSTACK_SERVER_PROPERTIES::LAUNCH_JOB_ID  => $vResult->jobid,
-                \SERVER_PROPERTIES::ARCHITECTURE              => $launchOptions->architecture,
-                \SERVER_PROPERTIES::INFO_INSTANCE_VCPUS       => $instanceTypeInfo ? $instanceTypeInfo->vcpus : null,
+                CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID      => $vResult->id,
+                CLOUDSTACK_SERVER_PROPERTIES::CLOUD_LOCATION => $launchOptions->cloudLocation,
+                CLOUDSTACK_SERVER_PROPERTIES::LAUNCH_JOB_ID  => $vResult->jobid,
+                SERVER_PROPERTIES::ARCHITECTURE              => $launchOptions->architecture,
+                SERVER_PROPERTIES::INFO_INSTANCE_VCPUS       => $instanceTypeInfo ? $instanceTypeInfo->vcpus : null,
             ]);
 
             $DBServer->cloudLocation = $launchOptions->cloudLocation;
@@ -811,15 +798,15 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
             $DBServer->update($params);
 
             //We set/update server history here
-            $DBServer->getServerHistory();
+            $DBServer->getServerHistory()->update(['cloudServerId' => $vResult->id]);
 
             return $DBServer;
         } else {
-            throw new \Exception(sprintf("Cannot launch new instance: %s", $vResult->errortext));
+            throw new Exception(sprintf("Cannot launch new instance: %s", $vResult->errortext));
         }
     }
 
-    private function GetServerSecurityGroupsList(DBServer $DBServer, \Scalr\Service\CloudStack\CloudStack $csClient, \Scalr_Governance $governance = null)
+    private function GetServerSecurityGroupsList(DBServer $DBServer, \Scalr\Service\CloudStack\CloudStack $csClient, Scalr_Governance $governance = null)
     {
         $retval = array();
         $checkGroups = array();
@@ -827,7 +814,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
         $allowAdditionalSgs = true;
 
         if ($governance) {
-            $sgs = $governance->getValue($DBServer->platform, \Scalr_Governance::CLOUDSTACK_SECURITY_GROUPS);
+            $sgs = $governance->getValue($DBServer->platform, Scalr_Governance::CLOUDSTACK_SECURITY_GROUPS);
             if ($sgs !== null) {
                 $governanceSecurityGroups = @explode(",", $sgs);
                 if (!empty($governanceSecurityGroups)) {
@@ -840,7 +827,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                 if (!empty($checkGroups)) {
                     $sgGovernance = true;
                 }
-                $allowAdditionalSgs = $governance->getValue($DBServer->platform, \Scalr_Governance::CLOUDSTACK_SECURITY_GROUPS, 'allow_additional_sec_groups');
+                $allowAdditionalSgs = $governance->getValue($DBServer->platform, Scalr_Governance::CLOUDSTACK_SECURITY_GROUPS, 'allow_additional_sec_groups');
             }
         }
 
@@ -869,8 +856,8 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                 $sgroups[strtolower($sg->name)] = $sg;
                 $sgroupIds[strtolower($sg->id)] = $sg;
             }
-        } catch (\Exception $e) {
-            throw new \Exception("GetServerSecurityGroupsList failed: {$e->getMessage()}");
+        } catch (Exception $e) {
+            throw new Exception("GetServerSecurityGroupsList failed: {$e->getMessage()}");
         }
 
         foreach ($checkGroups as $groupName) {
@@ -879,7 +866,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                 if (isset($sgroupIds[strtolower($groupName)]))
                     $groupName = $sgroupIds[$groupName]->name;
                 else
-                    throw new \Exception(sprintf(_("Security group '%s' is not found (1)"), $groupName));
+                    throw new Exception(sprintf(_("Security group '%s' is not found (1)"), $groupName));
             }
 
             // Check default SG
@@ -901,7 +888,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
                 array_push($retval, $sgroups[$groupName]->id);
             } else {
                 if (!isset($sgroups[strtolower($groupName)])) {
-                    throw new \Exception(sprintf(_("Security group '%s' is not found (2)"), $groupName));
+                    throw new Exception(sprintf(_("Security group '%s' is not found (2)"), $groupName));
                 } else
                     array_push($retval, $sgroups[strtolower($groupName)]->id);
             }
@@ -918,12 +905,27 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
      */
     public function GetPlatformAccessData($environment, DBServer $DBServer)
     {
-        $ccProps = $environment->cloudCredentials($DBServer->platform)->properties;
+        $ccProps = $environment->keychain($DBServer->platform)->properties;
 
-        $accessData = new \stdClass();
+        $accessData = new stdClass();
         $accessData->apiKey = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_API_KEY];
         $accessData->secretKey = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_SECRET_KEY];
         $accessData->apiUrl = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_API_URL];
+
+        $config = \Scalr::getContainer()->config;
+
+        if ($config->defined("scalr.{$this->platform}.use_proxy") &&
+            $config("scalr.{$this->platform}.use_proxy") &&
+            in_array($config('scalr.connections.proxy.use_on'), ['both', 'instance'])) {
+            $proxySettings = $config('scalr.connections.proxy');
+            $accessData->proxy = new \stdClass();
+            $accessData->proxy->host     = $proxySettings['host'];
+            $accessData->proxy->port     = $proxySettings['port'];
+            $accessData->proxy->user     = $proxySettings['user'];
+            $accessData->proxy->pass     = $proxySettings['pass'];
+            $accessData->proxy->type     = $proxySettings['type'];
+            $accessData->proxy->authtype = $proxySettings['authtype'];
+        }
 
         return $accessData;
     }
@@ -932,7 +934,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::PutAccessData()
      */
-    public function PutAccessData(DBServer $DBServer, \Scalr_Messaging_Msg $message)
+    public function PutAccessData(DBServer $DBServer, Scalr_Messaging_Msg $message)
     {
         $put = false;
         $put |= $message instanceof \Scalr_Messaging_Msg_Rebundle;
@@ -967,10 +969,10 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::getInstanceTypes()
      */
-    public function getInstanceTypes(\Scalr_Environment $env = null, $cloudLocation = null, $details = false)
+    public function getInstanceTypes(Scalr_Environment $env = null, $cloudLocation = null, $details = false)
     {
-        if (!($env instanceof \Scalr_Environment)) {
-            throw new \InvalidArgumentException(sprintf(
+        if (!($env instanceof Scalr_Environment)) {
+            throw new InvalidArgumentException(sprintf(
                 "Method %s requires environment to be specified.", __METHOD__
             ));
         }
@@ -979,7 +981,7 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
         $detailed = [];
 
         //Trying to retrieve instance types from the cache
-        $url = $env->cloudCredentials($this->platform)->properties[Entity\CloudCredentialsProperty::CLOUDSTACK_API_URL];
+        $url = $env->keychain($this->platform)->properties[Entity\CloudCredentialsProperty::CLOUDSTACK_API_URL];
         $collection = $this->getCachedInstanceTypes($this->platform, $url, ($cloudLocation ?: ''));
 
         if ($collection === false || $collection->count() == 0) {
@@ -1022,13 +1024,13 @@ class CloudstackPlatformModule extends AbstractCloudstackPlatformModule implemen
     /**
      * Gets endpoint url for private cloud
      *
-     * @param \Scalr_Environment $env       The scalr environment object
+     * @param Scalr_Environment $env       The scalr environment object
      * @param string             $group     optional The group name
      * @return string Returns endpoint url for cloudstack.
      */
-    public function getEndpointUrl(\Scalr_Environment $env, $group = null)
+    public function getEndpointUrl(Scalr_Environment $env, $group = null)
     {
-        return $env->cloudCredentials($this->platform)->properties[Entity\CloudCredentialsProperty::CLOUDSTACK_API_URL];
+        return $env->keychain($this->platform)->properties[Entity\CloudCredentialsProperty::CLOUDSTACK_API_URL];
     }
 
     /**

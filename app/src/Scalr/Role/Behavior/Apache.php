@@ -35,8 +35,10 @@
                     $vars['host'] = $vhost['name'];
                     $vKeys = array_keys($vars);
 
-                    $f = create_function('$item', 'return "{\$".$item."}";');
-                    $keys = array_map($f, $vKeys);
+                    $keys = array_map(function($item) {
+                        return '{$' . $item . '}';
+                    }, $vKeys);
+
                     $vValues = array_values($vars);
 
                     $itm->template = str_replace($keys, $vValues, $itm->template);
@@ -57,8 +59,11 @@
                 $vars['host'] = $vhost['name'];
                 $vKeys = array_keys($vars);
 
-                $f = create_function('$item', 'return "{\$".$item."}";');
-                $keys = array_map($f, $vKeys);
+
+                $keys = array_map(function($item) {
+                    return '{$' . $item . '}';
+                }, $vKeys);
+
                 $vValues = array_values($vars);
 
                 $itm->template = str_replace($keys, $vValues, $itm->template);

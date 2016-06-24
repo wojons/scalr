@@ -4,6 +4,7 @@ namespace Scalr\Model\Entity;
 use Exception;
 use Scalr\DataType\AccessPermissionsInterface;
 use Scalr\Exception\ModelException;
+use Scalr\Exception\ObjectInUseException;
 use Scalr\Model\AbstractEntity;
 use Scalr\DataType\ScopeInterface;
 use Scalr_Account_User;
@@ -290,7 +291,7 @@ class Script extends AbstractEntity implements ScopeInterface, AccessPermissions
         }
 
         if (count($usage)) {
-            throw new Scalr_Exception_Core(sprintf('Script "%s" being used by %s, and can\'t be deleted',
+            throw new ObjectInUseException(sprintf('Script "%s" being used by %s, and can\'t be deleted',
                 $this->name,
                 join(', ', $usage)
             ));

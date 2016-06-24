@@ -26,7 +26,7 @@ class Scalr_UI_Controller_Tools_Azure_AvailabilitySets extends Scalr_UI_Controll
         }
 
         $availSet = $azure->compute->availabilitySet->create(
-            $this->environment->cloudCredentials(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
+            $this->environment->keychain(SERVER_PLATFORMS::AZURE)->properties[Entity\CloudCredentialsProperty::AZURE_SUBSCRIPTION_ID],
             $resourceGroup,
             new CreateAvailabilitySet($name, $cloudLocation)
         );

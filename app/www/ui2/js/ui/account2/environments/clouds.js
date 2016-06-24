@@ -164,7 +164,6 @@ Scalr.regPage('Scalr.ui.account2.environments.clouds', function (loadParams, mod
             toggleGroup: 'environment-platforms',
             hrefTarget: '_self',
             disableMouseDownPressed: true,
-            hidden: !platformEnabled && key === 'rackspace' || key === 'azure' && Scalr.flags['hostedScalr'] && !Scalr.flags['betaMode'],
             platform: key,
             handler: function() {
                 loadPlatform({envId: loadParams['envId'], platform: this.platform});

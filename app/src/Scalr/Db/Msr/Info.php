@@ -80,11 +80,7 @@ abstract class Scalr_Db_Msr_Info
 
                 $this->dbFarmRole->SetSetting(Scalr_Db_Msr::VOLUME_ID, $storageVolume->id, Entity\FarmRoleSetting::TYPE_LCL);
             } catch (Exception $e) {
-                $this->logger->error(new FarmLogMessage(
-                    $this->dbServer->farmId,
-                    "Cannot save storage volume: {$e->getMessage()}",
-                    !empty($this->dbServer->serverId) ? $this->dbServer->serverId : null
-                ));
+                $this->logger->error(new FarmLogMessage($this->dbServer, "Cannot save storage volume: {$e->getMessage()}"));
             }
         }
 
@@ -122,11 +118,7 @@ abstract class Scalr_Db_Msr_Info
 
                 $this->dbFarmRole->SetSetting(Scalr_Db_Msr::SNAPSHOT_ID, $storageSnapshot->id, Entity\FarmRoleSetting::TYPE_LCL);
             } catch (Exception $e) {
-                $this->logger->error(new FarmLogMessage(
-                    $this->dbServer->farmId,
-                    "Cannot save storage snapshot: {$e->getMessage()}",
-                    !empty($this->dbServer->serverId) ? $this->dbServer->serverId : null
-                ));
+                $this->logger->error(new FarmLogMessage($this->dbServer, "Cannot save storage snapshot: {$e->getMessage()}"));
             }
         }
     }
@@ -211,13 +203,7 @@ abstract class Scalr_Db_Msr_Info
 
         } else if ($volumeConfig->type == MYSQL_STORAGE_ENGINE::EPH) {
 
-            if ($this->dbFarmRole->Platform == SERVER_PLATFORMS::RACKSPACE) {
-                $storageProvider = 'cf';
-
-                $volumeConfig->disk = new stdClass();
-                $volumeConfig->disk->type = 'loop';
-                $volumeConfig->disk->size = '75%root';
-            } elseif ($this->dbFarmRole->isOpenstack()) {
+            if ($this->dbFarmRole->isOpenstack()) {
                 $storageProvider = 'swift';
 
                 $volumeConfig->disk = new stdClass();
@@ -284,9 +270,7 @@ abstract class Scalr_Db_Msr_Info
             } catch (Exception $e) {}
         }
 
-        /***
-        * For Rackspace we ALWAYS need snapsjot_config for mysql
-        * ***/
+        //For Rackspace we always need snapshot_config for mysql
         if ($this->dbFarmRole->GetSetting(Scalr_Db_Msr::SNAPSHOT_ID)) {
             try {
                 $snapshotConfig = Scalr_Model::init(Scalr_Model::STORAGE_SNAPSHOT)->loadById(
@@ -306,11 +290,7 @@ abstract class Scalr_Db_Msr_Info
                     }
                 }
             } catch (Exception $e) {
-                $this->logger->error(new FarmLogMessage(
-                    $this->dbServer->farmId,
-                    "Cannot get snaphotConfig for hostInit message: {$e->getMessage()}",
-                    !empty($this->dbServer->serverId) ? $this->dbServer->serverId : null
-                ));
+                $this->logger->error(new FarmLogMessage($this->dbServer, "Cannot get snaphotConfig for hostInit message: {$e->getMessage()}"));
             }
         }
 

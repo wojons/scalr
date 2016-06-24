@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\Acl\Acl;
+use Scalr\Modules\PlatformFactory;
 use Scalr\Service\Aws\Route53\DataType\ChangeRecordSetsRequestData;
 use Scalr\Service\Aws\Route53\DataType\ChangeRecordSetList;
 use Scalr\Service\Aws\Route53\DataType\ChangeRecordSetData;
@@ -26,13 +27,22 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
     const RECORD_SETS_ALIAS_TARGET_TITLE    = 'Record sets in this hosted zone';
 
     /**
-     * @param string $cloudLocation
+     * Gets Aws object
+     *
+     * @return Aws
+     */
+    private function getAws()
+    {
+        return $this->environment->aws(Aws::REGION_US_EAST_1);
+    }
+
+    /**
      * @param string $zoneId
      * @param string $type          optional
      * @param string $aliases       optional
      * @param string $weighted      optional
      */
-    public function xListAction($cloudLocation, $zoneId, $type = null, $aliases = null, $weighted = null)
+    public function xListAction($zoneId, $type = null, $aliases = null, $weighted = null)
     {
         $resultList = [];
         $nextName = null;
@@ -44,8 +54,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
                 $nextType = $recordListResponse->nextRecordType;
             }
 
-            $recordListResponse = $this->environment
-                    ->aws($cloudLocation)->route53->record
+            $recordListResponse = $this->getAws()->route53->record
                     ->describe($zoneId, $nextName, $nextType);
 
             foreach ($recordListResponse as $record) {
@@ -152,12 +161,11 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
      * @param string $setIdentifier
      * @param string $region
      * @param string $failover
-     * @param string $cloudLocation
      * @param JsonData  $resourceRecord
      */
     public function xSaveAction($zoneId, $policy, $healthId, $dnsName,
             $action, $aliasZoneId, $evaluateTargetHealth, $name, $type,
-            $ttl, $weight, $setIdentifier, $region, $failover, $cloudLocation, JsonData $resourceRecord
+            $ttl, $weight, $setIdentifier, $region, $failover, JsonData $resourceRecord
         )
     {
         $this->request->restrictAccess(Acl::RESOURCE_AWS_ROUTE53, Acl::PERM_AWS_ROUTE53_MANAGE);
@@ -212,16 +220,15 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
         $rrsCnahgeList->append($rrsCnahgeListData);
         $rrsRequest->setChange($rrsCnahgeList);
 
-        $response = $this->environment->aws($cloudLocation)->route53->record->update($zoneId, $rrsRequest);
+        $response = $this->getAws()->route53->record->update($zoneId, $rrsRequest);
         $this->response->data(['data' => $response]);
     }
 
     /**
      * @param JsonData $recordSets JSON encoded structure
      * @param string $zoneId
-     * @param string $cloudLocation
      */
-    public function xDeleteAction(JsonData $recordSets, $zoneId, $cloudLocation)
+    public function xDeleteAction(JsonData $recordSets, $zoneId)
     {
         $this->request->restrictAccess(Acl::RESOURCE_AWS_ROUTE53, Acl::PERM_AWS_ROUTE53_MANAGE);
 
@@ -234,16 +241,15 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
             $rrsRequest->setChange($rrsCnahgeList);
         }
 
-        $response = $this->environment->aws($cloudLocation)->route53->record->update($zoneId, $rrsRequest);
+        $response = $this->getAws()->route53->record->update($zoneId, $rrsRequest);
         $this->response->data(['data' => $response]);
     }
 
     /**
      * @param string $zoneId
      * @param string $name
-     * @param string $cloudLocation
      */
-    public function xGetAliasTargetsAction($zoneId, $name, $cloudLocation)
+    public function xGetAliasTargetsAction($zoneId, $name)
     {
         $result = [];
 
@@ -251,10 +257,10 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
 
         $result['data'] = array_filter(
             array_merge(
-                $this->listLoadBalancerDomains($cloudLocation),
-                $this->listCloudFrontDomains($name, $cloudLocation),
-                $this->listRecordSetDomains($zoneId, $cloudLocation, $name),
-                $this->listS3Websites($name, $cloudLocation)
+                $this->listLoadBalancerDomains(),
+                $this->listCloudFrontDomains($name),
+                $this->listRecordSetDomains($zoneId, $name),
+                $this->listS3Websites($name)
             )
         );
 
@@ -263,25 +269,23 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
 
     /**
      * @param string $name
-     * @param string $cloudLocation
      */
-    public function xGetS3TargetsAction($name, $cloudLocation)
+    public function xGetS3TargetsAction($name)
     {
         $result = [];
 
         $name = rtrim($name, '.');
 
-        $result['data'] = $this->listS3Websites($name, $cloudLocation);
+        $result['data'] = $this->listS3Websites($name);
 
         $this->response->data($result);
     }
 
     /**
-     * @param string $cloudLocation
      * @param string $healthId optional
      * @return array
      */
-    protected function listHealthChecks($cloudLocation, $healthId = null)
+    protected function listHealthChecks($healthId = null)
     {
         $marker = null;
         $healthChecks = [];
@@ -290,7 +294,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
             if (isset($checkList)) {
                 $marker = new MarkerType($checkList->marker);
             }
-            $checkList = $this->environment->aws($cloudLocation)->route53->health->describe($marker);
+            $checkList = $this->getAws()->route53->health->describe($marker);
 
             foreach ($checkList as $check) {
                 if (property_exists($check, 'healthId')) {
@@ -320,21 +324,28 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
     }
 
     /**
-     * @param string $cloudLocation
+     * Gets Elb list from available regions
+     *
      * @return array
      */
-    protected function listLoadBalancerDomains($cloudLocation)
+    protected function listLoadBalancerDomains()
     {
         $result = [];
 
-        $elbList = $this->environment->aws($cloudLocation)->elb->loadBalancer->describe();
+        $platformModule = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
 
-        foreach ($elbList as $elb) {
-            $result[] = [
-                'domainName' => $elb->dnsName,
-                'aliasZoneId'=> $elb->canonicalHostedZoneNameId,
-                'title'      => self::ELB_ALIAS_TARGET_TITLE
-            ];
+        foreach (array_keys($platformModule->getLocations($this->getEnvironment())) as $cloudLocation) {
+            try {
+                $elbList = $this->environment->aws($cloudLocation)->elb->loadBalancer->describe();
+
+                foreach ($elbList as $elb) {
+                    $result[] = [
+                        'domainName' => $elb->dnsName,
+                        'aliasZoneId'=> $elb->canonicalHostedZoneNameId,
+                        'title'      => self::ELB_ALIAS_TARGET_TITLE
+                    ];
+                }
+            } catch (Exception $e) {}
         }
 
         return $result;
@@ -342,10 +353,9 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
 
     /**
      * @param string $name
-     * @param string $cloudLocation
      * @return array
      */
-    protected function listCloudFrontDomains($name, $cloudLocation)
+    protected function listCloudFrontDomains($name)
     {
         $result = [];
         $marker = null;
@@ -355,7 +365,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
                 $marker = new MarkerType($distributionList->marker);
             }
 
-            $distributionList = $this->environment->aws($cloudLocation)->cloudFront->distribution->describe($marker);
+            $distributionList = $this->getAws()->cloudFront->distribution->describe($marker);
 
             foreach ($distributionList as $distribution) {
                 foreach ($distribution->distributionConfig->aliases as $alias) {
@@ -381,54 +391,53 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Recordsets extends Scalr_UI_Controll
 
     /**
      * @param string $zoneId
-     * @param string $cloudLocation
      * @param string $name
      * @return array
      */
-    protected function listRecordSetDomains($zoneId, $cloudLocation, $name)
+    protected function listRecordSetDomains($zoneId, $name)
     {
         $result = [];
         $nextName = null;
         $nextType = null;
 
-        do {
-            if (isset($rrsList)) {
-                $nextName = $rrsList->nextRecordName;
-                $nextType = $rrsList->nextRecordType;
-            }
-
-            $rrsList = $this->environment
-                    ->aws($cloudLocation)->route53->record
-                    ->describe($zoneId, $nextName, $nextType);
-
-            foreach ($rrsList as $record) {
-                if ('NS' == $record->type || 'SOA' == $record->type || $name . '.' == $record->name) {
-                    continue;
+        if (!empty($zoneId)) {
+            do {
+                if (isset($rrsList)) {
+                    $nextName = $rrsList->nextRecordName;
+                    $nextType = $rrsList->nextRecordType;
                 }
 
-                $result[] = [
-                    'domainName' => $record->name,
-                    'aliasZoneId'=> $zoneId,
-                    'title'      => self::RECORD_SETS_ALIAS_TARGET_TITLE
-                ];
-            }
-        } while (!empty($rrsList->isTruncated));
+                $rrsList = $this->getAws()->route53->record
+                    ->describe($zoneId, $nextName, $nextType);
+
+                foreach ($rrsList as $record) {
+                    if ('NS' == $record->type || 'SOA' == $record->type || $name . '.' == $record->name) {
+                        continue;
+                    }
+
+                    $result[] = [
+                        'domainName' => $record->name,
+                        'aliasZoneId'=> $zoneId,
+                        'title'      => self::RECORD_SETS_ALIAS_TARGET_TITLE
+                    ];
+                }
+            } while (!empty($rrsList->isTruncated));
+        }
 
         return $result;
     }
 
     /**
      * @param string $name
-     * @param string $cloudLocation
      * @return array
      */
-    protected function listS3Websites($name, $cloudLocation)
+    protected function listS3Websites($name)
     {
         $result = [];
-        $buckets = $this->environment->aws($cloudLocation)->s3->bucket->getWebsite($name);
+        $buckets = $this->getAws()->s3->bucket->getWebsite($name);
 
         if ($buckets) {
-            $location = $this->environment->aws($cloudLocation)->s3->bucket->getLocation($name);
+            $location = $this->getAws()->s3->bucket->getLocation($name);
 
             if (empty($location)) {
                 $location = 'us-east-1';

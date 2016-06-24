@@ -17,6 +17,13 @@ class OrphanedServer implements \ArrayAccess
     public $cloudServerId;
 
     /**
+     * Cloud instance type
+     *
+     * @var string
+     */
+    public $instanceType;
+
+    /**
      * Image identifier
      *
      * @var string
@@ -111,6 +118,7 @@ class OrphanedServer implements \ArrayAccess
      * Constructor
      *
      * @param string    $cloudServerId           Cloud server identifier
+     * @param string    $instanceType            Cloud instance type
      * @param string    $imageId                 Image identifier
      * @param string    $status                  Server status
      * @param \DateTime $launchTime              The time the server was launched in UTC
@@ -125,6 +133,7 @@ class OrphanedServer implements \ArrayAccess
      */
     public function __construct(
         $cloudServerId,
+        $instanceType,
         $imageId,
         $status,
         \DateTime $launchTime,
@@ -138,6 +147,7 @@ class OrphanedServer implements \ArrayAccess
         array $tags = []
     ) {
         $this->cloudServerId  = $cloudServerId;
+        $this->instanceType   = $instanceType;
         $this->imageId        = $imageId;
         $this->status         = $status;
         $this->privateIp      = $privateIp;

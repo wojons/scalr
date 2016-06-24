@@ -1,7 +1,7 @@
 <?php
 namespace Scalr\Stats\CostAnalytics\Entity;
 
-use \DateTime, \DateTimeZone;
+use DateTime, DateTimeZone;
 
 /**
  * TimelineEventEntity

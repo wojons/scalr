@@ -10,7 +10,7 @@
 
 ### `script` (required, create-only, filterable) ###
 
-The Script this ScriptVersion is a version of
+The Script this ScriptVersion is a version of.
 
 
 An object of type [`ScriptForeignKey`](./../definitions/ScriptForeignKey.mkd).
@@ -53,44 +53,48 @@ Property of type: `string`.
 
 ## Used in ##
 
+  + [`/scripts/{scriptId}/script-versions/`](./../rest/api/v1beta0/account/scripts/{scriptId}/script-versions/)
+  + [`/scripts/{scriptId}/script-versions/{scriptVersionNumber}/`](./../rest/api/v1beta0/account/scripts/{scriptId}/script-versions/{scriptVersionNumber}/)
   + [`/{envId}/scripts/{scriptId}/script-versions/`](./../rest/api/v1beta0/user/{envId}/scripts/{scriptId}/script-versions/)
   + [`/{envId}/scripts/{scriptId}/script-versions/{scriptVersionNumber}/`](./../rest/api/v1beta0/user/{envId}/scripts/{scriptId}/script-versions/{scriptVersionNumber}/)
 
 ## Swagger Definition ##
 
     {
-      "x-usedIn": [
-        "/{envId}/scripts/{scriptId}/script-versions/", 
-        "/{envId}/scripts/{scriptId}/script-versions/{scriptVersionNumber}/"
+      "properties": {
+        "added": {
+          "format": "date-time", 
+          "readOnly": true, 
+          "type": "string"
+        }, 
+        "body": {
+          "description": "The contents of this ScriptVersion, those will be validated as per the Script's OS Type.", 
+          "type": "string"
+        }, 
+        "script": {
+          "$ref": "#/definitions/ScriptForeignKey", 
+          "description": "The Script this ScriptVersion is a version of."
+        }, 
+        "version": {
+          "description": "The Script version number. NULL is interpreted as the Latest Version.", 
+          "readOnly": true, 
+          "type": "integer"
+        }
+      }, 
+      "required": [
+        "body", 
+        "script"
       ], 
       "x-createOnly": [
         "script"
       ], 
-      "properties": {
-        "body": {
-          "type": "string", 
-          "description": "The contents of this ScriptVersion, those will be validated as per the Script's OS Type."
-        }, 
-        "added": {
-          "readOnly": true, 
-          "type": "string", 
-          "format": "date-time"
-        }, 
-        "version": {
-          "readOnly": true, 
-          "type": "integer", 
-          "description": "The Script version number. NULL is interpreted as the Latest Version."
-        }, 
-        "script": {
-          "description": "The Script this ScriptVersion is a version of", 
-          "$ref": "#/definitions/ScriptForeignKey"
-        }
-      }, 
       "x-filterable": [
         "script"
       ], 
-      "required": [
-        "script", 
-        "body"
+      "x-usedIn": [
+        "/scripts/{scriptId}/script-versions/", 
+        "/scripts/{scriptId}/script-versions/{scriptVersionNumber}/", 
+        "/{envId}/scripts/{scriptId}/script-versions/", 
+        "/{envId}/scripts/{scriptId}/script-versions/{scriptVersionNumber}/"
       ]
     }

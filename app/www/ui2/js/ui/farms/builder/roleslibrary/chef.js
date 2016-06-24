@@ -18,19 +18,13 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.chef', function () {
                 defaultSettings = {'chef.bootstrap': 1};
             this.currentRole = record;
             field.limits = Scalr.getGovernance('general', 'general.chef');
-            if (record.get('origin') !== 'SHARED') {
-                record.loadRoleChefSettings(function(data, status){
-                    if (status) {
-                        field.setReadOnly(data.roleChefSettings);
-                        field.roleChefSettings = data.roleChefSettings;
-                        field.farmRoleChefSettings = data.farmRoleChefSettings;
-                        field.setValue(data.roleChefSettings ? data.chefSettings : defaultSettings);
-                    }
-                });
-            } else {
-                field.setReadOnly(false);
-                field.setValue(defaultSettings);
-            }
+            record.loadRoleChefSettings(function(data, status){
+                if (status) {
+                    field.setRoleChefSettings(data.roleChefSettings);
+                    field.farmRoleChefSettings = data.farmRoleChefSettings;
+                    field.setValue(data.roleChefSettings ? data.chefSettings : defaultSettings);
+                }
+            });
             field.clearInvalid();
         },
 

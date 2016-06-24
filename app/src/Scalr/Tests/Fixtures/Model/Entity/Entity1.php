@@ -43,4 +43,10 @@ class Entity1 extends \Scalr\Model\AbstractEntity
      * @var float
      */
     public $cost;
+
+    /**
+     * @Column(type="integer",nullable=true)
+     * @var int
+     */
+    public $nil;
 }

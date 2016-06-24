@@ -15,6 +15,7 @@ define('SCALR_MULTITHREADING', true);
 require_once __DIR__ . "/../src/prepend.inc.php";
 
 use Scalr\System\Zmq\Cron\PidFile;
+use Scalr\Model\Entity\ScalrService;
 
 set_time_limit(0);
 
@@ -49,11 +50,6 @@ $taskConfig = $task->config();
 $oPid = new PidFile(CACHEPATH . '/cron.client.' . $task->getName() . '.pid', '/client.php');
 $oPid->setLogger($logger);
 
-//If it's demonized task it should not bark to log that another process already running
-if ($taskConfig->daemon) {
-    $oPid->pidExistLevel = 'WARN';
-}
-
 $oPid->create();
 
 $interrupt = 0;
@@ -87,22 +83,46 @@ if ($taskConfig->daemon) {
     $task->log('SERVICE', 'Starting %s...', $task->getName());
 }
 
+$scalrService = $task->getScalrService();
+
 while (!$interrupt) {
+    $scalrService->update([
+        'state'      => ScalrService::STATE_RUNNING,
+        'lastStart'  => new DateTime(),
+        'lastFinish' => null,
+        'numTasks'   => 0,
+        'numWorkers' => 1
+    ]);
+
     try {
         $task->run();
     } catch (ZMQException $e) {
         if ($e->getCode() == 4) {
             $interrupt++;
             usleep(1);
+
             break;
         } else {
+            $scalrService->update([
+                'state'      => ScalrService::STATE_FAILED,
+                'lastFinish' => new DateTime()
+            ]);
+
             throw $e;
         }
     }
 
+    $scalrService->lastFinish = new DateTime();
+
+    $scalrService->update([
+        'state'      => ScalrService::STATE_IDLE,
+        'lastFinish'
+    ]);
+
     //It does not need to repeat if it's daemon
-    if (!$taskConfig->daemon)
+    if (!$taskConfig->daemon) {
         break;
+    }
 
     //It checks memory usage for demonized services
     if (!$task->checkMemoryUsage()) {
@@ -110,6 +130,8 @@ while (!$interrupt) {
     }
 
     $idle = isset($taskConfig->idle) ? $taskConfig->idle : 5;
+
     $task->log("DEBUG", "Idling for %d sec", $idle);
+
     sleep($idle);
 }

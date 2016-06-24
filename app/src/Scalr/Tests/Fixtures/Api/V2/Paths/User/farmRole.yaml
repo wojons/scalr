@@ -1,0 +1,208 @@
+paths:
+  - uri: /{envId}/farms/{farmId}/farm-roles/
+    acl: noAccess
+    operations:
+      - {method: get,   response: 403, params: '&{3}FarmRolesData'}
+      - {method: post,  response: 403, params: '&{3}FarmRolesData', body: '&{4}FarmRolesData'}
+
+  - uri: /{envId}/farms/{farmId}/farm-roles/
+    acl: readOnly
+    operations:
+      - {method: get,   response: 200, params: '&{3}FarmRolesData'}
+      - {method: post,  response: 403, params: '&{3}FarmRolesData', body: '&{4}FarmRolesData'}
+
+  - uri: /{envId}/farms/{farmId}/farm-roles/
+    acl: fullAccess
+    operations:
+      - {method: get,   response: 200, params: '&{3}FarmRolesData'}
+      - {method: post,  response: 201, params: '&{3}FarmRolesData',  body: '&{24}FarmRolesData'} #base,chef role
+      - {method: post,  response: 201, params: '&{3}FarmRolesData',  body: '&{25}FarmRolesData'} #chef role
+      - {method: post,  response: 201, params: '&{3}FarmRolesData',  body: '&{26}FarmRolesData'} #base role
+      - {method: post,  response: 501, params: '&{3}FarmRolesData',  body: '&{4}FarmRolesData'}  #add mysql role
+      - {method: post,  response: 501, params: '&{3}FarmRolesData',  body: '&{5}FarmRolesData'}  #add percona role in the same farm
+      - {method: post,  response: 501, params: '&{3}FarmRolesData',  body: '&{6}FarmRolesData'}  #add postgresql role
+      - {method: post,  response: 501, params: '&{3}FarmRolesData',  body: '&{7}FarmRolesData'}  #add postgresql role in the same farm
+      - {method: post,  response: 501, params: '&{3}FarmRolesData',  body: '&{8}FarmRolesData'}  #add redis role
+      - {method: post,  response: 501, params: '&{3}FarmRolesData',  body: '&{9}FarmRolesData'}  #add redis role in the same farm
+      - {method: post,  response: 501, params: '&{3}FarmRolesData',  body: '&{10}FarmRolesData'} #add mongodb role
+      - {method: post,  response: 501, params: '&{3}FarmRolesData',  body: '&{11}FarmRolesData'} #add mongodb role in the same farm
+      - {method: post,  response: 501, params: '&{18}FarmRolesData', body: '&{5}FarmRolesData'}  #add percona role in the ahother farm
+      - {method: post,  response: 501, params: '&{18}FarmRolesData', body: '&{7}FarmRolesData'}  #add postgresql role in the ahother farm
+      - {method: post,  response: 501, params: '&{18}FarmRolesData', body: '&{9}FarmRolesData'}  #add redis role in the ahother farm
+      - {method: post,  response: 501, params: '&{18}FarmRolesData', body: '&{11}FarmRolesData'} #add mongodb role in the ahother farm
+      - {method: post,  response: 400, params: '&{3}FarmRolesData',  body: '&{34}FarmRolesData'} #farm role without alias
+      - {method: post,  response: 400, params: '&{3}FarmRolesData',  body: '&{35}FarmRolesData'} #farm role with not valid alias
+
+  - uri: /{envId}/farm-roles/{farmRoleId}/
+    acl: noAccess
+    operations:
+      - {method: get,    response: 403, params: '&FarmRolesData'}
+      - {method: delete, response: 403, params: '&FarmRolesData'}
+  - uri: /{envId}/farm-roles/{farmRoleId}/
+    acl: readOnly
+    operations:
+      - {method: get,    response: 200, params: '&FarmRolesData'}
+      - {method: delete, response: 403, params: '&FarmRolesData'}
+  - uri: /{envId}/farm-roles/{farmRoleId}/
+    acl: fullAccess
+    operations:
+      - {method: get,    response: 200, params: '&{0}FarmRolesData'}
+      - {method: patch,  response: 200, params: '&{0}FarmRolesData',  body: '&{15}FarmRolesData'} #replace role with chef behaviors
+      - {method: patch,  response: 200, params: '&{2}FarmRolesData',  body: '&{17}FarmRolesData'} #replace no scalarizer role for the role wich not use scalarizer
+      - {method: patch,  response: 200, params: '&{2}FarmRolesData',  body: '&{15}FarmRolesData'} #replace no scalarizer role for the role wich use scalarizer
+      - {method: patch,  response: 200, params: '&{2}FarmRolesData',  body: '&{23}FarmRolesData'} #replace role not include chef behaviors
+      - {method: patch,  response: 409, params: '&{19}FarmRolesData', body: '&{23}FarmRolesData'} #replace role with not include chef behaviors in farm role wich use chef
+      - {method: patch,  response: 200, params: '&{19}FarmRolesData', body: '&{15}FarmRolesData'} #replace role with include chef behaviors in farm role wich use chef
+      - {method: patch,  response: 409, params: '&{0}FarmRolesData',  body: '&{12}FarmRolesData'} #replace role with another os family
+      - {method: patch,  response: 409, params: '&{0}FarmRolesData',  body: '&{13}FarmRolesData'} #replace scalarizer role for the role wich not use scalarizer
+      - {method: patch,  response: 501, params: '&{0}FarmRolesData',  body: '&{14}FarmRolesData'} #replace role with more behaviors
+      - {method: patch,  response: 501, params: '&{0}FarmRolesData',  body: '&{16}FarmRolesData'} #replace role with not include chef behaviors
+      - {method: patch,  response: 501, params: '&{0}FarmRolesData',  body: '&{14}FarmRolesData'} #replace role with not valid behaviors
+      - {method: patch,  response: 501, params: '&{2}FarmRolesData',  body: '&{16}FarmRolesData'} #replace role with more behaviors
+      - {method: patch,  response: 501, params: '&{2}FarmRolesData',  body: '&{14}FarmRolesData'} #replace role with not valid behaviors
+      - {method: patch,  response: 501, params: '&{19}FarmRolesData', body: '&{16}FarmRolesData'} #replace role with not include chef behaviors in farm role wich use chef
+      - {method: patch,  response: 501, params: '&{19}FarmRolesData', body: '&{14}FarmRolesData'} #replace role with more behaviors this farm-role use chef
+      - {method: patch,  response: 501, params: '&{21}FarmRolesData', body: '&{22}FarmRolesData'} #replace role with mysql behaviors
+      - {method: patch,  response: 409, params: '&{0}FarmRolesData',  body: '&{36}FarmRolesData'} #replace role with deprecated role
+      - {method: delete, response: 200, params: '&{1}FarmRolesData'}
+      - {method: delete, response: 404, params: '&{1}FarmRolesData'}
+
+  - uri: /{envId}/farm-roles/{farmRoleId}/scaling/
+    acl: noAccess
+    operations:
+      - {method: get,   response: 403, params: '&{27}FarmRolesData'}
+      - {method: patch, response: 403, params: '&{27}FarmRolesData', body: '&{31}FarmRolesData'} #test ACL
+  - uri: /{envId}/farm-roles/{farmRoleId}/scaling/
+    acl: readOnly
+    operations:
+      - {method: get,   response: 200, params: '&{27}FarmRolesData'}
+      - {method: patch, response: 403, params: '&{27}FarmRolesData', body: '&{31}FarmRolesData'} #test ACL
+  - uri: /{envId}/farm-roles/{farmRoleId}/scaling/
+    acl: fullAccess
+    operations:
+      - {method: get,   response: 200, params: '&FarmRolesData'}
+      - {method: patch, response: 200, params: '&{27}FarmRolesData', body: '&{31}FarmRolesData'} # test GCE scaling setting
+      - {method: patch, response: 400, params: '&{27}FarmRolesData', body: '&{32}FarmRolesData'} # scaling config  min > max
+      - {method: patch, response: 400, params: '&{27}FarmRolesData', body: '&{33}FarmRolesData'} # scaling config max > 400
+      - {method: patch, response: 200, params: '&{0}FarmRolesData',  body: '&{31}FarmRolesData'} # test EC2 scaling setting
+      - {method: patch, response: 400, params: '&{0}FarmRolesData',  body: '&{32}FarmRolesData'} # scaling config  min > max
+      - {method: patch, response: 400, params: '&{0}FarmRolesData',  body: '&{33}FarmRolesData'} # scaling config max > 400
+      - {method: patch, response: 409, params: '&{28}FarmRolesData', body: '&{31}FarmRolesData'} # Add scaling to farm with cf_cloud_controller behaviors
+      - {method: patch, response: 409, params: '&{29}FarmRolesData', body: '&{31}FarmRolesData'} # Add scaling to farm with mongodb  behaviors
+      - {method: patch, response: 409, params: '&{30}FarmRolesData', body: '&{31}FarmRolesData'} # Add scaling to farm with rabbitmq behaviors
+
+FarmRolesData:
+  - {farmRoleId: '&FarmRole.id'}
+  - {farmRoleId: '&{1}FarmRole.id'}
+  - {farmRoleId: '&{2}FarmRole.id'}
+  - {farmId: '&{0}Farm.id'}
+  - {role: '&{2}Role.id',  placement: '&{0}Placement', instance: '&{0}Instance', platform: ec2, alias: '&{2}Role.name'} #4 role with mysql2 behaviors
+  - {role: '&{3}Role.id',  placement: '&{0}Placement', instance: '&{0}Instance', platform: ec2, alias: '&{3}Role.name'} #5 role with percona behaviors
+  - {role: '&{4}Role.id',  placement: '&{0}Placement', instance: '&{0}Instance', platform: ec2, alias: '&{4}Role.name'} #6 role with postgresql behaviors
+  - {role: '&{5}Role.id',  placement: '&{0}Placement', instance: '&{0}Instance', platform: ec2, alias: '&{5}Role.name'} #7 role with postgresql behaviors
+  - {role: '&{6}Role.id',  placement: '&{0}Placement', instance: '&{0}Instance', platform: ec2, alias: '&{6}Role.name'} #8 role with redis behaviors
+  - {role: '&{7}Role.id',  placement: '&{0}Placement', instance: '&{0}Instance', platform: ec2, alias: '&{7}Role.name'} #9 role with redis behaviors
+  - {role: '&{8}Role.id',  placement: '&{0}Placement', instance: '&{0}Instance', platform: ec2, alias: '&{8}Role.name'} #10 role mongodb redis behaviors
+  - {role: '&{9}Role.id',  placement: '&{0}Placement', instance: '&{0}Instance', platform: ec2, alias: '&{9}Role.name'} #11 role mongodb redis behaviors
+  - {role: '&{10}Role.id'} #12 role with os family ubuntu
+  - {role: '&{11}Role.id'} #13 role wich not use scalr agent
+  - {role: '&{12}Role.id'} #14 role with app,chef,haproxy behaviors
+  - {role: '&{0}Role.id'}  #15 role with base, mysql behaviors
+  - {role: '&{13}Role.id'} #16 role wich not use scalr agent
+  - {role: '&{14}Role.id'} #17 role with app,haproxy,memcached behaviors
+  - {farmId: '&{1}Farm.id'} #18
+  - {farmRoleId: '&{3}FarmRole.id'} #19 this farm role use chef settings
+  - {role: '&{0}Role.id',  placement: '&{0}Placement', instance: '&{0}Instance', platform: ec2, alias: '&{0}Role.name'} #20 role with base, chef behaviors
+  - {farmRoleId: '&{4}FarmRole.id'} #21 farm-role far testing replace role
+  - {role: '&{2}Role.id'} #22
+  - {role: '&{16}Role.id'} #23
+  - {role: '&{0}Role.id',   placement: '&{0}Placement', instance: '&{0}Instance', platform: ec2, alias: '&{0}Role.name'} #24 role with base, chef behaviors
+  - {role: '&{10}Role.id',  placement: '&{0}Placement', instance: '&{0}Instance', platform: ec2, alias: '&{10}Role.name'} #25 role with chef behaviors
+  - {role: '&{16}Role.id',  placement: '&{0}Placement', instance: '&{0}Instance', platform: ec2, alias: '&{16}Role.name'} #26 role with base behaviors
+  - {farmRoleId: '&{5}FarmRole.id'} #27 GCE farm role
+  - {farmRoleId: '&{6}FarmRole.id'} #28#################################################
+  - {farmRoleId: '&{7}FarmRole.id'} #29 farm role where not allowed add scaling rules  #
+  - {farmRoleId: '&{8}FarmRole.id'} #30################################################
+  - {minInstances: 0, maxInstances: 5}   #31scaling config correct data
+  - {minInstances: 6, maxInstances: 5}   #32scaling config  min > max
+  - {minInstances: 6, maxInstances: 450} #33scaling config max > 400
+  - {role: '&{0}Role.id',   placement: '&{0}Placement', instance: '&{0}Instance', platform: ec2} #34 farm role without alias
+  - {role: '&{0}Role.id',   placement: '&{0}Placement', instance: '&{0}Instance', platform: ec2, alias: 'fake_alias'} #35 farm role with not valid alias
+  - {role: '&{21}Role.id'} #36 deprecated role
+Placement:
+ - {region: us-east-1, placementConfigurationType: AwsClassicPlacementConfiguration}
+
+Instance:
+ - {instanceType: m1.small, instanceConfigurationType: AwsInstanceConfiguration}
+
+FarmRole:
+  - {farmId: '&{0}Farm.id',  roleId: '&{1}Role.id',  alias: test-farm-role,                           platform: ec2, cloudLocation: us-east-1} #farm-role with chef behaviors
+  - {farmId: '&{0}Farm.id',  roleId: '&Role.id',     alias: test-delete-farm-role,                    platform: ec2, cloudLocation: us-east-1} #farm-role for deleting
+  - {farmId: '&{0}Farm.id',  roleId: '&{11}Role.id', alias: test-no-scalarizer-farm-role,             platform: ec2, cloudLocation: us-east-1} #no scalarizer role
+  - {farmId: '&{2}Farm.id',  roleId: '&{15}Role.id', alias: test-use-chef-farm-role,                  platform: ec2, cloudLocation: us-east-1, settings: '&{0}Settings'} #this farm-role use chef
+  - {farmId: '&{1}Farm.id',  roleId: '&{0}Role.id',  alias: test-farm-role,                           platform: ec2, cloudLocation: us-east-1} #farm-role with base,chef behaviors
+  - {farmId: '&{1}Farm.id',  roleId: '&{20}Role.id', alias: test-gce-farm-role,                       platform: gce, cloudLocation: us-central1-a}
+  - {farmId: '&{1}Farm.id',  roleId: '&{17}Role.id', alias: test-patch-disable-scaling-role,          platform: ec2, cloudLocation: us-east-1}
+  - {farmId: '&{1}Farm.id',  roleId: '&{18}Role.id', alias: test-patch-disable-scaling-mongodb-role,  platform: ec2, cloudLocation: us-east-1, settings: '&{1}Settings'}
+  - {farmId: '&{1}Farm.id',  roleId: '&{19}Role.id', alias: test-patch-disable-scaling-rabbitmq-role, platform: ec2, cloudLocation: us-east-1, settings: '&{2}Settings'}
+
+Farm:
+  - {name: testFarmForFarmRole,        comments: test-description}
+  - {name: testFarmForFarmRole2,       comments: test-description}
+  - {name: testFarmForFarmRoleUseChef, comments: test-description}
+
+RoleImage:
+  - {roleId: '&Role.id', cloudLocation: '&FarmRole.cloudLocation',    platform: '&FarmRole.platform'}    #################
+  - {roleId: '&Role.id', cloudLocation: '&FarmRole.cloudLocation',    platform: '&FarmRole.platform'}    #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} # ec2 role images
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} #
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'} ##################
+  - {roleId: '&Role.id', cloudLocation: '&{5}FarmRole.cloudLocation', platform: '&{5}FarmRole.platform'} #role image for GCE
+  - {roleId: '&Role.id', cloudLocation: '&{0}FarmRole.cloudLocation', platform: '&{0}FarmRole.platform'}
+
+Role:
+  - {name: test-role,                        catId: '&{0}RoleCategory', osId: centos-5-x,   behaviors: 'base,chef',  accountId: , envId: } #0
+  - {name: test-delete-farm-role,            catId: '&{0}RoleCategory', osId: centos-5-x,   behaviors: 'chef',       accountId: , envId: } #1
+  - {name: test-mysql2-farm-role,            catId: '&{0}RoleCategory', osId: centos-5-x,   behaviors: 'mysql2',     accountId: , envId: } #2
+  - {name: test-percona-farm-role,           catId: '&{0}RoleCategory', osId: centos-5-x,   behaviors: 'percona',    accountId: , envId: } #3
+  - {name: test-postgresql-farm-role,        catId: '&{0}RoleCategory', osId: centos-5-x,   behaviors: 'postgresql', accountId: , envId: } #4
+  - {name: test-postgresql-farm-role2,       catId: '&{0}RoleCategory', osId: centos-5-x,   behaviors: 'postgresql', accountId: , envId: } #5
+  - {name: test-redis-farm-role,             catId: '&{0}RoleCategory', osId: centos-5-x,   behaviors: 'redis',      accountId: , envId: } #6
+  - {name: test-redis-farm-role2,            catId: '&{0}RoleCategory', osId: centos-5-x,   behaviors: 'redis',      accountId: , envId: } #7
+  - {name: test-mongodb-farm-role,           catId: '&{0}RoleCategory', osId: centos-5-x,   behaviors: 'mongodb',    accountId: , envId: } #8
+  - {name: test-mongodb-farm-role2,          catId: '&{0}RoleCategory', osId: centos-5-x,   behaviors: 'mongodb',    accountId: , envId: } #9
+  - {name: test-ubuntu-role,                 catId: '&{0}RoleCategory', osId: ubuntu-10-04, behaviors: 'chef',       accountId: , envId: } #10
+  - {name: test-no-scalarizer-role,          catId: '&{0}RoleCategory', osId: centos-5-x,   isScalarized: false,  accountId: , envId: } #11
+  - {name: test-valid-replace-role,          catId: '&{0}RoleCategory', osId: centos-5-x,   behaviors: 'app,chef,haproxy', accountId: , envId: } #12
+  - {name: test-valid-replace-role2,         catId: '&{0}RoleCategory', osId: centos-5-x,   behaviors: 'app,haproxy,memcached', accountId: , envId: } #13
+  - {name: test-no-scalarizer-role2,         catId: '&{0}RoleCategory', osId: centos-5-x,   isScalarized: false, accountId: , envId: } #14
+  - {name: test-chef-role,                   catId: '&{0}RoleCategory', osId: centos-5-x,   behaviors: 'base,chef', accountId: , envId: , settings: '&{0}Settings'} #15 use chef
+  - {name: test-base-role,                   catId: '&{0}RoleCategory', osId: centos-5-x,   behaviors: 'base', accountId: , envId: } #16
+  - {name: test-patch-scaling-role,          catId: '&{0}RoleCategory', osId: centos-5-x,  accountId: , envId: , behaviors: 'cf_cloud_controller,cf_dea,cf_health_manager,cf_router,cf_service,www'}
+  - {name: test-patch-scaling-mongodb-role,  catId: '&{0}RoleCategory', osId: centos-5-x,  accountId: , envId: , behaviors: 'chef,mongodb'}
+  - {name: test-patch-scaling-rabbitmq-role, catId: '&{0}RoleCategory', osId: centos-5-x,  accountId: , envId: , behaviors: 'chef,memcached,postgresql,rabbitmq'}
+  - {name: test-role-for-gce,                catId: '&{0}RoleCategory', osId: centos-5-x,  accountId: , envId: , behaviors: 'chef,percona,www' }
+  - {name: test-depreacted-role,             catId: '&{0}RoleCategory', osId: centos-5-x,   behaviors: 'base', accountId: , envId: , isDeprecated: true} #21 deprecated role
+
+RoleCategory:
+ - {name: farmRoleTestCategory}
+
+Settings:
+ - {chef.bootstrap: 1, chef.daemonize:  0, chef.environment:  _default, chef.log_level: auto, chef.server_id: 2, chef.ssl_verify_mode: chef_auto} #chef settings
+ - {mongodb.data_storage.ebs.size: 10} #mongodb settings
+ - {rabbitmq.nodes_ratio: 10} #rabbitmq settings

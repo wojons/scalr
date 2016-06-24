@@ -1,6 +1,6 @@
 Scalr.regPage('Scalr.ui.core.api2', function () {
 
-	var store = Ext.create('store.store', {
+    var store = Ext.create('store.store', {
         model: Scalr.getModel({
             idProperty: 'keyId',
             fields: ['keyId', 'secretKey', 'active', {name: 'created', type: 'date'}, {name: 'lastUsed', type: 'date'}, 'createdHr', 'lastUsedHr']
@@ -30,15 +30,15 @@ Scalr.regPage('Scalr.ui.core.api2', function () {
 
             return me;
         }
-	});
+    });
 
-	var grid = Ext.create('Ext.grid.Panel', {
+    var grid = Ext.create('Ext.grid.Panel', {
 
         cls: 'x-panel-column-left',
         flex: 1,
         scrollable: true,
 
-		store: store,
+        store: store,
 
         plugins: [ 'applyparams', 'focusedrowpointer', {
             ptype: 'selectedrecord',
@@ -69,7 +69,7 @@ Scalr.regPage('Scalr.ui.core.api2', function () {
             }
         },
 
-		columns:[{
+        columns:[{
             text: 'Key ID',
             dataIndex: 'keyId',
             width: 230,
@@ -106,9 +106,9 @@ Scalr.regPage('Scalr.ui.core.api2', function () {
             resizable: false
         }],
 
-		dockedItems: [{
-			xtype: 'toolbar',
-			dock: 'top',
+        dockedItems: [{
+            xtype: 'toolbar',
+            dock: 'top',
             ui: 'simple',
             defaults: {
                 margin: '0 0 0 12',
@@ -117,9 +117,9 @@ Scalr.regPage('Scalr.ui.core.api2', function () {
                         grid = this.up('grid'),
                         store = grid.getStore(),
                         actionMessages = {
-                            'delete': ['Delete selected API key(s): %s ?', 'Deleting selected API key(s) ...'],
-                            activate: ['Activate selected API key(s): %s ?', 'Activating selected API key(s) ...'],
-                            deactivate: ['Deactivate selected API key(s): %s ?', 'Deactivating selected API key(s) ...']
+                            'delete': ['Delete selected API key(s): %s&nbsp;?', 'Deleting selected API key(s) ...'],
+                            activate: ['Activate selected API key(s): %s&nbsp;?', 'Activating selected API key(s) ...'],
+                            deactivate: ['Deactivate selected API key(s): %s&nbsp;?', 'Deactivating selected API key(s) ...']
                         },
                         selModel = grid.getSelectionModel(),
                         ids = [],
@@ -169,10 +169,10 @@ Scalr.regPage('Scalr.ui.core.api2', function () {
                     Scalr.Request(request);
                 }
             },
-			items: [{
-				xtype: 'filterfield',
+            items: [{
+                xtype: 'filterfield',
                 itemId: 'filterfield',
-				store: store,
+                store: store,
                 filterFields: ['name', 'keyId'],
                 margin: 0,
                 listeners: {
@@ -202,28 +202,36 @@ Scalr.regPage('Scalr.ui.core.api2', function () {
                                 grid.getView().focusRow(record[0]);
 
                                 Scalr.utils.Window({
-                                    title: 'Secret Key',
+                                    title: 'New api key',
                                     xtype: 'form',
-                                    width: 460,
+                                    width: 620,
                                     items: [{
                                         xtype: 'fieldset',
-                                        cls: 'x-fieldset-separator-none',
                                         items: [{
                                             xtype: 'textfield',
+                                            fieldLabel: 'Key id',
                                             anchor: '100%',
                                             readOnly: true,
-                                            value: record[0].get('secretKey'),
-                                            listeners: {
-                                                afterrender: function() {
-                                                    this.focus();
-                                                    this.inputEl.dom.select();
-                                                }
-                                            }
+                                            selectOnFocus: true,
+                                            value: record[0].get('keyId')
+                                        }, {
+                                            xtype: 'textfield',
+                                            fieldLabel: 'Secret key',
+                                            anchor: '100%',
+                                            readOnly: true,
+                                            selectOnFocus: true,
+                                            value: record[0].get('secretKey')
+                                        }, {
+                                            xtype: 'displayfield',
+                                            cls: 'x-form-field-warning',
+                                            anchor: '100%',
+                                            value: 'Please save secret key. You won\'t be able to get it after closing this window.'
                                         }]
                                     }],
                                     dockedItems: [{
                                         xtype: 'container',
                                         dock: 'bottom',
+                                        cls: 'x-docked-buttons',
                                         layout: {
                                             type: 'hbox',
                                             pack: 'center'
@@ -231,7 +239,7 @@ Scalr.regPage('Scalr.ui.core.api2', function () {
                                         items: [{
                                             xtype: 'button',
                                             text: 'Close',
-                                            margin: '0 0 18 0',
+                                            minWidth: 150,
                                             handler: function() {
                                                 this.up('form').close();
                                             }
@@ -267,8 +275,8 @@ Scalr.regPage('Scalr.ui.core.api2', function () {
                 disabled: true,
                 tooltip: 'Delete'
             }]
-		}]
-	});
+        }]
+    });
 
     var form = Ext.create('Ext.form.Panel', {
         hidden: true,
@@ -392,12 +400,12 @@ Scalr.regPage('Scalr.ui.core.api2', function () {
                     });
                 }
             },{
-				itemId: 'cancel',
-				xtype: 'button',
-				text: 'Cancel',
-				handler: function() {
+                itemId: 'cancel',
+                xtype: 'button',
+                text: 'Cancel',
+                handler: function() {
                     grid.clearSelectedRecord();
-				}
+                }
             }]
         }]
 

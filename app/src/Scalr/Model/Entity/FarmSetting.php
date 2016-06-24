@@ -2,6 +2,8 @@
 
 namespace Scalr\Model\Entity;
 
+use Scalr\Model\Entity\Account\User;
+
 /**
  * Farm Settings entity
  *
@@ -12,7 +14,6 @@ namespace Scalr\Model\Entity;
  */
 class FarmSetting extends Setting
 {
-
     const CRYPTO_KEY = 'crypto.key';
 
     const SZR_UPD_REPOSITORY = 'szr.upd.repository';
@@ -38,6 +39,9 @@ class FarmSetting extends Setting
     const EC2_VPC_ID = 'ec2.vpc.id';
     const EC2_VPC_REGION = 'ec2.vpc.region';
 
+    const CREATED_BY_ID = "created.by.id";
+    const CREATED_BY_EMAIL = "created.by.email";
+
     //Beware lest you forget to add a new properties to cloneFarm methhod
 
     /**
@@ -48,4 +52,45 @@ class FarmSetting extends Setting
      * @var int
      */
     public $farmId;
+
+    /**
+     * Add record to history setting. Changes are not saved automatically.
+     *
+     * @param   Farm    $farm   Farm object
+     * @param   User    $owner  New owner
+     * @param   User    $user   User who changes owner for this farm
+     */
+    public static function addOwnerHistory(Farm $farm, User $owner, User $user)
+    {
+        $history = unserialize($farm->settings[self::OWNER_HISTORY]);
+
+        if (!is_array($history)) {
+            $history = [];
+        }
+
+        $history[] = [
+            'newId'             => $owner->id,
+            'newEmail'          => $owner->email,
+            'changedById'       => $user->id,
+            'changedByEmail'    => $user->email,
+            'dt'                => date('Y-m-d H:i:s')
+        ];
+        $farm->settings[self::OWNER_HISTORY] = serialize($history);
+    }
+
+    /**
+     * Get history of changes
+     *
+     * @param   Farm    $farm   Farm object
+     * @return  array
+     */
+    public static function getOwnerHistory(Farm $farm)
+    {
+        $history = unserialize($farm->settings[self::OWNER_HISTORY]);
+        if (!is_array($history)) {
+            $history = [];
+        }
+
+        return $history;
+    }
 }

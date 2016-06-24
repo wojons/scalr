@@ -109,7 +109,6 @@ class Update20150116130622 extends AbstractUpdate implements SequenceInterface
 
             $this->recrypt('ssh_keys', ['private_key', 'public_key']);
             $this->recrypt('services_ssl_certs', ['ssl_pkey', 'ssl_pkey_password']);
-            $this->recrypt('dm_sources', ['auth_info']);
             $this->recrypt('account_user_settings', ['value'], "WHERE `name` = 'security.2fa.ggl.key'", ['user_id', 'name']);
             $this->recrypt('services_chef_servers', ['auth_key', 'v_auth_key']);
 

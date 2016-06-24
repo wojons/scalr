@@ -13,7 +13,8 @@ Scalr.regPage('Scalr.ui.admin.accounts.edit', function (loadParams, moduleParams
             items: [{
                 xtype: 'textfield',
                 name: 'name',
-                fieldLabel: 'Name'
+                fieldLabel: 'Name',
+                allowBlank: false
             }, {
                 xtype: 'textarea',
                 name: 'comments',
@@ -28,13 +29,15 @@ Scalr.regPage('Scalr.ui.admin.accounts.edit', function (loadParams, moduleParams
                 xtype: 'textfield',
                 name: 'ownerEmail',
                 vtype: Scalr.flags['authMode'] == 'scalr' ? 'email' : null,
-                fieldLabel: Scalr.flags['authMode'] == 'ldap' ? 'LDAP login' : 'Email'
+                fieldLabel: Scalr.flags['authMode'] == 'ldap' ? 'LDAP login' : 'Email',
+                allowBlank: false
             }, {
                 xtype: 'scalrpasswordfield',
                 name: 'ownerPassword',
                 itemId: 'password',
                 vtype: 'password',
                 otherPassField: 'cpassword',
+                allowBlank: false,
                 minPasswordLengthAdmin: true,
                 hidden: Scalr.flags['authMode'] == 'ldap',
                 disabled: Scalr.flags['authMode'] == 'ldap',

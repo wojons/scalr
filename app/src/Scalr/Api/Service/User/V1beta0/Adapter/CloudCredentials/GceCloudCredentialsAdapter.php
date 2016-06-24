@@ -65,14 +65,20 @@ class GceCloudCredentialsAdapter extends CloudCredentialsAdapter
                 $client->setScopes(['https://www.googleapis.com/auth/compute']);
 
                 $key = base64_decode($ccProps[Entity\CloudCredentialsProperty::GCE_KEY]);
-                $client->setAssertionCredentials(new \Google_Auth_AssertionCredentials(
-                    $ccProps[Entity\CloudCredentialsProperty::GCE_SERVICE_ACCOUNT_NAME],
-                    array('https://www.googleapis.com/auth/compute'),
-                    $key,
-                    $ccProps[Entity\CloudCredentialsProperty::GCE_JSON_KEY] ? null : 'notasecret'
-                ));
-
-                //$client->setUseObjects(true);
+                // If it's not a json key we need to convert PKCS12 to PEM
+                if (!$ccProps[Entity\CloudCredentialsProperty::GCE_JSON_KEY]) {
+                    @openssl_pkcs12_read($key, $certs, 'notasecret');
+                    $key = $certs['pkey'];
+                }
+                
+                $client->setAuthConfig([
+                    'type' => 'service_account',
+                    'project_id' => $ccProps[Entity\CloudCredentialsProperty::GCE_PROJECT_ID],
+                    'private_key' => $key,
+                    'client_email' => $ccProps[Entity\CloudCredentialsProperty::GCE_SERVICE_ACCOUNT_NAME],
+                    'client_id' => $ccProps[Entity\CloudCredentialsProperty::GCE_CLIENT_ID]
+                ]);
+                
                 $client->setClientId($ccProps[Entity\CloudCredentialsProperty::GCE_CLIENT_ID]);
 
                 $gce = new \Google_Service_Compute($client);

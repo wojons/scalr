@@ -30,20 +30,20 @@ class Update20150923084008 extends AbstractUpdate implements SequenceInterface
 
     protected function isApplied1($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_ORPHANED_SERVERS') && $this->db->GetOne("
+        return defined('Scalr\\Acl\\Acl::RESOURCE_DISCOVERY_SERVERS') && $this->db->GetOne("
             SELECT `granted` FROM `acl_role_resources`
             WHERE `resource_id` = ? AND `role_id` = ?
             LIMIT 1
         ", array(
-            Acl::RESOURCE_ORPHANED_SERVERS,
+            Acl::RESOURCE_DISCOVERY_SERVERS,
             Acl::ROLE_ID_FULL_ACCESS,
         )) == 1;
     }
 
     protected function validateBefore1($stage)
     {
-        return defined('Scalr\\Acl\\Acl::RESOURCE_ORPHANED_SERVERS') &&
-               Definition::has(Acl::RESOURCE_ORPHANED_SERVERS);
+        return defined('Scalr\\Acl\\Acl::RESOURCE_DISCOVERY_SERVERS') &&
+               Definition::has(Acl::RESOURCE_DISCOVERY_SERVERS);
     }
 
     protected function run1($stage)
@@ -54,7 +54,7 @@ class Update20150923084008 extends AbstractUpdate implements SequenceInterface
             VALUES (?, ?, 1)
         ", array(
             Acl::ROLE_ID_FULL_ACCESS,
-            Acl::RESOURCE_ORPHANED_SERVERS
+            Acl::RESOURCE_DISCOVERY_SERVERS
         ));
     }
 }

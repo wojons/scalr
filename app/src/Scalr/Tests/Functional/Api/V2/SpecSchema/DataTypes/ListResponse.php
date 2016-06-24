@@ -6,7 +6,7 @@ namespace Scalr\Tests\Functional\Api\V2\SpecSchema\DataTypes;
  * ListResult object
  *
  * @author Andrii Penchuk <a.penchuk@scalr.com>
- * @since 5.6.14 (03.12.2015)
+ * @since 5.11 (03.12.2015)
  */
 class ListResponse extends AbstractSpecObject
 {

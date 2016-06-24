@@ -10,6 +10,7 @@ use Scalr\DataType\ScopeInterface;
 use Scalr\Model\Entity;
 use Scalr\Model\Entity\Image;
 use DateTime;
+use SERVER_PLATFORMS;
 use UnexpectedValueException;
 
 /**
@@ -37,6 +38,7 @@ class ImageAdapter extends ApiEntityAdapter
         self::RULE_TYPE_TO_DATA     => [
             'hash' => 'id', 'name', 'id' => 'cloudImageId', 'cloudLocation',
             'platform' => 'cloudPlatform', '_added' => 'added', 'dtLastUsed' => 'lastUsed',
+            'isScalarized' => 'scalrAgentInstalled', 'hasCloudInit' => 'cloudInitInstalled',
             '_architecture' => 'architecture', 'size', 'isDeprecated' => 'deprecated', 'source',
             'status', 'type', 'statusError',
             '_scope' => 'scope',
@@ -49,7 +51,8 @@ class ImageAdapter extends ApiEntityAdapter
         self::RULE_TYPE_FILTERABLE  => [
             'id', 'name', 'scope', 'os',
             'cloudPlatform', 'cloudImageId', 'architecture',
-            'cloudLocation', 'status', 'source', 'deprecated'
+            'cloudLocation', 'status', 'source', 'deprecated',
+            'scalrAgentInstalled', 'cloudInitInstalled'
         ],
 
         self::RULE_TYPE_SORTING     => [self::RULE_TYPE_PROP_DEFAULT => ['dtAdded' => true]],
@@ -209,9 +212,18 @@ class ImageAdapter extends ApiEntityAdapter
         } else {
             $image = Entity\Image::findOne([
                 ['id'            => $entity->id],
-                ['$or'           => [['envId' => $entity->envId], ['envId' => null]]],
                 ['platform'      => $entity->platform],
-                ['cloudLocation' => $entity->cloudLocation]
+                ['cloudLocation' => (string) $entity->cloudLocation],
+                ['$or' => [
+                    ['accountId' => null],
+                    ['$and' => [
+                        ['accountId' => $entity->accountId],
+                        ['$or' => [
+                            ['envId' => null],
+                            ['envId' => $entity->envId]
+                        ]]
+                    ]]
+                ]]
             ]);
 
             if ($image) {
@@ -253,6 +265,14 @@ class ImageAdapter extends ApiEntityAdapter
         //Tries to find out the specified OS
         if (empty(Entity\Os::findPk($entity->osId))) {
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "OS with id '{$entity->osId}' not found.");
+        }
+
+        if (empty($entity->platform)) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Missed property platform");
+        }
+
+        if (!isset(SERVER_PLATFORMS::GetList()[$entity->platform])) {
+            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, "Unexpected platform value");
         }
     }
 }

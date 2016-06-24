@@ -5,7 +5,7 @@ use Scalr\Stats\CostAnalytics\Entity\PriceHistoryEntity;
 use Scalr\Stats\CostAnalytics\Entity\PriceEntity;
 use Scalr\Model\Collections\ArrayCollection;
 use Scalr\Modules\PlatformFactory;
-use \SERVER_PLATFORMS;
+use SERVER_PLATFORMS;
 use Scalr\Model\Entity\CloudLocation;
 
 /**

@@ -28,7 +28,7 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
             }
 
             $servers = $dbFarmRole->GetServersByFilter();
-            for ($i = 0; $i < count($servers); $i++) {
+            for ($i = 0, $c = count($servers); $i < $c; $i++) {
                 if ($servers[$i]->status != SERVER_STATUS::TERMINATED && $servers[$i]->index) {
                     $map[$servers[$i]->index - 1]['serverIndex'] = $servers[$i]->index;
                     $map[$servers[$i]->index - 1]['serverId'] = $servers[$i]->serverId;
@@ -38,12 +38,12 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
             }
 
             $ips = $this->db->GetAll('SELECT ipaddress, instance_index FROM elastic_ips WHERE farm_roleid = ?', array($dbFarmRole->ID));
-            for ($i = 0; $i < count($ips); $i++) {
+            for ($i = 0, $c = count($ips); $i < $c; $i++) {
                 $map[$ips[$i]['instance_index'] - 1]['elasticIp'] = $ips[$i]['ipaddress'];
             }
         }
 
-        $ccProps = $this->environment->cloudCredentials($platform)->properties;
+        $ccProps = $this->environment->keychain($platform)->properties;
         $accountName = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_ACCOUNT_NAME];
         $domainId = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_DOMAIN_ID];
 
@@ -80,7 +80,7 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
                         if ($info['server_id'] && $itm['instanceId']) {
                             $dbServer = DBServer::LoadByID($info['server_id']);
                             if ($dbServer->GetProperty(CLOUDSTACK_SERVER_PROPERTIES::SERVER_ID) != $itm['instanceId']) {
-                                for ($i = 0; $i < count($map); $i++) {
+                                for ($i = 0, $c = count($map); $i < $c; $i++) {
                                     if ($map[$i]['elasticIp'] == $itm['ipAddress'])
                                         $map[$i]['warningInstanceIdDoesntMatch'] = true;
                                 }
@@ -116,25 +116,30 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
             //DO NOTHING
         }
 
-        foreach ($cs->listDiskOfferings() as $offering) {
-            $data['diskOfferings'][] = array(
-                'id' => (string)$offering->id,
-                'name' => $offering->displaytext,
-                'size' => $offering->disksize,
-                'type' => $offering->storagetype,
-                'custom_size' => $offering->iscustomized
-            );
+        $disks = $cs->listDiskOfferings();
+        if (!empty($disks)) {
+            foreach ($disks as $offering) {
+                $data['diskOfferings'][] = array(
+                    'id' => (string)$offering->id,
+                    'name' => $offering->displaytext,
+                    'size' => $offering->disksize,
+                    'type' => $offering->storagetype,
+                    'custom_size' => $offering->iscustomized
+                );
+            }
         }
 
-        foreach ($cs->listServiceOfferings() as $offering) {
-
-            $data['serviceOfferings'][] = array(
-                'id' => (string)$offering->id,
-                'name' => $offering->displaytext
-            );
+        $services = $cs->listServiceOfferings();
+        if (!empty($services)) {
+            foreach ($services as $offering) {
+                $data['serviceOfferings'][] = array(
+                    'id' => (string)$offering->id,
+                    'name' => $offering->displaytext
+                );
+            }
         }
 
-        $ccProps = $this->environment->cloudCredentials($this->getParam('platform'))->properties;
+        $ccProps = $this->environment->keychain($this->getParam('platform'))->properties;
         $accountName = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_ACCOUNT_NAME];
         $domainId = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_DOMAIN_ID];
 
@@ -206,7 +211,7 @@ class Scalr_UI_Controller_Platforms_Cloudstack extends Scalr_UI_Controller
             $cloudLocations = array($cloudLocation);
         }
 
-        $ccProps = $this->environment->cloudCredentials($platformName)->properties;
+        $ccProps = $this->environment->keychain($platformName)->properties;
         $accountName = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_ACCOUNT_NAME];
         $domainId = $ccProps[Entity\CloudCredentialsProperty::CLOUDSTACK_DOMAIN_ID];
 

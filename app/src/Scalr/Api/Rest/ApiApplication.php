@@ -4,11 +4,14 @@ namespace Scalr\Api\Rest;
 
 use ErrorException;
 use Exception;
-use Scalr\Api\DataType\ApiMessage;
 use Scalr\Api\Limiter;
+use Scalr\Api\Rest\Exception\StopException;
+use Scalr\Api\Rest\Http\Request;
 use Scalr\Api\Rest\Http\Response;
 use Scalr\Api\Rest\Routing\Route;
 use Scalr\DataType\ScopeInterface;
+use Scalr\LogCollector\AuditLoggerConfiguration;
+use Scalr\LogCollector\AuditLoggerRetrieveConfigurationInterface;
 use Scalr\Model\Entity;
 use Scalr\Api\Rest\Exception\ApiErrorException;
 use Scalr\Api\DataType\ErrorEnvelope;
@@ -19,7 +22,9 @@ use Scalr\Api\Rest\Exception\ApiInsufficientPermissionsException;
 use Scalr\Model\Entity\Account\User\ApiKeyEntity;
 use Scalr\Net\Ldap\Exception\LdapException;
 use Scalr\Net\Ldap\LdapClient;
-use Scalr\AuditLogger;
+use Scalr\LogCollector\AuditLogger;
+use Scalr;
+use RuntimeException;
 
 /**
  * ApiApplication
@@ -33,7 +38,7 @@ use Scalr\AuditLogger;
  * @property  \Scalr\Api\DataType\Warnings $warnings
  *            Gets Warnings object which is the part of the body API response
  */
-class ApiApplication extends Application
+class ApiApplication extends Application implements AuditLoggerRetrieveConfigurationInterface
 {
 
     const SETTING_SCALR_ENVIRONMENT = 'api.scalr-environment';
@@ -87,7 +92,7 @@ class ApiApplication extends Application
 
         $cont = $this->getContainer();
 
-        $cont->api->setShared('meta', function ($cont) {
+        $cont->api->setShared('meta', function () {
             return new Meta();
         });
 
@@ -169,7 +174,7 @@ class ApiApplication extends Application
      */
     public function setupRoutes()
     {
-        $this->group('/api', [$this, 'handleApiVersion'], [$this, 'authenticationMiddleware'], function() {
+        $this->group('/api', [$this, 'handleApiVersion'], [$this, 'preflightRequestHandlerMiddleware'], [$this, 'authenticationMiddleware'], function() {
             $this->group('/v:apiversion', function () {
                 $roleRequirements = ['roleId' => '\d+'];
                 $imageRequirements = ['imageId' => ApiApplication::REGEXP_UUID];
@@ -178,6 +183,8 @@ class ApiApplication extends Application
                 $ccRequirements = ['ccId' => ApiApplication::REGEXP_UUID];
                 $cloudCredsRequirements = ['cloudCredentialsId' => static::REGEXP_SHORT_UUID];
                 $orchestrationRuleRequirements = ['ruleId' => '\d+'];
+                $scriptRequirements = ['scriptId' => '\d+'];
+                $scriptVersionReqs = array_merge($scriptRequirements, ['versionNumber' => '\d+']);
 
                 $roleImageReqs = array_merge($roleRequirements, $imageRequirements);
                 $roleCategoryReqs = ['roleCategoryId' => '\d+'];
@@ -200,12 +207,45 @@ class ApiApplication extends Application
                     $osRequirements,
                     $ccRequirements,
                     $cloudCredsRequirements,
-                    $orchestrationRuleRequirements
+                    $orchestrationRuleRequirements,
+                    $scriptRequirements,
+                    $scriptVersionReqs
                 ) {
                     //All Account API routes are here
+                    $envRequirements = ['envId' => '\d+'];
+                    $teamsReqs = ['teamId' => '\d+'];
+                    $envCloudsReqs = array_merge($envRequirements, ['cloud' => '\w+']);
+                    $envTeamsReqs = array_merge($envRequirements, $teamsReqs);
 
                     $this->get('/os', ['controller' => 'User_Os:get']);
                     $this->get('/os/:osId', ['controller' => 'User_Os:fetch'], $osRequirements);
+
+                    $this->get('/teams', 'Account_Teams:describe');
+                    $this->post('/teams', 'Account_Teams:create');
+
+                    $this->get('/teams/:teamId', 'Account_Teams:fetch', $teamsReqs);
+                    $this->patch('/teams/:teamId', 'Account_Teams:modify', $teamsReqs);
+                    $this->delete('/teams/:teamId', 'Account_Teams:delete', $teamsReqs);
+
+                    $this->get('/acl-roles', 'Account_AclRoles:describe');
+
+                    $this->get('/environments', 'Account_Environments:describe');
+                    $this->post('/environments', 'Account_Environments:create');
+
+                    $this->get('/environments/:envId', 'Account_Environments:fetch', $envRequirements);
+                    $this->patch('/environments/:envId', 'Account_Environments:modify', $envRequirements);
+                    $this->delete('/environments/:envId', 'Account_Environments:delete', $envRequirements);
+
+                    $this->get('/environments/:envId/clouds', 'Account_Environments:describeClouds', $envRequirements);
+
+                    $this->get('/environments/:envId/clouds/:cloud', 'Account_Environments:fetchCloudCredentials', $envCloudsReqs);
+                    $this->post('/environments/:envId/clouds/:cloud', 'Account_Environments:attachCredentials', $envCloudsReqs);
+                    $this->delete('/environments/:envId/clouds/:cloud', 'Account_Environments:detachCredentials', $envCloudsReqs);
+
+                    $this->get('/environments/:envId/teams', 'Account_Environments:describeTeams', $envRequirements);
+                    $this->post('/environments/:envId/teams', 'Account_Environments:allowTeam', $envRequirements);
+
+                    $this->delete('/environments/:envId/teams/:teamId', 'Account_Environments:denyTeam', $envTeamsReqs);
 
                     //We explicitly set array of the options to exclude the Route Name as both environment and
                     //account levels have the same controllers and all registered Route Names must be unique withing the router.
@@ -216,6 +256,7 @@ class ApiApplication extends Application
                     $this->delete('/events/:eventId', ['controller' => 'User_Events:delete'], $eventRequirements);
 
                     $this->get('/images', ['controller' => 'User_Images:describe']);
+                    $this->post('/images', ['controller' => 'User_Images:register']);
 
                     $this->get('/images/:imageId', ['controller' => 'User_Images:fetch'], $imageRequirements);
                     $this->patch('/images/:imageId', ['controller' => 'User_Images:modify'], $imageRequirements);
@@ -238,8 +279,12 @@ class ApiApplication extends Application
 
                     $this->post('/roles/:roleId/images/:imageId/actions/:action/', ['controller' => 'User_Roles:replaceImage'], array_merge($roleImageReqs, ['action' => 'replace']));
 
-                    $this->get('/role-categories', ['controller' => 'User_RoleCategories:describe'], $roleCategoryReqs);
+                    $this->get('/role-categories', ['controller' => 'User_RoleCategories:describe']);
+                    $this->post('/role-categories', ['controller' => 'User_RoleCategories:create']);
+
                     $this->get('/role-categories/:roleCategoryId', ['controller' => 'User_RoleCategories:fetch'], $roleCategoryReqs);
+                    $this->patch('/role-categories/:roleCategoryId', ['controller' => 'User_RoleCategories:modify'], $roleCategoryReqs);
+                    $this->delete('/role-categories/:roleCategoryId', ['controller' => 'User_RoleCategories:delete'], $roleCategoryReqs);
 
                     $this->get('/roles/:roleId/global-variables', ['controller' => 'User_Roles:describeVariables'], $roleRequirements);
                     $this->post('/roles/:roleId/global-variables', ['controller' => 'User_Roles:createVariable'], $roleRequirements);
@@ -261,6 +306,20 @@ class ApiApplication extends Application
                     $this->get('/orchestration-rules/:ruleId', 'User_AccountScripts:fetch', $orchestrationRuleRequirements);
                     $this->patch('/orchestration-rules/:ruleId', 'User_AccountScripts:modify', $orchestrationRuleRequirements);
                     $this->delete('/orchestration-rules/:ruleId', 'User_AccountScripts:delete', $orchestrationRuleRequirements);
+
+                    $this->get('/scripts', ['controller' => 'User_Scripts:describe']);
+                    $this->post('/scripts', ['controller' => 'User_Scripts:create']);
+
+                    $this->get('/scripts/:scriptId', ['controller' => 'User_Scripts:fetch'], $scriptRequirements);
+                    $this->patch('/scripts/:scriptId', ['controller' => 'User_Scripts:modify'], $scriptRequirements);
+                    $this->delete('/scripts/:scriptId', ['controller' => 'User_Scripts:delete'], $scriptRequirements);
+
+                    $this->get('/scripts/:scriptId/script-versions', ['controller' => 'User_ScriptVersions:describe'], $scriptRequirements);
+                    $this->post('/scripts/:scriptId/script-versions', ['controller' => 'User_ScriptVersions:create'], $scriptRequirements);
+
+                    $this->get('/scripts/:scriptId/script-versions/:versionNumber', ['controller' => 'User_ScriptVersions:fetch'], $scriptVersionReqs);
+                    $this->patch('/scripts/:scriptId/script-versions/:versionNumber', ['controller' => 'User_ScriptVersions:modify'], $scriptVersionReqs);
+                    $this->delete('/scripts/:scriptId/script-versions/:versionNumber', ['controller' => 'User_ScriptVersions:delete'], $scriptVersionReqs);
 
                     $this->get("/cloud-credentials", ['controller' => 'User_CloudCredentials:describe']);
                     $this->post("/cloud-credentials", ['controller' => 'User_CloudCredentials:create']);
@@ -286,17 +345,20 @@ class ApiApplication extends Application
                     $osRequirements,
                     $ccRequirements,
                     $cloudCredsRequirements,
-                    $orchestrationRuleRequirements
+                    $orchestrationRuleRequirements,
+                    $scriptRequirements,
+                    $scriptVersionReqs
                 ) {
                     //All User API Environment level routes are here
-                    $scriptRequirements = ['scriptId' => '\d+'];
                     $farmRequirements = ['farmId' => '\d+'];
                     $farmRoleRequirements = ['farmRoleId' => '\d+'];
 
-                    $scriptVersionReqs = array_merge($scriptRequirements, ['versionNumber' => '\d+']);
                     $farmVariableReqs = array_merge($farmRequirements, ['variableName' => '\w+']);
                     $farmRoleVariableReqs = array_merge($farmRoleRequirements, ['variableName' => '\w+']);
                     $farmRoleScriptReqs = array_merge($farmRoleRequirements, $orchestrationRuleRequirements);
+                    $scalingMetricsReqs = ['metricName' => Entity\ScalingMetric::NAME_REGEXP];
+                    $farmRoleScalingRuleReqs = array_merge($farmRoleRequirements, ['scalingRuleName' => Entity\ScalingMetric::NAME_REGEXP]);
+                    $serverRequirements = ['serverId' => ApiApplication::REGEXP_UUID];
 
                     $this->get('/os', 'User_Os:get');
                     $this->get('/os/:osId', 'User_Os:fetch', $osRequirements);
@@ -331,8 +393,12 @@ class ApiApplication extends Application
 
                     $this->post('/roles/:roleId/images/:imageId/actions/:action/', 'User_Roles:replaceImage', array_merge($roleImageReqs, ['action' => 'replace']));
 
-                    $this->get('/role-categories', 'User_RoleCategories:describe', $roleCategoryReqs);
+                    $this->get('/role-categories', 'User_RoleCategories:describe');
+                    $this->post('/role-categories', 'User_RoleCategories:create');
+
                     $this->get('/role-categories/:roleCategoryId', 'User_RoleCategories:fetch', $roleCategoryReqs);
+                    $this->patch('/role-categories/:roleCategoryId', 'User_RoleCategories:modify', $roleCategoryReqs);
+                    $this->delete('/role-categories/:roleCategoryId', 'User_RoleCategories:delete', $roleCategoryReqs);
 
                     $this->get('/roles/:roleId/global-variables', 'User_Roles:describeVariables', $roleRequirements);
                     $this->post('/roles/:roleId/global-variables', 'User_Roles:createVariable', $roleRequirements);
@@ -355,6 +421,8 @@ class ApiApplication extends Application
                     $this->patch('/farms/:farmId', 'User_Farms:modify', $farmRequirements);
                     $this->delete('/farms/:farmId', 'User_Farms:delete', $farmRequirements);
 
+                    $this->get('/farms/:farmId/servers', 'User_Farms:describeServers', $farmRequirements);
+
                     $this->get('/farms/:farmId/global-variables', 'User_Farms:describeVariables', $farmRequirements);
                     $this->post('/farms/:farmId/global-variables', 'User_Farms:createVariable', $farmRequirements);
 
@@ -364,6 +432,7 @@ class ApiApplication extends Application
 
                     $this->post('/farms/:farmId/actions/launch', 'User_Farms:launch', $farmRequirements);
                     $this->post('/farms/:farmId/actions/terminate', 'User_Farms:terminate', $farmRequirements);
+                    $this->post('/farms/:farmId/actions/clone', 'User_Farms:clone', $farmRequirements);
 
                     $this->get('/farms/:farmId/farm-roles', 'User_FarmRoles:describe', $farmRequirements);
                     $this->post('/farms/:farmId/farm-roles', 'User_FarmRoles:create', $farmRequirements);
@@ -372,6 +441,9 @@ class ApiApplication extends Application
                     $this->patch('/farm-roles/:farmRoleId', 'User_FarmRoles:modify', $farmRoleRequirements);
                     $this->delete('/farm-roles/:farmRoleId', 'User_FarmRoles:delete', $farmRoleRequirements);
 
+                    $this->get('/farm-roles/:farmRoleId/servers', 'User_FarmRoles:describeServers', $farmRoleRequirements);
+                    $this->post('/farm-roles/:farmRoleId/actions/import-server', 'User_FarmRoles:importServer', $farmRoleRequirements);
+
                     $this->get('/farm-roles/:farmRoleId/placement', 'User_FarmRoles:describePlacement', $farmRoleRequirements);
                     $this->patch('/farm-roles/:farmRoleId/placement', 'User_FarmRoles:modifyPlacement', $farmRoleRequirements);
 
@@ -379,7 +451,12 @@ class ApiApplication extends Application
                     $this->patch('/farm-roles/:farmRoleId/instance', 'User_FarmRoles:modifyInstance', $farmRoleRequirements);
 
                     $this->get('/farm-roles/:farmRoleId/scaling', 'User_FarmRoles:describeScaling', $farmRoleRequirements);
+                    $this->post('/farm-roles/:farmRoleId/scaling', 'User_FarmRoles:createScalingRule', $farmRoleRequirements);
                     $this->patch('/farm-roles/:farmRoleId/scaling', 'User_FarmRoles:modifyScaling', $farmRoleRequirements);
+
+                    $this->get('/farm-roles/:farmRoleId/scaling/:scalingRuleName', 'User_FarmRoles:fetchScalingRule', $farmRoleScalingRuleReqs);
+                    $this->patch('/farm-roles/:farmRoleId/scaling/:scalingRuleName', 'User_FarmRoles:modifyScalingRule', $farmRoleScalingRuleReqs);
+                    $this->delete('/farm-roles/:farmRoleId/scaling/:scalingRuleName', 'User_FarmRoles:deleteScalingRule', $farmRoleScalingRuleReqs);
 
                     $this->get('/farm-roles/:farmRoleId/global-variables', 'User_FarmRoles:describeVariables', $farmRoleRequirements);
                     $this->post('/farm-roles/:farmRoleId/global-variables', 'User_FarmRoles:createVariable', $farmRoleRequirements);
@@ -394,6 +471,20 @@ class ApiApplication extends Application
                     $this->get('/farm-roles/:farmRoleId/orchestration-rules/:ruleId', 'User_FarmRoleScripts:fetch', $farmRoleScriptReqs);
                     $this->patch('/farm-roles/:farmRoleId/orchestration-rules/:ruleId', 'User_FarmRoleScripts:modify', $farmRoleScriptReqs);
                     $this->delete('/farm-roles/:farmRoleId/orchestration-rules/:ruleId', 'User_FarmRoleScripts:delete', $farmRoleScriptReqs);
+
+                    $this->get('/servers', 'User_Servers:describe');
+                    $this->get('/servers/:serverId', 'User_Servers:fetch', $serverRequirements);
+                    $this->post('/servers/:serverId/actions/suspend', 'User_Servers:suspend', $serverRequirements);
+                    $this->post('/servers/:serverId/actions/terminate', 'User_Servers:terminate', $serverRequirements);
+                    $this->post('/servers/:serverId/actions/resume', 'User_Servers:resume', $serverRequirements);
+                    $this->post('/servers/:serverId/actions/reboot', 'User_Servers:reboot', $serverRequirements);
+
+                    $this->get('/scaling-metrics', 'User_ScalingMetrics:describe');
+                    $this->post('/scaling-metrics', 'User_ScalingMetrics:create');
+
+                    $this->get('/scaling-metrics/:metricName', 'User_ScalingMetrics:fetch', $scalingMetricsReqs);
+                    $this->patch('/scaling-metrics/:metricName', 'User_ScalingMetrics:modify', $scalingMetricsReqs);
+                    $this->delete('/scaling-metrics/:metricName', 'User_ScalingMetrics:delete', $scalingMetricsReqs);
 
                     $this->get('/scripts', 'User_Scripts:describe');
                     $this->post('/scripts', 'User_Scripts:create');
@@ -432,6 +523,35 @@ class ApiApplication extends Application
         });
 
         return $this;
+    }
+
+    /**
+     * Preflight request middleware handler
+     *
+     * @throws StopException
+     */
+    public function preflightRequestHandlerMiddleware()
+    {
+        $origin = $this->request->getOrigin();
+        $requestMethod = $this->request->getMethod();
+        
+        if (!(empty($this->request->getUserAgent()) || empty($origin))) {
+            $allowedOrigins = (array) Scalr::getContainer()->config('scalr.system.api.allowed_origins');
+
+            if (!empty($allowedOrigins)) {
+                $this->response->setHeader('Access-Control-Allow-Origin', array_intersect(['*', $origin], $allowedOrigins) ? $origin : implode(' ', $allowedOrigins));
+                $this->response->setHeader('Vary', 'Origin, User-Agent');
+            }
+
+            if ($requestMethod === Request::METHOD_OPTIONS) {
+                $this->response->setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, PATCH, PUT, DELETE, OPTIONS');
+                $this->response->setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Scalr-Date, X-Scalr-Key-Id, X-Scalr-Signature, X-Scalr-Debug');
+                $this->stop();
+            }
+        } else if ($requestMethod === Request::METHOD_OPTIONS) {
+            $this->response->setHeader('Allow', 'GET, HEAD, POST, PATCH, PUT, DELETE, OPTIONS');
+            $this->stop();
+        }
     }
 
     /**
@@ -547,7 +667,7 @@ class ApiApplication extends Application
                 if ($bDebug && $ldap instanceof LdapClient && $ldap->getConfig()->debug) {
                     $this->meta->ldapDebug = $ldap->getLog();
                 }
-                throw new \RuntimeException($e->getMessage());
+                throw new RuntimeException($e->getMessage(), $e->getCode(), $e);
             }
         }
 
@@ -569,16 +689,8 @@ class ApiApplication extends Application
         //Releases auditloger to ensure it will be updated
         $container->release('auditlogger');
 
-        //Adjusts metadata to invoke audit loger
-        $container->setShared('auditlogger.metadata', function ($cont) use ($user) {
-            return (object) [
-                'user'        => $user,
-                'envId'       => null,
-                'remoteAddr'  => $this->request->getIp(),
-                'ruid'        => null,
-                'requestType' => AuditLogger::REQUEST_TYPE_API,
-                'systemTask'  => null,
-            ];
+        $container->set('auditlogger.request', function () {
+            return $this;
         });
     }
 
@@ -610,7 +722,6 @@ class ApiApplication extends Application
         }
 
         $this->setEnvironment($environment);
-
         //Sets Environment to Audit Logger
         $this->getContainer()->auditlogger->setEnvironmentId($environment->id);
     }
@@ -803,7 +914,7 @@ class ApiApplication extends Application
             //Check Entity level permission
             return $this->getContainer()->acl->hasAccessTo(
                 $args[0], $this->getUser(), $this->getEnvironment(),
-                (isset($args[1]) ? (bool) $args[1] : null)
+                (isset($args[1]) ? $args[1] : null)
             );
         } else {
             //Check ACL
@@ -845,5 +956,81 @@ class ApiApplication extends Application
     public function getScope()
     {
         return isset($this->env) ? ScopeInterface::SCOPE_ENVIRONMENT : (isset($this->user) ? ScopeInterface::SCOPE_ACCOUNT : ScopeInterface::SCOPE_SCALR);
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Api\Rest\Application::error()
+     */
+    public function error($e = null)
+    {
+        try {
+            parent::error($e);
+        } catch (StopException $e) {
+            $this->getContainer()->apilogger->log('api.error', $this->request, $this->response);
+            $this->stop();
+        }
+
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\LogCollector\AuditLoggerRetrieveConfigurationInterface::getAuditLoggerConfig()
+     */
+    public function getAuditLoggerConfig()
+    {
+        $config = new AuditLoggerConfiguration(AuditLogger::REQUEST_TYPE_API);
+
+        $config->user = $this->user;
+        $config->accountId = $this->user ? $this->user->getAccountId() : null;
+        $config->envId = $this->env ? $this->env->id : null;
+        $config->remoteAddr = $this->request->getIp();
+
+        return $config;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see Application::get()
+     */
+    public function get($path, $options, $requirements = [])
+    {
+        return parent::get($path, $options, $requirements)->addMethod(Request::METHOD_OPTIONS);
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see Application::post()
+     */
+    public function post($path, $options, $requirements = [])
+    {
+        return parent::post($path, $options, $requirements)->addMethod(Request::METHOD_OPTIONS);
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see Application::put()
+     */
+    public function put($path, $options, $requirements = [])
+    {
+        return parent::put($path, $options, $requirements)->addMethod(Request::METHOD_OPTIONS);
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see Application::patch()
+     */
+    public function patch($path, $options, $requirements = [])
+    {
+        return parent::patch($path, $options, $requirements)->addMethod(Request::METHOD_OPTIONS);
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see Application::delete()
+     */
+    public function delete($path, $options, $requirements = [])
+    {
+        return parent::delete($path, $options, $requirements)->addMethod(Request::METHOD_OPTIONS);
     }
 }

@@ -89,7 +89,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.create', function (loadParams,
                 layout: 'hbox',
                 items: [{
                     xtype: 'combo',
-                    store: Scalr.constants.ebsTypes,
+                    store: Scalr.utils.getEbsTypes(),
                     fieldLabel: 'Type',
                     valueField: 'id',
                     displayField: 'name',
@@ -176,7 +176,18 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.create', function (loadParams,
                 disabled: !!loadParams['snapshotId'],
                 boxLabel: 'Enable EBS encryption',
                 value: '0',
+                plugins: {
+                    ptype: 'fieldicons',
+                    icons: ['governance']
+                },
                 listeners: {
+                    afterrender: function() {
+                        if (!loadParams['snapshotId'] && (Scalr.getGovernance('ec2', 'aws.storage') || {})['require_encryption']) {
+                            this.setValue(true);
+                            this.setReadOnly(true);
+                            this.toggleIcon('governance', true);
+                        }
+                    },
                     change: function(comp, value) {
                         comp.next('[name="kmsKeyId"]').setVisible(value == 1).reset();
                     }
@@ -271,7 +282,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.create', function (loadParams,
                 cls: 'x-boundlist-alt',
                 tpl:
                     '<tpl for=".">' +
-                        '<div class="x-boundlist-item" style="height: auto; width: auto">' +
+                        '<div class="x-boundlist-item" style="height: auto; widtfh: auto">' +
                             '<div class="x-semibold">{name}</div>' +
                             '<tpl if="farmName && farmRoleName">' +
                                 '<div <div style="line-height: 28px;">{farmName} &rarr; {farmRoleName}</div>' +
@@ -297,7 +308,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.create', function (loadParams,
                     if (!type) {
                         zone = this.store.proxy.params.availabilityZone;
                     }
-                    this.emptyText =  type ? 'Please select server' : 'No running servers found in ' + zone;
+                    this.emptyText =  type ? 'Please select server' : 'No running servers with scalr agent installed found in ' + zone;
                     this.applyEmptyText();
                 },
                 listeners: {

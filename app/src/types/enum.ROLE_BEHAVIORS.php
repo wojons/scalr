@@ -29,7 +29,7 @@ final class ROLE_BEHAVIORS
     const CF_DEA 				= 'cf_dea';
     const CF_SERVICE 			= 'cf_service';
 
-    static public function GetCategoryId($const) {
+    public static function GetCategoryId($const) {
 
         $behavior = explode(",", $const);
 
@@ -82,7 +82,7 @@ final class ROLE_BEHAVIORS
             return 8;
     }
 
-    static public function GetName($const = null, $all = false)
+    public static function GetName($const = null, $all = false)
     {
         $types = array(
             self::BASE	 => _("Base"),

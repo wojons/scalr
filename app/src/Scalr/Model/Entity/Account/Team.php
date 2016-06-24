@@ -18,7 +18,7 @@ class Team extends AbstractEntity
      * The identifier of the Team
      *
      * @Id
-     * @GeteratedValue
+     * @GeneratedValue
      * @Column(type="integer")
      * @var int
      */
@@ -55,4 +55,15 @@ class Team extends AbstractEntity
      * @var string
      */
     public $accountRoleId;
+
+    /**
+     * {@inheritdoc}
+     * @see AbstractEntity::delete()
+     */
+    public function delete()
+    {
+        parent::delete();
+        TeamEnvs::deleteByTeamId($this->id);
+        TeamUser::deleteByTeamId($this->id);
+    }
 }

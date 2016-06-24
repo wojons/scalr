@@ -4,7 +4,7 @@ use Scalr\Modules\PlatformFactory;
 
 class Scalr_UI_Controller_Tools_Aws extends Scalr_UI_Controller
 {
-    static public function getAwsLocations()
+    public static function getAwsLocations()
     {
         $locations = array();
 

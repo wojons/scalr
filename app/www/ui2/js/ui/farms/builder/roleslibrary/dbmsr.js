@@ -7,23 +7,20 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
         suspendUpdateEvent: 0,
 
         layout: 'anchor',
-        /*defaults: {
-            anchor: '100%',
-            cls: 'x-container-fieldset x-fieldset-separator-bottom'
-        },*/
 
         isVisibleForRole: function(record) {
             return record.isDbMsr();
         },
 
         onSettingsUpdate: function(record, name, value) {
-            var me = this;
+            var me = this,
+                platform = record.get('platform');
             me.suspendUpdateEvent++;
-            if (name === 'aws.instance_type' || name === 'gce.machine-type') {
+            if (name === 'instance_type' && Ext.Array.contains(['ec2', 'gce'], platform)) {
                 me.refreshStorageEngine(record);
                 me.refreshStorageDisks(record);
                 me.refreshDisksCheckboxes(record, 'lvm_settings');
-                if (name === 'aws.instance_type') {
+                if (platform === 'ec2') {
                     me.refreshEbsEncrypted(record, value);
                 }
             }
@@ -34,10 +31,22 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
             var me = this;
             record.loadInstanceTypeInfo(function(instanceTypeInfo){
                 var field = me.down('[name="db.msr.data_storage.ebs.encrypted"]'),
+                    readOnly = false,
+                    value = false,
                     ebsEncryptionSupported = instanceTypeInfo ? instanceTypeInfo.ebsencryption || false : true;
                 if (field) {
-                    field.setValue(!ebsEncryptionSupported ? false : field.getValue());
-                    field.setReadOnly(!ebsEncryptionSupported);
+                    readOnly = !ebsEncryptionSupported;
+                    value = !ebsEncryptionSupported ? false : field.getValue();
+                    if (ebsEncryptionSupported && (Scalr.getGovernance('ec2', 'aws.storage') || {})['require_encryption']) {
+                        readOnly = true;
+                        value = true;
+                        field.toggleIcon('governance', true);
+                    } else {
+                        field.toggleIcon('governance', false);
+                    }
+                    field.encryptionSupported = ebsEncryptionSupported;
+                    field.setValue(value);
+                    field.setReadOnly(readOnly);
                 }
             }, instType);
         },
@@ -92,10 +101,8 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                 cont = this.down('#' + itemId),
                 instanceType;
 
-			if (platform === 'gce') {
-				instanceType = settings['gce.machine-type'];
-			} else if (platform === 'ec2') {
-				instanceType = settings['aws.instance_type'];
+			if (Ext.Array.contains(['ec2', 'gce'], platform)) {
+				instanceType = settings['instance_type'];
 			}
 
             cont.suspendLayouts();
@@ -183,7 +190,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                 }
             }
             if (platform === 'ec2') {
-                if (instType = this.up('form').getForm().findField('instanceType').getValue()) {
+                if (instType = this.up('form').getForm().findField('instance_type').getValue()) {
                     this.refreshEbsEncrypted(record, instType);
                 }
             }
@@ -468,7 +475,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                             margin: '0 20 0 0',
                             items: [{
                                 xtype: 'combo',
-                                store: Scalr.constants.ebsTypes,
+                                store: Scalr.utils.getEbsTypes(),
                                 allowChangeable: false,
                                 fieldLabel: 'EBS type',
                                 labelWidth: 102,
@@ -550,12 +557,12 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                             ptype: 'fieldicons',
                             icons: [
                                 {id: 'question', tooltip: 'EBS encryption is not supported by selected instance type'},
-                                {id: 'szrversion', tooltipData: {version: '2.9.25'}}
+                                'governance'
                             ]
                         },
                         listeners: {
                             writeablechange: function(comp, readOnly) {
-                                this.toggleIcon('question', readOnly);
+                                this.toggleIcon('question', readOnly && !comp.encryptionSupported);
                             }
                         }
 
@@ -615,14 +622,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                         editable: false,
                         queryMode: 'local',
                         value: 'pd-standard',
-                        name: 'db.msr.data_storage.gced.type',
-                        plugins: {
-                            ptype: 'fieldicons',
-                            position: 'outer',
-                            icons: [
-                                {id: 'szrversion', tooltipData: {version: '3.5.19'}}
-                            ]
-                        }
+                        name: 'db.msr.data_storage.gced.type'
                     }]
                 },{
                     xtype: 'container',
@@ -699,7 +699,7 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.dbmsr', function () {
                             layout: 'hbox',
                             items: [{
                                 xtype: 'combo',
-                                store: Scalr.constants.ebsTypes,
+                                store: Scalr.utils.getEbsTypes(),
                                 allowChangeable: false,
                                 fieldLabel: 'EBS type',
                                 labelWidth: 80,

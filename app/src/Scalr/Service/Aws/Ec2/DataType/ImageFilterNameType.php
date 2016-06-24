@@ -49,7 +49,7 @@ class ImageFilterNameType extends StringType
 
     /**
      * The volume type of the Amazon EBS volume.
-     * Valid values: standard | io1 | gp2
+     * Valid values: standard | io1 | gp2 | st1 | sc1
      */
     const TYPE_BLOCK_DEVICE_MAPPING_VOLUME_TYPE = 'block-device-mapping.volume-type';
 

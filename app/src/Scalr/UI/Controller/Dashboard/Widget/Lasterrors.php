@@ -20,16 +20,14 @@ class Scalr_UI_Controller_Dashboard_Widget_Lasterrors extends Scalr_UI_Controlle
             $params['errorCount'] = 10;
         }
 
-        $sql = 'SELECT l.time, l.message, l.serverid as server_id, l.cnt
+        $sql = "SELECT l.time, l.message, l.serverid as server_id, l.cnt
             FROM logentries l
             INNER JOIN farms f ON f.id = l.farmid
             WHERE l.severity = 4
-            AND f.env_id = ?';
+            AND f.env_id = ? AND " . $this->request->getFarmSqlQuery();
         $args = [$this->getEnvironmentId()];
 
-        list($sql, $args) = $this->request->prepareFarmSqlQuery($sql, $args, 'f');
-
-        $sql .= ' ORDER BY time DESC LIMIT 0, ?';
+        $sql .= " ORDER BY time DESC LIMIT 0, ?";
         $args[] = $params['errorCount'];
 
         $r = $this->db->Execute($sql, $args);

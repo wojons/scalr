@@ -119,6 +119,9 @@ class ApiEntityAdapter extends BaseAdapter
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, sprintf($message, implode(', ', $notAlterable)));
         }
 
+        $settingsRules = null;
+        $collection = null;
+
         foreach ($rules[static::RULE_TYPE_ALTERABLE] as $key) {
             if (!property_exists($object, $key)) {
                 continue;
@@ -197,7 +200,10 @@ class ApiEntityAdapter extends BaseAdapter
             //Search criteria
             $criteria = $criteria ?: [];
 
+            $settingsRules = null;
+
             foreach ($rules[static::RULE_TYPE_FILTERABLE] as $property) {
+                $key = null;
                 //Gets value from the request
                 $filterValue = $this->controller->params($property);
                 if ($filterValue === null) {
@@ -216,8 +222,22 @@ class ApiEntityAdapter extends BaseAdapter
                                 $from = (object)[$property => $filterValue];
                                 $addCriteria = $this->$key($from, null, self::ACT_GET_FILTER_CRITERIA);
                                 if (!empty($addCriteria)) {
+                                    if (isset($addCriteria[AbstractEntity::STMT_FROM])) {
+                                        if (!isset($criteria[AbstractEntity::STMT_FROM])) {
+                                            $criteria[AbstractEntity::STMT_FROM] = $entity->table();
+                                        }
+                                        $criteria[AbstractEntity::STMT_FROM] .= " " . $addCriteria[AbstractEntity::STMT_FROM];
+                                    }
+
+                                    if (isset($addCriteria[AbstractEntity::STMT_WHERE])) {
+                                        if (!empty($criteria[AbstractEntity::STMT_WHERE])) {
+                                            $criteria[AbstractEntity::STMT_WHERE] .= " AND (" . $addCriteria[AbstractEntity::STMT_WHERE] . ")";
+                                        } else {
+                                            $criteria[AbstractEntity::STMT_WHERE] = $addCriteria[AbstractEntity::STMT_WHERE];
+                                        }
+                                    }
                                     //Latter value should not overwrite the previous
-                                    $criteria = array_merge($criteria, $addCriteria);
+                                    $criteria = array_merge($addCriteria, $criteria);
                                 }
                                 continue;
                             }
@@ -227,13 +247,22 @@ class ApiEntityAdapter extends BaseAdapter
                     }
                 }
 
-                if (empty($property) && !empty($rules[static::RULE_TYPE_SETTINGS]) && method_exists($entity, 'getSettingCriteria')) {
+                if (empty($key) && !empty($rules[static::RULE_TYPE_SETTINGS]) && method_exists($entity, 'getSettingCriteria')) {
                     if (!isset($settingsRules)) {
                         $settingsRules = $this->getSettingsRules();
                     }
 
-                    if (($property = array_search($key, $settingsRules)) !== false) {
-                        $criteria = $entity->getSettingCriteria($property, $filterValue, $criteria);
+                    if (($key = array_search($property, $settingsRules)) !== false) {
+                        if (is_object($filterValue) || is_array($filterValue)) {
+                            throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Filter value must be a string");
+                        }
+
+                        if (empty($criteria[AbstractEntity::STMT_FROM])) {
+                            $criteria[AbstractEntity::STMT_FROM] = " {$entity->table()} ";
+                        }
+
+                        $criteria = $entity->getSettingCriteria($key, $filterValue, $criteria);
+                        continue;
                     }
                 }
 
@@ -439,7 +468,7 @@ class ApiEntityAdapter extends BaseAdapter
         $rules = $this->getRules();
 
         if (!empty($rules[static::RULE_TYPE_TO_DATA])) {
-            $validFields = array_values($rules[static::RULE_TYPE_TO_DATA]);
+            $validFields = $rules[static::RULE_TYPE_TO_DATA];
         } else {
             //All fields from the Entity are allowed to be in the data object
             $entityClass = $this->getEntityClass();
@@ -447,11 +476,12 @@ class ApiEntityAdapter extends BaseAdapter
             $validFields = [];
             foreach ($entity->getIterator()->fields() as $field) {
                 /* @var $field \Scalr\Model\Loader\Field */
-                $validFields[] = $field->name;
+                $validFields[$field->name] = $field->name;
             }
         }
 
-        $doesNotExist = array_diff(array_keys(get_object_vars($object)), $validFields);
+        $objectVars = get_object_vars($object);
+        $doesNotExist = array_diff(array_keys($objectVars), $validFields);
 
         if (!empty($rules[static::RULE_TYPE_SETTINGS])) {
             $doesNotExist = array_diff($doesNotExist, array_values($this->getSettingsRules()));
@@ -465,6 +495,17 @@ class ApiEntityAdapter extends BaseAdapter
             }
 
             throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_STRUCTURE, sprintf($message, implode(', ', $doesNotExist)));
+        }
+
+        foreach ($objectVars as $property => $val) {
+            if (is_string($val)) {
+                if (($key = array_search($property, $validFields)) && $key[0] === '_' && method_exists($this, $key)) {
+                    //It is callable
+                    continue;
+                } elseif ($val != strip_tags($val)) {
+                    throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, sprintf("Property %s contains invalid characters.", $property));
+                }
+            }
         }
     }
 
@@ -486,9 +527,9 @@ class ApiEntityAdapter extends BaseAdapter
             $collection = $this->getSettingsCollection($entity);
 
             foreach ($this->getSettingsRules() as $key => $property) {
-                $key = is_int($key) ? $property : $key;
-
-                $collection[$key] = $data->$property;
+                if (isset($data->$property)) {
+                    $collection[is_int($key) ? $property : $key] = $data->$property;
+                }
             }
         }
 
@@ -551,6 +592,8 @@ class ApiEntityAdapter extends BaseAdapter
      */
     public function getSettingsRules()
     {
-        return array_map(function ($field) { return $field[0] == '!' ? substr($field, 1) : $field; }, $this->rules[static::RULE_TYPE_SETTINGS]);
+        return array_map(function ($field) {
+            return $field[0] == '!' ? substr($field, 1) : $field;
+        }, $this->rules[static::RULE_TYPE_SETTINGS]);
     }
 }

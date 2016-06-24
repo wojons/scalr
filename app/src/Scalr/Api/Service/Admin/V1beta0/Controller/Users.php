@@ -6,7 +6,7 @@ use Scalr\Api\Rest\Controller\ApiController;
 use Scalr\Api\Rest\Exception\ApiNotImplementedErrorException;
 
 /**
- * Admin/Version-1/Users API Controller
+ * Admin/Users API Controller
  *
  * @author   Vitaliy Demidov   <vitaliy@scalr.com>
  * @since    5.4.0  (09.02.2015)

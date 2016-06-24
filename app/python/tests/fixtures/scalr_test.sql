@@ -535,21 +535,6 @@ CREATE TABLE `autosnap_settings` (
 ) ENGINE=InnoDB AUTO_INCREMENT=1096 DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Table structure for table `billing_packages`
---
-
-DROP TABLE IF EXISTS `billing_packages`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `billing_packages` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(255) DEFAULT NULL,
-  `cost` float(7,2) DEFAULT NULL,
-  `group` tinyint(2) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=MyISAM AUTO_INCREMENT=6 DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `bundle_task_log`
@@ -864,21 +849,6 @@ CREATE TABLE `comments` (
 ) ENGINE=InnoDB AUTO_INCREMENT=4500 DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Table structure for table `countries`
---
-
-DROP TABLE IF EXISTS `countries`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `countries` (
-  `id` int(5) NOT NULL AUTO_INCREMENT,
-  `name` varchar(64) NOT NULL DEFAULT '',
-  `code` char(2) NOT NULL DEFAULT '',
-  PRIMARY KEY (`id`),
-  KEY `IDX_COUNTRIES_NAME` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=240 DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `debug_scripting`
@@ -1225,38 +1195,6 @@ CREATE TABLE `events` (
 ) ENGINE=InnoDB AUTO_INCREMENT=12097610 DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Table structure for table `farm_event_observers`
---
-
-DROP TABLE IF EXISTS `farm_event_observers`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `farm_event_observers` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `farmid` int(11) DEFAULT NULL,
-  `event_observer_name` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `NewIndex1` (`farmid`)
-) ENGINE=InnoDB AUTO_INCREMENT=1065 DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `farm_event_observers_config`
---
-
-DROP TABLE IF EXISTS `farm_event_observers_config`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `farm_event_observers_config` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `observerid` int(11) DEFAULT NULL,
-  `key` varchar(255) DEFAULT NULL,
-  `value` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `NewIndex1` (`observerid`)
-) ENGINE=InnoDB AUTO_INCREMENT=20251 DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `farm_lease_requests`
@@ -2633,29 +2571,6 @@ CREATE TABLE `servers_launch_timelog` (
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Table structure for table `servers_stats`
---
-
-DROP TABLE IF EXISTS `servers_stats`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `servers_stats` (
-  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-  `usage` int(11) DEFAULT NULL,
-  `instance_type` varchar(15) DEFAULT NULL,
-  `env_id` int(11) DEFAULT NULL,
-  `month` int(2) DEFAULT NULL,
-  `year` int(4) DEFAULT NULL,
-  `farm_id` int(11) DEFAULT NULL,
-  `cloud_location` varchar(25) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `main` (`instance_type`,`cloud_location`,`farm_id`,`env_id`,`month`,`year`),
-  KEY `envid` (`env_id`),
-  KEY `farm_id` (`farm_id`),
-  KEY `year` (`year`)
-) ENGINE=MyISAM AUTO_INCREMENT=71180 DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `service_config_preset_data`
@@ -2999,24 +2914,6 @@ CREATE TABLE `storage_volumes` (
   `purpose` varchar(20) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `subscriptions`
---
-
-DROP TABLE IF EXISTS `subscriptions`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `subscriptions` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `clientid` int(11) DEFAULT NULL,
-  `subscriptionid` varchar(255) DEFAULT NULL,
-  `dtstart` datetime DEFAULT NULL,
-  `status` varchar(255) DEFAULT NULL,
-  `test` int(11) DEFAULT '0',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=100000 DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --

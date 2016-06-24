@@ -4,18 +4,23 @@ use Scalr\Acl\Acl;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentreEntity;
 use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
+use Scalr\Stats\CostAnalytics\Entity\NotificationEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectPropertyEntity;
+use Scalr\Stats\CostAnalytics\Entity\ReportEntity;
 use Scalr\Stats\CostAnalytics\Entity\SettingEntity;
 use Scalr\Stats\CostAnalytics\Entity\TagEntity;
+use Scalr\Stats\CostAnalytics\Forecast;
 use Scalr\Stats\CostAnalytics\Iterator\ChartPeriodIterator;
 use Scalr\Exception\AnalyticsException;
 use Scalr\Model\Entity;
+use Scalr\UI\Controller\Account2\Analytics\NotificationTrait;
+use Scalr\UI\Request\JsonData;
 use Scalr\UI\Request\Validator;
 
 class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controller
 {
-    use Scalr\Stats\CostAnalytics\Forecast;
+    use Forecast, NotificationTrait;
 
     /**
      * {@inheritdoc}
@@ -49,6 +54,8 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
      */
     public function xListAction($query = null)
     {
+        $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT);
+
         $this->response->data(array(
             'projects' => $this->getProjectsList(trim($query))
         ));
@@ -63,15 +70,17 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
      * Edit project action
      *
      * @param string $projectId
-     * @throws Scalr_UI_Exception_NotFound
+     * @throws Scalr_Exception_InsufficientPermissions
      */
     public function editAction($projectId = null)
     {
         $scope = $this->request->getScope();
 
-        $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_ACCOUNT, Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS);
+        $ccs = [];
 
         if (!empty($projectId)) {
+            $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT, Acl::PERM_ANALYTICS_PROJECTS_ACCOUNT_UPDATE);
+
             $project = $this->getContainer()->analytics->projects->get($projectId);
 
             if ($project->shared != ProjectEntity::SHARED_WITHIN_ACCOUNT || $project->accountId != $this->user->getAccountId()) {
@@ -79,6 +88,16 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
             }
             $cc = $project->getCostCenter();
             $projectData = $this->getProjectData($project, true);
+
+            $currentCc = CostCentreEntity::findPk($projectData['ccId']);
+            /* @var $currentCc CostCentreEntity */
+            if ($currentCc) {
+                $ccs[$currentCc->ccId] = [
+                    'ccId'        => $currentCc->ccId,
+                    'name'        => $currentCc->name,
+                    'billingCode' => $currentCc->getProperty(CostCentrePropertyEntity::NAME_BILLING_CODE)
+                ];
+            }
             //Check whether it can be removed
             try {
                 $projectData['removable'] = $project->checkRemoval();
@@ -88,18 +107,19 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
             }
 
         } else {
+            $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT, Acl::PERM_ANALYTICS_PROJECTS_ACCOUNT_CREATE);
+
             if ($scope == 'environment') {
                 $cc = $this->getContainer()->analytics->ccs->get($this->getEnvironment()->getPlatformConfigValue(\Scalr_Environment::SETTING_CC_ID));
             }
+
             $projectData = [];
         }
-
-        $ccs = [];
 
         if ($scope == 'environment') {
             $accountCcs = AccountCostCenterEntity::findOne([['accountId' => $this->user->getAccountId()], ['ccId' => $cc->ccId]]);
 
-            if ($accountCcs instanceof AccountCostCenterEntity) {
+            if (($accountCcs instanceof AccountCostCenterEntity) && empty($ccs[$cc->ccId])) {
                 $ccs[$cc->ccId] = [
                     'ccId' => $cc->ccId,
                     'name' => $cc->name,
@@ -114,7 +134,7 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
                 if ($ccEntity) {
                     $accountCcs = AccountCostCenterEntity::findOne([['accountId' => $env->clientId], ['ccId' => $ccEntity->ccId]]);
 
-                    if ($accountCcs instanceof AccountCostCenterEntity) {
+                    if (($accountCcs instanceof AccountCostCenterEntity) && empty($ccs[$ccEntity->ccId])) {
                         $ccs[$ccEntity->ccId] = [
                             'ccId' => $ccEntity->ccId,
                             'name' => $ccEntity->name,
@@ -147,7 +167,7 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
      */
     public function xSaveAction($projectId, $name, $description, $billingCode, $leadEmail, $ccId = null)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_ACCOUNT, Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS);
+        $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT);
 
         $validator = new Validator();
         $validator->validate($name, 'name', Validator::NOEMPTY);
@@ -156,6 +176,8 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
             return;
 
         if ($projectId) {
+            $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT, Acl::PERM_ANALYTICS_PROJECTS_ACCOUNT_UPDATE);
+
             $project = $this->getContainer()->analytics->projects->get($projectId);
 
             if (!$project) {
@@ -164,6 +186,8 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
                 throw new Scalr_Exception_InsufficientPermissions();
             }
         } else {
+            $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT, Acl::PERM_ANALYTICS_PROJECTS_ACCOUNT_CREATE);
+
             $project = new ProjectEntity();
             if ($this->request->getScope() == 'environment') {
                 $project->ccId = $this->getEnvironment()->getPlatformConfigValue(\Scalr_Environment::SETTING_CC_ID);
@@ -231,7 +255,7 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
      */
     public function xRemoveAction($projectId)
     {
-        $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_ACCOUNT, Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS);
+        $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT, Acl::PERM_ANALYTICS_PROJECTS_ACCOUNT_DELETE);
 
         $project = $this->getContainer()->analytics->projects->get($projectId);
         if ($project) {
@@ -264,8 +288,61 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
      */
     public function xGetPeriodDataAction($projectId, $mode, $startDate, $endDate)
     {
+        $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT);
+
         $filter = ['accountId' => $this->user->getAccountId()];
         $this->response->data($this->getContainer()->analytics->usage->getProjectPeriodData($projectId, $mode, $startDate, $endDate, $filter));
+    }
+
+    /**
+     * @param string $projectId
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function notificationsAction($projectId)
+    {
+        $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT);
+
+        $project = ProjectEntity::findPk($projectId);
+        /* @var $project ProjectEntity */
+        if (!$project->hasAccessPermissions($this->getUser())) {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+
+        $this->response->page('ui/admin/analytics/projects/notifications.js', [
+            'notifications.projects' => NotificationEntity::find([['subjectType' => NotificationEntity::SUBJECT_TYPE_PROJECT],['subjectId' => $projectId]])->getArrayCopy(),
+            'reports'                => ReportEntity::find([['subjectType' => ReportEntity::SUBJECT_TYPE_PROJECT],['subjectId' => $projectId]])->getArrayCopy(),
+        ], [], ['ui/admin/analytics/notifications/view.css']);
+    }
+
+    /**
+     * @param string $projectId
+     * @param JsonData $notifications
+     * @throws Scalr_Exception_InsufficientPermissions
+     */
+    public function xSaveNotificationsAction($projectId, JsonData $notifications)
+    {
+        $this->request->restrictAccess(Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT);
+
+        $project = ProjectEntity::findPk($projectId);
+        /* @var $project ProjectEntity */
+        if (!$project->hasAccessPermissions($this->getUser())) {
+            throw new Scalr_Exception_InsufficientPermissions();
+        }
+
+        $data = [];
+
+        foreach ($notifications as $id => $settings) {
+            if ($id == 'reports') {
+                $this->saveReports($settings, $projectId);
+                $data[$id] = ReportEntity::find([['subjectType' => ReportEntity::SUBJECT_TYPE_PROJECT],['subjectId' => $projectId]])->getArrayCopy();
+            } elseif ($id == 'notifications.projects') {
+                $this->saveNotifications(NotificationEntity::SUBJECT_TYPE_PROJECT, $settings, $projectId);
+                $data[$id] = NotificationEntity::find([['subjectType' => NotificationEntity::SUBJECT_TYPE_PROJECT],['subjectId' => $projectId]])->getArrayCopy();
+            }
+        }
+
+        $this->response->data($data);
+        $this->response->success('Notifications successfully saved');
     }
 
     /**
@@ -278,40 +355,7 @@ class Scalr_UI_Controller_Account2_Analytics_Projects extends \Scalr_UI_Controll
     {
         $projects = [];
 
-        $collection = $this->getContainer()->analytics->projects->findByKey($query, ['accountId' => $this->user->getAccountId()], true);
-
-        //Select identifiers of all projects assigned to farms from the account
-        $assignedProjects = [];
-
-        $rs = $this->db->Execute("
-            SELECT DISTINCT fs.value
-            FROM farms f
-            JOIN farm_settings fs ON f.id = fs.farmid
-            WHERE fs.name = ?
-            AND f.clientid = ?
-        ", [Entity\FarmSetting::PROJECT_ID, $this->user->getAccountId()]);
-
-        while ($rec = $rs->fetchRow()) {
-            $assignedProjects[$rec['value']] = true;
-        }
-
-        //Adjusts missing projects.
-        //This is going to be very rare event.
-        foreach ($collection as $projectEntity) {
-            if (isset($assignedProjects[$projectEntity->projectId])) {
-                unset($assignedProjects[$projectEntity->projectId]);
-            }
-        }
-
-        foreach ($assignedProjects as $projectId => $v) {
-            $project = ProjectEntity::findPk($projectId);
-            /* @var $project ProjectEntity */
-            $projectBillingCode = $project->getProperty(ProjectPropertyEntity::NAME_BILLING_CODE);
-
-            if (empty($query) || (stripos($project->name, $query) !== false || stripos($projectBillingCode, $query) !== false)) {
-                $collection->append($project);
-            }
-        }
+        $collection = $this->getContainer()->analytics->projects->getAccountProjects($this->user->getAccountId(), $query);
 
         if ($collection->count()) {
             $iterator = ChartPeriodIterator::create('month', gmdate('Y-m-01'), null, 'UTC');

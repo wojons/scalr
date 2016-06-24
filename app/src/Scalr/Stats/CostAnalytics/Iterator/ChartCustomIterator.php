@@ -2,7 +2,7 @@
 
 namespace Scalr\Stats\CostAnalytics\Iterator;
 
-use \DateTime, \DateTimeZone;
+use DateTime, DateTimeZone;
 use Scalr\Stats\CostAnalytics\ChartPointInfo;
 use Scalr\Stats\CostAnalytics\Entity\SettingEntity;
 use Scalr\Stats\CostAnalytics\Quarters;

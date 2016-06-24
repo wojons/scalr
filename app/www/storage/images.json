@@ -6,14 +6,6 @@
         {"cloud_location":"jp-east-f2v","os_id":"centos-6-x","architecture":"x86_64","image_id":"3039"}
     ],
     "ec2":[
-        {"image_id":"ami-2cca7c2d","os_id":"oracle-5-x","cloud_location":"ap-northeast-1","architecture":"x86_64","root_device_type":"ebs"},
-        {"image_id":"ami-e8f4b1ba","os_id":"oracle-5-x","cloud_location":"ap-southeast-1","architecture":"x86_64","root_device_type":"ebs"},
-        {"image_id":"ami-d594aba1","os_id":"oracle-5-x","cloud_location":"eu-west-1","architecture":"x86_64","root_device_type":"ebs"},
-        {"image_id":"ami-9c578881","os_id":"oracle-5-x","cloud_location":"sa-east-1","architecture":"x86_64","root_device_type":"ebs"},
-        {"image_id":"ami-9fa076f6","os_id":"oracle-5-x","cloud_location":"us-east-1","architecture":"x86_64","root_device_type":"ebs"},
-        {"image_id":"ami-5ddb8518","os_id":"oracle-5-x","cloud_location":"us-west-1","architecture":"x86_64","root_device_type":"ebs"},
-        {"image_id":"ami-4446cb74","os_id":"oracle-5-x","cloud_location":"us-west-2","architecture":"x86_64","root_device_type":"ebs"},
-
         {"image_id":"ami-8db5818c","os_id":"redhat-6-x","cloud_location":"ap-northeast-1","architecture":"x86_64","root_device_type":"ebs"},
         {"image_id":"ami-d60e2884","os_id":"redhat-6-x","cloud_location":"ap-southeast-1","architecture":"x86_64","root_device_type":"ebs"},
         {"image_id":"ami-eb2a47d1","os_id":"redhat-6-x","cloud_location":"ap-southeast-2","architecture":"x86_64","root_device_type":"ebs"},
@@ -22,7 +14,7 @@
         {"image_id":"ami-1643ff7e","os_id":"redhat-6-x","cloud_location":"us-east-1","architecture":"x86_64","root_device_type":"ebs"},
         {"image_id":"ami-2b171d6e","os_id":"redhat-6-x","cloud_location":"us-west-1","architecture":"x86_64","root_device_type":"ebs"},
         {"image_id":"ami-7df0bd4d","os_id":"redhat-6-x","cloud_location":"us-west-2","architecture":"x86_64","root_device_type":"ebs"},
-        {"image_id":"","os_id":"redhat-6-x","cloud_location":"us-gov-west-1","architecture":"x86_64","root_device_type":"ebs"},
+        {"image_id":"ami-f72542d4","os_id":"redhat-6-x","cloud_location":"us-gov-west-1","architecture":"x86_64","root_device_type":"ebs"},
 
         {"image_id":"ami-87206d86","os_id":"redhat-7-x","cloud_location":"ap-northeast-1","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
         {"image_id":"ami-b8fda0ea","os_id":"redhat-7-x","cloud_location":"ap-southeast-1","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
@@ -32,6 +24,7 @@
         {"image_id":"ami-785bae10","os_id":"redhat-7-x","cloud_location":"us-east-1","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
         {"image_id":"ami-66b9bc23","os_id":"redhat-7-x","cloud_location":"us-west-1","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
         {"image_id":"ami-77d7a747","os_id":"redhat-7-x","cloud_location":"us-west-2","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
+        {"image_id":"ami-a5137086","os_id":"redhat-7-x","cloud_location":"us-gov-west-1","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
 
         {"image_id":"ami-abb682aa","os_id":"redhat-6-x","cloud_location":"ap-northeast-1","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
         {"image_id":"ami-ce1f399c","os_id":"redhat-6-x","cloud_location":"ap-southeast-1","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
@@ -41,6 +34,7 @@
         {"image_id":"ami-00a11e68","os_id":"redhat-6-x","cloud_location":"us-east-1","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
         {"image_id":"ami-4b3f350e","os_id":"redhat-6-x","cloud_location":"us-west-1","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
         {"image_id":"ami-11125e21","os_id":"redhat-6-x","cloud_location":"us-west-2","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
+        {"image_id":"ami-a5137086","os_id":"redhat-6-x","cloud_location":"us-gov-west-1","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
 
         {"image_id":"ami-27f90e27","os_id":"amazon-2015-03","cloud_location":"ap-northeast-1","architecture":"x86_64","root_device_type":"ebs"},
         {"image_id":"ami-acd9e8fe","os_id":"amazon-2015-03","cloud_location":"ap-southeast-1","architecture":"x86_64","root_device_type":"ebs"},
@@ -79,6 +73,7 @@
         {"image_id":"ami-feb5d7dd","os_id":"amazon-2015-09","cloud_location":"us-gov-west-1","architecture":"x86_64","root_device_type":"ebs"},
 
         {"image_id":"ami-383c1956","os_id":"amazon-2015-09","cloud_location":"ap-northeast-1","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
+        {"image_id":"ami-259b554b","os_id":"amazon-2015-09","cloud_location":"ap-northeast-2","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
         {"image_id":"ami-c9b572aa","os_id":"amazon-2015-09","cloud_location":"ap-southeast-1","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
         {"image_id":"ami-48d38c2b","os_id":"amazon-2015-09","cloud_location":"ap-southeast-2","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
         {"image_id":"ami-bff32ccc","os_id":"amazon-2015-09","cloud_location":"eu-west-1","architecture":"x86_64","root_device_type":"ebs", "hvm":1},
@@ -115,6 +110,7 @@
         {"image_id":"ami-ef4d2acc","os_id":"ubuntu-14-04","cloud_location":"us-gov-west-1","architecture":"x86_64","root_device_type":"instance-store"},
 
         {"image_id":"ami-3eb00e3e","os_id":"ubuntu-14-04","cloud_location":"ap-northeast-1","architecture":"x86_64","root_device_type":"ebs", "hvm": 1},
+        {"image_id":"ami-65a16f0b","os_id":"ubuntu-14-04","cloud_location":"ap-northeast-2","architecture":"x86_64","root_device_type":"ebs", "hvm": 1},
         {"image_id":"ami-d85e518a","os_id":"ubuntu-14-04","cloud_location":"ap-southeast-1","architecture":"x86_64","root_device_type":"ebs", "hvm": 1},
         {"image_id":"ami-1decac27","os_id":"ubuntu-14-04","cloud_location":"ap-southeast-2","architecture":"x86_64","root_device_type":"ebs", "hvm": 1},
         {"image_id":"ami-b05101c7","os_id":"ubuntu-14-04","cloud_location":"eu-west-1","architecture":"x86_64","root_device_type":"ebs", "hvm": 1},
@@ -158,6 +154,7 @@
         {"image_id":"ami-917959a1","os_id":"ubuntu-12-04","cloud_location":"us-west-2","architecture":"i386","root_device_type":"ebs"},
         
         {"image_id":"ami-f16b40f0","os_id":"ubuntu-12-04","cloud_location":"ap-northeast-1","architecture":"x86_64","root_device_type":"ebs", "hvm": 1},
+        {"image_id":"ami-83a46aed","os_id":"ubuntu-12-04","cloud_location":"ap-northeast-2","architecture":"x86_64","root_device_type":"ebs", "hvm": 1},
         {"image_id":"ami-d61e3984","os_id":"ubuntu-12-04","cloud_location":"ap-southeast-1","architecture":"x86_64","root_device_type":"ebs", "hvm": 1},
         {"image_id":"ami-9b0e6ca1","os_id":"ubuntu-12-04","cloud_location":"ap-southeast-2","architecture":"x86_64","root_device_type":"ebs", "hvm": 1},
         {"image_id":"ami-60a10117","os_id":"ubuntu-12-04","cloud_location":"eu-west-1","architecture":"x86_64","root_device_type":"ebs", "hvm": 1},
@@ -182,12 +179,12 @@
         {"image_id":"ami-e4b5be90","os_id":"centos-6-x","cloud_location":"eu-west-1","architecture":"x86_64","root_device_type":"ebs", "hvm": 1}
     ],
     "gce":[
-        {"os_id":"centos-6-x","architecture":"x86_64","image_id":"centos-cloud\/global\/images\/centos-6-v20151104"},
-        {"os_id":"centos-7-x","architecture":"x86_64","image_id":"centos-cloud\/global\/images\/centos-7-v20151104"},
-        {"os_id":"debian-7-x","architecture":"x86_64","image_id":"debian-cloud\/global\/images\/debian-7-wheezy-v20151104"},
-        {"os_id":"debian-8-x","architecture":"x86_64","image_id":"debian-cloud\/global\/images\/debian-8-jessie-v20151104"},
-        {"os_id":"redhat-7-x", "architecture":"x86_64","image_id":"rhel-cloud\/global\/images\/rhel-7-v20151104"},
-        {"os_id":"ubuntu-14-04","architecture":"x86_64","image_id":"ubuntu-os-cloud\/global\/images\/ubuntu-1404-trusty-v20151113"}
+        {"os_id":"centos-6-x","architecture":"x86_64","image_id":"centos-cloud\/global\/images\/centos-6-v20160216"},
+        {"os_id":"centos-7-x","architecture":"x86_64","image_id":"centos-cloud\/global\/images\/centos-7-v20160216"},
+        {"os_id":"debian-7-x","architecture":"x86_64","image_id":"debian-cloud\/global\/images\/debian-7-wheezy-v20160216"},
+        {"os_id":"debian-8-x","architecture":"x86_64","image_id":"debian-cloud\/global\/images\/debian-8-jessie-v20160216"},
+        {"os_id":"redhat-7-x", "architecture":"x86_64","image_id":"rhel-cloud\/global\/images\/rhel-7-v20160216"},
+        {"os_id":"ubuntu-14-04","architecture":"x86_64","image_id":"ubuntu-os-cloud\/global\/images\/ubuntu-1404-trusty-v20160217a"}
     ],
     "rackspacengus":[
         {"cloud_location":"DFW","os_id":"ubuntu-14-04","architecture":"x86_64","image_id":"5ed162cc-b4eb-4371-b24a-a0ae73376c73"},

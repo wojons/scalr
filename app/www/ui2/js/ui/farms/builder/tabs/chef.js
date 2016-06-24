@@ -44,8 +44,7 @@ Ext.define('Scalr.ui.FarmRoleEditorTab.Chef', {
                         }
                     });
                 }
-                field.setReadOnly(data.roleChefSettings);
-                field.roleChefSettings = data.roleChefSettings;
+                field.setRoleChefSettings(data.roleChefSettings);
                 field.farmRoleChefSettings = data.farmRoleChefSettings;
                 field.roleOsFamily = Scalr.utils.getOsById(record.get('osId'), 'family');
                 field.setValue(data.chefSettings, function(success){

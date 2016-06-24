@@ -14,9 +14,10 @@ use Scalr\Exception\AnalyticsException;
 use Scalr\Stats\CostAnalytics\Entity\CostCentrePropertyEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectEntity;
 use Scalr\Stats\CostAnalytics\Entity\ProjectPropertyEntity;
+use Scalr\Api\Rest\Exception\ApiInsufficientPermissionsException;
 
 /**
- * User/Version-1beta0/Projects API Controller
+ * User/Projects API Controller
  *
  * @author N.V.
  */
@@ -77,21 +78,23 @@ class Projects extends ApiController
      */
     public function describeAction()
     {
+        $this->checkPermissions(Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT);
+
         $criteria = $this->getDefaultCriteria();
 
         if (empty($this->params('name')) && empty($this->params('billingCode'))) {
             $criteria[] = ['archived' => ProjectEntity::NOT_ARCHIVED];
         }
-        
+
         return $this->adapter('project')->getDescribeResult($criteria);
     }
 
     /**
-     * Creates a new Project in this Environment
+     * Creates a new Project in this account
      */
     public function createAction()
     {
-        $this->checkPermissions(Acl::RESOURCE_ANALYTICS_ACCOUNT, Acl::PERM_ANALYTICS_ACCOUNT_MANAGE_PROJECTS);
+        $this->checkPermissions(Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT, Acl::PERM_ANALYTICS_PROJECTS_ACCOUNT_CREATE);
 
         $object = $this->request->getJsonBody();
 
@@ -223,6 +226,32 @@ class Projects extends ApiController
      */
     public function fetchAction($projectId)
     {
+        $this->checkPermissions(Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT);
+
         return $this->result($this->adapter('project')->toData($this->getProject($projectId)));
+    }
+
+    /**
+     * Throws an exception if the user does not have sufficient permissions for projects
+     * If the argument just one we will checks all the existing variants of access to projects
+     * checkPermissions(int $roleId, string $permissionId = null)
+     *
+     * @param ...$args
+     * @throws ApiInsufficientPermissionsException
+     */
+    public function checkPermissions(...$args)
+    {
+        if (isset($args[0]) && $args[0] == Acl::RESOURCE_ANALYTICS_PROJECTS_ACCOUNT && empty($args[1])) {
+            if (!($this->hasPermissions(...$args) ||
+                $this->hasPermissions(Acl::RESOURCE_OWN_FARMS,  Acl::PERM_FARMS_CREATE)   ||
+                $this->hasPermissions(Acl::RESOURCE_FARMS,      Acl::PERM_FARMS_PROJECTS) ||
+                $this->hasPermissions(Acl::RESOURCE_TEAM_FARMS, Acl::PERM_FARMS_PROJECTS) ||
+                $this->hasPermissions(Acl::RESOURCE_OWN_FARMS,  Acl::PERM_FARMS_PROJECTS)
+            )) {
+                throw new ApiInsufficientPermissionsException(isset($args[2]) ? $args[2] : null);
+            }
+        } else {
+            parent::checkPermissions(...$args);
+        }
     }
 }

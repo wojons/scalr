@@ -2,15 +2,16 @@ Scalr.regPage('Scalr.ui.admin.analytics.budgets.quarterCalendar', function (load
     var curDate = new Date(),
         curYear = curDate.getFullYear();
 
-	var form = Ext.create('Ext.form.Panel', {
+    var form = Ext.create('Ext.form.Panel', {
         width: 500,
-		fieldDefaults: {
-			anchor: '100%'
-		},
-		scalrOptions: {
-			modal: true
-		},
-		items: [{
+        fieldDefaults: {
+            anchor: '100%'
+        },
+        scalrOptions: {
+            modal: true,
+            closeOnEsc: moduleParams['quartersConfirmed'] == 1
+        },
+        items: [{
             xtype: 'fieldset',
             itemId: 'quarterCal',
             cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
@@ -161,40 +162,40 @@ Scalr.regPage('Scalr.ui.admin.analytics.budgets.quarterCalendar', function (load
                 }]
             }]
         }],
-		dockedItems: [{
-			xtype: 'container',
-			dock: 'bottom',
-			cls: 'x-docked-buttons',
-			layout: {
-				type: 'hbox',
-				pack: 'center'
-			},
-			items: [{
-				xtype: 'button',
-				text: 'Save',
-				handler: function() {
+        dockedItems: [{
+            xtype: 'container',
+            dock: 'bottom',
+            cls: 'x-docked-buttons',
+            layout: {
+                type: 'hbox',
+                pack: 'center'
+            },
+            items: [{
+                xtype: 'button',
+                text: 'Save',
+                handler: function() {
                     var frm = form.getForm();
-					if (frm.isValid())
-						Scalr.Request({
-							processBox: {
-								type: 'save'
-							},
-							form: frm,
-							url: '/admin/analytics/budgets/xSaveQuarterCalendar',
-							success: function (data) {
+                    if (frm.isValid())
+                        Scalr.Request({
+                            processBox: {
+                                type: 'save'
+                            },
+                            form: frm,
+                            url: '/admin/analytics/budgets/xSaveQuarterCalendar',
+                            success: function (data) {
                                 Scalr.utils.Quarters.days = data['quarters'];
-								Scalr.event.fireEvent('redirect', '#/admin/analytics/budgets/');
-							}
-						});
-				}
-			}, {
-				xtype: 'button',
-				text: 'Cancel',
+                                Scalr.event.fireEvent('redirect', '#/admin/analytics/budgets/');
+                            }
+                        });
+                }
+            }, {
+                xtype: 'button',
+                text: 'Cancel',
                 disabled: moduleParams['quartersConfirmed'] != 1,
-				handler: function() {
-					Scalr.event.fireEvent('close');
-				}
-			}]
+                handler: function() {
+                    Scalr.event.fireEvent('close');
+                }
+            }]
         }]
 
     });
@@ -202,5 +203,5 @@ Scalr.regPage('Scalr.ui.admin.analytics.budgets.quarterCalendar', function (load
     Ext.each(moduleParams['quarters'], function(item, i){
         form.down('#q'+(i+1)).setValue(curYear+'-'+item);
     });
-	return form;
+    return form;
 });

@@ -20,7 +20,9 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.vpc', function () {
 
         setRole: function(record) {
             var field,
-                vpc = this.up('roleslibrary').vpc,
+                roleslibrary = this.up('roleslibrary'),
+                defaultSettings = roleslibrary.defaultRoleSettings || {},
+                vpc = roleslibrary.vpc,
                 limits = Scalr.getGovernance('ec2', 'aws.vpc'),
                 moduleTabParams = this.up('#farmDesigner').moduleParams['tabParams'];
             this.isVpcRouter = Ext.Array.contains(record.get('behaviors'), 'router');
@@ -37,6 +39,16 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.vpc', function () {
                 extended: 1
             };
             field.reset();
+            if (defaultSettings['roleId'] == record.get('role_id') &&
+                defaultSettings['settings'] &&
+                defaultSettings['settings']['settings'] &&
+                defaultSettings['settings']['settings']['aws.vpc_subnet_id']
+            ) {
+                field.store.on('load', function() {
+                    this.setValue([defaultSettings['settings']['settings']['aws.vpc_subnet_id']]);
+                }, field, { single: true });
+                field.store.load();
+            }
 
             field = this.down('[name="router.scalr.farm_role_id"]');
             Ext.apply(field.store.getProxy(), {params: {vpcId: vpc.id}});

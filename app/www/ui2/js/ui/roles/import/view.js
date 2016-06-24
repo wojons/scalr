@@ -1,21 +1,21 @@
 Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) {
-	var panel = Ext.create('Ext.panel.Panel', {
+    var panel = Ext.create('Ext.panel.Panel', {
         cls: 'scalr-ui-role-import',
-		scalrOptions: {
-			maximize: 'all',
+        scalrOptions: {
+            maximize: 'all',
             menuTitle: 'Roles',
             menuHref: '#/roles',
             menuParentStateId: 'grid-roles-manager'
-		},
+        },
         plugins: {
             ptype: 'localcachedrequest',
             crscope: 'servers.import'
         },
-		layout: {
-			type: 'hbox',
-			align: 'stretch'
-		},
-		items:[{
+        layout: {
+            type: 'hbox',
+            align: 'stretch'
+        },
+        items:[{
             xtype: 'container',
             itemId: 'leftcol',
             cls: 'x-panel-column-left',
@@ -659,7 +659,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                 }]
             }]
         }],
-		dockedItems: {
+        dockedItems: {
             xtype: 'container',
             width: 112 + Ext.getScrollbarSize().width,
             itemId: 'tabs',
@@ -991,7 +991,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
         },
 
         listeners: {
-			boxready: function () {
+            boxready: function () {
                 var items = this.getDockedComponent('tabs').items,
                     defaultPlatform = loadParams['platform'] || 'ec2',
                     defaultItem;
@@ -1012,7 +1012,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     defaultItem = defaultItem || items.first();
                 }
                 defaultItem.toggle(true);
-			},
+            },
             destroy: function() {
                 this.clearCheckCommTaskDelayed();
             },
@@ -1021,7 +1021,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                     leftcol = me.getComponent('leftcol'),
                     serverId = leftcol.down('[name="cloudServerId"]'),
                     defaultLocations = {/*ec2: 'us-east-1',*/ gce: 'us-central1-a'},
-                    callback = function(locations){
+                    callback = function (locations) {
                         var cloudLocationField = leftcol.down('[name="cloudLocation"]'),
                             locationIds = Ext.Object.getKeys(locations),
                             location = defaultLocations[platform] || (locationIds.length ? locationIds[0] : '');
@@ -1040,6 +1040,7 @@ Scalr.regPage('Scalr.ui.roles.import.view', function (loadParams, moduleParams) 
                             me.loadServer();
                         } else if (!Ext.isEmpty(moduleParams.orphan)) {
                             me.loadOrphanServer();
+                            delete moduleParams.orphan;
                         }
                         me.isLoading = false;
                     };

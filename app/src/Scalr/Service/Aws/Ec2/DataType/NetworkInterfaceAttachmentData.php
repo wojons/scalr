@@ -43,7 +43,7 @@ class NetworkInterfaceAttachmentData extends AbstractEc2DataType
     public $status;
 
     /**
-     * @var DateTime
+     * @var \DateTime
      */
     public $attachTime;
 

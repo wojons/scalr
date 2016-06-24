@@ -1,6 +1,7 @@
 <?php
 
 use Scalr\Acl\Acl;
+use Scalr\Service\Aws;
 use Scalr\Service\Aws\Route53\DataType\HealthData;
 use Scalr\Service\Aws\Route53\DataType\HealthConfigData;
 use Scalr\Service\Aws\DataType\MarkerType;
@@ -10,9 +11,19 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Healthchecks extends Scalr_UI_Contro
 {
 
     /**
-     * @param string $cloudLocation
+     * Gets Aws object
+     *
+     * @return Aws
      */
-    public function xListAction($cloudLocation)
+    private function getAws()
+    {
+        return $this->environment->aws(Aws::REGION_US_EAST_1);
+    }
+
+    /**
+     * Describes health checks
+     */
+    public function xListAction()
     {
         $result = [];
         $marker = null;
@@ -21,7 +32,7 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Healthchecks extends Scalr_UI_Contro
             if (isset($checkList)) {
                 $marker = new MarkerType($checkList->marker);
             }
-            $checkList = $this->environment->aws($cloudLocation)->route53->health->describe($marker);
+            $checkList = $this->getAws()->route53->health->describe($marker);
 
             foreach ($checkList as $check) {
                 if (property_exists($check, 'healthId')) {
@@ -47,12 +58,11 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Healthchecks extends Scalr_UI_Contro
     }
 
     /**
-     * @param string $cloudLocation
      * @param string $healthId
      */
-    public function infoAction($cloudLocation, $healthId)
+    public function infoAction($healthId)
     {
-        $check = $this->environment->aws($cloudLocation)->route53->health->fetch($healthId);
+        $check = $this->getAws()->route53->health->fetch($healthId);
 
         $checkResult = [];
 
@@ -80,12 +90,11 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Healthchecks extends Scalr_UI_Contro
      * @param string $port
      * @param string $requestInterval
      * @param string $failureThreshold
-     * @param string $cloudLocation
      * @param string $hostName          optional
      * @param string $resourcePath      optional
      * @param string $searchString      optional
      */
-    public function xCreateAction($protocol, $ipAddress, $port, $requestInterval, $failureThreshold, $cloudLocation,
+    public function xCreateAction($protocol, $ipAddress, $port, $requestInterval, $failureThreshold,
             $hostName = null, $resourcePath = null, $searchString = null
         )
     {
@@ -116,20 +125,19 @@ class Scalr_UI_Controller_Tools_Aws_Route53_Healthchecks extends Scalr_UI_Contro
 
         $healthConfig->type = $protocol;
         $healthData->setHealthConfig($healthConfig);
-        $response = $this->environment->aws($cloudLocation)->route53->health->create($healthData);
+        $response = $this->getAws()->route53->health->create($healthData);
 
         $this->response->data(['data' => $response]);
     }
 
     /**
      * @param JsonData $healthId JSON encoded structure
-     * @param string $cloudLocation
      */
-    public function xDeleteAction(JsonData $healthId, $cloudLocation)
+    public function xDeleteAction(JsonData $healthId)
     {
         $this->request->restrictAccess(Acl::RESOURCE_AWS_ROUTE53, Acl::PERM_AWS_ROUTE53_MANAGE);
 
-        $aws = $this->environment->aws($cloudLocation);
+        $aws = $this->getAws();
 
         foreach ($healthId as $id) {
             $aws->route53->health->delete($id);

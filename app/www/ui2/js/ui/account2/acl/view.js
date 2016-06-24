@@ -1,38 +1,38 @@
 Scalr.regPage('Scalr.ui.account2.acl.view', function (loadParams, moduleParams) {
     var firstReconfigure = true;
-	var reconfigurePage = function(params) {
+    var reconfigurePage = function(params) {
         var params = params || {},
             roleId = params.roleId;
         if (firstReconfigure && !roleId) {
             roleId = 'first';
         }
-		if (roleId) {
-			dataview.deselectAndClearLastSelected();
-			if (roleId === 'new') {
-				panel.down('#add').toggle(true);
-			} else {
-				panel.down('#rolesLiveSearch').reset();
-				var record =  store.getById(roleId) || (roleId === 'first' ? store.first() : null);
-				if (record) {
-					dataview.select(record);
-				}
-			}
-		}
+        if (roleId) {
+            dataview.deselectAndClearLastSelected();
+            if (roleId === 'new') {
+                panel.down('#add').toggle(true);
+            } else {
+                panel.down('#rolesLiveSearch').reset();
+                var record =  store.getById(roleId) || (roleId === 'first' ? store.first() : null);
+                if (record) {
+                    dataview.select(record);
+                }
+            }
+        }
         firstReconfigure = false;
-	};
+    };
 
     var storeRoles = Scalr.data.get('account.acl'),
         storeBaseRoles = Scalr.data.get('base.acl');
 
-	var store = Ext.create('Ext.data.ChainedStore', {
-		source: storeRoles,
-		sorters: [{
-			property: 'name',
-			transform: function(value){
-				return value.toLowerCase();
-			}
-		}]
-	});
+    var store = Ext.create('Ext.data.ChainedStore', {
+        source: storeRoles,
+        sorters: [{
+            property: 'name',
+            transform: function(value){
+                return value.toLowerCase();
+            }
+        }]
+    });
 
     var storeRoleResources = Ext.create('Ext.data.Store', {
         fields: ['id', 'name', 'granted', 'group', 'groupOrder', 'permissions', 'locked', 'lockedPermissions', {name: 'mode', type: 'int'}],
@@ -40,7 +40,7 @@ Scalr.regPage('Scalr.ui.account2.acl.view', function (loadParams, moduleParams) 
     });
 
     var dataview = Ext.create('Ext.view.View', {
-		listeners: {
+        listeners: {
             refresh: function(view){
                 var selModel = view.getSelectionModel(),
                     record = selModel.getLastSelected();
@@ -51,7 +51,7 @@ Scalr.regPage('Scalr.ui.account2.acl.view', function (loadParams, moduleParams) 
                     }
                 }
             }
-		},
+        },
         deferInitialRefresh: false,
         store: store,
         cls: 'x-dataview',
@@ -75,50 +75,50 @@ Scalr.regPage('Scalr.ui.account2.acl.view', function (loadParams, moduleParams) 
                     '</table>',
                 '</div>',
             '</tpl>',
-			{
-				getBaseRoleName: function(baseRoleId){
-					var record = storeBaseRoles.getById(baseRoleId);
-					return record ? record.get('name') : '';
-				}
-			}
+            {
+                getBaseRoleName: function(baseRoleId){
+                    var record = storeBaseRoles.getById(baseRoleId);
+                    return record ? record.get('name') : '';
+                }
+            }
         ),
-		plugins: {
-			ptype: 'dynemptytext',
-			emptyText: '<div class="x-semibold title">No ACL were found to match your search.</div>Try modifying your search criteria <br/>or creating a new ACL',
-			emptyTextNoItems: '<div class="x-semibold title">You have no ACLs under your account.</div>'+
-								'Access Control Lists let you define exactly what your co-workers have or don\'t have access to.'
-		},
-		loadingText: 'Loading ACLs ...',
-		deferEmptyText: false
+        plugins: {
+            ptype: 'dynemptytext',
+            emptyText: '<div class="x-semibold title">No ACL were found to match your search.</div>Try modifying your search criteria <br/>or creating a new ACL',
+            emptyTextNoItems: '<div class="x-semibold title">You have no ACLs under your account.</div>'+
+                                'Access Control Lists let you define exactly what your co-workers have or don\'t have access to.'
+        },
+        loadingText: 'Loading ACLs ...',
+        deferEmptyText: false
     });
 
-	var form = 	Ext.create('Ext.form.Panel', {
-		hidden: true,
+    var form = 	Ext.create('Ext.form.Panel', {
+        hidden: true,
         layout: {
             type: 'vbox',
             align: 'stretch'
         },
         padding: 0,
-		listeners: {
-			hide: function() {
+        listeners: {
+            hide: function() {
                 panel.down('#add').toggle(false, true);
-			},
-			afterrender: function() {
-				var me = this;
-				dataview.on('selectionchange', function(dataview, selection){
-					if (selection.length) {
-						me.loadRecord(selection[0]);
-					} else {
+            },
+            afterrender: function() {
+                var me = this;
+                dataview.on('selectionchange', function(dataview, selection){
+                    if (selection.length) {
+                        me.loadRecord(selection[0]);
+                    } else {
                         me.resetRecord();
-					}
-				});
-			},
-			beforeloadrecord: function(record) {
-				var frm = this.getForm(),
+                    }
+                });
+            },
+            beforeloadrecord: function(record) {
+                var frm = this.getForm(),
                     isNewRecord = !record.store;
                 this.down('#formtitle').setTitle(isNewRecord ? 'New ACL' : 'Edit ACL');
-				this.down('#delete').setVisible(!isNewRecord);
-				dataview.up('panel').down('#add').toggle(isNewRecord, true);
+                this.down('#delete').setVisible(!isNewRecord);
+                dataview.up('panel').down('#add').toggle(isNewRecord, true);
                 this.down('#permissions').setTitle('Permissions ' + (isNewRecord ? '' : '(<a href="#/account/acl/usage?accountRoleId=' + record.get('id') + '">Helper</a>)'));
 
                 var resources = record.get('resources');
@@ -132,7 +132,7 @@ Scalr.regPage('Scalr.ui.account2.acl.view', function (loadParams, moduleParams) 
 
                 frm.findField('baseRoleId').setReadOnly(!isNewRecord);
             }
-		},
+        },
         items: [{
             xtype: 'fieldset',
             layout: 'hbox',
@@ -272,7 +272,6 @@ Scalr.regPage('Scalr.ui.account2.acl.view', function (loadParams, moduleParams) 
                         excludeForm: true
                     },{
                         xtype: 'buttongroupfield',
-                        cls: 'scalr-ui-panel-account-roles-btngroup',
                         margin: '0 0 0 18',
                         maxWidth: 600,
                         isFormField: false,
@@ -287,19 +286,19 @@ Scalr.regPage('Scalr.ui.account2.acl.view', function (loadParams, moduleParams) 
                             value: 'all'
                         },{
                             text: 'Full access',
-                            cls: 'scalr-ui-panel-account-roles-btn-full',
+                            cls: 'x-full-access',
                             value: 1
                         },{
                             text: 'Limited',
-                            cls: 'scalr-ui-panel-account-roles-btn-limited',
+                            cls: 'x-limited-access',
                             value: 2
                         },{
                             text: 'Read only',
-                            cls: 'scalr-ui-panel-account-roles-btn-readonly',
+                            cls: 'x-readonly-access',
                             value: 3
                         },{
                             text: 'No access',
-                            cls: 'scalr-ui-panel-account-roles-btn-no',
+                            cls: 'x-no-access',
                             value: 0
                         }],
                         listeners: {
@@ -377,104 +376,104 @@ Scalr.regPage('Scalr.ui.account2.acl.view', function (loadParams, moduleParams) 
                 }]
             }]
         }],
-		dockedItems: [{
-			xtype: 'container',
-			dock: 'bottom',
-			cls: 'x-docked-buttons',
+        dockedItems: [{
+            xtype: 'container',
+            dock: 'bottom',
+            cls: 'x-docked-buttons',
             maxWidth: 1100,
-			layout: {
-				type: 'hbox',
-				pack: 'center'
-			},
-			items: [{
-				xtype: 'button',
-				itemId: 'save',
-				text: 'Save',
-				handler: function() {
-					var frm = form.getForm(),
-						record = frm.getRecord();
-					if (frm.isValid()) {
-						Scalr.Request({
-							processBox: {
-								type: 'save'
-							},
-							url: '/account/acl/xSave',
+            layout: {
+                type: 'hbox',
+                pack: 'center'
+            },
+            items: [{
+                xtype: 'button',
+                itemId: 'save',
+                text: 'Save',
+                handler: function() {
+                    var frm = form.getForm(),
+                        record = frm.getRecord();
+                    if (frm.isValid()) {
+                        Scalr.Request({
+                            processBox: {
+                                type: 'save'
+                            },
+                            url: '/account/acl/xSave',
                             form: frm,
-							params: {
+                            params: {
                                 resources: Ext.encode(form.down('#resources').getResources())
                             },
-							success: function (data) {
-								if (!record.store) {
-									record = store.add(data.role)[0];
-									dataview.getSelectionModel().select(record);
-								} else {
-									record.set(data.role);
-									form.loadRecord(record);
-								}
-							}
-						});
-					}
+                            success: function (data) {
+                                if (!record.store) {
+                                    record = store.add(data.role)[0];
+                                    dataview.getSelectionModel().select(record);
+                                } else {
+                                    record.set(data.role);
+                                    form.loadRecord(record);
+                                }
+                            }
+                        });
+                    }
 
-				}
-			}, {
-				xtype: 'button',
-				itemId: 'cancel',
-				text: 'Cancel',
-				handler: function() {
+                }
+            }, {
+                xtype: 'button',
+                itemId: 'cancel',
+                text: 'Cancel',
+                handler: function() {
                     form.hide();
                     dataview.deselectAndClearLastSelected();
-				}
-			}, {
-				xtype: 'button',
-				itemId: 'delete',
-				cls: 'x-btn-red',
-				text: 'Delete',
-				handler: function() {
-					var record = form.getForm().getRecord();
-					Scalr.Request({
-						confirmBox: {
-							msg: 'Delete ACL ' + record.get('name') + ' ?',
-							type: 'delete'
-						},
-						processBox: {
-							msg: 'Deleting...',
-							type: 'delete'
-						},
-						scope: this,
-						url: '/account/acl/xRemove',
-						params: {
-							id: record.get('id')
-						},
-						success: function (data) {
-							record.store.remove(record);
-						}
-					});
-				}
-			}]
-		}]
-	});
+                }
+            }, {
+                xtype: 'button',
+                itemId: 'delete',
+                cls: 'x-btn-red',
+                text: 'Delete',
+                handler: function() {
+                    var record = form.getForm().getRecord();
+                    Scalr.Request({
+                        confirmBox: {
+                            msg: 'Delete ACL ' + record.get('name') + ' ?',
+                            type: 'delete'
+                        },
+                        processBox: {
+                            msg: 'Deleting...',
+                            type: 'delete'
+                        },
+                        scope: this,
+                        url: '/account/acl/xRemove',
+                        params: {
+                            id: record.get('id')
+                        },
+                        success: function (data) {
+                            record.store.remove(record);
+                        }
+                    });
+                }
+            }]
+        }]
+    });
 
-	var panel = Ext.create('Ext.panel.Panel', {
-		cls: 'scalr-ui-panel-account-roles',
-		scalrOptions: {
-			menuTitle: 'ACL',
+    var panel = Ext.create('Ext.panel.Panel', {
+        cls: 'scalr-ui-panel-account-roles',
+        scalrOptions: {
+            menuTitle: 'ACL',
             menuHref: '#/account/acl',
             menuFavorite: true,
-			reload: false,
-			maximize: 'all',
-			leftMenu: {
-				menuId: 'account',
-				itemId: 'roles'
-			}
-		},
+            reload: false,
+            maximize: 'all',
+            leftMenu: {
+                menuId: 'account',
+                itemId: 'roles'
+            }
+        },
         stateId: 'grid-account-acl',
         listeners: {
             applyparams: reconfigurePage
         },
-		layout: {
-			type: 'hbox',
-			align: 'stretch'
-		},
+        layout: {
+            type: 'hbox',
+            align: 'stretch'
+        },
         items: [{
             xtype: 'panel',
             cls: 'x-panel-column-left',
@@ -524,13 +523,13 @@ Scalr.regPage('Scalr.ui.account2.acl.view', function (loadParams, moduleParams) 
                 }]
             }]
         },{
-			xtype: 'container',
+            xtype: 'container',
             flex: 1,
             layout: 'fit',
-			minWidth: 800,
-			items: form
+            minWidth: 800,
+            items: form
         }]
-	});
+    });
 
-	return panel;
+    return panel;
 });

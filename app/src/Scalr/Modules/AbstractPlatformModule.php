@@ -2,6 +2,7 @@
 namespace Scalr\Modules;
 
 use Scalr\Exception;
+use Scalr\Model\Entity\Account\Environment;
 use Scalr\Model\Entity\CloudLocation;
 use Scalr\Model\Entity\CloudInstanceType;
 
@@ -113,7 +114,7 @@ abstract class AbstractPlatformModule
      * @see \Scalr\Modules\PlatformModuleInterface::getOrphanedServers()
      * @throws \Scalr\Exception\NotYetImplementedException
      */
-    public function getOrphanedServers(\Scalr_Environment $environment, $cloudLocation)
+    public function getOrphanedServers(Environment $environment, $cloudLocation, $instanceIds = null)
     {
         throw new Exception\NotYetImplementedException(sprintf("Orphaned server's listing has not been implemented for the platform '%s' yet", $this->platform));
     }

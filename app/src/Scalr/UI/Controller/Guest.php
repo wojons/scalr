@@ -7,12 +7,11 @@ use Scalr\UI\Request\RawData;
 use Scalr\UI\Request\JsonData;
 use Scalr\Stats\CostAnalytics\Entity\AccountCostCenterEntity;
 use Scalr\Util\CryptoTool;
-use \Scalr\AuditLogger;
 use Scalr\DataType\ScopeInterface;
 use Scalr\UI\Request\Validator;
 use Scalr\Model\Entity\CloudCredentialsProperty;
-use Scalr\Model\Entity\CloudCredentials;
 use Scalr\Model\Entity\Account\User;
+use Scalr\Model\Entity\Account\User\UserSetting;
 
 class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 {
@@ -20,7 +19,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
 
     public function logoutAction()
     {
-        $this->auditLog("user.auth.logout", ['result' => 'success']);
+        $this->auditLog("user.auth.logout", ['.result' => 'success']);
         Scalr_Session::destroy();
         $this->response->setRedirect('/');
     }
@@ -82,7 +81,8 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                 'envVars' => '',
                 'type' => $this->user->getType(),
                 'settings' => [
-                    Scalr_Account_User::SETTING_UI_TIMEZONE => $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE)
+                    Scalr_Account_User::SETTING_UI_TIMEZONE => $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE),
+                    UserSetting::NAME_UI_ANNOUNCEMENT_TIME => $this->getUser()->getSetting(UserSetting::NAME_UI_ANNOUNCEMENT_TIME)
                 ]
             );
 
@@ -108,12 +108,6 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                 $data['flags']['billingExists'] = \Scalr::config('scalr.billing.enabled');
                 $data['flags']['showDeprecatedFeatures'] = \Scalr::config('scalr.ui.show_deprecated_features');
 
-                $data['flags']['wikiUrl'] = \Scalr::config('scalr.ui.wiki_url');
-                $data['flags']['supportUrl'] = \Scalr::config('scalr.ui.support_url');
-                if ($data['flags']['supportUrl'] == '/core/support') {
-                    $data['flags']['supportUrl'] .= '?X-Requested-Token=' . Scalr_Session::getInstance()->getToken();
-                }
-
                 $data['acl'] = $this->request->getAclRoles()->getAllowedArray(true);
 
                 if (! $this->user->isAccountOwner()) {
@@ -129,17 +123,27 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                 }
 
                 if ($this->request->getScope() == 'environment') {
-                    $sql = 'SELECT id, name FROM farms WHERE env_id = ?';
+                    $sql = "SELECT id, name FROM farms f WHERE env_id = ? AND " . $this->request->getFarmSqlQuery();
                     $args = [$this->getEnvironmentId()];
 
-                    list($sql, $args) = $this->request->prepareFarmSqlQuery($sql, $args);
-                    $sql .= ' ORDER BY name';
+                    $sql .= " ORDER BY name";
 
                     $data['farms'] = $this->db->getAll($sql, $args);
 
                     if ($this->getEnvironment() && $this->user->isTeamOwner()) {
                         $data['user']['isTeamOwner'] = true;
                     }
+                }
+            }
+
+            $data['flags']['wikiUrl'] = \Scalr::config('scalr.ui.wiki_url');
+            $data['flags']['supportUrl'] = \Scalr::config('scalr.ui.support_url');
+
+            if ($data['flags']['supportUrl'] == '/core/support') {
+                if ($this->user->isAdmin()) {
+                    unset($data['flags']['supportUrl']);
+                } else {
+                    $data['flags']['supportUrl'] .= '?X-Requested-Token=' . Scalr_Session::getInstance()->getToken();
                 }
             }
 
@@ -207,6 +211,12 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
             $data['flags']['uiStorageTime'] = $this->user->getSetting(Scalr_Account_User::SETTING_UI_STORAGE_TIME);
             $data['flags']['uiStorage'] = $this->user->getVar(Scalr_Account_User::VAR_UI_STORAGE);
             $data['flags']['allowManageAnalytics'] = $this->user->getAccountId() && Scalr::isAllowedAnalyticsOnHostedScalrAccount($this->user->getAccountId());
+            $data['flags']['hostedScalr'] = (bool) Scalr::isHostedScalr();
+            $data['flags']['analyticsEnabled'] = $this->getContainer()->analytics->enabled;
+            $data['flags']['apiEnabled'] = (bool) \Scalr::config('scalr.system.api.enabled');
+            $data['flags']['dnsGlobalEnabled'] = (bool) \Scalr::config('scalr.dns.global.enabled');
+            $data['flags']['allowBetaEbsTypes'] = SCALR_ID == 'gdp-aws-east';
+
 
             $data['scope'] = $this->request->getScope();
             if ($this->request->getScope() == 'environment') {
@@ -222,9 +232,7 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
         $data['flags']['authMode'] = $this->getContainer()->config->get('scalr.auth_mode');
         $data['flags']['recaptchaPublicKey'] = $this->getContainer()->config->get('scalr.ui.recaptcha.public_key');
         $data['flags']['specialToken'] = Scalr_Session::getInstance()->getToken();
-        $data['flags']['hostedScalr'] = (bool) Scalr::isHostedScalr();
-        $data['flags']['analyticsEnabled'] = $this->getContainer()->analytics->enabled;
-        $data['flags']['apiEnabled'] = (bool) \Scalr::config('scalr.system.api.enabled');
+        $data['flags']['loginWarning'] = $this->getContainer()->config->get('scalr.ui.login_warning');
 
         return $data;
     }
@@ -383,10 +391,10 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
             }
 
             $clientinfo = array(
-                'fullname'	=> $name,
-                'firstname'	=> ($firstname) ? $firstname : $name,
-                'email'		=> $email,
-                'password'	=> $password
+                'fullname'  => $name,
+                'firstname' => ($firstname) ? $firstname : $name,
+                'email'     => $email,
+                'password'  => $password
             );
 
             //Sends welcome email
@@ -697,7 +705,10 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
                 Scalr_Session::keepSession();
         }
 
-        $this->response->data(array('userId' => $user->getId(), 'specialToken' => Scalr_Session::getInstance()->getToken()));
+        $this->response->data([
+            'userId' => $user->getId(),
+            'specialToken' => Scalr_Session::getInstance()->getToken()
+        ]);
     }
 
     /**
@@ -771,13 +782,9 @@ class Scalr_UI_Controller_Guest extends Scalr_UI_Controller
             $envId = null;
         }
 
-        $this->auditLog(
-            "user.auth.login",
-            $user,
-            $envId,
-            $this->request->getRemoteAddr(),
-            Scalr_Session::getInstance()->getRealUserId()
-        );
+        $this->getContainer()->auditlogger->setEnvironmentId($envId)->setRuid(Scalr_Session::getInstance()->getRealUserId());
+
+        $this->auditLog("user.auth.login", $user);
     }
 
     /**

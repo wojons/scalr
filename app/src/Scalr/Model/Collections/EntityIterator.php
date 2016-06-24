@@ -101,6 +101,24 @@ class EntityIterator extends \IteratorIterator implements \Countable
     }
 
     /**
+     * Implementation of array_map for EntityIterator
+     * Applies the callback to the elements of the Iterator
+     *
+     * @param   callable    $callback   Callback function to run for each element in each array
+     * @return  array       An array containing all the elements after applying the callback function to each one
+     */
+    public function map(callable $callback)
+    {
+        $ret = [];
+
+        foreach ($this as $entity) {
+            $ret[] = call_user_func($callback, $entity);
+        }
+
+        return $ret;
+    }
+
+    /**
      * Implements some convenient magic methods
      *
      * @param   string $name The method name
@@ -119,7 +137,7 @@ class EntityIterator extends \IteratorIterator implements \Countable
             $value = isset($args[0]) ? $args[0] : null;
 
             return new ArrayCollection(iterator_to_array(new PropertyFilterIterator(
-                $this->getInnerIterator(),
+                $this,
                 $property,
                 $value
             )));

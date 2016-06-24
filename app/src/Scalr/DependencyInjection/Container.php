@@ -87,9 +87,14 @@ namespace Scalr\DependencyInjection;
  * @property \OneLogin_Saml2_Auth $saml
  *           Gets SAML 2.0 Auth
  *
- * @property \Scalr\AuditLogger $auditlogger
+ * @property \Scalr\LogCollector\AuditLogger $auditlogger
  *           Gets AuditLogger instance
  *
+ * @property \Scalr\LogCollector\UserLogger $userlogger
+ *           Gets UserLogger instance
+ *
+ * @property \Scalr\LogCollector\ApiLogger $apilogger
+ *           Gets ApiLogger instance
  *
  * @method   mixed config()
  *           config(string $name)
@@ -152,8 +157,8 @@ namespace Scalr\DependencyInjection;
  *           version(string $part = 'full')
  *           Gets information about Scalr version
  *
- * @method   \Scalr\Model\Entity\CloudCredentials cloudCredentials(string $cloud, int $envId = null)
- *           cloudCredential(string $cloud, int $envId = null)
+ * @method   \Scalr\Model\Entity\CloudCredentials keychain(string $cloud, int $envId = null)
+ *           keychain(string $cloud, int $envId = null)
  *           Gets specified cloud credentials for specified environment
  */
 class Container extends BaseContainer
@@ -168,7 +173,7 @@ class Container extends BaseContainer
      *
      * @return Container
      */
-    static public function getInstance()
+    public static function getInstance()
     {
         if (is_null(self::$instance)) {
             self::$instance = new Container();
@@ -181,7 +186,7 @@ class Container extends BaseContainer
      *
      * It can be used for phpunit testing purposes.
      */
-    static public function reset()
+    public static function reset()
     {
         self::$instance = null;
     }

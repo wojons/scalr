@@ -3,8 +3,8 @@ namespace Scalr\System\Zmq\Cron\Task;
 
 use ArrayObject, DateTime, DateTimeZone, Exception;
 use Scalr\System\Zmq\Cron\AbstractTask;
-use \Scalr_SchedulerTask;
-use \Scalr_Account;
+use Scalr_SchedulerTask;
+use Scalr_Account;
 
 /**
  * Scheduler
@@ -25,25 +25,11 @@ class Scheduler extends AbstractTask
 
         $db = \Scalr::getDb();
 
-        // set status to "finished" for active tasks, which ended or executed once
-        $db->Execute("
-            UPDATE scheduler
-            SET `status` = ?
-            WHERE `status` = ?
-            AND (
-                CONVERT_TZ(`end_time`,'SYSTEM',`timezone`) < CONVERT_TZ(NOW(),'SYSTEM',`timezone`) OR
-                (CONVERT_TZ(`last_start_time`,'SYSTEM',`timezone`) < CONVERT_TZ(NOW(),'SYSTEM',`timezone`) AND `restart_every` = 0)
-            )
-        ",[
-            Scalr_SchedulerTask::STATUS_FINISHED, Scalr_SchedulerTask::STATUS_ACTIVE
-        ]);
-
         // get active tasks: first run (condition and last_start_time is null), others (condition and last_start_time + interval * 0.9 < now())
         $taskList = $db->GetAll("
             SELECT *
             FROM scheduler
             WHERE `status` = ?
-            AND (`end_time` IS NULL OR CONVERT_TZ(`end_time`,'SYSTEM',`timezone`) > CONVERT_TZ(NOW(),'SYSTEM',`timezone`))
             AND (`start_time` IS NULL OR CONVERT_TZ(`start_time`,'SYSTEM',`timezone`) <= CONVERT_TZ(NOW(),'SYSTEM',`timezone`))
             AND (`last_start_time` IS NULL OR
                  `last_start_time` IS NOT NULL AND `start_time` IS NULL AND (CONVERT_TZ(last_start_time + INTERVAL restart_every MINUTE, 'SYSTEM', `timezone`) < CONVERT_TZ(NOW(),'SYSTEM',`timezone`)) OR
@@ -121,11 +107,10 @@ class Scheduler extends AbstractTask
 
         $this->log("DEBUG", "Trying to execute task:%d", $task->id);
 
+        $container = \Scalr::getContainer();
+        $container->release('auditlogger');
         //Ajdusts both account & environment for the audit log
-        \Scalr::getContainer()->auditlogger
-            ->setAccountId($task->accountId)
-            ->setEnvironmentId($task->envId)
-        ;
+        $container->auditlogger->setAccountId($task->accountId)->setEnvironmentId($task->envId);
 
         if ($task->execute()) {
             $task->updateLastStartTime();

@@ -16,8 +16,9 @@ Ext.define('Scalr.ui.FarmBuilderFarmCostMetering', {
         me.down('#noCostData').setVisible(!farmCostMeteringData);
 
         comp = me.down('#projectId');
+        comp.setReadOnly(!me.projectEditable);
         comp.store.load({data: me['analyticsData']['projects']});
-        comp.findPlugin('comboaddnew').setDisabled(!Scalr.isAllowed('ANALYTICS_ACCOUNT', 'manage-projects') || me['analyticsData']['costCenterLocked'] == 1);
+        comp.findPlugin('comboaddnew').setDisabled(!Scalr.isAllowed('ANALYTICS_PROJECTS_ACCOUNT', 'create') || me['analyticsData']['costCenterLocked'] == 1);
 
         comp = me.down('#chartWrap');
         comp.remove(comp.down('#chart'));

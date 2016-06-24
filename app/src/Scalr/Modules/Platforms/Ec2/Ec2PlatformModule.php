@@ -35,28 +35,30 @@ use Scalr\Modules\Platforms\Ec2\Adapters\StatusAdapter;
 use Scalr\Service\Aws\Ec2\DataType\RouteData;
 use Scalr\Model\Entity;
 use Scalr\Model\Entity\Image;
-use Scalr\Model\Entity\Server;
 use Scalr\Model\Entity\SshKey;
-use \EC2_SERVER_PROPERTIES;
-use \DBServer;
-use \Exception;
+use EC2_SERVER_PROPERTIES;
+use DBServer;
+use Exception;
 use Scalr\Util\CryptoTool;
 use Scalr_Environment;
-use \SERVER_PLATFORMS;
-use \DBRole;
-use \SERVER_SNAPSHOT_CREATION_TYPE;
-use \BundleTask;
-use \ROLE_TAGS;
-use \SERVER_PROPERTIES;
-use \SERVER_SNAPSHOT_CREATION_STATUS;
-use \ROLE_BEHAVIORS;
-use \SERVER_STATUS;
+use Scalr_Governance;
+use SERVER_PLATFORMS;
+use DBRole;
+use SERVER_SNAPSHOT_CREATION_TYPE;
+use BundleTask;
+use ROLE_TAGS;
+use SERVER_PROPERTIES;
+use SERVER_SNAPSHOT_CREATION_STATUS;
+use ROLE_BEHAVIORS;
+use SERVER_STATUS;
 use Scalr\Service\Aws;
 use Scalr\Service\Aws\Ec2\DataType\EbsBlockDeviceData;
 use Scalr\Service\Aws\Ec2\DataType\BlockDeviceMappingList;
 use Scalr\Farm\Role\FarmRoleStorageConfig;
 use Scalr\Modules\Platforms\OrphanedServer;
 use Scalr\Service\Aws\Ec2\DataType\ImageData;
+use Scalr_Role_Behavior_Router;
+use Scalr_Server_LaunchOptions;
 
 class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modules\PlatformModuleInterface
 {
@@ -79,6 +81,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
     const ACCOUNT_TYPE_GOV_CLOUD    = 'gov-cloud';
     const ACCOUNT_TYPE_CN_CLOUD     = 'cn-cloud';
 
+    const MAX_TAGS_COUNT = 10;
+
     /**
      * @var array
      */
@@ -99,19 +103,19 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         //http://aws.amazon.com/amazon-linux-ami/instance-type-matrix/
         //http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-types.html
         //http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSOptimized.html
-        $restrictions = [
+        static $restrictions = [
             't1' => ['ebs' => true, 'hvm' => false],
             't2' => [
-                't2.nano'  => ['ebs' => true, 'hvm' => true, 'vpc' => true],
+                't2.nano'   => ['ebs' => true, 'hvm' => true, 'vpc' => true],
                 't2.micro'  => ['ebs' => true, 'hvm' => true, 'vpc' => true],
                 't2.small'  => ['ebs' => true, 'hvm' => true, 'vpc' => true],
                 't2.medium' => ['ebs' => true, 'hvm' => true, 'vpc' => true],
                 't2.large'  => ['ebs' => true, 'hvm' => true, 'vpc' => true, 'x64' => true],
             ],
             'm1' => [
-                'm1.small' =>  ['hvm' => false],
+                'm1.small'  =>  ['hvm' => false],
                 'm1.medium' => ['hvm' => false],
-                'm1.large' =>  ['hvm' => false, 'x64' => true],
+                'm1.large'  =>  ['hvm' => false, 'x64' => true],
                 'm1.xlarge' => ['hvm' => false, 'x64' => true],
             ],
             'm2' => ['hvm' => false, 'x64' => true],
@@ -121,12 +125,12 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'c1.medium' =>  ['hvm' => false],
                 'c1.xlarge' =>  ['hvm' => false, 'x64' => true],
             ],
-            'c4' => ['ebs' => true, 'hvm' => true, 'vpc' => true, 'x64' => true],
-            'c3' => ['x64' => true],
-            'd2' => ['hvm' => true, 'x64' => true],
-            'r3' => ['hvm' => true, 'x64' => true],
-            'i2' => ['hvm' => true, 'x64' => true],
-            'g2' => ['ebs' => true, 'hvm' => true, 'x64' => true],
+            'c4'  => ['ebs' => true, 'hvm' => true, 'vpc' => true, 'x64' => true],
+            'c3'  => ['x64' => true],
+            'd2'  => ['hvm' => true, 'x64' => true],
+            'r3'  => ['hvm' => true, 'x64' => true],
+            'i2'  => ['hvm' => true, 'x64' => true],
+            'g2'  => ['ebs' => true, 'hvm' => true, 'x64' => true],
             'hs1' => ['x64' => true],
             'cc2' => ['hvm' => true, 'x64' => true],
             'cg1' => ['hvm' => true, 'x64' => true],
@@ -134,7 +138,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             'cr1' => ['ebs' => true, 'hvm' => true, 'x64' => true],
         ];
 
-        $definition = array(
+        static $definition = array(
             't1.micro' => array(
                 'name' => 't1.micro',
                 'ram' => '625',
@@ -153,7 +157,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'note' => 'SHARED CPU',
                 'ebsencryption' => true
             ),
-            
+
             't2.micro' => array(
                 'name' => 't2.micro',
                 'ram' => '1024',
@@ -337,7 +341,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => '',
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'enhancednetworking' => true
             ),
             'm4.xlarge' => array(
                 'name' => 'm4.xlarge',
@@ -347,7 +352,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => '',
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'enhancednetworking' => true
             ),
             'm4.2xlarge' => array(
                 'name' => 'm4.2xlarge',
@@ -357,7 +363,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => '',
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'enhancednetworking' => true
             ),
             'm4.4xlarge' => array(
                 'name' => 'm4.4xlarge',
@@ -367,7 +374,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => '',
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'enhancednetworking' => true
             ),
             'm4.10xlarge' => array(
                 'name' => 'm4.10xlarge',
@@ -377,7 +385,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => '',
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'enhancednetworking' => true
             ),
 
             'c1.medium' => array(
@@ -412,7 +421,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'enhancednetworking' => true
             ),
             'c4.xlarge' => array(
                 'name' => 'c4.xlarge',
@@ -422,7 +432,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'enhancednetworking' => true
             ),
             'c4.2xlarge' => array(
                 'name' => 'c4.2xlarge',
@@ -432,7 +443,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'enhancednetworking' => true
             ),
             'c4.4xlarge' => array(
                 'name' => 'c4.4xlarge',
@@ -442,7 +454,8 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'enhancednetworking' => true
             ),
             'c4.8xlarge' => array(
                 'name' => 'c4.8xlarge',
@@ -452,9 +465,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
-                'placementgroups' => true
+                'placementgroups' => true,
+                'enhancednetworking' => true
             ),
-
             'c3.large' => array(
                 'name' => 'c3.large',
                 'ram' => '3840',
@@ -463,6 +476,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 2,
                     'size'   => 16
@@ -477,6 +491,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 2,
                     'size'   => 40
@@ -491,6 +506,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 2,
                     'size'   => 80
@@ -505,6 +521,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 2,
                     'size'   => 160
@@ -518,6 +535,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 2,
                     'size'   => 320
@@ -532,6 +550,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 1,
                     'size'   => 32
@@ -546,6 +565,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 1,
                     'size'   => 80
@@ -560,6 +580,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 1,
                     'size'   => 160
@@ -574,6 +595,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 1,
                     'size'   => 320
@@ -587,6 +609,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 2,
                     'size'   => 320
@@ -602,6 +625,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 1,
                     'size'   => 800
@@ -616,6 +640,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 2,
                     'size'   => 800
@@ -630,6 +655,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ebsencryption' => true,
                 'ebsoptimized' => true,
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 4,
                     'size'   => 800
@@ -643,6 +669,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'type' => 'SSD',
                 'ebsencryption' => true,
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 8,
                     'size'   => 800
@@ -658,6 +685,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 3,
                     'size'   => 2000
@@ -672,6 +700,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 6,
                     'size'   => 2000
@@ -686,6 +715,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 12,
                     'size'   => 2000
@@ -700,6 +730,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 'ebsencryption' => true,
                 'ebsoptimized' => 'default',
                 'placementgroups' => true,
+                'enhancednetworking' => true,
                 'instancestore' => [
                     'number' => 24,
                     'size'   => 2000
@@ -803,22 +834,32 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             )
         );
 
-        // New region supports only new instance types
-        foreach ($definition as $key => $value) {
-            $family = substr($key, 0, strpos($key, '.'));
-            $definition[$key]['family'] = $family;
-            if ($cloudLocation == Aws::REGION_EU_CENTRAL_1 && !in_array($family, array('t2','m3','m4','c3','r3','i2'))) {
-                unset($definition[$key]);
-            } else if (isset($restrictions[$family])) {
-                $definition[$key]['restrictions'] = isset($restrictions[$family][$key]) ? $restrictions[$family][$key] : $restrictions[$family];
+        static $supportedFamilies = [
+            Aws::REGION_EU_CENTRAL_1 => ['t2','m3','m4','c3','r3','i2'],
+            Aws::REGION_AP_NORTHEAST_2 => ['t2', 'm4', 'c4', 'r3', 'i2', 'd2']
+        ];
+
+        $filter = isset($supportedFamilies[$cloudLocation]) ? array_flip($supportedFamilies[$cloudLocation]) : null;
+
+        return array_filter($definition, function (&$entry, $key) use ($filter, $restrictions, $details) {
+            $family = explode('.', $key)[0];
+
+            if (isset($filter) && !isset($filter[$family])) {
+                return false;
             }
-        }
 
+            if ($details) {
+                $entry['family'] = $family;
 
-        if (!$details)
-            return array_combine(array_keys($definition), array_keys($definition));
-        else
-            return $definition;
+                if (isset($restrictions[$family])) {
+                    $entry['restrictions'] = isset($restrictions[$family][$key]) ? $restrictions[$family][$key] : $restrictions[$family];
+                }
+            } else {
+                $entry = $key;
+            }
+
+            return true;
+        }, ARRAY_FILTER_USE_BOTH);
     }
 
     /**
@@ -830,7 +871,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         if (!$this->container->analytics->enabled) return false;
 
         if (in_array(
-                $env->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE],
+                $env->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE],
                 [
                     Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE_GOV_CLOUD,
                     Entity\CloudCredentialsProperty::AWS_ACCOUNT_TYPE_CN_CLOUD
@@ -916,8 +957,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
     {
         $aws = $env->aws($cloudLocation);
 
-        if ($extended)
+        if ($extended) {
             $routingTables = $this->getRoutingTables($aws->ec2, $vpcId);
+        }
 
         $filter = array(array(
             'name'  => SubnetFilterNameType::vpcId(),
@@ -951,8 +993,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 }
             }
 
-            if (!$item['type'])
+            if (empty($item['type'])) {
                 $item['type'] = $mainTableType;
+            }
 
             $retval[] = $item;
         }
@@ -998,7 +1041,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
      */
     public function GetServerIPAddresses(DBServer $DBServer)
     {
-        $instanceId = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::INSTANCE_ID);
+        $instanceId = $DBServer->GetCloudServerID();
         $cacheKey = sprintf('%s:%s', $DBServer->envId, $DBServer->cloudLocation);
 
         if (!isset($this->instancesListCache[$cacheKey][$instanceId])) {
@@ -1037,7 +1080,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::getOrphanedServers()
      */
-    public function getOrphanedServers(\Scalr_Environment $environment, $cloudLocation)
+    public function getOrphanedServers(Entity\Account\Environment $environment, $cloudLocation, $instanceIds = null)
     {
         if (empty($cloudLocation)) {
             return [];
@@ -1051,7 +1094,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         do {
             try {
                 /* @var $results ReservationList */
-                $results = $aws->ec2->instance->describe(null, null, $nextToken, 1000);
+                $results = $aws->ec2->instance->describe($instanceIds, null, $nextToken, empty($instanceIds) ? 1000 : null);
             } catch (Exception $e) {
                 throw new Exception(sprintf("Cannot get list of servers for platform ec2: %s", $e->getMessage()));
             }
@@ -1075,6 +1118,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
                         $orphans[] = new OrphanedServer(
                             $instance->instanceId,
+                            $instance->instanceType,
                             $instance->imageId,
                             $instance->instanceState->name,
                             $instance->launchTime->setTimezone(new \DateTimeZone("UTC")), // !important
@@ -1091,7 +1135,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 }
             }
 
-            $nextToken = $results->getNextToken();
+            if (empty($instanceIds)) {
+                $nextToken = $results->getNextToken();
+            }
 
             unset($results);
         } while ($nextToken);
@@ -1272,7 +1318,6 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
             //$ami variable is expected to be defined here
 
-            $platform = $ami->platform;
             $rootDeviceType = $ami->rootDeviceType;
 
             if ($rootDeviceType == 'ebs') {
@@ -1353,9 +1398,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 $BundleTask->Log(sprintf("Checking snapshot creation status: %s", $ami->imageState));
 
                 $metaData = $BundleTask->getSnapshotDetails();
-                if ($ami->imageState == 'available') {
 
+                if ($ami->imageState == 'available') {
                     $metaData['szr_version'] = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_VESION);
+
+                    $tags = [];
 
                     if ($ami->rootDeviceType == 'ebs') {
                         $tags[] = ROLE_TAGS::EC2_EBS;
@@ -1365,7 +1412,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                         $tags[] = ROLE_TAGS::EC2_HVM;
                     }
 
-                    $metaData['tags'] = $tags;
+                    $metaData['tags'] = empty($tags) ? null : $tags;
 
                     $BundleTask->SnapshotCreationComplete($BundleTask->snapshotId, $metaData);
                 } else {
@@ -1763,7 +1810,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
         $list = $aws->ec2->routeTable->describe(null, $filter);
         if ($list->count() > 0) {
-            if ($type == \Scalr_Role_Behavior_Router::INTERNET_ACCESS_FULL)
+            if ($type == Scalr_Role_Behavior_Router::INTERNET_ACCESS_FULL)
                 $routingTable = $list->get(0);
             else {
                 /* @var $routingTable \Scalr\Service\Aws\Ec2\DataType\RouteTableData */
@@ -1791,7 +1838,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             // Create routing table for FULL internet access
             $routingTable = $aws->ec2->routeTable->create($vpcId);
             // Add new route for internet
-            if ($type == \Scalr_Role_Behavior_Router::INTERNET_ACCESS_FULL) {
+            if ($type == Scalr_Role_Behavior_Router::INTERNET_ACCESS_FULL) {
                 // GET IGW
                 $igwList = $aws->ec2->internetGateway->describe(null, array(array(
                     'name'  => InternetGatewayFilterNameType::attachmentVpcId(),
@@ -1858,7 +1905,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
      * {@inheritdoc}
      * @see \Scalr\Modules\PlatformModuleInterface::LaunchServer()
      */
-    public function LaunchServer(DBServer $DBServer, \Scalr_Server_LaunchOptions $launchOptions = null)
+    public function LaunchServer(DBServer $DBServer, Scalr_Server_LaunchOptions $launchOptions = null)
     {
         $runInstanceRequest = new RunInstancesRequestData(
             (isset($launchOptions->imageId) ? $launchOptions->imageId : null), 1, 1
@@ -1872,7 +1919,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         $noSecurityGroups = false;
 
         if (!$launchOptions) {
-            $launchOptions = new \Scalr_Server_LaunchOptions();
+            $launchOptions = new Scalr_Server_LaunchOptions();
 
             $dbFarmRole = $DBServer->GetFarmRoleObject();
             $DBRole = $dbFarmRole->GetRoleObject();
@@ -1885,8 +1932,13 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 SERVER_PLATFORMS::EC2,
                 $dbFarmRole->CloudLocation
             );
-
             $launchOptions->imageId = $image->imageId;
+
+            if ($DBRole->isScalarized) {
+                if (!$image->getImage()->isScalarized && $image->getImage()->hasCloudInit) {
+                    $useCloudInit = true;
+                }
+            }
 
             // Need OS Family to get block device mapping for OEL roles
             $launchOptions->osFamily = $image->getImage()->getOs()->family;
@@ -1906,11 +1958,11 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             if ($ariId)
                 $runInstanceRequest->ramdiskId = $ariId;
 
-            $iType = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_INSTANCE_TYPE);
+            $iType = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::INSTANCE_TYPE);
             $launchOptions->serverType = $iType;
 
             // Check governance of instance types
-            $types = $governance->getValue('ec2', 'aws.instance_type');
+            $types = $governance->getValue('ec2', Scalr_Governance::INSTANCE_TYPE);
             if (count($types) > 0) {
                 if (!in_array($iType, $types))
                     throw new Exception(sprintf(
@@ -1939,7 +1991,12 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
             $u_data = trim($u_data, ";");
 
-            $customUserData = $dbFarmRole->GetSetting('base.custom_user_data');
+            if (!empty($useCloudInit)) {
+                $customUserData = file_get_contents(APPPATH . "/templates/services/cloud_init/config.tpl");
+            } else {
+                $customUserData = $dbFarmRole->GetSetting('base.custom_user_data');
+            }
+
             if ($customUserData) {
                 $repos = $DBServer->getScalarizrRepository();
 
@@ -1956,13 +2013,15 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 $userData = $u_data;
             }
 
-            $runInstanceRequest->userData = base64_encode($userData);
+            if ($DBRole->isScalarized) {
+                $runInstanceRequest->userData = base64_encode($userData);
+            }
 
             $vpcId = $dbFarmRole->GetFarmObject()->GetSetting(Entity\FarmSetting::EC2_VPC_ID);
             if ($vpcId) {
                 if ($DBRole->hasBehavior(ROLE_BEHAVIORS::VPC_ROUTER)) {
                     $networkInterface = new InstanceNetworkInterfaceSetRequestData();
-                    $networkInterface->networkInterfaceId = $dbFarmRole->GetSetting(\Scalr_Role_Behavior_Router::ROLE_VPC_NID);
+                    $networkInterface->networkInterfaceId = $dbFarmRole->GetSetting(Scalr_Role_Behavior_Router::ROLE_VPC_NID);
                     $networkInterface->deviceIndex = 0;
                     $networkInterface->deleteOnTermination = false;
 
@@ -2013,40 +2072,39 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                                     array('key' => "scalr-sn-type", 'value' => $vpcInternetAccess),
                                     array('key' => "Name", 'value' => 'Scalr System Subnet')
                                 ));
-                            } catch (Exception $e) {}
+                            } catch (Exception $e) {
+                            }
 
                             try {
-
                                 $routeTableId = $dbFarmRole->GetSetting(Entity\FarmRoleSetting::AWS_VPC_ROUTING_TABLE_ID);
 
-                                \Scalr::getContainer()->logger('VPC')->warn(new \FarmLogMessage($DBServer->farmId, "Internet access: {$vpcInternetAccess}"));
+                                \Scalr::getContainer()->logger('VPC')->warn(new FarmLogMessage($DBServer, "Internet access: {$vpcInternetAccess}"));
 
                                 if (!$routeTableId) {
-                                    if ($vpcInternetAccess == \Scalr_Role_Behavior_Router::INTERNET_ACCESS_OUTBOUND) {
+                                    if ($vpcInternetAccess == Scalr_Role_Behavior_Router::INTERNET_ACCESS_OUTBOUND) {
                                         $routerRole = $DBServer->GetFarmObject()->GetFarmRoleByBehavior(ROLE_BEHAVIORS::VPC_ROUTER);
+
                                         if (!$routerRole) {
-                                            if (\Scalr::config('scalr.instances_connection_policy') != 'local')
+                                            if (\Scalr::config('scalr.instances_connection_policy') != 'local') {
                                                 throw new Exception("Outbound access require VPC router role in farm");
+                                            }
                                         }
 
-                                        $networkInterfaceId = $routerRole->GetSetting(\Scalr_Role_Behavior_Router::ROLE_VPC_NID);
+                                        $networkInterfaceId = $routerRole->GetSetting(Scalr_Role_Behavior_Router::ROLE_VPC_NID);
 
-                                        \Scalr::getContainer()->logger('EC2')->warn(new \FarmLogMessage($DBServer->farmId, "Requesting outbound routing table. NID: {$networkInterfaceId}"));
+                                        \Scalr::getContainer()->logger('EC2')->warn(new FarmLogMessage($DBServer, "Requesting outbound routing table. NID: {$networkInterfaceId}"));
 
                                         $routeTableId = $this->getRoutingTable($vpcInternetAccess, $aws, $networkInterfaceId, $vpcId);
 
-                                        \Scalr::getContainer()->logger('EC2')->warn(new \FarmLogMessage($DBServer->farmId, "Routing table ID: {$routeTableId}"));
-
-                                    } elseif ($vpcInternetAccess == \Scalr_Role_Behavior_Router::INTERNET_ACCESS_FULL) {
+                                        \Scalr::getContainer()->logger('EC2')->warn(new FarmLogMessage($DBServer, "Routing table ID: {$routeTableId}"));
+                                    } elseif ($vpcInternetAccess == Scalr_Role_Behavior_Router::INTERNET_ACCESS_FULL) {
                                         $routeTableId = $this->getRoutingTable($vpcInternetAccess, $aws, null, $vpcId);
                                     }
                                 }
 
                                 $aws->ec2->routeTable->associate($routeTableId, $subnet->subnetId);
-
                             } catch (Exception $e) {
-
-                                \Scalr::getContainer()->logger('EC2')->warn(new \FarmLogMessage($DBServer->farmId, "Removing allocated subnet, due to routing table issues"));
+                                \Scalr::getContainer()->logger('EC2')->warn(new FarmLogMessage($DBServer, "Removing allocated subnet, due to routing table issues"));
 
                                 $aws->ec2->subnet->delete($subnet->subnetId);
                                 throw $e;
@@ -2140,15 +2198,15 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
         if ($rootDeviceSettings) {
             $ebs = new EbsBlockDeviceData(
-                $rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_SIZE],
+                array_key_exists(FarmRoleStorageConfig::SETTING_EBS_SIZE, $rootDeviceSettings) ? $rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_SIZE] : null,
                 null,//$rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_SNAPSHOT],
-                $rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_TYPE],
-                $rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_IOPS],
+                array_key_exists(FarmRoleStorageConfig::SETTING_EBS_TYPE, $rootDeviceSettings) ? $rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_TYPE] : null,
+                array_key_exists(FarmRoleStorageConfig::SETTING_EBS_IOPS, $rootDeviceSettings) ? $rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_IOPS] : null,
                 true,
                 null
             );
 
-            $deviceName = $rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_DEVICE_NAME] ? $rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_DEVICE_NAME] : '/dev/sda1';
+            $deviceName = !empty($rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_DEVICE_NAME]) ? $rootDeviceSettings[FarmRoleStorageConfig::SETTING_EBS_DEVICE_NAME] : '/dev/sda1';
 
             $rootBlockDevice = new BlockDeviceMappingData($deviceName, null, null, $ebs);
             $runInstanceRequest->appendBlockDeviceMapping($rootBlockDevice);
@@ -2251,7 +2309,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 \EC2_SERVER_PROPERTIES::VPC_ID          => $result->instancesSet->get(0)->vpcId,
                 \EC2_SERVER_PROPERTIES::SUBNET_ID       => $result->instancesSet->get(0)->subnetId,
                 \EC2_SERVER_PROPERTIES::ARCHITECTURE    => $result->instancesSet->get(0)->architecture,
-                \SERVER_PROPERTIES::INFO_INSTANCE_VCPUS => $instanceTypeInfo ? $instanceTypeInfo->vcpus : null,
+                \SERVER_PROPERTIES::INFO_INSTANCE_VCPUS => isset($instanceTypeInfo['vcpus']) ? $instanceTypeInfo['vcpus'] : null,
             ]);
 
             $DBServer->setOsType($result->instancesSet->get(0)->platform ? $result->instancesSet->get(0)->platform : 'linux');
@@ -2260,7 +2318,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             $DBServer->update(['type' => $runInstanceRequest->instanceType, 'instanceTypeName' => $runInstanceRequest->instanceType]);
             $DBServer->imageId = $launchOptions->imageId;
             // we set server history here
-            $DBServer->getServerHistory();
+            $DBServer->getServerHistory()->update(['cloudServerId' => $result->instancesSet->get(0)->instanceId]);
 
             return $DBServer;
         } else {
@@ -2341,6 +2399,17 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         }
 
         return $retval;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Modules\PlatformModuleInterface::getInstanceType()
+     */
+    public function getInstanceType($instanceTypeId, \Scalr_Environment $env, $cloudLocation = null)
+    {
+        $instanceTypes = $this->getInstanceTypes($env, $cloudLocation, true);
+
+        return $instanceTypes[$instanceTypeId];
     }
 
     /**
@@ -2533,7 +2602,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                         sleep(2);
 
                         $userIdGroupPairList = new UserIdGroupPairList(new UserIdGroupPairData(
-                            $DBServer->GetEnvironmentObject()->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
+                            $DBServer->GetEnvironmentObject()->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
                             null,
                             $groupName
                         ));
@@ -2584,7 +2653,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
 
                         // Default rules
                         $userIdGroupPairList = new UserIdGroupPairList(new UserIdGroupPairData(
-                            $DBServer->GetEnvironmentObject()->cloudCredentials(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
+                            $DBServer->GetEnvironmentObject()->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID],
                             null,
                             $groupName
                         ));
@@ -2673,15 +2742,14 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
      *
      * @param   DBServer                   $DBServer
      * @param   \Scalr\Service\Aws\Ec2     $ec2
-     * @param   \Scalr_Server_LaunchOptions $launchOptions
+     * @param   Scalr_Server_LaunchOptions $launchOptions
      */
     private function GetServerAvailZone(DBServer $DBServer, \Scalr\Service\Aws\Ec2 $ec2,
-                                        \Scalr_Server_LaunchOptions $launchOptions)
+                                        Scalr_Server_LaunchOptions $launchOptions)
     {
-        if ($DBServer->status == SERVER_STATUS::TEMPORARY)
+        if ($DBServer->status == SERVER_STATUS::TEMPORARY) {
             return false;
-
-        $aws = $DBServer->GetEnvironmentObject()->aws($DBServer);
+        }
 
         $server_avail_zone = $DBServer->GetProperty(EC2_SERVER_PROPERTIES::AVAIL_ZONE);
 
@@ -2689,9 +2757,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             SELECT ec2_avail_zone FROM ec2_ebs
             WHERE server_index=? AND farm_roleid=?
             LIMIT 1
-        ",
-            array($DBServer->index, $DBServer->farmRoleId)
-        );
+        ", [$DBServer->index, $DBServer->farmRoleId]);
 
         if (!$role_avail_zone) {
             if ($server_avail_zone &&
@@ -2733,10 +2799,10 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                         }
                     }
                 }
-
             } else {
                 // Get list of all available zones
                 $avail_zones_resp = $ec2->availabilityZone->describe();
+
                 foreach ($avail_zones_resp as $zone) {
                     /* @var $zone \Scalr\Service\Aws\Ec2\DataType\AvailabilityZoneData */
                     $zoneName = $zone->zoneName;
@@ -2764,6 +2830,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             }
 
             sort($avail_zones);
+
             $avail_zones = array_reverse($avail_zones);
 
             $servers = $DBServer->GetFarmRoleObject()->GetServersByFilter(array("status" => array(
@@ -2771,7 +2838,9 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
                 SERVER_STATUS::INIT,
                 SERVER_STATUS::PENDING
             )));
+
             $availZoneDistribution = array();
+
             foreach ($servers as $cDbServer) {
                 if ($cDbServer->serverId != $DBServer->serverId) {
                     $availZoneDistribution[$cDbServer->GetProperty(EC2_SERVER_PROPERTIES::AVAIL_ZONE)]++;
@@ -2779,17 +2848,12 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
             }
 
             $sCount = 1000000;
+
             foreach ($avail_zones as $zone) {
                 if ((int)$availZoneDistribution[$zone] <= $sCount) {
                     $sCount = (int)$availZoneDistribution[$zone];
                     $availZone = $zone;
                 }
-            }
-
-            $aZones = implode(",", $avail_zones);
-            $dZones = "";
-            foreach ($availZoneDistribution as $zone => $num) {
-                $dZones .= "({$zone}:{$num})";
             }
 
             return $availZone;
@@ -2808,7 +2872,7 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
     {
         $config = \Scalr::getContainer()->config;
 
-        $cloudCredentials = $environment->cloudCredentials(SERVER_PLATFORMS::EC2);
+        $cloudCredentials = $environment->keychain(SERVER_PLATFORMS::EC2);
         $ccProps = $cloudCredentials->properties;
 
         $accessData = new \stdClass();
@@ -2818,14 +2882,15 @@ class Ec2PlatformModule extends AbstractAwsPlatformModule implements \Scalr\Modu
         $accessData->cert = $ccProps[Entity\CloudCredentialsProperty::AWS_CERTIFICATE];
         $accessData->pk = $ccProps[Entity\CloudCredentialsProperty::AWS_PRIVATE_KEY];
 
-        if ($config('scalr.aws.use_proxy') && in_array($config('scalr.connections.proxy.use_on'), array('both', 'instance'))) {
+        if ($config('scalr.aws.use_proxy') && in_array($config('scalr.connections.proxy.use_on'), ['both', 'instance'])) {
             $proxySettings = $config('scalr.connections.proxy');
             $accessData->proxy = new \stdClass();
-            $accessData->proxy->host = $proxySettings['host'];
-            $accessData->proxy->port = $proxySettings['port'];
-            $accessData->proxy->user = $proxySettings['user'];
-            $accessData->proxy->pass = $proxySettings['pass'];
-            $accessData->proxy->type = $proxySettings['type'];
+            $accessData->proxy->host     = $proxySettings['host'];
+            $accessData->proxy->port     = $proxySettings['port'];
+            $accessData->proxy->user     = $proxySettings['user'];
+            $accessData->proxy->pass     = $proxySettings['pass'];
+            $accessData->proxy->type     = $proxySettings['type'];
+            $accessData->proxy->authtype = $proxySettings['authtype'];
         }
 
         return $accessData;

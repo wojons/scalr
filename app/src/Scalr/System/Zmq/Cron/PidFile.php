@@ -39,7 +39,7 @@ class PidFile
      *
      * @var string
      */
-    public $pidExistLevel = 'ERROR';
+    public $pidExistLevel = 'INFO';
 
     /**
      * Constructor

@@ -1,0 +1,329 @@
+paths:
+  - uri: /{envId}/farm-roles/{farmRoleId}/scaling/
+    acl: fullAccess
+    adapter: 'farmRole'
+    operations:
+      - {method: get,  response: 200, params: '&{0}ScalingRuleData'}
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #1#######################
+      - {method: post, response: 404, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #2
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #3
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #4
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #5
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #6
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #7
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #8 Custom scaling metric
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #9
+      - {method: post, response: 201, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #10
+      - {method: post, response: 409, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #11
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #12
+      - {method: post, response: 201, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #13
+      - {method: post, response: 409, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #14
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #15######################
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #16  LoadAverages
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #17  scaling metric
+      - {method: post, response: 201, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #18
+      - {method: post, response: 409, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #19######################
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #20
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #21 BandWidth
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #22 scaling metric
+      - {method: post, response: 201, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #23
+      - {method: post, response: 409, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #24######################
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #25
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #26 FreeRam
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #27 scaling metric
+      - {method: post, response: 201, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #28
+      - {method: post, response: 409, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #29
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #30######################
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #31 SqsQueueSize
+      - {method: post, response: 201, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #32 scaling metric
+      - {method: post, response: 409, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #33######################
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #34
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #35 UrlResponseTime
+      - {method: post, response: 400, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #36 scaling metric
+      - {method: post, response: 201, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #37
+      - {method: post, response: 409, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #38#########################
+      - {method: post, response: 409, body: '&{40}ScalingRuleData', params: '&{0}ScalingRuleData'} #40 Add DateAndTime scaling metric to the Role which alredy has other Scaling metrics
+      - {method: post, response: 400, body: '&{41}ScalingRuleData', params: '&{39}ScalingRuleData'} #41#################
+      - {method: post, response: 400, body: '&{42}ScalingRuleData', params: '&{39}ScalingRuleData'} #42
+      - {method: post, response: 400, body: '&{43}ScalingRuleData', params: '&{39}ScalingRuleData'} #43
+      - {method: post, response: 400, body: '&{44}ScalingRuleData', params: '&{39}ScalingRuleData'} #44
+      - {method: post, response: 400, body: '&{45}ScalingRuleData', params: '&{39}ScalingRuleData'} #45
+      - {method: post, response: 400, body: '&{46}ScalingRuleData', params: '&{39}ScalingRuleData'} #46
+      - {method: post, response: 400, body: '&{47}ScalingRuleData', params: '&{39}ScalingRuleData'} #47
+      - {method: post, response: 400, body: '&{48}ScalingRuleData', params: '&{39}ScalingRuleData'} #48
+      - {method: post, response: 400, body: '&{49}ScalingRuleData', params: '&{39}ScalingRuleData'} #49
+      - {method: post, response: 400, body: '&{50}ScalingRuleData', params: '&{39}ScalingRuleData'} #50 DateAndTime
+      - {method: post, response: 400, body: '&{51}ScalingRuleData', params: '&{39}ScalingRuleData'} #51 scaling metric
+      - {method: post, response: 400, body: '&{52}ScalingRuleData', params: '&{39}ScalingRuleData'} #52
+      - {method: post, response: 201, body: '&{53}ScalingRuleData', params: '&{39}ScalingRuleData'} #53
+      - {method: post, response: 409, body: '&{53}ScalingRuleData', params: '&{39}ScalingRuleData'} #54#################
+      - {method: post, response: 409, body: '&{10}ScalingRuleData', params: '&{39}ScalingRuleData'} #55Add BasicScaling metrics to DateAndTimeScalingMetrics
+      - {method: post, response: 400, body: '&{55}ScalingRuleData', params: '&{0}ScalingRuleData'} #56##################
+      - {method: post, response: 400, body: '&{56}ScalingRuleData', params: '&{0}ScalingRuleData'} #57
+      - {method: post, response: 400, body: '&{57}ScalingRuleData', params: '&{0}ScalingRuleData'} #58  test not valid ruleType
+      - {method: post, response: 400, body: '&{58}ScalingRuleData', params: '&{0}ScalingRuleData'} #59
+      - {method: post, response: 400, body: '&{59}ScalingRuleData', params: '&{0}ScalingRuleData'} #60
+      - {method: post, response: 400, body: '&{60}ScalingRuleData', params: '&{0}ScalingRuleData'} #61##################
+      - {method: post, response: 409, body: '&{10}ScalingRuleData', params: '&{8}ScalingRuleDataParams'}  # Add scaling to farm with cf_cloud_controller behaviors
+      - {method: post, response: 409, body: '&{10}ScalingRuleData', params: '&{9}ScalingRuleDataParams'}  # Add scaling to farm with mongodb  behaviors
+      - {method: post, response: 409, body: '&{10}ScalingRuleData', params: '&{10}ScalingRuleDataParams'} # Add scaling to farm with rabbitmq behaviors
+      - {method: post, response: 409, body: '&{10}ScalingRuleData', params: '&{11}ScalingRuleDataParams'} ##############
+      - {method: post, response: 409, body: '&{13}ScalingRuleData', params: '&{11}ScalingRuleDataParams'} #
+      - {method: post, response: 409, body: '&{18}ScalingRuleData', params: '&{11}ScalingRuleDataParams'} # Add scaling rule
+      - {method: post, response: 409, body: '&{23}ScalingRuleData', params: '&{11}ScalingRuleDataParams'} # to scalarizer farm-role
+      - {method: post, response: 409, body: '&{28}ScalingRuleData', params: '&{11}ScalingRuleDataParams'} #
+      - {method: post, response: 409, body: '&{32}ScalingRuleData', params: '&{11}ScalingRuleDataParams'} #
+      - {method: post, response: 409, body: '&{37}ScalingRuleData', params: '&{11}ScalingRuleDataParams'} ##############
+      - {method: post, response: 201, body: '&{53}ScalingRuleData', params: '&{11}ScalingRuleDataParams'} # Add DateAndTime scaling rule to scalarizer farm-role
+      - {method: post, response: 400, body: '&{61}ScalingRuleData', params: '&{12}ScalingRuleDataParams'} #############
+      - {method: post, response: 400, body: '&{62}ScalingRuleData', params: '&{12}ScalingRuleDataParams'} #
+      - {method: post, response: 400, body: '&{63}ScalingRuleData', params: '&{12}ScalingRuleDataParams'} #  Test SCALRCORE-3242 SQS Queue size validation correction
+      - {method: post, response: 201, body: '&{64}ScalingRuleData', params: '&{12}ScalingRuleDataParams'} #
+      - {method: post, response: 409, body: '&{64}ScalingRuleData', params: '&{12}ScalingRuleDataParams'} #############
+
+  - uri: /{envId}/farm-roles/{farmRoleId}/scaling/
+    acl: readOnly
+    adapter: 'farmRole'
+    operations:
+      - {method: get,  response: 200, params: '&{0}ScalingRuleData'}
+      - {method: post, response: 403, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #10
+  - uri: /{envId}/farm-roles/{farmRoleId}/scaling/
+    acl: noAccess
+    adapter: 'farmRole'
+    operations:
+      - {method: get,  response: 403, params: '&{0}ScalingRuleData'}
+      - {method: post, response: 403, body: '&ScalingRuleData', params: '&{0}ScalingRuleData'} #10
+
+  - uri: /{envId}/farm-roles/{farmRoleId}/scaling/{metricName}/
+    acl: readOnly
+    adapter: 'ScalingRule\BasicScalingRule'
+    operations:
+      - {method: get,    response: 200, params:  '&{0}ScalingRuleDataParams'}
+      - {method: get,    response: 200, params:  '&{1}ScalingRuleDataParams'}
+      - {method: patch,  response: 403, params:  '&{0}ScalingRuleDataParams', body: {scaleUp: 205}}
+      - {method: delete, response: 403, params:  '&{0}ScalingRuleDataParams'}
+  - uri: /{envId}/farm-roles/{farmRoleId}/scaling/{metricName}/
+    acl: noAccess
+    adapter: 'ScalingRule\BasicScalingRule'
+    operations:
+      - {method: get,    response: 403, params:  '&{0}ScalingRuleDataParams'}
+      - {method: patch,  response: 403, params:  '&{0}ScalingRuleDataParams', body: {scaleUp: 205}}
+      - {method: delete, response: 403, params:  '&{0}ScalingRuleDataParams'}
+
+  - uri: /{envId}/farm-roles/{farmRoleId}/scaling/{metricName}/
+    acl: fullAccess
+    adapter: 'ScalingRule\BasicScalingRule'
+    operations:
+      - {method: get,    response: 200, params:  '&{0}ScalingRuleDataParams'}
+      - {method: patch,  response: 200, params:  '&{0}ScalingRuleDataParams', body: {scaleUp: 205}}
+      - {method: patch,  response: 200, params:  '&{0}ScalingRuleDataParams', body: {scaleUp: 250, scaleDown: 211}}
+      - {method: patch,  response: 400, params:  '&{0}ScalingRuleDataParams', body: {scaleUp: 211, scaleDown: 211}}
+      - {method: patch,  response: 400, params:  '&{0}ScalingRuleDataParams', body: {scaleUp: 200, scaleDown: 300}}
+      - {method: patch,  response: 400, params:  '&{0}ScalingRuleDataParams', body: {name: 'LoadAverages'}}
+      - {method: patch,  response: 400, params:  '&{0}ScalingRuleDataParams', body: {ruleType: 'BasicScalingRule'}}
+      - {method: delete, response: 200, params:  '&{0}ScalingRuleDataParams'}
+      - {method: delete, response: 404, params:  '&{0}ScalingRuleDataParams'}
+      - {method: get,    response: 200, params:  '&{1}ScalingRuleDataParams'}
+      - {method: patch,  response: 200, params:  '&{1}ScalingRuleDataParams', body: {scaleDown: 205}}
+      - {method: patch,  response: 400, params:  '&{1}ScalingRuleDataParams', body: {scaleUp: 211, scaleDown: 211}}
+      - {method: patch,  response: 200, params:  '&{1}ScalingRuleDataParams', body: {scaleUp: 200, scaleDown: 300}}
+      - {method: patch,  response: 400, params:  '&{1}ScalingRuleDataParams', body: {name: 'LoadAverages'}}
+      - {method: patch,  response: 400, params:  '&{1}ScalingRuleDataParams', body: {ruleType: 'BasicScalingRule'}}
+      - {method: delete, response: 200, params:  '&{1}ScalingRuleDataParams'}
+      - {method: delete, response: 404, params:  '&{1}ScalingRuleDataParams'}
+
+  - uri: /{envId}/farm-roles/{farmRoleId}/scaling/{metricName}/
+    acl: fullAccess
+    adapter: 'ScalingRule\LoadAveragesScalingRule'
+    operations:
+     - {method: get,    response: 200, params:  '&{2}ScalingRuleDataParams'}
+     - {method: patch,  response: 400, params:  '&{2}ScalingRuleDataParams', body: {calculatingPeriod: 25}}
+     - {method: patch,  response: 200, params:  '&{2}ScalingRuleDataParams', body: {calculatingPeriod: 15}}
+     - {method: patch,  response: 400, params:  '&{2}ScalingRuleDataParams', body: {name: 'LoadAverages'}}
+     - {method: delete, response: 200, params:  '&{2}ScalingRuleDataParams'}
+     - {method: delete, response: 404, params:  '&{2}ScalingRuleDataParams'}
+  - uri: /{envId}/farm-roles/{farmRoleId}/scaling/{metricName}/
+    acl: fullAccess
+    adapter: 'ScalingRule\BandWidthScalingRule'
+    operations:
+      - {method: get,    response: 200, params:  '&{3}ScalingRuleDataParams'}
+      - {method: patch,  response: 200, params:  '&{3}ScalingRuleDataParams', body: {direction: 'inbound'}}
+      - {method: patch,  response: 200, params:  '&{3}ScalingRuleDataParams', body: {direction: 'outbound'}}
+      - {method: patch,  response: 400, params:  '&{3}ScalingRuleDataParams', body: {direction: 'fake'}}
+      - {method: delete, response: 200, params:  '&{3}ScalingRuleDataParams'}
+      - {method: delete, response: 404, params:  '&{3}ScalingRuleDataParams'}
+  - uri: /{envId}/farm-roles/{farmRoleId}/scaling/{metricName}/
+    acl: fullAccess
+    adapter: 'ScalingRule\FreeRamScalingRule'
+    operations:
+      - {method: get,    response: 200, params:  '&{4}ScalingRuleDataParams'}
+      - {method: patch,  response: 200, params:  '&{4}ScalingRuleDataParams', body: {useCachedRam: false}}
+      - {method: patch,  response: 200, params:  '&{4}ScalingRuleDataParams', body: {useCachedRam: true}}
+      - {method: patch,  response: 200, params:  '&{4}ScalingRuleDataParams', body: {scaleUp: 200, scaleDown: 300}}
+      - {method: patch,  response: 400, params:  '&{4}ScalingRuleDataParams', body: {scaleUp: 300, scaleDown: 200}}
+      - {method: delete, response: 200, params:  '&{4}ScalingRuleDataParams'}
+      - {method: delete, response: 404, params:  '&{4}ScalingRuleDataParams'}
+  - uri: /{envId}/farm-roles/{farmRoleId}/scaling/{metricName}/
+    acl: fullAccess
+    adapter: 'ScalingRule\SqsQueueSizeScalingRule'
+    operations:
+      - {method: get,    response: 200, params:  '&{5}ScalingRuleDataParams'}
+      - {method: patch,  response: 400, params:  '&{5}ScalingRuleDataParams', body: {queue: }}
+      - {method: patch,  response: 200, params:  '&{5}ScalingRuleDataParams', body: {queue: 'testQue'}}
+      - {method: patch,  response: 200, params:  '&{5}ScalingRuleDataParams', body: {scaleUp: 400, scaleDown: 300, queue: 'testQue'}}
+      - {method: delete, response: 200, params:  '&{5}ScalingRuleDataParams'}
+      - {method: delete, response: 404, params:  '&{5}ScalingRuleDataParams'}
+  - uri: /{envId}/farm-roles/{farmRoleId}/scaling/{metricName}/
+    acl: fullAccess
+    adapter: 'ScalingRule\UrlResponseTimeScalingRule'
+    operations:
+      - {method: get,    response: 200, params:  '&{6}ScalingRuleDataParams'}
+      - {method: patch,  response: 400, params:  '&{6}ScalingRuleDataParams', body: {url: 'fake' }}
+      - {method: patch,  response: 200, params:  '&{6}ScalingRuleDataParams', body: {url: 'https://en.wikipedia.org/wiki/Foobar'}}
+      - {method: patch,  response: 200, params:  '&{6}ScalingRuleDataParams', body: {scaleUp: 400, scaleDown: 300, url: 'https://en.wikipedia.org/wiki/Foobar'}}
+      - {method: delete, response: 200, params:  '&{6}ScalingRuleDataParams'}
+      - {method: delete, response: 404, params:  '&{6}ScalingRuleDataParams'}
+
+  - uri: /{envId}/farm-roles/{farmRoleId}/scaling/{metricName}/
+    acl: fullAccess
+    adapter: 'ScalingRule\DateAndTimeScalingRule'
+    operations:
+      - {method: get,    response: 200, params:  '&{7}ScalingRuleDataParams'}
+      - {method: patch,  response: 200, params:  '&{7}ScalingRuleDataParams', body: '&{54}ScalingRuleData'}
+      - {method: patch,  response: 400, params:  '&{7}ScalingRuleDataParams', body: {schedule: []}}
+      - {method: delete, response: 200, params:  '&{7}ScalingRuleDataParams'}
+      - {method: delete, response: 404, params:  '&{7}ScalingRuleDataParams'}
+
+ScalingRuleData:
+ - {farmRoleId: '&FarmRole.id'}
+ - {name: '&CustomMetrics.name', ruleType: 'fake', scaleUp: 200, scaleDown: 100}                 #1    Custom
+ - {name: 'fake', ruleType: 'BasicScalingRule', scaleUp: 200, scaleDown: 100}                    #2
+ - {name: '&{0}CustomMetrics.name', scaleUp: 10, scaleDown: 100}                                 #3
+ - {name: '&{0}CustomMetrics.name', scaleDown: 100}                                              #4
+ - {name: '&{0}CustomMetrics.name', ruleType: 'BasicScalingRule',  scaleDown: 100}               #5
+ - {name: '&{0}CustomMetrics.name', scaleUp: 10, scaleDown: 100}                                 #6
+ - {ruleType: 'BasicScalingRule', scaleUp: 10, scaleDown: 100}                                   #7
+ - {name: '&{1}CustomMetrics.name', ruleType: 'BasicScalingRule'}                                #8
+ - {name: '&{0}CustomMetrics.name', ruleType: 'BasicScalingRule', scaleUp: 10, scaleDown: 100}   #9
+ - {name: '&{0}CustomMetrics.name', ruleType: 'BasicScalingRule', scaleUp: 100, scaleDown: 10}   #10
+ - {name: '&{0}CustomMetrics.name', ruleType: 'BasicScalingRule', scaleUp: 100, scaleDown: 10}   #11
+ - {name: '&{1}CustomMetrics.name', ruleType: 'BasicScalingRule', scaleUp: 100, scaleDown: 10}   #12
+ - {name: '&{1}CustomMetrics.name', ruleType: 'BasicScalingRule', scaleUp: 10, scaleDown: 100}   #13
+ - {name: '&{1}CustomMetrics.name', ruleType: 'BasicScalingRule', scaleUp: 10, scaleDown: 100}   #14
+ - {name: 'LoadAverages', ruleType: 'BasicScalingRule', scaleUp: 100, scaleDown: 10}             #15
+ - {name: 'LoadAverages', ruleType: 'LoadAveragesScalingRule', scaleUp: 100, scaleDown: 10}                        #16 LoadAverages
+ - {name: 'LoadAverages', ruleType: 'LoadAveragesScalingRule', scaleUp: 100, scaleDown: 10, calculatingPeriod: 25} #17
+ - {name: 'LoadAverages', ruleType: 'LoadAveragesScalingRule', scaleUp: 100, scaleDown: 10, calculatingPeriod: 15} #18
+ - {name: 'LoadAverages', ruleType: 'LoadAveragesScalingRule', scaleUp: 100, scaleDown: 10, calculatingPeriod: 15} #19
+ - {name: 'BandWidth', ruleType: 'BasicScalingRule', scaleUp: 100, scaleDown: 10}                                  #20 BandWidth
+ - {name: 'BandWidth', ruleType: 'BandWidthScalingRule', scaleUp: 100, scaleDown: 10}                              #21
+ - {name: 'BandWidth', ruleType: 'BandWidthScalingRule', scaleUp: 100, scaleDown: 10, direction: ['fake']}         #22
+ - {name: 'BandWidth', ruleType: 'BandWidthScalingRule', scaleUp: 100, scaleDown: 10, direction: 'outbound'}       #23
+ - {name: 'BandWidth', ruleType: 'BandWidthScalingRule', scaleUp: 100, scaleDown: 10, direction: 'inbound'}        #24
+ - {name: 'FreeRam', ruleType: 'BasicScalingRule', scaleUp: 100, scaleDown: 10}                                    #25 FreeRam
+ - {name: 'FreeRam', ruleType: 'FreeRamScalingRule', scaleUp: 100, scaleDown: 10}                                  #26
+ - {name: 'FreeRam', ruleType: 'FreeRamScalingRule', scaleUp: 100, scaleDown: 10}                                  #27
+ - {name: 'FreeRam', ruleType: 'FreeRamScalingRule', scaleUp: 10, scaleDown: 100, useCachedRam: true}              #28
+ - {name: 'FreeRam', ruleType: 'FreeRamScalingRule', scaleUp: 10, scaleDown: 100, useCachedRam: true}              #29
+ - {name: 'SqsQueueSize', ruleType: 'BasicScalingRule', scaleUp: 100, scaleDown: 10}                               #30 SqsQueueSize
+ - {name: 'SqsQueueSize', ruleType: 'SqsQueueSizeScalingRule', scaleUp: 100, scaleDown: 10}                        #31
+ - {name: 'SqsQueueSize', ruleType: 'SqsQueueSizeScalingRule', scaleUp: 100, scaleDown: 10, queue: 'test'}         #32
+ - {name: 'SqsQueueSize', ruleType: 'SqsQueueSizeScalingRule', scaleUp: 100, scaleDown: 10, queue: 'test'}         #33 UrlResponseTime
+ - {name: 'UrlResponseTime', ruleType: 'BasicScalingRule', scaleUp: 100, scaleDown: 10}                            #34
+ - {name: 'UrlResponseTime', ruleType: 'UrlResponseTimeScalingRule', scaleUp: 100, scaleDown: 10}                  #35
+ - {name: 'UrlResponseTime', ruleType: 'UrlResponseTimeScalingRule', scaleUp: 100, scaleDown: 10, url: 'test'}     #36
+ - {name: 'UrlResponseTime', ruleType: 'UrlResponseTimeScalingRule', scaleUp: 100, scaleDown: 10, url: 'http://example.com/'}  #37
+ - {name: 'UrlResponseTime', ruleType: 'UrlResponseTimeScalingRule', scaleUp: 100, scaleDown: 10, url: 'http://example.com/'}  #38
+ - {farmRoleId: '&{1}FarmRole.id'}
+ - {name: 'DateAndTime', ruleType: 'DateAndTimeScalingRule',  schedule: '&{0}Schedule'}  #40
+ - {name: 'DateAndTime', ruleType: 'BasicScalingRule',        schedule: '&{0}Schedule'}  #41
+ - {name: 'DateAndTime', ruleType: 'DateAndTimeScalingRule', schedule: '&{1}Schedule'}   #42
+ - {name: 'DateAndTime', ruleType: 'DateAndTimeScalingRule', schedule: '&{2}Schedule'}   #43
+ - {name: 'DateAndTime', ruleType: 'DateAndTimeScalingRule', schedule: '&{3}Schedule'}   #44
+ - {name: 'DateAndTime', ruleType: 'DateAndTimeScalingRule', schedule: '&{4}Schedule'}   #45
+ - {name: 'DateAndTime', ruleType: 'DateAndTimeScalingRule', schedule: '&{5}Schedule'}   #46  DateAndTime
+ - {name: 'DateAndTime', ruleType: 'DateAndTimeScalingRule', schedule: '&{6}Schedule'}   #47
+ - {name: 'DateAndTime', ruleType: 'DateAndTimeScalingRule', schedule: '&{7}Schedule'}   #48
+ - {name: 'DateAndTime', ruleType: 'DateAndTimeScalingRule', schedule: '&{8}Schedule'}   #49
+ - {name: 'DateAndTime', ruleType: 'DateAndTimeScalingRule', schedule: '&{9}Schedule'}   #50
+ - {name: 'DateAndTime', ruleType: 'DateAndTimeScalingRule', schedule: '&{10}Schedule'}  #51
+ - {name: 'DateAndTime', ruleType: 'DateAndTimeScalingRule'}                             #52
+ - {name: 'DateAndTime', ruleType: 'DateAndTimeScalingRule',  schedule: '&{11}Schedule'} #53
+ - {schedule: '&{12}Schedule'} #54
+ - {name: '&{0}CustomMetrics.name', ruleType: 'DateAndTimeScalingRule',     schedule: '&{11}Schedule'}                               #55
+ - {name: '&{0}CustomMetrics.name', ruleType: 'FreeRamScalingRule',         scaleUp: 10, scaleDown: 100, useCachedRam: true}         #56
+ - {name: '&{0}CustomMetrics.name', ruleType: 'LoadAveragesScalingRule',    scaleUp: 100, scaleDown: 10, calculatingPeriod: 15}      #57
+ - {name: '&{0}CustomMetrics.name', ruleType: 'SqsQueueSizeScalingRule',    scaleUp: 100, scaleDown: 10, queue: 'test'}              #58 test not valid ruleType
+ - {name: '&{0}CustomMetrics.name', ruleType: 'UrlResponseTimeScalingRule', scaleUp: 100, scaleDown: 10, url: 'http://example.com/'} #59
+ - {name: '&{0}CustomMetrics.name', ruleType: 'BandWidthScalingRule',       scaleUp: 100, scaleDown: 10, direction: 'inbound'}       #60
+ - {name: 'SqsQueueSize',           ruleType: 'SqsQueueSizeScalingRule',                  scaleDown: 1, queue: 'test_queue' }         #61##########
+ - {name: 'SqsQueueSize',           ruleType: 'SqsQueueSizeScalingRule',    scaleUp: 0,                 queue: ['test_array_queue'] } #62 Test SCALRCORE-3242 SQS Queue size validation correction
+ - {name: 'SqsQueueSize',           ruleType: 'SqsQueueSizeScalingRule',    scaleUp: 0,   scaleDown: 1, queue: ['test_array_queue'] } #63
+ - {name: 'SqsQueueSize',           ruleType: 'SqsQueueSizeScalingRule',    scaleUp: 0,   scaleDown: 1, queue: 'test_queue'}          #64##########
+ScalingRuleDataParams:
+  - {farmRoleId: '&{0}FarmRole.id', metricName: '&{0}CustomMetrics.name'}
+  - {farmRoleId: '&{0}FarmRole.id', metricName: '&{1}CustomMetrics.name'}
+  - {farmRoleId: '&{0}FarmRole.id', metricName: 'LoadAverages'}
+  - {farmRoleId: '&{0}FarmRole.id', metricName: 'BandWidth'}
+  - {farmRoleId: '&{0}FarmRole.id', metricName: 'FreeRam'}
+  - {farmRoleId: '&{0}FarmRole.id', metricName: 'SqsQueueSize'}
+  - {farmRoleId: '&{0}FarmRole.id', metricName: 'UrlResponseTime'}
+  - {farmRoleId: '&{1}FarmRole.id', metricName: 'DateAndTime'}
+  - {farmRoleId: '&{2}FarmRole.id'} #8#################################################
+  - {farmRoleId: '&{3}FarmRole.id'} #9 farm role where not allowed add scaling rules  #
+  - {farmRoleId: '&{4}FarmRole.id'} #10################################################
+  - {farmRoleId: '&{5}FarmRole.id'} #11 non scalarizer farm role
+  - {farmRoleId: '&{6}FarmRole.id'} #12 gce farmRole
+
+#test data#
+Farm:
+ - {name: testFarmForTestingScaling, comments: test-description}
+
+FarmRole:
+  - {farmId: '&{0}Farm.id',  roleId: '&Role.id', alias: test-farm-role,                     platform: ec2, cloudLocation: us-east-1}
+  - {farmId: '&{0}Farm.id',  roleId: '&Role.id', alias: test-farm-role2,                    platform: gce, cloudLocation: us-central1-a} #GCE farm role for DateAndTime Scaling metric
+  - {farmId: '&{0}Farm.id',  roleId: '&Role.id', alias: test-disable-scaling-role,          platform: ec2, cloudLocation: us-east-1}
+  - {farmId: '&{0}Farm.id',  roleId: '&Role.id', alias: test-disable-scaling-mongodb-role,  platform: ec2, cloudLocation: us-east-1, settings: {mongodb.data_storage.ebs.size: 10}}
+  - {farmId: '&{0}Farm.id',  roleId: '&Role.id', alias: test-disable-scaling-rabbitmq-role, platform: ec2, cloudLocation: us-east-1, settings: {rabbitmq.nodes_ratio: 10}}
+  - {farmId: '&{0}Farm.id',  roleId: '&Role.id', alias: test-no-scalarizer-role,            platform: ec2, cloudLocation: us-east-1}
+  - {farmId: '&{0}Farm.id',  roleId: '&Role.id', alias: test-gce-farm-role2,                platform: gce, cloudLocation: us-central1-a}
+
+Role:
+  - {name: test-scaling-role,                  catId: '&{0}RoleCategory', osId: centos-5-x,  accountId: , envId: , behaviors: 'base,chef' } #role for add scaling rules
+  - {name: test-date-time-scaling-role,        catId: '&{0}RoleCategory', osId: centos-5-x,  accountId: , envId: , behaviors: 'base,chef' } #role for add date-time scaling rules
+  - {name: test-disable-scaling-role,          catId: '&{0}RoleCategory', osId: centos-5-x,  accountId: , envId: , behaviors: 'cf_cloud_controller,cf_dea,cf_health_manager,cf_router,cf_service,www'}
+  - {name: test-disable-scaling-mongodb-role,  catId: '&{0}RoleCategory', osId: centos-5-x,  accountId: , envId: , behaviors: 'chef,mongodb'}
+  - {name: test-disable-scaling-rabbitmq-role, catId: '&{0}RoleCategory', osId: centos-5-x,  accountId: , envId: , behaviors: 'chef,memcached,postgresql,rabbitmq'}
+  - {name: test-no-scalarizer-scaling-role,    catId: '&{0}RoleCategory', osId: centos-5-x,  accountId: , envId: , isScalarized: false} #not scalarizer role
+  - {name: test-gce-scaling-role,              catId: '&{0}RoleCategory', osId: centos-5-x,  accountId: , envId: , behaviors: 'base,chef' } #role for add scaling rules
+
+RoleImage:
+  - {roleId: '&Role.id', cloudLocation: '&FarmRole.cloudLocation',  platform: '&FarmRole.platform'}
+  - {roleId: '&Role.id', cloudLocation: '&FarmRole.cloudLocation',  platform: '&FarmRole.platform'}
+  - {roleId: '&Role.id', cloudLocation: '&FarmRole.cloudLocation',  platform: '&FarmRole.platform'}
+  - {roleId: '&Role.id', cloudLocation: '&FarmRole.cloudLocation',  platform: '&FarmRole.platform'}
+  - {roleId: '&Role.id', cloudLocation: '&FarmRole.cloudLocation',  platform: '&FarmRole.platform'}
+  - {roleId: '&Role.id', cloudLocation: '&FarmRole.cloudLocation',  platform: '&FarmRole.platform'}
+  - {roleId: '&Role.id', cloudLocation: '&FarmRole.cloudLocation',  platform: '&FarmRole.platform'}
+
+RoleCategory:
+ - {name: testScalingRoleCategory}
+
+CustomMetrics:
+  - {name: 'testMetric',    retrieveMethod: 'read', calcFunction: 'avg', algorithm: 'Sensor', alias: 'custom'}
+  - {name: 'testInvMetric', retrieveMethod: 'read', calcFunction: 'avg', algorithm: 'Sensor', alias: 'custom', isInvert: true}
+
+Schedule:
+  - [{start: '12:00', end: '23:45', instanceCount: 2, daysOfWeek: ['mon']}]
+  - [{start: '12:00', instanceCount: 2, daysOfWeek: ['mon']}]
+  - [{start: '12:00', end: '23:45'}]
+  - [{start: '23:45', end: '12:00', instanceCount: 2, daysOfWeek: 'mon'}]
+  - [{start: '23:45', end: '12:00', instanceCount: 2, daysOfWeek: ['mon']}]
+  - [{start: '12:00', end: '23:45', instanceCount: one, daysOfWeek: ['mon']}]
+  - [{start: '12:00', end: '15:00', instanceCount: 1, daysOfWeek: ['mon']}, {start: 'foo bar', end: '23:45', instanceCount: 0, daysOfWeek: ['tue']}]
+  - [{start: '12:00', end: '15:00', instanceCount: 1, daysOfWeek: ['mon']}, {start: '14:00', end: '23:45', instanceCount: 1, daysOfWeek: ['mon', 'fake']}]
+  - [{start: '12:00', end: '15:00', instanceCount: 1, daysOfWeek: ['mon']}, {start: '15:35', end: '23:45', instanceCount: 1, daysOfWeek: ['mon']}]
+  - [{start: '00:00', end: '24:00', instanceCount: 1, daysOfWeek: ['mon']}]
+  - [{start: '12:00', end: '15:00', instanceCount: 1, daysOfWeek: ['mon']}, {start: '15:15', end: '23:45', instanceCount: 1}]
+  - [{start: '12:00', end: '15:00', instanceCount: 1, daysOfWeek: ['mon']}, {start: '15:15', end: '23:45', instanceCount: 1, daysOfWeek: ['mon']}]
+  - [{start: '12:00 PM', end: '3:00 PM', instanceCount: 1, daysOfWeek: ['mon']}, {start: '3:15 PM', end: '11:45 PM', instanceCount: 0, daysOfWeek: ['mon']}]

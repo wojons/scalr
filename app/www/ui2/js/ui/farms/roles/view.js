@@ -3,7 +3,8 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
         fields: [
             {name: 'id', type: 'int'}, 'platform', 'location',
             'name', 'alias', 'min_count', 'max_count', 'min_LA', 'max_LA', 'running_servers', 'suspended_servers', 'non_running_servers' ,'domains',
-            'image_id', 'farmid','shortcuts', 'role_id', 'scaling_algos', 'farm_status', 'location', 'allow_launch_instance', 'is_vpc', 'scaling_enabled'
+            'image_id', 'farmid','shortcuts', 'role_id', 'scaling_algos', 'farm_status', 'location', 'allow_launch_instance', 'is_vpc', 'scaling_enabled',
+            'isScalarized'
         ],
         proxy: {
             type: 'scalr.paging',
@@ -78,6 +79,8 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
                 )
             },
             { header: "Domains", width: 90, dataIndex: 'domains', sortable: false, align: 'center', xtype: 'templatecolumn',
+                hidden: !Scalr.flags['dnsGlobalEnabled'],
+                hideable: Scalr.flags['dnsGlobalEnabled'],
                 tpl:
                     '<tpl if="Scalr.isAllowed(\'DNS_ZONES\')">' +
                         '<a href="#/dnszones?farmRoleId={id}" class="x-grid-big-href">{domains}</a>' +
@@ -108,6 +111,7 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
                                     if (typeof(shortcut) != 'function') {
                                         me.add({
                                             isshortcut: true,
+                                            iconCls: 'x-menu-icon-execute',
                                             text: 'Execute ' + shortcut.name,
                                             href: '#/scripts/execute?shortcutId=' + shortcut.id
                                         });
@@ -128,11 +132,11 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
                         },
                         getVisibility: function(data) {
                             var format = Scalr.localStorage.get('system-preferred-sshkey-format') || (Ext.isWindows ? 'ppk' : 'pem');
-                            return format == 'pem' && data['farm_status'] != 0 && Scalr.isAllowed('SECURITY_SSH_KEYS') && (
-                                    Scalr.isAllowed('FARMS', 'servers') ||
-                                    data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
-                                    data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
-                                );
+                            return  data['platform'] !== 'azure' &&
+                                    format == 'pem' &&
+                                    data['farm_status'] != 0 &&
+                                    Scalr.isAllowed('SECURITY_SSH_KEYS') &&
+                                    Scalr.isFarmAllowed('servers', data);
                         }
                     }, {
                         text: 'Download SSH Private key in PPK format',
@@ -147,11 +151,11 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
                         },
                         getVisibility: function(data) {
                             var format = Scalr.localStorage.get('system-preferred-sshkey-format') || (Ext.isWindows ? 'ppk' : 'pem');
-                            return format == 'ppk' && data['farm_status'] != 0 && Scalr.isAllowed('SECURITY_SSH_KEYS') && (
-                                    Scalr.isAllowed('FARMS', 'servers') ||
-                                    data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
-                                    data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
-                                );
+                            return  data['platform'] !== 'azure' &&
+                                    format == 'ppk' &&
+                                    data['farm_status'] != 0 &&
+                                    Scalr.isAllowed('SECURITY_SSH_KEYS') &&
+                                    Scalr.isFarmAllowed('servers', data);
                         }
                     }, {
                         iconCls: 'x-menu-icon-configure',
@@ -159,20 +163,16 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
                         showAsQuickAction: true,
                         href: "#/farms/designer?farmId={farmid}&farmRoleId={id}",
                         getVisibility: function(data) {
-                            return Scalr.isAllowed('FARMS', 'manage') ||
-                                   data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'manage') ||
-                                   data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'manage');
+                            return Scalr.isFarmAllowed('update', data);
                         }
                     }, {
                         iconCls: 'x-menu-icon-statsusage',
                         text: 'View statistics',
                         href: "#/monitoring?farmRoleId={id}&farmId={farmid}",
                         getVisibility: function(data) {
-                            return data['farm_status'] != 0 && (
-                                Scalr.isAllowed('FARMS', 'statistics') ||
-                                data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'statistics') ||
-                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'statistics')
-                            );
+                            return data['isScalarized'] == 1 && 
+                                   data['farm_status'] != 0 && 
+                                   Scalr.isFarmAllowed('statistics', data);
                         }
                     }, {
                         iconCls: 'x-menu-icon-information',
@@ -188,22 +188,19 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
                         text: 'Execute script',
                         href: '#/scripts/execute?farmRoleId={id}',
                         getVisibility: function(data) {
-                            return data['farm_status'] != 0 && Scalr.isAllowed('SCRIPTS_ENVIRONMENT', 'execute') && (
-                                Scalr.isAllowed('FARMS', 'servers') ||
-                                data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
-                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
-                            );
+                            return data['isScalarized'] == 1 && 
+                                   data['farm_status'] != 0 && 
+                                   Scalr.isAllowed('SCRIPTS_ENVIRONMENT', 'execute') && 
+                                   Scalr.isFarmAllowed('servers', data);
                         }
                     }, {
-                        iconCls: 'x-menu-icon-execute',
+                        iconCls: 'x-menu-icon-fireevent',
                         text: 'Fire event',
                         href: '#/scripts/events/fire?farmRoleId={id}',
                         getVisibility: function(data) {
-                            return data['farm_status'] != 0 && Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'fire') && (
-                                Scalr.isAllowed('FARMS', 'servers') ||
-                                data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
-                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
-                            );
+                            return data['farm_status'] != 0 && 
+                                   Scalr.isAllowed('GENERAL_CUSTOM_EVENTS', 'fire') && 
+                                   Scalr.isFarmAllowed('servers', data);
                         }
                     }, {
                         xtype: 'menuseparator'
@@ -212,11 +209,9 @@ Scalr.regPage('Scalr.ui.farms.roles.view', function (loadParams, moduleParams) {
                         text: 'Launch new server',
                         showAsQuickAction: true,
                         getVisibility: function(data) {
-                            return !!data['allow_launch_instance'] && data['farm_status'] == '1'  && (
-                                Scalr.isAllowed('FARMS', 'servers') ||
-                                data['farmTeamIdPerm'] && Scalr.isAllowed('TEAM_FARMS', 'servers') ||
-                                data['farmOwnerIdPerm'] && Scalr.isAllowed('OWN_FARMS', 'servers')
-                            );
+                            return !!data['allow_launch_instance'] && 
+                                   data['farm_status'] == '1' && 
+                                   Scalr.isFarmAllowed('servers', data);
                         },
                         menuHandler: function(data) {
                             Scalr.Request({

@@ -119,12 +119,6 @@ class SoftwareDependencyTest extends TestCase
         );
 
         $this->assertTrue(
-            class_exists('SoapClient'),
-            'SOAP must be enabled. '
-          . 'Look at http://www.php.net/manual/en/soap.installation.php'
-        );
-
-        $this->assertTrue(
             function_exists('socket_create'),
             'Sockets must be enabled. '
           . 'Look at http://php.net/manual/en/sockets.installation.php'

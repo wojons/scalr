@@ -11,6 +11,7 @@ use Scalr\Modules\PlatformFactory;
 use Scalr\Service\CloudStack\CloudStack;
 use Scalr\Service\CloudStack\DataType\AccountList;
 use Scalr\Service\CloudStack\DataType\ListAccountsData;
+use Scalr\System\Config\Yaml;
 
 /**
  * Cloudstack Cloud Credentials Adapter v1beta0
@@ -146,6 +147,20 @@ class CloudstackCloudCredentialsAdapter extends CloudCredentialsAdapter
                 $listAccountsData->listall = true;
             } catch (Exception $e) {
                 throw new ApiErrorException(400, ErrorMessage::ERR_INVALID_VALUE, "Failed to verify your Cloudstack credentials: {$e->getMessage()}");
+            }
+
+            /* @var $config Yaml */
+            $config = $this->controller->getContainer()->config;
+
+            if ($config->defined("scalr.{$entity->cloud}.use_proxy") &&
+                $config("scalr.{$entity->cloud}.use_proxy") &&
+                in_array($config('scalr.connections.proxy.use_on'), ['both', 'scalr'])) {
+                $proxySettings = $config('scalr.connections.proxy');
+
+                $cs->setProxy(
+                    $proxySettings['host'], $proxySettings['port'], $proxySettings['user'],
+                    $proxySettings['pass'], $proxySettings['type'], $proxySettings['authtype']
+                );
             }
 
             if (!$this->searchCloudstackUser($cs->listAccounts($listAccountsData), $ccProps)) {

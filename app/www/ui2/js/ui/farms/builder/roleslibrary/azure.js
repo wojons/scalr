@@ -20,11 +20,13 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.azure', function () {
 
         setRole: function(record) {
             var field,
-                resourceGroupGrovernance = Scalr.getGovernance('azure', 'azure.resource-group');
+                resourceGroupGrovernance = Scalr.getGovernance('azure', 'azure.resource-group'),
+                networkGovernance = Scalr.getGovernance('azure', 'azure.network');
             this.currentRole = record;
 
             field = this.down('[name="azure.resource-group"]');
-            //field.toggleIcon('governance', !!resourceGroupGrovernance);
+            this.down('fieldset').toggleGovernance(!!resourceGroupGrovernance);
+
             if (resourceGroupGrovernance !== undefined) {
                 field.store.proxy.data = Ext.Array.map(resourceGroupGrovernance.value, function(v){
                     return {
@@ -61,6 +63,16 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.azure', function () {
             field.getPlugin('comboaddnew').postUrl = '?' + Ext.Object.toQueryString(field.store.proxy.params);
             field.updateEmptyText(true);
 
+            field = this.down('[name="azure.use_public_ips"]');
+            if (networkGovernance && networkGovernance['use_public_ips'] !== undefined) {
+                field.setReadOnly(true);
+                field.setValue(networkGovernance['use_public_ips'] == 1);
+                field.toggleIcon('governance', true);
+            } else {
+                field.setReadOnly(false);
+                field.toggleIcon('governance', false);
+            }
+
         },
 
         isValid: function() {
@@ -92,6 +104,9 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.azure', function () {
         items: [{
             xtype: 'fieldset',
             title: 'Azure',
+            toggleGovernance: function(enabled) {
+                this.setTitle('Azure' + (enabled ? '&nbsp;&nbsp;<img src="' + Ext.BLANK_IMAGE_URL + '" data-qtip="The account owner has limited which Resource Groups<br/> can be used in this Environment." class="x-icon-governance" />' : ''));
+            },
             items: [{
                 xtype: 'combo',
                 name: 'azure.resource-group',
@@ -114,15 +129,10 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.azure', function () {
                 },
                 valueField: 'id',
                 displayField: 'name',
-                //queryCaching: false,
                 plugins: [{
                     ptype: 'comboaddnew',
                     pluginId: 'comboaddnew',
                     url: '/tools/azure/resourceGroups/create'
-                /*},{
-                    ptype: 'fieldicons',
-                    position: 'outer',
-                    icons: ['governance']*/
                 }],
                 listeners: {
                     addnew: function(item) {
@@ -373,6 +383,10 @@ Scalr.regPage('Scalr.ui.farms.builder.addrole.azure', function () {
                 name: 'azure.use_public_ips',
                 hidden: true,
                 boxLabel: 'Attach dynamic public IP to every instance of this Farm Role',
+                plugins: [{
+                    ptype: 'fieldicons',
+                    icons: ['governance']
+                }]
             }]
         }]
     };

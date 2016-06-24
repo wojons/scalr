@@ -193,18 +193,19 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
                 }
             })
         }, {
-            text: 'File path',
-            flex: 1,
-            dataIndex: 'filePath',
-            sortable: true
-        }, {
             text: 'Retrieve method',
             width: 138,
             dataIndex: 'retrieveMethod',
             sortable: false,
             xtype: 'templatecolumn',
             tpl: '<tpl if="retrieveMethod == \'read\'">File-Read</tpl>' +
-                '<tpl if="retrieveMethod == \'execute\'">File-Execute</tpl>'
+                 '<tpl if="retrieveMethod == \'execute\'">File-Execute</tpl>' +
+                 '<tpl if="retrieveMethod == \'url-request\'">URL-Request</tpl>'
+        }, {
+            text: 'File path / URL',
+            flex: 1,
+            dataIndex: 'filePath',
+            sortable: true
         }, {
             text: 'Calculation function',
             flex: 1,
@@ -303,7 +304,7 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
                         form
                             .setHeader('New Metric')
                             .hideScopeInfo()
-                            .setFieldsReadOnly(false)
+                            .setFieldsReadOnly(null, false)
                             .hideInvertedField(false)
                             .show()
                             .down('[name=name]').focus();
@@ -354,8 +355,11 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
                 : 'environment';
         },
 
-        setFieldsReadOnly: function (readOnly, scope) {
-            var me = this;
+        setFieldsReadOnly: function (record, readOnly, scope) {
+            var me = this,
+                isCalcFunctionAvailable = !record || record.get('calcFunction');
+
+            me.down('[name="calcFunction"]').setDisabled(!isCalcFunctionAvailable).setVisible(isCalcFunctionAvailable);
 
             me.getForm().getFields().each(function (field) {
                 field.setReadOnly(readOnly);
@@ -468,7 +472,7 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
                         record.get('id'),
                         scope
                     )
-                    .setFieldsReadOnly(readOnly, scope)
+                    .setFieldsReadOnly(record, readOnly, scope)
                     .hideInvertedField(
                         Ext.isEmpty(record.get('envId'))
                     );
@@ -497,10 +501,6 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
                 minLength: 5,
                 allowBlank: false
             }, {
-                xtype: 'textfield',
-                name: 'filePath',
-                fieldLabel: 'File path'
-            }, {
                 xtype: 'combo',
                 name: 'retrieveMethod',
                 fieldLabel: 'Retrieve method',
@@ -509,8 +509,36 @@ Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
                 queryMode: 'local',
                 store: [
                     ['read','File-Read'],
-                    ['execute','File-Execute']
-                ]
+                    ['execute','File-Execute'],
+                    ['url-request','URL-Request (GET)']
+                ],
+                listeners: {
+                    change: function(comp, value) {
+                        var filePathField = comp.next('[name="filePath"]'),
+                            isUrlRequest = value === 'url-request';
+
+                        filePathField.setFieldLabel(isUrlRequest ? 'URL' : 'File path');
+                        filePathField.toggleIcon('globalvars', isUrlRequest);
+                        filePathField.allowBlank = !isUrlRequest;
+                        if (isUrlRequest) {
+                            filePathField.vtype = 'url';
+                        } else {
+                            delete filePathField.vtype;
+                        }
+                        comp.next('[name="calcFunction"]').setDisabled(isUrlRequest).setVisible(!isUrlRequest);
+
+                        filePathField.validate();
+                    }
+                }
+            }, {
+                xtype: 'textfield',
+                name: 'filePath',
+                fieldLabel: 'File path',
+                plugins: [{
+                    ptype: 'fieldicons',
+                    position: 'label',
+                    icons: [{id: 'globalvars', hidden: true, tooltip: 'Global Variable Interpolation is supported in query params.'}]
+                }]
             }, {
                 xtype: 'combo',
                 name: 'calcFunction',

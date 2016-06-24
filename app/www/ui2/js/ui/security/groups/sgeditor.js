@@ -1,6 +1,6 @@
 Ext.define('Scalr.ui.SecurityGroupEditor', {
-	extend: 'Ext.form.Panel',
-	alias: 'widget.sgeditor',
+    extend: 'Ext.form.Panel',
+    alias: 'widget.sgeditor',
     vpcIdReadOnly: false,
     layout: 'fit',
     initComponent: function () {
@@ -177,6 +177,8 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                         '<tpl else>' +
                             '{[values.fromPort==-1?\'ANY\':values.fromPort]}<tpl if="toPort"> - {[values.toPort==-1?\'ANY\':values.toPort]}</tpl>'+
                         '</tpl>' +
+                    '<tpl elseif="ipProtocol==\'ANY\'">' +
+                        'ANY' +
                     '<tpl else>' +
                         '<tpl if="!fromPort&&!toPort||fromPort==\'*\'&&toPort==\'*\'">' +
                             'ANY' +
@@ -235,13 +237,14 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                         var editor = this.up('sgeditor'),
                             accountId = editor.accountId,
                             remoteAddress = editor.remoteAddress,
+                            listGroupsUrl = editor.listGroupsUrl,
                             platform = editor.down('[name="platform"]').getValue(),
                             advanced = editor.down('[name="advanced"]').getValue(),
                             cloudLocation = editor.down('[name="cloudLocation"]').getValue(),
                             ipProtocols,
                             grid = this.up('#view'),
                             store = grid.store,
-                            showType = platform === 'ec2' && !Ext.isEmpty(editor.down('[name="vpcId"]').getValue());
+                            isVpc = platform === 'ec2' && !Ext.isEmpty(editor.down('[name="vpcId"]').getValue());
 
                         ipProtocols = [{
                             text: 'TCP',
@@ -251,10 +254,10 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                             value: 'udp'
                         }];
                         if (platform === 'azure') {
-                                ipProtocols.push({
-                                    text: 'ANY',
-                                    value: '*'
-                                });
+                            ipProtocols.push({
+                                text: 'ANY',
+                                value: '*'
+                            });
                         } else {
                             if (!Scalr.isCloudstack(platform)) {
                                 ipProtocols.push({
@@ -268,15 +271,22 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                     value: 'other'
                                 });
                             }
+                            
+                            if (platform === 'ec2' && isVpc) {
+                                ipProtocols.push({
+                                    text: 'ANY',
+                                    value: 'ANY'
+                                });
+                            }
                         }
                         Scalr.Confirm({
-							form: [{
+                            form: [{
                                 xtype: 'fieldset',
                                 title: 'New security rule',
                                 cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
                                 defaults: {
                                     anchor: '100%',
-                                    labelWidth: !showType ? 75 : 85
+                                    labelWidth: !isVpc ? 75 : 85
                                 },
                                 items: [{
                                     xtype: 'textfield',
@@ -297,10 +307,10 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                     xtype: 'buttongroupfield',
                                     name: 'type',
                                     fieldLabel: 'Type',
-                                    labelWidth: !showType ? 75 : 85,
+                                    labelWidth: !isVpc ? 75 : 85,
                                     layout: 'hbox',
-                                    maxWidth: !showType ? 340 : 350,
-                                    hidden: !showType,
+                                    maxWidth: !isVpc ? 340 : 350,
+                                    hidden: !isVpc,
                                     disabled: platform !== 'ec2',
                                     defaults: {
                                         flex: 1
@@ -332,19 +342,29 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                         name: 'ipProtocol',
                                         fieldLabel: 'Protocol',
                                         value: 'tcp',
-                                        labelWidth: !showType ? 75 : 85,
+                                        labelWidth: !isVpc ? 75 : 85,
                                         layout: 'hbox',
-                                        width: !showType ? 340 : 350,
+                                        width: !isVpc ? 340 : 350,
                                         defaults: {
                                             flex: 1
                                         },
                                         items: ipProtocols,
                                         listeners: {
                                             change: function(comp, value) {
-                                                comp.up('form').down('#portCt').setVisible(value !== 'other');
-                                                comp.up('form').down('[name="otherProtocol"]').setVisible(value === 'other').setDisabled(value !== 'other');
-                                                comp.up('form').down('[name="fromPort"]').setDisabled(value === 'other');
-                                                comp.up('form').down('[name="toPort"]').setDisabled(value === 'other');
+                                                var form = comp.up('form'),
+                                                    fromPortField = form.down('[name="fromPort"]'),
+                                                    toPortField = form.down('[name="toPort"]');
+                                                form.down('#portCt').setVisible(value !== 'other');
+                                                form.down('[name="otherProtocol"]').setVisible(value === 'other').setDisabled(value !== 'other');
+                                                fromPortField.setDisabled(value === 'other' || value === 'ANY');
+                                                toPortField.setDisabled(value === 'other' || value === 'ANY');
+                                                if (value === 'ANY') {
+                                                    fromPortField.setValue(0);
+                                                    toPortField.setValue(65535);
+                                                    form.down('#portCt').down('buttongroupfield').disable().setValue('range');
+                                                } else {
+                                                    form.down('#portCt').down('buttongroupfield').enable();
+                                                }
                                             }
                                         }
                                     },{
@@ -373,8 +393,8 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                         fieldLabel: 'Port',
                                         submitValue: false,
                                         value: 'single',
-                                        width: !showType ? 350 : 360,
-                                        labelWidth: !showType ? 75 : 85,
+                                        width: !isVpc ? 350 : 360,
+                                        labelWidth: !isVpc ? 75 : 85,
                                         defaults: {
                                             width: 130
                                         },
@@ -458,8 +478,8 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                         fieldLabel: 'Source',
                                         name: 'sourceType',
                                         value: 'ip',
-                                        width: !showType ? 350 : 360,
-                                        labelWidth: !showType ? 75 : 85,
+                                        width: !isVpc ? 350 : 360,
+                                        labelWidth: !isVpc ? 75 : 85,
                                         defaults: {
                                             width: 130
                                         },
@@ -508,7 +528,7 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                             fields: [ 'id', 'name' ],
                                             proxy: {
                                                 type: 'cachedrequest',
-                                                url: '/security/groups/xListGroups',
+                                                url: listGroupsUrl,
                                                 ttl: 1,
                                                 params: {
                                                     platform: platform,
@@ -556,18 +576,18 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                     fieldLabel: 'Comment',
                                     allowBlank: true
                                 }]
-							}],
+                            }],
                             formWidth: 640,
                             winConfig: {
                                 autoScroll: false,
                                 alignTop: true
                             },
-							ok: 'Add',
-							formValidate: true,
-							closeOnSuccess: true,
-							scope: this,
-							success: function (formValues, form) {
-								var view = this.up('#view'), store = view.store;
+                            ok: 'Add',
+                            formValidate: true,
+                            closeOnSuccess: true,
+                            scope: this,
+                            success: function (formValues, form) {
+                                var view = this.up('#view'), store = view.store;
                                 if (formValues['ipProtocol'] === 'other') {
                                     formValues['ipProtocol'] = form.getForm().findField('otherProtocol').getValue();
                                 }
@@ -581,27 +601,27 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
                                         return false;
                                     }
                                 }
-								if (store.findBy(function (record) {
-									if (
+                                if (store.findBy(function (record) {
+                                    if (
                                         (platform !== 'ec2' || record.get('type') === formValues.type) &&
-										record.get('ipProtocol') == formValues.ipProtocol &&
-											record.get('fromPort') == formValues.fromPort &&
-											record.get('toPort') == formValues.toPort &&
-											record.get('sourceType') == formValues.sourceType &&
+                                        record.get('ipProtocol') == formValues.ipProtocol &&
+                                            record.get('fromPort') == formValues.fromPort &&
+                                            record.get('toPort') == formValues.toPort &&
+                                            record.get('sourceType') == formValues.sourceType &&
                                             record.get('sourceValue') == formValues.sourceValue
-										) {
-										Scalr.message.Error('Rule already exists');
-										return true;
-									}
-								}) == -1) {
-									store.add(formValues);
+                                        ) {
+                                        Scalr.message.Error('Rule already exists');
+                                        return true;
+                                    }
+                                }) == -1) {
+                                    store.add(formValues);
                                     grid.maybeRefreshGrouping();
-									return true;
-								} else {
-									return false;
-								}
-							}
-						});
+                                    return true;
+                                } else {
+                                    return false;
+                                }
+                            }
+                        });
                     }
                 },{
                     itemId: 'delete',
@@ -712,8 +732,8 @@ Ext.define('Scalr.ui.SecurityGroupEditor', {
 });
 
 Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
-	extend: 'Ext.form.FieldSet',
-	alias: 'widget.sgmultiselect',
+    extend: 'Ext.form.FieldSet',
+    alias: 'widget.sgmultiselect',
 
     cls: 'x-fieldset-separator-none x-fieldset-no-bottom-padding',
     excludeGroups: {},
@@ -754,7 +774,7 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
             ],
             proxy: {
                 type: 'scalr.paging',
-                url: '/security/groups/xListGroups/',
+                url: me.listGroupsUrl,
                 extraParams: me.storeExtraParams
             },
             listeners: {
@@ -789,7 +809,7 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
                 loadingText: 'Loading security groups ...',
                 listeners: {
                     viewready: function() {
-                        store.applyProxyParams();
+                        Ext.defer(function(){store.applyProxyParams()}, 100);
                     }
                 }
             },
@@ -910,6 +930,7 @@ Ext.define('Scalr.ui.SecurityGroupMultiSelect', {
                         vpcIdReadOnly: true,
                         accountId: me.accountId,
                         remoteAddress: me.remoteAddress,
+                        listGroupsUrl: me.listGroupsUrl,
                         platform: me.storeExtraParams['platform'],
                         listeners: {
                             afterrender: function() {

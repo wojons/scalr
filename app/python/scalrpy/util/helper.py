@@ -36,7 +36,7 @@ import multiprocessing
 import logging.handlers
 import greenlet as greenlet_mod
 import uuid
-import pymysql.err
+#import pymysql.err
 
 from textwrap import dedent
 from email.mime.text import MIMEText
@@ -79,7 +79,7 @@ def configure_log(log_level=logging.INFO, log_file=None, log_size=1024 * 10):
             os.makedirs(os.path.dirname(log_file), mode=0o755)
         prompt = dedent("[%(asctime)15s][%(module)20s][%(process)6d] %(levelname)10s %(message)s")
         file_frmtr = logging.Formatter(prompt, datefmt='%d/%b/%Y %H:%M:%S')
-        file_hndlr = logging.handlers.RotatingFileHandler(log_file, maxBytes=log_size, backupCount=1)
+        file_hndlr = logging.handlers.WatchedFileHandler(log_file)
         file_hndlr.setFormatter(file_frmtr)
         file_hndlr.setLevel(log_level)
         LOG.addHandler(file_hndlr)
@@ -562,8 +562,10 @@ def get_scalr_meta(tags):
     assert version in keys_map, 'Unsupported scalr-meta version {0}'.format(version)
     meta = dict(zip(keys_map[version], data[1:]))
     for k, v in meta.items():
-        if v:
+        try:
             meta[k] = types_map[k](v)
+        except ValueError:
+            meta[k] = None
     if meta['server_id']:
         try:
             uuid.UUID(meta['server_id'])
@@ -588,6 +590,7 @@ class PeriodicalTask(object):
         self._stop = False
         self.start_time = None
         self.end_time = None
+        self.iteration_number = 0
 
     def stop(self):
         self._stop = True
@@ -600,10 +603,12 @@ class PeriodicalTask(object):
             try:
                 self.start_time = time.time()
                 LOG.debug('Start periodical task ({})'.format(self.task_name))
+                self.iteration_number += 1
                 self.task.task_info = {
-                        'period': self.period,
-                        'timeout': self.timeout,
-                        'start_time': self.start_time,
+                    'period': self.period,
+                    'timeout': self.timeout,
+                    'start_time': self.start_time,
+                    'iteration_number': self.iteration_number,
                 }
                 if callable(self.before):
                     msg = 'Periodical task ({}) call before ({})'
@@ -697,7 +702,43 @@ def handle_error(message=None, level='exception'):
         'critical': LOG.critical,
         'exception': LOG.exception,
     }
-    if isinstance(e, pymysql.err.Error):
-        logging_map[min(level, 'error')](message)
+    #if isinstance(e, pymysql.err.Error):
+    #    logging_map[min(level, 'error')](message)
+    #else:
+    #    logging_map[level](message)
+    logging_map[level](message)
+
+
+def get_proxy_settings(scalr_config, config_section):
+    if config_section == 'system.webhooks':
+        use_proxy = scalr_config.get('system', {}).get('webhooks', {}).get('use_proxy', False)
+    elif config_section in ('ec2', 'aws'):
+        use_proxy = scalr_config.get('aws', {}).get('use_proxy', False)
     else:
-        logging_map[level](message)
+        use_proxy = scalr_config.get(config_section, {}).get('use_proxy', False)
+    use_on = scalr_config['connections'].get('proxy', {}).get('use_on', 'both')
+    if use_proxy in (True, 'yes') and use_on in ('both', 'scalr'):
+        proxy_settings = {
+            'host': 'localhost',
+            'user': None,
+            'pass': None,
+            'port': 3128,
+            'type': 0,
+        }
+        proxy_settings.update(scalr_config['connections']['proxy'])
+        proxy_scheme = {4: 'socks4', 5: 'socks5', 0: 'http'}[int(proxy_settings['type'])]
+        proxy_settings['scheme'] = proxy_scheme
+        url = proxy_scheme + '://'
+        if proxy_settings.get('user'):
+            url += proxy_settings['user']
+        if proxy_settings.get('pass'):
+            url += ':' + proxy_settings['pass']
+        if proxy_settings.get('user'):
+            url += '@'
+        url += proxy_settings['host']
+        if proxy_settings.get('port'):
+            url += ':{port}'.format(**proxy_settings)
+        proxy_settings['url'] = url
+    else:
+        proxy_settings = {}
+    return proxy_settings

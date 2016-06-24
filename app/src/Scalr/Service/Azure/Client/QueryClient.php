@@ -78,6 +78,24 @@ class QueryClient implements ClientInterface, CallbackInterface
             }
 
             $request = new Request($method, $url);
+
+            $proxySettings = $this->azure->getProxy();
+
+            if ($proxySettings !== false) {
+                $request->setOptions([
+                    'proxyhost' => $proxySettings['host'],
+                    'proxyport' => $proxySettings['port'],
+                    'proxytype' => $proxySettings['type']
+                ]);
+
+                if ($proxySettings['user']) {
+                    $request->setOptions([
+                        'proxyauth'     => "{$proxySettings['user']}:{$proxySettings['pass']}",
+                        'proxyauthtype' => $proxySettings['authtype']
+                    ]);
+                }
+            }
+
             $request->addQuery($queryData);
 
             if ($baseUrl === Azure::URL_MANAGEMENT_WINDOWS) {
@@ -90,7 +108,11 @@ class QueryClient implements ClientInterface, CallbackInterface
 
             if (count($postFields)) {
                 $request->append(json_encode($postFields));
-            } else if (in_array($method, ['PUT', 'PATCH', 'POST']) && !isset($headers['Content-Length'])) {
+            } else if ($method == 'POST' && !isset($headers['Content-Length'])) {
+                // pecl_http does not include Content-Length for empty posts what breaks integration with Azure.
+                $headers['Content-Length'] = 1;
+                $request->append(" ");
+            } else if (in_array($method, ['PUT', 'PATCH']) && !isset($headers['Content-Length'])) {
                 // pecl_http does not include Content-Length for empty posts what breaks integration with Azure.
                 $headers['Content-Length'] = 0;
             }
@@ -163,9 +185,9 @@ class QueryClient implements ClientInterface, CallbackInterface
         while ($response->getResponseCode() == 202) {
             $headers = $response->getHeaders();
 
-            $retryAfter = isset($headers['Retry-After']) ? $headers['Retry-After'] : 25;
+            $retryAfter = isset($headers['Retry-After']) ? $headers['Retry-After'] : 2;
 
-            usleep($retryAfter);
+            usleep($retryAfter * 100000);
 
             $url = $headers['Location'];
 

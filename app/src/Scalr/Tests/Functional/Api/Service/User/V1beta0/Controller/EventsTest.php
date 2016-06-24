@@ -5,7 +5,6 @@ use Scalr\Api\DataType\ErrorMessage;
 use Scalr\Api\Rest\Http\Request;
 use Scalr\DataType\ScopeInterface;
 use Scalr\Model\Entity\EventDefinition;
-use Scalr\Service\Aws;
 use Scalr\Tests\Functional\Api\ApiTestCase;
 
 /**
@@ -19,7 +18,7 @@ class EventsTest extends ApiTestCase
 
     public function eventToDelete($eventId)
     {
-        static::toDelete('Scalr\Model\Entity\EventDefinition', $eventId);
+        static::toDelete(EventDefinition::class, [$eventId]);
     }
 
     public function getCriteria($environment = false)
@@ -38,18 +37,18 @@ class EventsTest extends ApiTestCase
         return [[ '$or' => $criteria ]];
     }
 
-    public function postEvent(array $eventData, $environment = false, $params = [])
+    public function postEvent(array $eventData = null, $environment = null, $params = null)
     {
-        $uri = $environment === false ? self::getAccountApiUrl('/events') : self::getUserApiUrl('/events', $environment);
+        $uri = $environment === null ? self::getAccountApiUrl('/events') : self::getUserApiUrl('/events', $environment);
 
-        $response = $this->request($uri, Request::METHOD_POST, $params, $eventData);
+        $response = $this->request($uri, Request::METHOD_POST, $params ?: [], $eventData ?: []);
 
         $body = $response->getBody();
 
         if ($response->status == 201 && isset($body->data->id)) {
-            $criteria = $this->getCriteria($environment === null);
+            $criteria = $this->getCriteria($environment !== null);
 
-            $criteria[] = [ 'name' => $body->data->id ];
+            $criteria[] = ['name' => $body->data->id];
 
             $this->eventToDelete(EventDefinition::findOne($criteria)->id);
         }
@@ -101,7 +100,7 @@ class EventsTest extends ApiTestCase
         } while (!empty($events->pagination->next));
 
         // test create action
-        $create = $this->postEvent([]);
+        $create = $this->postEvent();
         $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_STRUCTURE, 'Invalid body');
 
         $create = $this->postEvent(['id' => $testName, 'invalid' => 'value']);
@@ -114,7 +113,7 @@ class EventsTest extends ApiTestCase
         $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, 'Invalid id of the Event');
 
         $create = $this->postEvent(['id' => $testName, 'description' => '<br>tags']);
-        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, 'Invalid description');
+        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE);
 
         $create = $this->postEvent([
             'id' => $testName,
@@ -161,7 +160,7 @@ class EventsTest extends ApiTestCase
             'id' => 'testEnvAccount',
             'description' => 'testEnvAccount-scope-replace',
             'scope' => ScopeInterface::SCOPE_ACCOUNT
-        ], false, [ 'replace' => true ]);
+        ], null, [ 'replace' => true ]);
 
         $this->assertEquals(201, $replace->response->getStatus());
 
@@ -261,6 +260,7 @@ class EventsTest extends ApiTestCase
         $testName = str_replace('-', '', static::getTestName());
 
         $events = null;
+
         $uri = self::getUserApiUrl('/events');
 
         static::createEntity(new EventDefinition(), [
@@ -296,33 +296,33 @@ class EventsTest extends ApiTestCase
         } while (!empty($events->pagination->next));
 
         // test create action
-        $create = $this->postEvent([], null);
+        $create = $this->postEvent(null, self::$testEnvId);
         $create = $this->request($uri, Request::METHOD_POST);
         $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_STRUCTURE, 'Invalid body');
 
-        $create = $this->postEvent(['id' => $testName, 'invalid' => 'value'], null);
+        $create = $this->postEvent(['id' => $testName, 'invalid' => 'value'], self::$testEnvId);
         $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_STRUCTURE, 'You are trying to set');
 
-        $create = $this->postEvent(['scope' => ScopeInterface::SCOPE_ENVIRONMENT], null);
+        $create = $this->postEvent(['scope' => ScopeInterface::SCOPE_ENVIRONMENT], self::$testEnvId);
         $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_STRUCTURE, 'Required field');
 
-        $create = $this->postEvent(['id' => 'invalid*^'], null);
+        $create = $this->postEvent(['id' => 'invalid*^'], self::$testEnvId);
         $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, 'Invalid id of the Event');
 
-        $create = $this->postEvent(['id' => $testName, 'description' => '<br>tags'], null);
-        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE, 'Invalid description');
+        $create = $this->postEvent(['id' => $testName, 'description' => '<br>tags'], self::$testEnvId);
+        $this->assertErrorMessageContains($create, 400, ErrorMessage::ERR_INVALID_VALUE);
 
         $create = $this->postEvent([
             'id' => $testName,
             'description' => $testName,
             'scope' => ScopeInterface::SCOPE_ENVIRONMENT
-        ], null);
+        ], self::$testEnvId);
 
         $createSame = $this->postEvent([
             'id' => $testName,
             'description' => $testName,
             'scope' => ScopeInterface::SCOPE_ENVIRONMENT
-        ], null);
+        ], self::$testEnvId);
 
         $this->assertErrorMessageContains($createSame, 409, ErrorMessage::ERR_UNICITY_VIOLATION);
 

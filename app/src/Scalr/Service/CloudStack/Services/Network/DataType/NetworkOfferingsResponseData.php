@@ -2,7 +2,7 @@
 namespace Scalr\Service\CloudStack\Services\Network\DataType;
 
 use Scalr\Service\CloudStack\DataType\AbstractDataType;
-use \DateTime;
+use DateTime;
 
 /**
  * NetworkOfferingsResponseData

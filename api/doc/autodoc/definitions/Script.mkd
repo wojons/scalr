@@ -34,36 +34,6 @@ Property of type: `string`.
 To filter on this field, use: `name=...`.
 
 
-### `scope` (required, read-only, filterable) ###
-
-
-
-
-Property of type: `string`.
-
- 
-The following are valid values for the `scope` property:
-  + `scalr`
-  + `account`
-  + `environment`
-  + `farm`
-  + `farmrole`
-  + `server`
-
-To filter on this field, use: `scope=...`.
-
-
-### `id` (required, read-only, filterable) ###
-
-
-
-
-Property of type: `integer`.
-
-
-To filter on this field, use: `id=...`.
-
-
 ### `timeoutDefault` (optional) ###
 
 
@@ -95,6 +65,26 @@ Property of type: `boolean`.
 To filter on this field, use: `blockingDefault=...`.
 
 
+### `scope` (read-only, filterable) ###
+
+
+
+
+Property of type: `string`.
+
+ 
+The following are valid values for the `scope` property:
+  + `scalr`
+  + `account`
+  + `environment`
+  + `farm`
+  + `farmrole`
+  + `role`
+  + `server`
+
+To filter on this field, use: `scope=...`.
+
+
 ### `lastChanged` (read-only) ###
 
 
@@ -103,6 +93,17 @@ To filter on this field, use: `blockingDefault=...`.
 Property of type: `string`.
 
 
+
+
+### `id` (read-only, filterable) ###
+
+
+
+
+Property of type: `integer`.
+
+
+To filter on this field, use: `id=...`.
 
 
 ### `added` (read-only) ###
@@ -119,6 +120,10 @@ Property of type: `string`.
 
 ## Used in ##
 
+  + [`/scripts/`](./../rest/api/v1beta0/account/scripts/)
+  + [`/scripts/{scriptId}/`](./../rest/api/v1beta0/account/scripts/{scriptId}/)
+  + [`/scripts/{scriptId}/script-versions/`](./../rest/api/v1beta0/account/scripts/{scriptId}/script-versions/)
+  + [`/scripts/{scriptId}/script-versions/{scriptVersionNumber}/`](./../rest/api/v1beta0/account/scripts/{scriptId}/script-versions/{scriptVersionNumber}/)
   + [`/{envId}/scripts/`](./../rest/api/v1beta0/user/{envId}/scripts/)
   + [`/{envId}/scripts/{scriptId}/`](./../rest/api/v1beta0/user/{envId}/scripts/{scriptId}/)
   + [`/{envId}/scripts/{scriptId}/script-versions/`](./../rest/api/v1beta0/user/{envId}/scripts/{scriptId}/script-versions/)
@@ -127,74 +132,77 @@ Property of type: `string`.
 ## Swagger Definition ##
 
     {
-      "x-usedIn": [
-        "/{envId}/scripts/{scriptId}/script-versions/", 
-        "/{envId}/scripts/{scriptId}/", 
-        "/{envId}/scripts/", 
-        "/{envId}/scripts/{scriptId}/script-versions/{scriptVersionNumber}/"
-      ], 
-      "required": [
-        "id", 
-        "name", 
-        "scope", 
-        "osType"
-      ], 
       "properties": {
-        "timeoutDefault": {
-          "type": "integer"
-        }, 
         "added": {
+          "format": "date-time", 
           "readOnly": true, 
-          "type": "string", 
-          "format": "date-time"
-        }, 
-        "description": {
           "type": "string"
-        }, 
-        "lastChanged": {
-          "readOnly": true, 
-          "type": "string", 
-          "format": "date-time"
         }, 
         "blockingDefault": {
           "type": "boolean"
         }, 
-        "osType": {
-          "enum": [
-            "linux", 
-            "windows"
-          ], 
-          "type": "string", 
-          "description": "Type of OS this Script should execute on. This will influence Orchestration Rules, an will trigger validation on individual ScriptVersion's you upload."
-        }, 
-        "scope": {
-          "readOnly": true, 
-          "enum": [
-            "scalr", 
-            "account", 
-            "environment", 
-            "farm", 
-            "farmrole", 
-            "server"
-          ], 
+        "description": {
           "type": "string"
         }, 
         "id": {
           "readOnly": true, 
           "type": "integer"
         }, 
+        "lastChanged": {
+          "format": "date-time", 
+          "readOnly": true, 
+          "type": "string"
+        }, 
         "name": {
           "type": "string"
+        }, 
+        "osType": {
+          "description": "Type of OS this Script should execute on. This will influence Orchestration Rules, an will trigger validation on individual ScriptVersion's you upload.", 
+          "enum": [
+            "linux", 
+            "windows"
+          ], 
+          "type": "string"
+        }, 
+        "scope": {
+          "enum": [
+            "scalr", 
+            "account", 
+            "environment", 
+            "farm", 
+            "farmrole", 
+            "role", 
+            "server"
+          ], 
+          "readOnly": true, 
+          "type": "string"
+        }, 
+        "timeoutDefault": {
+          "type": "integer"
         }
       }, 
-      "x-filterable": [
-        "id", 
+      "required": [
         "name", 
-        "osType", 
-        "blockingDefault", 
-        "scope"
+        "osType"
       ], 
       "x-createOnly": [
         "osType"
+      ], 
+      "x-filterable": [
+        "blockingDefault", 
+        "id", 
+        "name", 
+        "osType", 
+        "scope"
+      ], 
+      "x-usedIn": [
+        "/scripts/", 
+        "/scripts/{scriptId}/", 
+        "/scripts/{scriptId}/script-versions/", 
+        "/scripts/{scriptId}/script-versions/{scriptVersionNumber}/", 
+        "/{envId}/scripts/", 
+        "/{envId}/scripts/{scriptId}/", 
+        "/{envId}/scripts/{scriptId}/script-versions/", 
+        "/{envId}/scripts/{scriptId}/script-versions/{scriptVersionNumber}/"
       ]
     }

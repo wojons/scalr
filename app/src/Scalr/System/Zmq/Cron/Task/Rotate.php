@@ -90,9 +90,14 @@ class Rotate extends AbstractTask
         $this->getLogger()->info("Rotating logentries table. Keep:'%s'", $keep['scalr']['logentries']);
         $this->rotateTable("DELETE FROM `logentries` WHERE `time` < ?", [strtotime($keep['scalr']['logentries'])]);
 
-        $this->getLogger()->info("Rotating scripting_log table. Keep:'%s'", $keep['scalr']['scripting_log']);
-        $this->rotateTable("DELETE FROM `scripting_log` WHERE `dtadded` < ?", [
-            date('Y-m-d H:i:s', strtotime($keep['scalr']['scripting_log']))
+        $this->getLogger()->info("Rotating orchestration_log table. Keep:'%s'", $keep['scalr']['orchestration_log']);
+        $this->rotateTable("DELETE FROM `orchestration_log` WHERE `dtadded` < ?", [
+            date('Y-m-d H:i:s', strtotime($keep['scalr']['orchestration_log']))
+        ]);
+
+        $this->getLogger()->info("Rotating orchestration_log_manual_scripts table. Keep:'%s'", $keep['scalr']['orchestration_log']);
+        $this->rotateTable("DELETE FROM `orchestration_log_manual_scripts` WHERE `added` < ?", [
+            date('Y-m-d H:i:s', strtotime($keep['scalr']['orchestration_log']))
         ]);
 
         $this->getLogger()->info("Rotating api_log table. Keep:'%s'", $keep['scalr']['api_log']);
@@ -107,13 +112,14 @@ class Rotate extends AbstractTask
 
         $this->getLogger()->info("Rotating messages table. Keep:'%s'", $keep['scalr']['messages']);
         $this->rotateTable("DELETE FROM messages WHERE type='out' AND status='1' AND `dtlasthandleattempt` < ?", [
-            date('Y-m-d H:i:s', strtotime($keep['scalr']['messages']))
+            (new DateTime($keep['scalr']['messages'], new DateTimeZone('UTC')))->format('Y-m-d H:i:s')
         ]);
+
         $this->rotateTable("DELETE FROM messages WHERE type='out' AND status='3' AND `dtlasthandleattempt` < ?", [
-            date('Y-m-d H:i:s', strtotime($keep['scalr']['messages']))
+            (new DateTime($keep['scalr']['messages'], new DateTimeZone('UTC')))->format('Y-m-d H:i:s')
         ]);
         $this->rotateTable("DELETE FROM messages WHERE type='in' AND status='1' AND `dtlasthandleattempt` <  ?", [
-            date('Y-m-d H:i:s', strtotime($keep['scalr']['messages']))
+            (new DateTime($keep['scalr']['messages'], new DateTimeZone('UTC')))->format('Y-m-d H:i:s')
         ]);
 
         $this->getLogger()->info("Rotating webhook_history table. Keep:'%s'", $keep['scalr']['webhook_history']);

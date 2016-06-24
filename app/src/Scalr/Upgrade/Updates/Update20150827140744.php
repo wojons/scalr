@@ -121,7 +121,7 @@ class Update20150827140744 extends AbstractUpdate implements SequenceInterface
         ", [
             \SERVER_PROPERTIES::FARM_PROJECT_ID,
             \SERVER_PROPERTIES::ENV_CC_ID,
-            \SERVER_PROPERTIES::INFO_INSTANCE_TYPE_NAME,
+            'info.instance_type_name',
             \SERVER_PROPERTIES::ROLE_ID,
             \SERVER_PROPERTIES::FARM_CREATED_BY_ID
         ]);

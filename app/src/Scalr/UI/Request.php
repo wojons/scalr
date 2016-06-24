@@ -1,11 +1,16 @@
 <?php
 
 use Scalr\Acl\Acl;
-use Scalr\AuditLogger;
 use Scalr\Acl\Resource\Mode\CloudResourceScopeMode;
 use Scalr\Acl\Resource\CloudResourceFilteringDecision;
+use Scalr\Exception\Http\BadRequestException;
+use Scalr\LogCollector\AuditLogger;
+use Scalr\LogCollector\AuditLoggerConfiguration;
+use Scalr\LogCollector\AuditLoggerRetrieveConfigurationInterface;
+use Scalr\Model\Entity\Farm;
+use Scalr\DataType\AccessPermissionsInterface;
 
-class Scalr_UI_Request
+class Scalr_UI_Request implements AuditLoggerRetrieveConfigurationInterface
 {
 
     protected
@@ -89,6 +94,8 @@ class Scalr_UI_Request
         /* @var $instance Scalr_UI_Request */
         $instance = new $class($type, $headers, $server, $params, $files);
 
+        $container = Scalr::getContainer();
+
         if ($userId) {
             try {
                 $user = Scalr_Account_User::init();
@@ -168,11 +175,14 @@ class Scalr_UI_Request
             $instance->scope = $scope;
         }
 
-        $container = Scalr::getContainer();
         $container->request = $instance;
         $container->environment = isset($instance->environment) ? $instance->environment : null;
 
         self::$_instance = $instance;
+
+        $container->set('auditlogger.request', function () {
+            return self::$_instance;
+        });
 
         return $instance;
     }
@@ -319,7 +329,14 @@ class Scalr_UI_Request
                         break;
 
                     case 'json':
-                        $value = is_array($value) ? $value : json_decode($value, true);
+                        if (!is_array($value)) {
+                            $a = json_decode($value, true);
+                            if (!empty($value) && is_null($a)) {
+                                throw new BadRequestException(sprintf('Server expects parameter "%s" to be json-encoded string, but it could not be decoded: %s', $key, json_last_error_msg()));
+                            }
+
+                            $value = $a;
+                        }
                         break;
 
                     case 'array':
@@ -473,147 +490,146 @@ class Scalr_UI_Request
     }
 
     /**
+     * Check whether the user has access permissions to the specified object
+     *
+     * @param   object          $object
+     * @param   bool|string     $modify
+     * @return  bool            Returns TRUE if the authenticated user has access or FALSE otherwise
+     * @throws  Scalr_Exception_Core
+     */
+    public function hasPermissions($object, $modify = null)
+    {
+        if (! ($object instanceof AccessPermissionsInterface)) {
+            throw new Scalr_Exception_Core('Object is not an instance of AccessPermissionsInterface');
+        }
+
+        return $object->hasAccessPermissions($this->getUser(), $this->getEnvironment(), $modify);
+    }
+
+    /**
+     * Check whether the user has access permissions to the specified object
+     *
+     * @param   object      $object
+     * @param   bool|string $modify
+     * @throws  Scalr_Exception_Core
+     * @throws  Scalr_Exception_InsufficientPermissions
+     */
+    public function checkPermissions($object, $modify = null)
+    {
+        if (! $this->hasPermissions($object, $modify)) {
+            throw new Scalr_Exception_InsufficientPermissions('Access denied');
+        }
+    }
+
+    /**
      * Checks if access to ACL resource or unique permission is allowed
      *
      * Usage:
      * --
      * use \Scalr\Acl\Acl;
      *
-     * //it is somewhere inside controller action method
+     * The ID of the ACL resource; The ID of the unique permission which is related to specified resource
      * $this->request->isAllowed(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_EDIT);
      *
-     * //or you can do something like that
-     * $this->request->isAllowed('FARMS', 'edit');
+     * Array of IDs of the ACL resource (check if user have any permission); The ID of the unique permission which is related to specified resource
+     * $this->request->isAllowed([Acl::RESOURCE_FARMS, Acl::RESOURCE_OWN_FARMS], Acl::PERM_FARMS_EDIT);
      *
-     * @param   int        $resourceId            The ID of the ACL resource or its symbolic name without "RESOURCE_" prefix.
-     * @param   string     $permissionId optional The ID of the unique permission which is
-     *                                            related to specified resource.
+     * Mnemonic constants: resource, permission
+     * Method interprets $resourceMnemonic as RESOURCE_$resourceMnemonic_$scope, $permissionMnemonic as PERM_$resourceMnemonic_$scope_$permissionMnemonic
+     * For example, call(ROLES, MANAGE) on account scope will check RESOURCE_ROLES_ACCOUNT, PERM_ROLES_ACCOUNT_MANAGE
+     * $this->request->isAllowed('ROLES', 'MANAGE');
+     *
+     * @param   int|string|array    $resourceId             The ID or Name of the ACL resource or array of resources
+     * @param   string              $permissionId optional  The ID or Name of the unique permission which is
+     *                                                      related to specified resource.
      * @return  bool       Returns TRUE if access is allowed
      */
     public function isAllowed($resourceId, $permissionId = null)
     {
-        return \Scalr::getContainer()->acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), $resourceId, $permissionId);
-    }
+        if ($this->user->isScalrAdmin()) {
+            // we don't have permissions on scalr scope
+            return true;
+        }
 
-    /**
-     * @param   DBFarm $dbFarm
-     * @param   string $permissionId
-     * @return  bool
-     */
-    public function isFarmAllowed(DBFarm $dbFarm = null, $permissionId = null)
-    {
-        $acl = \Scalr::getContainer()->acl;
+        if (is_string($resourceId)) {
+            $resourceMnemonic = $resourceId;
+            $resourceId = Acl::getResourceIdByMnemonic($resourceMnemonic, $this->getScope());
+            $permissionId = $permissionId ? Acl::getPermissionIdByMnemonic($resourceMnemonic, $permissionId, $this->getScope()) : null;
+        }
 
-        if (is_null($dbFarm)) {
-            return  $acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), \Scalr\Acl\Acl::RESOURCE_FARMS, $permissionId) ||
-                    $acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), \Scalr\Acl\Acl::RESOURCE_TEAM_FARMS, $permissionId) ||
-                    $acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), \Scalr\Acl\Acl::RESOURCE_OWN_FARMS, $permissionId);
+        if (is_array($resourceId)) {
+            foreach ($resourceId as $id) {
+                if (\Scalr::getContainer()->acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), $id, $permissionId)) {
+                    return true;
+                }
+            }
+
+            return false;
         } else {
-            if (!($dbFarm instanceof DBFarm))
-                throw new \InvalidArgumentException(sprintf(
-                    'First argument should be instance of DBFarm or null'
-                ));
-
-            $result = $acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), \Scalr\Acl\Acl::RESOURCE_FARMS, $permissionId);
-
-            if (!$result && $dbFarm->teamId && $this->getUser()->isInTeam($dbFarm->teamId)) {
-                $result = $acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), \Scalr\Acl\Acl::RESOURCE_TEAM_FARMS, $permissionId);
-            }
-
-            if (!$result && $dbFarm->createdByUserId && $this->getUser()->id == $dbFarm->createdByUserId) {
-                $result = $acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), \Scalr\Acl\Acl::RESOURCE_OWN_FARMS, $permissionId);
-            }
-
-            return $result;
+            return \Scalr::getContainer()->acl->isUserAllowedByEnvironment($this->getUser(), $this->getEnvironment(), $resourceId, $permissionId);
         }
     }
 
     /**
-     * Checks if access to ACL resource or unique permission is allowed
-     * and throws an exception if negative.
-     *
-     * Usage:
-     * --
-     * use \Scalr\Acl\Acl;
-     *
-     * //it is somewhere inside controller action method
-     * $this->request->restrictAccess(Acl::RESOURCE_FARMS, Acl::PERM_FARMS_EDIT);
-     *
-     * //or you can do something like that
-     * $this->request->restrictAccess('FARMS', 'edit');
-     *
-     *
-     * @param   int        $resourceId            The ID of the ACL resource or its symbolic name
-     *                                            without "RESOURCE_" prefix.
-     * @param   string     $permissionId optional The ID of the uniqure permission which is
-     *                                            related to specified resource.
+     * @see Scalr_UI_Controller_Request::isAllowed
      * @throws  Scalr_Exception_InsufficientPermissions
      */
     public function restrictAccess($resourceId, $permissionId = null)
     {
-        if (is_string($resourceId)) {
-            $sName = 'Scalr\\Acl\\Acl::RESOURCE_' . strtoupper($resourceId);
-            if (defined($sName)) {
-                $resourceId = constant($sName);
-            } else {
-                throw new \InvalidArgumentException(sprintf(
-                    'Cannot find ACL resource %s by specified symbolic name %s.',
-                    $sName, $resourceId
-                ));
-            }
-        }
-
         if (!$this->isAllowed($resourceId, $permissionId)) {
            throw new Scalr_Exception_InsufficientPermissions();
         }
     }
 
     /**
-     * @param DBFarm $dbFarm
-     * @param null $permissionId
+     * Checks whether user has access to FarmDesigner
+     * @return  bool
+     */
+    public function isFarmDesignerAllowed()
+    {
+        return $this->isAllowed(Acl::RESOURCE_OWN_FARMS, Acl::PERM_FARMS_CREATE) || $this->isAllowed([Acl::RESOURCE_FARMS, Acl::RESOURCE_TEAM_FARMS, Acl::RESOURCE_OWN_FARMS], Acl::PERM_FARMS_UPDATE);
+    }
+
+    /**
+     * Checks whether user has access to FarmDesigner
      * @throws Scalr_Exception_InsufficientPermissions
      */
-    public function restrictFarmAccess(DBFarm $dbFarm = null, $permissionId = null)
+    public function restrictFarmDesignerAccess()
     {
-        if (!$this->isFarmAllowed($dbFarm, $permissionId)) {
+        if (!$this->isFarmDesignerAllowed()) {
             throw new Scalr_Exception_InsufficientPermissions();
         }
     }
 
     /**
-     * Modify sql query to limit access by only allowable farms
+     * Generate conditions for sql query to limit access by only allowable farms.
+     * Table `farms` should have alias `f`.
      *
-     * @param   string  $query
-     * @param   array   $args
-     * @param   string  $prefix optional    Prefix for table farms in sql query
-     * @param   string  $perm   optional
-     * @return  array
+     * @param   string  $permissionId   optional
+     * @return  string
      */
-    public function prepareFarmSqlQuery($query, $args, $prefix = '', $perm = null)
+    public function getFarmSqlQuery($permissionId = null)
     {
-        $prefix = $prefix ? "{$prefix}." : '';
-
-        if (!$this->isAllowed(Acl::RESOURCE_FARMS, $perm)) {
+        if (!$this->isAllowed(Acl::RESOURCE_FARMS, $permissionId)) {
             $q = [];
-            if ($this->isAllowed(Acl::RESOURCE_TEAM_FARMS, $perm)) {
-                $t = array_map(function($t) { return $t['id']; }, $this->user->getTeams());
-                if (count($t))
-                    $q[] = "{$prefix}team_id IN(" . join(',', $t) . ")";
+            if ($this->isAllowed(Acl::RESOURCE_TEAM_FARMS, $permissionId)) {
+                $q[] = Farm::getUserTeamOwnershipSql($this->user->id);
             }
 
-            if ($this->isAllowed(Acl::RESOURCE_OWN_FARMS, $perm)) {
-                $q[] = "{$prefix}created_by_id = ?";
-                $args[] = $this->user->getId();
+            if ($this->isAllowed(Acl::RESOURCE_OWN_FARMS, $permissionId)) {
+                $q[] = "f.created_by_id = '{$this->user->getId()}'";
             }
 
             if (count($q)) {
-                $query .= ' AND (' . join(' OR ', $q) . ')';
+                $sql = '(' . join(' OR ', $q) . ')';
             } else {
-                $query .= ' AND false'; // no permissions
+                $sql = '0'; // no permissions
             }
+        } else {
+            $sql = '1'; // all farms in env
         }
 
-        return [$query, $args];
+        return $sql;
     }
 
     /**
@@ -647,9 +663,10 @@ class Scalr_UI_Request
                 ];
             } elseif ($decision->mode == CloudResourceScopeMode::MODE_MANAGED_FARMS) {
                 //We should filter resources by the Farms to which user has access in current Environment
-                $decision->managedFarms = call_user_func_array([\Scalr::getDb(), 'GetCol'], $this->prepareFarmSqlQuery("
-                    SELECT id FROM farms WHERE env_id = ?
-                ", [$env->id]));
+                $decision->managedFarms = call_user_func_array(
+                    [\Scalr::getDb(), 'GetCol'],
+                    ["SELECT id FROM farms f WHERE env_id = ? AND " . $this->getFarmSqlQuery(), [$env->id]]
+                );
 
                 if (empty($decision->managedFarms) || (!empty($farmId) && !in_array($farmId, $decision->managedFarms))) {
                     //This user hasn't any managed Farm. We should return empty result set.
@@ -689,4 +706,22 @@ class Scalr_UI_Request
     {
         return !!$this->getHeaderVar('Interface-Beta');
     }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\LogCollector\AuditLoggerRetrieveConfigurationInterface::getAuditLoggerConfig()
+     */
+    public function getAuditLoggerConfig()
+    {
+        $config = new AuditLoggerConfiguration(AuditLogger::REQUEST_TYPE_UI);
+
+        $config->user = $this->user;
+        $config->accountId = $this->user ? $this->user->getAccountId() : null;
+        $config->envId = isset($this->environment) ? $this->environment->id : null;
+        $config->ruid = Scalr_Session::getInstance()->getRealUserId();
+        $config->remoteAddr = $this->getRemoteAddr();
+
+        return $config;
+    }
+
 }

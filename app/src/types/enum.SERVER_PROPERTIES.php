@@ -5,6 +5,7 @@ class SERVER_PROPERTIES
     //System properties
     const SYSTEM_IGNORE_INBOUND_MESSAGES = 'system.ignore_inbound_messages';
     const SYSTEM_USER_DATA_METHOD = 'system.user_data_method';
+    const SYSTEM_FORCE_RESUME_INITIATED = 'system.force_resume_initiated';
 
     //Scalarizr properties
     const SZR_KEY			= 'scalarizr.key';
@@ -98,7 +99,6 @@ class SERVER_PROPERTIES
 
     const SCALR_INBOUND_REQ_RATE = 'scalr.inbound.req.rate';
 
-    const INFO_INSTANCE_TYPE_NAME = 'info.instance_type_name';
     const INFO_INSTANCE_VCPUS = 'info.instance_vcpus';
 
     /**
@@ -120,7 +120,6 @@ class SERVER_PROPERTIES
             self::LAUNCHED_BY_EMAIL,
             self::TERMINATED_BY_ID,
             self::TERMINATED_BY_EMAIL,
-            self::INFO_INSTANCE_TYPE_NAME,
             self::INFO_INSTANCE_VCPUS,
         ];
     }

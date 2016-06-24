@@ -249,9 +249,14 @@ Scalr.regPage('Scalr.ui.images.register', function (loadParams, moduleParams) {
                         },
                         listeners: {
                             change: function (comp, value) {
-                                var osIdField = comp.next();
+                                var osIdField = comp.next(),
+                                    form = comp.up('form').getForm(),
+                                    isScalarized = form.findField('isScalarized').getValue(),
+                                    disableCloudInit = value === 'windows' || isScalarized;
                                 osIdField.store.load({data: value ? Scalr.utils.getOsList(value) : []});
                                 osIdField.reset();
+
+                                form.findField('hasCloudInit').setVisible(!disableCloudInit).setDisabled(disableCloudInit);
                             }
                         }
                     }, {
@@ -272,8 +277,12 @@ Scalr.regPage('Scalr.ui.images.register', function (loadParams, moduleParams) {
                                     return record.get('version')
                                         || record.get('generation')
                                         || record.getId();
-                                }
-                            }]
+                                },
+                                sortType: 'asFloat'
+                            }],
+                            sorters: [{
+                                property: 'title'
+                            }],
                         },
                         margin: '0 0 0 12',
                         listeners: {
@@ -388,7 +397,13 @@ Scalr.regPage('Scalr.ui.images.register', function (loadParams, moduleParams) {
                 items: [{
                     xtype: 'buttongroupfield',
                     fieldLabel: 'Scalarizr installed',
-                    submitValue: false,
+                    name: 'isScalarized',
+                    plugins: [{
+                        ptype: 'fieldicons',
+                        align: 'right',
+                        icons: [{id: 'info', 'tooltip': 'Using Scalarizr (Scalr agent) is optional, but gives you access to additional features in Scalr, including Orchestration, Autoscaling and many others.'}]
+                    }],
+                    maxWidth: 435,
                     defaults: {
                         width: 130
                     },
@@ -399,12 +414,37 @@ Scalr.regPage('Scalr.ui.images.register', function (loadParams, moduleParams) {
                         text: 'No',
                         value: false
                     }],
-                    value: false,
+                    value: true,
                     listeners: {
-                        change: function (buttonGroupField, value) {
-                            panel.disableRegisterButton(!value);
+                        change: function (comp, value) {
+                            var form = comp.up('form').getForm(),
+                                disableCloudInit = form.findField('osFamily').getValue() === 'windows' || value;
+                            form.findField('hasCloudInit').setVisible(!disableCloudInit).setDisabled(disableCloudInit);
                         }
                     }
+                },{
+                    xtype: 'buttongroupfield',
+                    fieldLabel: 'Cloud-init installed',
+                    name: 'hasCloudInit',
+                    plugins: [{
+                        ptype: 'fieldicons',
+                        align: 'right',
+                        icons: [{id: 'info', 'tooltip': 'Scalr can attempt to install Scalarizr (scalr agent) via cloud-init when you launch instances using this Image (so you can still benefit from Scalarizr features, even if it’s not installed).'}]
+                    }],
+                    maxWidth: 435,
+                    hidden: true,
+                    disabled: true,
+                    defaults: {
+                        width: 130
+                    },
+                    items: [{
+                        text: 'Yes',
+                        value: true
+                    },{
+                        text: 'No',
+                        value: false
+                    }],
+                    value: false
                 }]
             }, {
                 xtype: 'fieldset',
@@ -495,9 +535,6 @@ Scalr.regPage('Scalr.ui.images.register', function (loadParams, moduleParams) {
                 items: [{
                     text: 'Register',
                     itemId: 'register',
-                    disabled: true,
-                    tooltip: 'The Scalr agent must be installed on this Image to continue.'
-                        + ' If it isn\'t, please install it and try again.',
                     handler: function () {
                         panel.registerImage();
                     }
@@ -602,7 +639,7 @@ Scalr.regPage('Scalr.ui.images.register', function (loadParams, moduleParams) {
         loadCloudLocations: function (platform, callback) {
             var me = this;
 
-            if (Scalr.scope !== 'environment' && (Scalr.isOpenstack(platform) || Scalr.isCloudstack(platform) || platform == 'rackspace')) {
+            if (Scalr.scope !== 'environment' && (Scalr.isOpenstack(platform) || Scalr.isCloudstack(platform))) {
                 me.applyCloudLocations(platform, [], true);
             } else {
                 Scalr.loadCloudLocations(platform, function (cloudLocations) {
@@ -709,20 +746,6 @@ Scalr.regPage('Scalr.ui.images.register', function (loadParams, moduleParams) {
             return me;
         },
 
-        disableRegisterButton: function (disabled) {
-            var me = this;
-
-            me.getRightColumn()
-                .down('#register')
-                    .setDisabled(disabled)
-                    .setTooltip(!disabled
-                        ? ''
-                        : 'The Scalr agent must be installed on this Image to continue. If it isn\'t, please install it and try again.'
-                    );
-
-            return me;
-        },
-
         disableHvmButton: function (disabled) {
             var me = this;
 
@@ -785,6 +808,15 @@ Scalr.regPage('Scalr.ui.images.register', function (loadParams, moduleParams) {
 
             me.disableLeftColumnsButtons(true);
 
+            if (me.importNonSzrImage) {
+                Ext.apply(imageData, {
+                    isScalarized: false,
+                    hasCloudInit: false
+                });
+            }
+
+            imageData['name'] = (imageData['name'] || '').replace(/\//g, '-').replace(/\./g, '').replace(/_/g, '-');
+
             me.getRightColumn()
                 .loadImageData(me.getPlatform(), imageData);
 
@@ -840,7 +872,11 @@ Scalr.regPage('Scalr.ui.images.register', function (loadParams, moduleParams) {
                     },
                     url: '/images/xSave',
                     success: function (response) {
-                        Scalr.event.fireEvent('redirect', '#' + Scalr.utils.getUrlPrefix() + '/images?hash=' + response.hash);
+                        if (panel.importNonSzrImage) {
+                            Scalr.event.fireEvent('close');
+                        } else {
+                            Scalr.event.fireEvent('redirect', '#' + Scalr.utils.getUrlPrefix() + '/images?hash=' + response.hash);
+                        }
                     }
                 });
             }
@@ -861,9 +897,22 @@ Scalr.regPage('Scalr.ui.images.register', function (loadParams, moduleParams) {
                 return true;
             },
             boxready: function (panel) {
-                panel.down('#platforms')
-                    .child()
+                var plCmp;
+                if (loadParams['platform'] && (plCmp = panel.down('#platforms').child('[value="' + loadParams['platform'] + '"]'))) {
+                    plCmp.toggle();
+                    if (loadParams['cloudLocation']) {
+                        this.setCloudLocation(loadParams['cloudLocation']);
+                        if (loadParams['imageId']) {
+                            this.importNonSzrImage = true;
+                            this.getCloudImageIdField().setValue(loadParams['imageId']);
+                            this.checkImage();
+                        }
+                    }
+                } else {
+                    panel.down('#platforms')
+                        .child()
                         .toggle();
+                }
             }
         }
     });

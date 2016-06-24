@@ -5,8 +5,8 @@ namespace Scalr\Tests\Functional\Modules\Platforms;
 use Scalr\Service\Aws;
 use Scalr\Tests\WebTestCase;
 use Scalr\Modules\Platforms\Ec2\Ec2PlatformModule;
-use \SERVER_PLATFORMS;
-use \ReflectionClass;
+use SERVER_PLATFORMS;
+use ReflectionClass;
 
 
 /**
@@ -54,12 +54,13 @@ class Ec2Test extends WebTestCase
         $env = $this->getEnvironment();
         $servers = $this->module->GetServersList($env, self::REGION, true);
         $this->assertInternalType('array', $servers);
+
         $ref = new ReflectionClass('Scalr\\Service\\Aws\\Ec2\\DataType\\InstanceStateData');
+
         if (count($servers)) {
             foreach ($servers as $instanceid => $v) {
                 $this->assertStringStartsWith('i-', $instanceid);
                 $this->assertNotEmpty($v);
-                $this->assertTrue(is_string($v));
             }
         }
     }

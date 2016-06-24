@@ -338,22 +338,27 @@ class DBDNSZone
         if ($ext_record_alias)
             $ext_record = $DBServer->applyGlobalVarsToValue($ext_record_alias);
 
-        array_push($records, array(
-                "name" 		=> $int_record,
-                "value"		=> $DBServer->localIp,
-                "type"		=> "A",
-                "ttl"		=> 90,
-                "server_id"	=> $DBServer->serverId,
-                "issystem"	=> '1'
-        ));
-        array_push($records, array(
-                "name" 		=> $ext_record,
-                "value"		=> $DBServer->remoteIp,
-                "type"		=> "A",
-                "ttl"		=> 90,
-                "server_id"	=> $DBServer->serverId,
-                "issystem"	=> '1'
-        ));
+        if ($DBServer->localIp) {
+            array_push($records, array(
+                    "name" 		=> $int_record,
+                    "value"		=> $DBServer->localIp,
+                    "type"		=> "A",
+                    "ttl"		=> 90,
+                    "server_id"	=> $DBServer->serverId,
+                    "issystem"	=> '1'
+            ));
+        }
+        
+        if ($DBServer->remoteIp) {
+            array_push($records, array(
+                    "name" 		=> $ext_record,
+                    "value"		=> $DBServer->remoteIp,
+                    "type"		=> "A",
+                    "ttl"		=> 90,
+                    "server_id"	=> $DBServer->serverId,
+                    "issystem"	=> '1'
+            ));
+        }
 
         $records = array_merge($records, (array)$this->getDbRecords($DBServer));
         $records = array_merge($records, (array)$this->getBehaviorsRecords($DBServer));

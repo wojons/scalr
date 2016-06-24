@@ -35,7 +35,7 @@ class ExtensionTest extends TestCase
 
         $this->assertEquals('mysqli', $ext('scalr.connections.mysql.driver')->default);
         $this->assertEquals(null, $ext('scalr.connections.ldap.port')->default);
-        $this->assertEquals(true, $ext('scalr.phpunit.skip_functional_tests')->default);
+        $this->assertEquals(false, $ext('scalr.phpunit.functional_tests')->default);
 
         $vars = $this->getConfigUsedVars();
         foreach ($vars as $varname => $info) {
