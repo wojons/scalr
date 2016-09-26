@@ -3,7 +3,7 @@ pytz
 docopt
 boto==2.39.0
 pyyaml==3.11
-https://pypi.python.org/packages/40/f1/4f696a1dcdb5f21b7e31a5900e5b5144326348ce278636695bd159f2a2cd/gevent-1.1.1-cp27-cp27m-manylinux1_x86_64.whl#md5=676aba25e46930c085c2a682a2704506
+gevent==1.0.2
 psutil==3.2.2
 pymysql==0.7.1
 httplib2
