@@ -1,30 +1,28 @@
 <?php
 
-	class ServerSnapshotCreateInfo
-	{
-		/**
-		 * 
-		 * @var DBServer
-		 */
-		public $DBServer;
-		
-		public $roleName;
-		public $replaceType;
-		public $removePrototypeRole;
-		public $description;
-		public $rootVolumeSize;
-		public $noServersReplace;
-		
-		public function __construct(DBServer $DBServer, $role_name, $replace_type, $remove_proto_role = false, $description = '', $rootVolumeSize = '', $noServersReplace = false)
-		{
-			$this->DBServer = $DBServer;
-			$this->roleName = $role_name;
-			$this->replaceType = $replace_type;
-			$this->removePrototypeRole = $remove_proto_role;
-			$this->description = $description;
-			$this->rootVolumeSize = $rootVolumeSize;
-			$this->noServersReplace = $noServersReplace;
-		}
-	}
-	
+    class ServerSnapshotCreateInfo
+    {
+        /**
+         *
+         * @var DBServer
+         */
+        public $DBServer;
+
+        public $roleName;
+        public $replaceType;
+        public $object;
+        public $description;
+        public $rootBlockDeviceProperties;
+
+        public function __construct(DBServer $DBServer, $roleName, $replaceType, $object = 'role', $description = '', $rootBlockDeviceProperties = [])
+        {
+            $this->DBServer = $DBServer;
+            $this->roleName = $roleName;
+            $this->replaceType = $replaceType;
+            $this->object = $object;
+            $this->description = $description;
+            $this->rootBlockDeviceProperties = $rootBlockDeviceProperties;
+        }
+    }
+
 ?>

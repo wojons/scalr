@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.roles.migrate', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 900,
 		title: 'Roles &raquo; Migration',
 		items: [{
@@ -17,7 +16,7 @@ Scalr.regPage('Scalr.ui.roles.migrate', function (loadParams, moduleParams) {
 				proxy: 'object'
 			}, 
 			valueField: 'location',
-			displayField: 'name',
+			displayField: 'name'
 		}, {
 			xtype: 'combo',
 			name: 'destLocation',
@@ -32,12 +31,12 @@ Scalr.regPage('Scalr.ui.roles.migrate', function (loadParams, moduleParams) {
 				proxy: 'object'
 			}, 
 			valueField: 'location',
-			displayField: 'name',
+			displayField: 'name'
 		}],
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -59,7 +58,6 @@ Scalr.regPage('Scalr.ui.roles.migrate', function (loadParams, moduleParams) {
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

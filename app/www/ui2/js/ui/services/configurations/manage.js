@@ -1,10 +1,11 @@
 Scalr.regPage('Scalr.ui.services.configurations.manage', function (loadParams, moduleParams) {
-	
+	var isConfigEmpty = Ext.Object.isEmpty(moduleParams['config']);
+    
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 900,
 		title: 'Services &raquo; Configurations &raquo; Manage',
-
+        layout: 'auto',
+        overflowX: 'hidden',
 		items: [{
 			xtype: 'fieldset',
 			title: 'General information',
@@ -17,7 +18,7 @@ Scalr.regPage('Scalr.ui.services.configurations.manage', function (loadParams, m
 				value: moduleParams['farmName']+" &raquo; "+moduleParams['roleName']
 			}, {
 				xtype: 'displayfield',
-				fieldLabel: 'Behavior',
+				fieldLabel: 'Automation',
 				width: 600,
 				value: moduleParams['behaviorName']
 			}, {
@@ -26,56 +27,45 @@ Scalr.regPage('Scalr.ui.services.configurations.manage', function (loadParams, m
 				hidden: !moduleParams['masterServerId'],
 				fieldLabel: 'Master server',
 				width: 600,
-				value: moduleParams['masterServerId'] ? "<a href='#/servers/"+moduleParams['masterServerId']+"/extendedInfo'>"+moduleParams['masterServer']['remoteIp']+" ("+moduleParams['masterServerId']+")</a>" : ""
-			}, {
-				xtype: 'combo',
-				name: 'masterServer2',
-				fieldLabel: 'Master server',
-				width: 600,
-				queryMode: 'local',
-				editable: false,
-				valueField: 'serverId',
-				displayField: 'remoteIp',
-				hidden: !!moduleParams['masterServerId'],
-				emptyText: 'Please select master server...',
-				store: moduleParams['servers'],
-				listeners: {
-					'select': function() {
-						/*
-						Scalr.Request({
-							processBox: {
-								type: 'load'
-							},
-							url: '/services/configurations/presets/xGetPresetOptions',
-							params: {
-								'compat4': 1,
-								'presetId': moduleParams['presetId'],
-								'presetName': form.down('[name="presetName"]').getValue(),
-								'roleBehavior': form.down('[name="roleBehavior"]').getValue()
-							},
-							success: function (data) {
-								var field = form.down('#optionsSet');
-
-								field.removeAll();
-								field.add(data.presetOptions);
-								field.show();
-							}
-						});
-						*/
-					}
-				}
-			}]
+				value: moduleParams['masterServerId'] ? "<a href='#/servers/"+moduleParams['masterServerId']+"/dashboard'>"+moduleParams['masterServer']['remoteIp']+" ("+moduleParams['masterServerId']+")</a>" : ""
+			},{
+                xtype: 'displayfield',
+                hidden: moduleParams['masterServerId'] || isConfigEmpty,
+                anchor: '100%',
+                margin: 0,
+                cls: 'x-form-field-warning',
+                value: 'No running master server found. Any changed in configuration won\'t be tested and will be applied during the next instance launch.'
+            }]
 		}, {
-			xtype: 'fieldset',
-			title: 'Configuration options',
+			xtype: 'container',
+            layout: 'anchor',
+            cls: 'x-container-fieldset x-fieldset-separator-bottom',
+            style: 'padding-bottom:0',
 			itemId: 'optionsSet',
-			items: []
+			items: [{
+                xtype: 'component',
+                cls: 'x-fieldset-subheader',
+                html: 'Configuration options'
+            },{
+                xtype: 'displayfield',
+                hidden: moduleParams['masterServerId'] || !isConfigEmpty,
+                anchor: '100%',
+                margin: '0 0 24',
+                cls: 'x-form-field-warning',
+                value: 'No configuration found. Please launch at least one server to start managing configuration.'
+            },{
+                xtype: 'displayfield',
+                anchor: '100%',
+                margin: '0 0 24',
+                cls: 'x-form-field-warning',
+                value: 'Any changes made to your configuration through this interface will result in ' + moduleParams['behaviorName'] + ' being restarted after your changes are saved.'
+            }]
 		}],
 
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -85,7 +75,7 @@ Scalr.regPage('Scalr.ui.services.configurations.manage', function (loadParams, m
 				text: 'Save',
 				handler: function() {
 					
-					var results = {};
+					var results = [];
 					var configFields = form.child('#optionsSet').query('configfield');
 					for (var i = 0; i < configFields.length; i++) {
 						item = configFields[i];
@@ -111,14 +101,12 @@ Scalr.regPage('Scalr.ui.services.configurations.manage', function (loadParams, m
 							'config': Ext.encode(results) 
 						},
 						success: function () {
-							//Scalr.event.fireEvent('close');
-							console.log("OK");
+							Scalr.event.fireEvent('refresh');
 						}
 					});
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');
@@ -134,11 +122,40 @@ Scalr.regPage('Scalr.ui.services.configurations.manage', function (loadParams, m
 		var itemId = name.replace(/[^a-zA-Z0-9]+/gi, '');
 		
 		optionsSet.add({
-			'xtype': 'fieldset',
-			'itemId' : itemId,
-			'flex': 1,
-			'title': name,
-			'items': []
+			xtype: 'panel',
+			itemId : itemId,
+			flex: 1,
+            margin: '12 0 24',
+            dockedItems: [{
+                dock: 'top',
+                xtype: 'component',
+                cls: 'x-fieldset-subheader',
+                html: name
+            }],
+            layout: 'anchor',
+            defaults: {
+                anchor: '100%'
+            },
+            bodyStyle: 'padding-bottom:32px;',
+            plugins: {
+                ptype: 'addfield',
+                padding: '6px 28px 0 0',
+                targetEl: '.x-panel-body',
+                handler: function () {
+                    var scrollY = form.getScrollY();
+                    this.addNewConfigfield();
+                    form.setScrollY(scrollY);
+                }
+            },
+            addNewConfigfield: function (){
+                this.items.last().down('#remove').enable().show();
+                this.add({
+                    xtype: 'configfield',
+                    configFile: name,
+                    showRemoveButton: true
+                });
+            },
+			items: []
 		});
 		
 		for (settingName in moduleParams['config'][name]) {

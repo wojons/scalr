@@ -1,210 +1,1111 @@
 Scalr.regPage('Scalr.ui.scripts.view', function (loadParams, moduleParams) {
-	var store = Ext.create('store.store', {
-		fields: [
-			{ name: 'id', type: 'int' },
-			'name', 'description', 'origin',
-			{ name: 'clientid', type: 'int' },
-			'approval_state', 'dtupdated', 'client_email', 'version', 'client_name'
-		],
-		proxy: {
-			type: 'scalr.paging',
-			extraParams: loadParams,
-			url: '/scripts/xListScripts/'
-		},
-		remoteSort: true
-	});
+    var isManageAllowed = true,
+        isForkAllowed = true;
+    if (Scalr.scope === 'environment') {
+        isManageAllowed = Scalr.isAllowed('SCRIPTS_ENVIRONMENT', 'manage');
+        isForkAllowed = Scalr.isAllowed('SCRIPTS_ENVIRONMENT', 'fork');
+    } else if (Scalr.scope === 'account') {
+        isManageAllowed = Scalr.isAllowed('SCRIPTS_ACCOUNT', 'manage');
+        isForkAllowed = Scalr.isAllowed('SCRIPTS_ACCOUNT', 'fork');
+    }
 
-	return Ext.create('Ext.grid.Panel', {
-		title: 'Scripts &raquo; View',
-		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
-		},
-		scalrReconfigureParams: {scriptId: '' },
-		store: store,
-		stateId: 'grid-scripts-view',
-		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
+    var globalVariablesInfo =
 
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Scripts',
-				href: '#/scripts/view'
-			}
-		}],
+        'You can access <a href="https://scalr-wiki.atlassian.net/wiki/x/hiIb" '
+        + 'target="_blank">Global Variables</a> as Environment Variables in your Scripts. '
+        + 'Visit <a href="https://scalr-wiki.atlassian.net/wiki/x/7R4b" target="_blank">the documentation</a> '
+        + 'for details and examples.</br>In addition to the Global Variables that you manually define, '
+        + 'Scalr provides <a href="https://scalr-wiki.atlassian.net/wiki/x/MYBM" target="_blank">'
+        + 'System Global Variables</a>, which include information regarding the Server the Script is '
+        + 'currently executing on.</br>If the Script is used in an Orchestration Rule, '
+        + 'System Global Variables will also include information regarding the Server that fired the event '
+        + 'that triggered this Orchestration Rule.';
 
-		viewConfig: {
-			emptyText: 'No scripts defined',
-			loadingText: 'Loading scripts ...',
-			disableSelection: true
-		},
+    var store = Ext.create('Scalr.ui.ContinuousStore', {
 
-		columns: [
-			{ header: 'Author', flex: 1, dataIndex: 'id', sortable: false, xtype: 'templatecolumn', tpl: new Ext.XTemplate(
-				'<tpl if="!this.isAdmin()">' +
-					'<tpl if="clientid">' +
-						'<tpl if="clientid == this.getClientId()">Me</tpl>' +
-						'<tpl if="clientid != this.getClientId()">{client_name}</tpl>' +
-					'</tpl>' +
-					'<tpl if="!clientid">Scalr</tpl>' +
-				'</tpl>' +
-				'<tpl if="this.isAdmin()">' +
-					'<tpl if="clientid">{client_name}</tpl>' +
-					'<tpl if="!clientid">Scalr</tpl>' +
-				'</tpl>', {
-					getClientId: function() {
-						return moduleParams['clientId']
-					},
-					isAdmin: function() {
-						return moduleParams['isScalrAdmin']
-					}
-				})
-			},
-			{ header: 'Name', flex: 1, dataIndex: 'name', sortable: true },
-			{ header: 'Description', flex: 2, dataIndex: 'description', sortable: true },
-			{ header: 'Latest version', width: 100, dataIndex: 'version', sortable: false, align:'center' },
-			{ header: 'Updated on', width: 160, dataIndex: 'dtupdated', sortable: true },
-			{ header: 'Origin', width: 80, dataIndex: 'origin', sortable: false, align:'center', xtype: 'templatecolumn', tpl:
-				'<tpl if="origin == &quot;Shared&quot;"><img src="/ui2/images/ui/scripts/default.png" height="16" title="Contributed by Scalr"></tpl>' +
-				'<tpl if="origin == &quot;Custom&quot;"><img src="/ui2/images/ui/scripts/custom.png" height="16" title="Custom"></tpl>' +
-				'<tpl if="origin != &quot;Shared&quot; && origin != &quot;Custom&quot;"><img src="/ui2/images/ui/scripts/contributed.png" height="16" title="Contributed by {client_name}"></tpl>'
-			},
-			{ header: 'Approved', width: 80, dataIndex: 'approval_state', sortable: false, align:'center', xtype: 'templatecolumn', tpl:
-				'<tpl if="approval_state == &quot;Approved&quot; || !approval_state"><img src="/ui2/images/icons/true.png" title="Approved" /></tpl>' +
-				'<tpl if="approval_state == &quot;Pending&quot;"><img src="/ui2/images/ui/scripts/pending.gif" title="Pending" /></tpl>' +
-				'<tpl if="approval_state == &quot;Declined&quot;"><img src="/ui2/images/icons/false.png" title="Declined" /></tpl>'
-			}, {
-				xtype: 'optionscolumn',
-				getOptionVisibility: function (item, record) {
-					var data = record.data;
-					
-					if (item.itemId == 'option.view') {
-						return true;
-					} else if (item.itemId == 'option.fork') {
-						return true;
-					} else {
-						if (item.itemId == 'option.execute' || item.itemId == 'option.execSep') {
-							if (moduleParams['isScalrAdmin'])
-								return false;
-							else
-								return true;
-						}
-						if ((data.clientid != 0 && data.clientid == moduleParams['clientId']) || moduleParams['isScalrAdmin'])
-							return true;
-						else
-							return false;
-					}
-				},
+        fields: [
+            { name: 'id', type: 'int' },
+            { name: 'accountId', type: 'int' },
+            'name', 'description', 'version', 'isSync', 'os', 'envId'
+        ],
 
-				optionsMenu: [{
-					itemId: 'option.view',
-					iconCls: 'x-menu-icon-view',
-					text: 'View',
-					href: '#/scripts/{id}/view'
-				}, {
-					itemId: 'option.execute',
-					iconCls: 'x-menu-icon-execute',
-					text: 'Execute',
-					href: '#/scripts/{id}/execute'
-				}, {
-					xtype: 'menuseparator',
-					itemId: 'option.execSep'
-				}, {
-					itemId: 'option.fork',
-					text: 'Fork',
-					iconCls: 'x-menu-icon-fork',
-					request: {
-						processBox: {
-							type: 'action'
-						},
-						dataHandler: function (record) {
-							this.url = '/scripts/' + record.get('id') + '/xFork';
-						},
-						success: function () {
-							store.load();
-						}
-					}
-				}, {
-					itemId: 'option.edit',
-					iconCls: 'x-menu-icon-edit',
-					text: 'Edit',
-					href: '#/scripts/{id}/edit'
-				}, {
-					itemId: 'option.delete',
-					text: 'Delete',
-					iconCls: 'x-menu-icon-delete',
-					request: {
-						confirmBox: {
-							msg: 'Remove script "{name}"?',
-							type: 'delete'
-						},
-						processBox: {
-							type: 'delete',
-							msg: 'Removing script ...'
-						},
-						dataHandler: function (record) {
-							this.url = '/scripts/' + record.get('id') + '/xRemove';
-						},
-						success: function () {
-							store.load();
-						}
-					}
-				}]
-			}
-		],
+        proxy: {
+            type: 'ajax',
+            url: '/scripts/xList',
+            reader: {
+                type: 'json',
+                rootProperty: 'data',
+                totalProperty: 'total',
+                successProperty: 'success'
+            }
+        },
 
-		dockedItems: [{
-			xtype: 'scalrpagingtoolbar',
-			store: store,
-			dock: 'top',
-			afterItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
-				handler: function() {
-					Scalr.event.fireEvent('redirect', '#/scripts/create');
-				}
-			}],
-			items: [{
-				xtype: 'tbfilterfield',
-				store: store
-			}, ' ', {
-				xtype: 'combo',
-				fieldLabel: 'Moderation phase',
-				labelWidth: 110,
-				width: 230,
-				store: [ ['','All'], ['Approved','Approved'], ['Declined','Declined'], ['Pending','Pending'] ],
-				editable: false,
-				value: '',
-				queryMode: 'local',
-				itemId: 'approvalState',
-				listeners: {
-					change: function(field, value) {
-						store.proxy.extraParams.approvalState = value;
-						store.loadPage(1);
-					}
-				}
-			}, ' ', {
-				xtype: 'combo',
-				fieldLabel: 'Origin',
-				labelWidth: 40,
-				store: [ ['','All'], ['Shared','Shared'], ['Custom','Custom'], ['User-contributed','User-contributed'] ],
-				editable: false,
-				value: '',
-				queryMode: 'local',
-				itemId: 'origin',
-				iconCls: 'no-icon',
-				listeners:{
-					change: function(field, value) {
-						store.proxy.extraParams.origin = value;
-						store.loadPage(1);
-					}
-				}
-			}]
-		}]
-	});
+        listeners: {
+            beforeload: function () {
+                grid.down('#add').toggle(false, true);
+            }
+        },
+
+        removeByScriptId: function (ids) {
+            store.remove(Ext.Array.map(
+                ids, function (id) {
+                    return store.getById(id);
+                }
+            ));
+        }
+    });
+
+    var grid =  Ext.create('Ext.grid.Panel', {
+
+        cls: 'x-panel-column-left',
+        flex: .8,
+        minWidth: 660,
+        scrollable: true,
+        store: store,
+
+        plugins: [ 'applyparams', 'focusedrowpointer', {
+            ptype: 'selectedrecord',
+            disableSelection: false,
+            clearOnRefresh: true,
+            selectSingleRecord: true
+        }, {
+            ptype: 'continuousrenderer'
+        }],
+
+        viewConfig: {
+            emptyText: 'No scripts found'
+        },
+
+        selModel:
+            isManageAllowed ? {
+                selType: 'selectedmodel',
+                getVisibility: function (record) {
+                    return Scalr.scope === record.get('scope') && (
+                        Scalr.user.type === 'ScalrAdmin' ||
+                        Scalr.scope === 'environment' && Scalr.isAllowed('SCRIPTS_ENVIRONMENT', 'manage') ||
+                        Scalr.scope === 'account' && Scalr.isAllowed('SCRIPTS_ACCOUNT', 'manage')
+                    );
+                }
+            } : null,
+
+        listeners: {
+            selectionchange: function(selModel, selections) {
+                var toolbar = this.down('toolbar');
+                toolbar.down('#delete').setDisabled(!selections.length);
+            }
+        },
+
+        applyScript: function (script) {
+            var me = this;
+
+            var record = me.getSelectedRecord();
+            var store = me.getStore();
+
+            if (Ext.isEmpty(record) || record.getId() != script.id) {
+                record = store.add(script)[0];
+            } else {
+                record.set(script);
+                me.clearSelectedRecord();
+            }
+
+            me.view.focusRow(record);
+
+            return me;
+        },
+
+        deleteScript: function (id, name) {
+
+            var isDeleteMultiple = Ext.typeOf(id) === 'array';
+
+            Scalr.Request({
+                confirmBox: {
+                    type: 'delete',
+                    msg: !isDeleteMultiple
+                        ? 'Delete script <b>' + name + '</b> ?'
+                        : 'Delete selected script(s): %s ?',
+                    objects: isDeleteMultiple ? name : null
+                },
+                processBox: {
+                    type: 'delete',
+                    msg: !isDeleteMultiple
+                        ? 'Deleting <b>' + name + '</b> ...'
+                        : 'Deleting selected script(s) ...'
+                },
+                url: '/scripts/xRemove',
+                params: {
+                    scriptId: Ext.encode(
+                        !isDeleteMultiple ? [id] : id
+                    )
+                },
+                success: function (response) {
+                    var deletedScriptsIds = response.processed;
+
+                    if (!Ext.isEmpty(deletedScriptsIds)) {
+                        store.removeByScriptId(deletedScriptsIds);
+                    }
+
+                }
+            });
+        },
+
+        deleteSelectedScript: function () {
+            var me = this;
+
+            var record = me.getSelectedRecord();
+
+            me.deleteScript(
+                record.get('id'),
+                record.get('name')
+            );
+
+            return me;
+        },
+
+        deleteSelectedScripts: function () {
+            var me = this;
+
+            var ids = [];
+            var names = [];
+
+            Ext.Array.each(
+                me.getSelectionModel().getSelection(),
+
+                function (record) {
+                    ids.push(record.get('id'));
+                    names.push(record.get('name'));
+                }
+            );
+
+            me.deleteScript(ids, names);
+
+            return me;
+        },
+
+        columns: [
+            { header: 'ID', width: 80, dataIndex: 'id', sortable: true },
+            {
+                text: 'Script',
+                flex: 1,
+                dataIndex: 'name',
+                sortable: true,
+                xtype: 'templatecolumn',
+                tpl: new Ext.XTemplate('{[this.getScope(values.scope)]}&nbsp;&nbsp;{name}',
+                    {
+                        getScope: function(scope){
+                            return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-'+scope+'" data-qclass="x-tip-light" data-qtip="' + Scalr.utils.getScopeLegend('script') + '"/>';
+                        }
+                    }
+                )
+            },
+            { header: 'Version', width: 80, dataIndex: 'version', sortable: false, resizable: false, align:'center' },
+            { header: 'OS', width: 60, sortable: false, align:'center', xtype: 'templatecolumn', tpl:[
+                '<tpl if="os == \'linux\'">',
+                    '<img class="x-icon-osfamily-small x-icon-osfamily-small-oel" src="' + Ext.BLANK_IMAGE_URL + '"/>',
+                '<tpl elseif="os == \'windows\'">',
+                    '<img class="x-icon-osfamily-small x-icon-osfamily-small-windows" src="' + Ext.BLANK_IMAGE_URL + '"/>',
+                '</tpl>'
+            ]}, {
+                xtype: 'optionscolumn',
+                hidden: !(Scalr.scope === 'environment' && Scalr.isAllowed('SCRIPTS_ENVIRONMENT', 'execute')),
+                menu: [{
+                    iconCls: 'x-menu-icon-execute',
+                    text: 'Execute',
+                    showAsQuickAction: true,
+                    href: '#/scripts/{id}/execute'
+                }]
+            }
+        ],
+
+        dockedItems: [{
+            xtype: 'toolbar',
+            store: store,
+            dock: 'top',
+            ui: 'simple',
+            defaults: {
+                margin: '0 0 0 12'
+            },
+            items: [{
+                xtype: 'filterfield',
+                store: store,
+                margin: 0
+            }, ' ', {
+                xtype: 'cyclealt',
+                name: 'scope',
+                getItemIconCls: false,
+                hidden: Scalr.scope == 'scalr',
+                disabled: Scalr.scope == 'scalr',
+                width: 130,
+                margin: 0,
+                changeHandler: function (me, menuItem) {
+                    store.applyProxyParams({
+                        scope: menuItem.value
+                    });
+                },
+                getItemText: function (item) {
+                    return item.value
+                        ? 'Scope: &nbsp;<img src="'
+                    + Ext.BLANK_IMAGE_URL
+                    + '" class="' + item.iconCls
+                    + '" title="' + item.text + '" />'
+                        : item.text;
+                },
+                menu: {
+                    cls: 'x-menu-light x-menu-cycle-button-filter',
+                    minWidth: 200,
+                    items: [{
+                        text: 'All scopes',
+                        value: null
+                    }, {
+                        text: 'Scalr scope',
+                        value: 'scalr',
+                        iconCls: 'scalr-scope-scalr'
+                    }, {
+                        text: 'Account scope',
+                        value: 'account',
+                        iconCls: 'scalr-scope-account'
+                    }, {
+                        text: 'Environment scope',
+                        value: 'environment',
+                        iconCls: 'scalr-scope-environment',
+                        hidden: Scalr.scope !== 'environment',
+                        disabled: Scalr.scope !== 'environment'
+                    }]
+                }
+            }, {
+                xtype: 'tbfill'
+            }, {
+                text: 'New script',
+                itemId: 'add',
+                cls: 'x-btn-green',
+                enableToggle: true,
+                hidden: !isManageAllowed,
+                toggleHandler: function (button, state) {
+                    if (state) {
+                        grid.clearSelectedRecord();
+
+                        form.down('#details').setTitle('New script');
+
+                        form.
+                            toggleScopeInfo(false).
+                            setFormReadOnly(false).
+                            hideForkButton(true).
+                            hideDeleteButton(true).
+                            setDeleteTooltip('').
+                            hideCreateButton(false).
+                            hideSaveButton(true).
+                            hideScriptVersion(true, true).
+                            show();
+
+                        return;
+                    }
+
+                    form.hide();
+                }
+            }, {
+                itemId: 'refresh',
+                iconCls: 'x-btn-icon-refresh',
+                tooltip: 'Refresh',
+                handler: function () {
+                    store.clearAndLoad();
+                }
+            }, {
+                itemId: 'delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
+                tooltip: 'Select one or more scripts to delete them',
+                disabled: true,
+                hidden: !isManageAllowed,
+                handler: function() {
+                    grid.deleteSelectedScripts();
+                }
+            }]
+        }]
+    });
+
+    var form = Ext.create('Ext.form.Panel', {
+
+        hidden: true,
+
+        autoScroll: true,
+
+        scope: Scalr.scope,
+
+        allowFork: isForkAllowed,
+
+        isScriptEditable: function (scriptScope) {
+            return scriptScope === this.scope && (
+                Scalr.user.type === 'ScalrAdmin' ||
+                Scalr.scope === 'environment' && Scalr.isAllowed('SCRIPTS_ENVIRONMENT') ||
+                Scalr.scope === 'account' && Scalr.isAllowed('SCRIPTS_ACCOUNT')
+            );
+        },
+
+        hideForkButton: function (hidden, disabled) {
+            var me = this;
+
+            me.down('#fork').
+                setVisible(!hidden).
+                setDisabled(disabled);
+
+            return me;
+        },
+
+        hideDeleteButton: function (hidden, disabled) {
+            var me = this;
+
+            me.down('#delete').
+                setVisible(!hidden).
+                setDisabled(disabled);
+
+            return me;
+        },
+
+        setDeleteTooltip: function (tooltip) {
+            var me = this;
+
+            me.down('#delete').setTooltip(tooltip);
+
+            return me;
+        },
+
+        hideCreateButton: function (hidden) {
+            var me = this;
+
+            me.down('#create').
+                setVisible(!hidden);
+
+            return me;
+        },
+
+        hideSaveButton: function (hidden) {
+            var me = this;
+
+            me.down('#save').
+                setVisible(!hidden);
+
+            return me;
+        },
+
+        disableSaveButton: function (disabled, scope) {
+            var me = this;
+
+            me.down('#save').
+                setTooltip(disabled
+                    ? Scalr.utils.getForbiddenActionTip('script', scope)
+                    : '').
+                setDisabled(disabled);
+
+            return me;
+        },
+
+        hideScriptVersion: function (hidden, hideButton) {
+            var me = this;
+
+            me.down('[name=version]').
+                setVisible(!hidden);
+
+            if (hideButton) {
+                me.down('#removeVersion').hide();
+            }
+
+            return me;
+        },
+
+        getScriptData: function (scriptId, readOnly) {
+            var me = this;
+
+            Scalr.Request({
+                processBox: {
+                    type: 'load'
+                },
+                url: '/scripts/xGet',
+                params: {
+                    scriptId: scriptId
+                },
+                success: function (response) {
+                    var scriptData = response.script;
+
+                    if (scriptData) {
+                        me.applyScriptData(scriptData, readOnly);
+                    }
+                }
+            });
+
+            return me;
+        },
+
+        applyScriptVersions: function (versions, latestVersion, readOnly) {
+            var me = this;
+
+            me.down('[name=version]').
+                getStore()
+                .loadData(versions);
+
+            me.down('#removeVersion').
+                setVisible(isManageAllowed).
+                setDisabled(!!readOnly || versions.length < 2);
+
+            me.down('#save').
+                setLatestVersion(latestVersion);
+
+            return me;
+        },
+
+        applyScriptContent: function (content) {
+            var me = this;
+
+            me.down('[name=content]').
+                codeMirror.setValue(content);
+
+            return me;
+        },
+
+        applyScriptTags: function (tags) {
+            var me = this;
+
+            me.down('[name=tags]').setValue(
+                tags.split(',')
+            );
+
+            return me;
+        },
+
+        applyScriptData: function (data, readOnly) {
+            var me = this;
+
+            me.
+                applyScriptVersions(data.versions, data.version, readOnly).
+                applyScriptTags(data.tags).
+                getRecord().
+                set(data);
+
+            return me;
+        },
+
+        saveScript: function (version) {
+            var me = this;
+
+            var baseForm = me.getForm();
+
+            if (baseForm.isValid()) {
+                var request = function (checkScriptParameters) {
+                    Scalr.Request({
+                        processBox: {
+                            type: 'save'
+                        },
+                        url: '/scripts/xSave',
+                        form: baseForm,
+                        hideErrorMessage: true,
+                        params: {
+                            version: Ext.isDefined(version)
+                                ? version : null,
+                            envId: Scalr.user.envId,
+                            checkScriptParameters: checkScriptParameters
+                        },
+                        success: function (response) {
+
+                            var script = response.script;
+
+                            if (!Ext.isEmpty(script)) {
+                                grid.applyScript(script);
+                            }
+                        },
+                        failure: function (response) {
+                            if (response.showScriptParametersConfirmation) {
+                                Scalr.Confirm({
+                                    msg: 'It looks like you might be using Script Parameters in this Script. If that is the case, enable Script Parameter Interpolation.',
+                                    type: 'action',
+                                    formWidth: 460,
+                                    ok: 'Ignore & Save',
+                                    closeOnSuccess: false,
+                                    success: function () {
+                                        request(false);
+                                    }
+                                });
+                            } else if (response.errorMessage) {
+                                Scalr.message.Error(response.errorMessage);
+                            }
+                        }
+
+                    });
+                };
+                request(true);
+            }
+
+            return me;
+        },
+
+        deleteScriptVersion: function () {
+            var me = this;
+
+            var record = me.getRecord();
+            var version = me.down('[name=version]').getValue();
+
+            Scalr.Request({
+                confirmBox: {
+                    type: 'delete',
+                    msg: 'Are you sure want to delete selected version? This cannot be undone.'
+                },
+                processBox: {
+                    type: 'delete'
+                },
+                url: '/scripts/' + record.get('id') + '/xRemoveVersion',
+                params: {
+                    version: version
+                },
+                success: function (response) {
+                    var versions = response.script.versions;
+                    var latestVersion = response.script.version;
+
+                    record.set({
+                        version: latestVersion,
+                        versions: versions
+                    });
+
+                    me.loadRecord(me.getRecord());
+                }
+            });
+        },
+
+        forkScript: function () {
+            var me = this;
+
+            var record = me.getRecord();
+            var name = record.get('name');
+
+            Scalr.Request({
+                confirmBox: {
+                    formValidate: true,
+                    formSimple: true,
+                    form: [{
+                        xtype: 'textfield',
+                        name: 'name',
+                        fieldLabel: 'New script name',
+                        labelAlign: 'top',
+                        labelWidth: 110,
+                        allowBlank: false,
+                        value: 'Custom ' + name
+                    }],
+                    type: 'action',
+                    msg: 'Are you sure want to fork script "' + name + '" ?'
+                },
+                processBox: {
+                    type: 'action'
+                },
+                url: '/scripts/xFork',
+                params: {
+                    scriptId: record.get('id')
+                },
+                success: function (response) {
+
+                    var script = response.script;
+
+                    if (!Ext.isEmpty(script)) {
+                        grid.applyScript(script);
+                    }
+                },
+            });
+
+            return me;
+        },
+
+        toggleScopeInfo: function(record) {
+            var me = this,
+                scopeInfoField = me.down('#scopeInfo');
+            if (record && !me.isScriptEditable(record.get('scope'))) {
+                scopeInfoField.setValue(Scalr.utils.getScopeInfo('script', record.get('scope'), record.get('id')));
+                scopeInfoField.show();
+            } else {
+                scopeInfoField.hide();
+            }
+            return me;
+        },
+
+        // temporary solution
+        setFormReadOnly: function (readOnly) {
+            var me = this;
+
+            me.down('[name=name]').setReadOnly(readOnly);
+            me.down('[name=description]').setReadOnly(readOnly);
+            me.down('[name=tags]').setReadOnly(readOnly);
+            me.down('[name=timeout]').setReadOnly(readOnly);
+
+            Ext.Array.each(
+                me.down('[name=isSync]').query(), function (button) {
+                    button.setDisabled(readOnly);
+                }
+            );
+
+            Ext.Array.each(
+                me.down('#scriptSourceTabs').query(), function (button) {
+                    button.setDisabled(readOnly);
+                }
+            );
+
+            me.down('[name=content]').setReadOnly(readOnly);
+            me.down('[name=allowScriptParameters]').setReadOnly(readOnly);
+
+            return me;
+        },
+
+        setFormEditable: function (scope) {
+            var me = this;
+
+            var readOnly = !me.isScriptEditable(scope) || !isManageAllowed;
+
+            me.
+                hideForkButton(!me.allowFork, !me.allowFork).
+                hideDeleteButton(!isManageAllowed, readOnly).
+                setDeleteTooltip(readOnly ? Scalr.utils.getForbiddenActionTip('script', scope) : '').
+                hideCreateButton(true).
+                disableSaveButton(readOnly, scope).
+                hideSaveButton(!isManageAllowed).
+                hideScriptVersion(false).
+                setFormReadOnly(readOnly);
+
+            return me;
+        },
+
+        listeners: {
+            show: function (form) {
+                form.down('field[xtype!=hidden]').focus();
+            },
+            afterloadrecord: function (record) {
+                var me = this;
+
+                var scope = record.get('scope');
+                var readOnly = !me.isScriptEditable(scope);
+                var versions = record.get('versions');
+
+                if (!Ext.isDefined(versions)) {
+                    me.getScriptData(record.get('id'), readOnly);
+                } else {
+                    me.
+                        applyScriptVersions(versions, record.get('version'), readOnly).
+                        applyScriptTags(record.get('tags'));
+                }
+
+                me.setFormEditable(scope);
+
+                grid.down('#add').toggle(false, true);
+                form.down('#details').setTitle('Edit script');
+                form.toggleScopeInfo(record);
+            }
+        },
+
+        items: [{
+            xtype: 'displayfield',
+            itemId: 'scopeInfo',
+            cls: 'x-form-field-info x-form-field-info-fit',
+            anchor: '100%',
+            hidden: true
+        },{
+            xtype: 'fieldset',
+            itemId: 'details',
+            title: 'Edit script',
+            collapsible: true,
+            stateful: true,
+            stateId: 'fieldset-scripts-details',
+            fieldDefaults: {
+                anchor: '100%'
+            },
+            items: [{
+                xtype: 'hidden',
+                name: 'id'
+            }, {
+                xtype: 'textfield',
+                name: 'name',
+                fieldLabel: 'Name',
+                allowBlank: false
+            }, {
+                xtype: 'textfield',
+                name: 'description',
+                fieldLabel: 'Description'
+            }, {
+                xtype: 'scalrtagfield',
+                name: 'tags',
+                fieldLabel: 'Tags',
+                saveTagsOn: 'submit'
+            }]
+        }, {
+            xtype: 'fieldset',
+            collapsible: true,
+            collapsed: true,
+            title: 'Script execution options',
+            defaults: {
+                labelWidth: 130
+            },
+            items: [{
+                xtype: 'buttongroupfield',
+                fieldLabel: 'Execution mode',
+                editable: false,
+                name: 'isSync',
+                value: 1,
+                defaults: {
+                    width: 130
+                },
+                items: [{
+                    text: 'Blocking',
+                    value: 1
+                },{
+                    text: 'Non-blocking',
+                    value: 0
+                }],
+                setDefaultTimeout: function (value) {
+                    var me = this;
+
+                    var timeoutField = me.next('[name=timeout]');
+
+                    timeoutField.emptyText = moduleParams['timeouts'][
+                        value ? 'sync' : 'async'
+                        ];
+
+                    timeoutField.applyEmptyText();
+                },
+                listeners: {
+                    afterlayout: function (buttonGroup) {
+                        buttonGroup.setDefaultTimeout(
+                            buttonGroup.getValue()
+                        );
+                    },
+                    change: function (buttonGroup, value) {
+                        buttonGroup.setDefaultTimeout(value);
+                    }
+                }
+            }, {
+                xtype: 'numberfield',
+                name: 'timeout',
+                fieldLabel: 'Timeout',
+                width: 266,
+                minValue: 0,
+                step: 10
+            }]
+        }, {
+            xtype: 'fieldset',
+            cls: 'x-fieldset-separator-none',
+
+            title: 'Script content'
+                + '<img style="margin-left: 6px" src="'
+                + Ext.BLANK_IMAGE_URL + '" class="x-icon-info" data-qclickable="1" data-qtip=\''
+                + globalVariablesInfo + '\' />',
+
+            defaults: {
+                anchor: '100%'
+            },
+
+            hideFields: function (visibleFieldName) {
+                var me = this;
+
+                var isSourceRemote = visibleFieldName !== 'content';
+
+                Ext.Array.each(
+                    me.down('#scriptSource').query(),
+                    function (field) {
+                        var fieldName = field.getName();
+
+                        if (fieldName === 'uploadType') {
+                            var uploadType = isSourceRemote
+                                ? (visibleFieldName === 'uploadFile' ? 'File' : 'URL' )
+                                : '';
+
+                            field.
+                                setValue(uploadType).
+                                setDisabled(!isSourceRemote);
+
+                            return;
+                        }
+
+                        var isVisible = fieldName === visibleFieldName;
+
+                        field.
+                            setVisible(isVisible).
+                            setDisabled(!isVisible);
+                    }
+                );
+
+                return me;
+            },
+
+            items: [{
+                xtype: 'fieldcontainer',
+                name: 'toolbar',
+                layout: 'hbox',
+                margin: '0 0 12 0',
+                items: [/*{
+                    xtype: 'component',
+                    html:
+                    '<div style="padding: 0 0 0 32px; margin-bottom: 0" class="x-fieldset-subheader">'
+                    + '<span>Script content</span>'
+                    + '<img style="margin-left: 6px" src="'
+                    + Ext.BLANK_IMAGE_URL
+                    + '" class="x-icon-info" data-qclickable="1" data-qtip=\''
+                    + globalVariablesInfo
+                    + '\' />'
+                    + '</div>'
+                },*/ {
+                    xtype: 'checkbox',
+                    name: 'allowScriptParameters',
+                    boxLabel: 'Enable Script Parameter interpolation.',
+                    plugins: {
+                        ptype: 'fieldicons',
+                        icons: [{id: 'info', tooltip: 'Visit the documentation on <a target="_blank" href="https://scalr-wiki.atlassian.net/wiki/x/QBUb">Script Parameters</a> for more details'}]
+                    }
+                }, {
+                    xtype: 'tbfill'
+                }, {
+                    xtype: 'combo',
+                    name: 'version',
+                    fieldLabel: 'Version',
+                    labelWidth: 60,
+                    editable: false,
+                    queryMode: 'local',
+                    submitValue: false,
+                    store: {
+                        proxy: 'object',
+                        fields: [ 'version', 'content' ],
+                        listeners: {
+                            datachanged: function (store) {
+                                var versionCombo = form.down('[name=version]');
+                                var record = store.findRecord(
+                                    'version', versionCombo.getValue()
+                                );
+
+                                if (!Ext.isEmpty(record)) {
+                                    form.applyScriptContent(
+                                        record.get('content')
+                                    );
+
+                                    versionCombo.select(record);
+                                }
+                            }
+                        }
+                    },
+                    displayField: 'version',
+                    valueField: 'version',
+                    width: 120,
+                    listeners: {
+                        change: function (combo, value) {
+                            if (!Ext.isEmpty(value)) {
+                                form.down('#save').
+                                    setCurrentVersion(value);
+                            }
+                        },
+                        select: function (combo, record) {
+                            form.applyScriptContent(
+                                record.get('content')
+                            );
+                        }
+                    }
+                }, {
+                    xtype: 'button',
+                    itemId: 'removeVersion',
+                    cls: 'x-btn-red',
+                    iconCls: 'x-btn-icon-delete',
+                    margin: '0 0 0 12',
+                    tooltip: 'Delete selected version',
+                    hidden: true,
+                    handler: function () {
+                        form.deleteScriptVersion();
+                    }
+                }, {
+                    xtype: 'tbfill'
+                }, {
+                    xtype: 'buttongroupfield',
+                    itemId: 'scriptSourceTabs',
+                    editable: false,
+                    submitValue: false,
+                    value: 'content',
+                    items: [{
+                        iconCls: 'x-btn-icon-edit',
+                        tooltip: 'Script editor',
+                        value: 'content'
+                    }, {
+                        iconCls: 'x-btn-icon-web',
+                        tooltip: 'Attach script from web',
+                        value: 'uploadUrl'
+                    }, {
+                        iconCls: 'x-btn-icon-upload',
+                        tooltip: 'Upload script',
+                        value: 'uploadFile'
+                    }],
+                    listeners: {
+                        change: function (buttonGroup, state) {
+                            buttonGroup.up('fieldset').hideFields(state);
+                        }
+                    }
+                }]
+            }, {
+                xtype: 'fieldcontainer',
+                itemId: 'scriptSource',
+                defaults: {
+                    width: '100%'
+                },
+                items: [{
+                    xtype: 'hiddenfield',
+                    name: 'uploadType',
+                    value: ''
+                }, {
+                    xtype: 'textfield',
+                    name: 'uploadUrl',
+                    emptyText: 'http://domain.com/file',
+                    hidden: true
+                }, {
+                    xtype: 'filefield',
+                    name: 'uploadFile',
+                    emptyText: 'Select script to upload',
+                    hidden: true
+                }, {
+                    xtype: 'codemirror',
+                    plugins: [{ ptype: 'expandeditor' }],
+                    name: 'content',
+                    minHeight: 300,
+                    hideLabel: true,
+                    validator: function (value) {
+                        return value.substring(0, 2) !== '#!'
+                            ? 'First line must contain shebang (#!/path/to/interpreter)'
+                            : true;
+                    }
+                }]
+            }]
+        }],
+
+        dockedItems: [{
+            xtype: 'container',
+            dock: 'bottom',
+            cls: 'x-docked-buttons',
+            hidden: !isManageAllowed && !isForkAllowed,
+            layout: {
+                type: 'hbox',
+                pack: 'center'
+            },
+            maxWidth: 1100,
+            defaults: {
+                flex: 1,
+                maxWidth: 140
+            },
+            items: [{
+                xtype: 'button',
+                itemId: 'create',
+                text: 'Create',
+                handler: function () {
+                    form.saveScript();
+                }
+            }, {
+                xtype: 'splitbutton',
+                itemId: 'save',
+                text: 'Save',
+                margin: 0,
+                listeners: {
+                    menushow: function (button, menu) {
+                        var saveAsNewButton = menu.down('#saveAsNew');
+
+                        saveAsNewButton.setDisabled(
+                            form.down('[name=content]').getValue()
+                            === form.down('[name=version]').
+                                getStore().
+                                findRecord('version', saveAsNewButton.version).
+                                get('content')
+
+                        );
+                    }
+                },
+                setCurrentVersion: function (version) {
+                    var me = this;
+
+                    me.getMenu().down('#saveAsCurrent').
+                        version = version;
+
+                    return me;
+                },
+                setLatestVersion: function (version) {
+                    var me = this;
+
+                    me.getMenu().down('#saveAsNew').
+                        updateText(version).
+                        version = version;
+
+                    return me;
+                },
+                handler: function () {
+                    form.saveScript();
+                },
+                menu: [{
+                    itemId: 'saveAsNew',
+                    text: 'Save changes as new version',
+                    updateText: function (version) {
+                        var me = this;
+
+                        me.setText(
+                            'Save changes as new version ('
+                            + ++version
+                            + ')'
+                        );
+
+                        return me;
+                    },
+                    handler: function () {
+                        form.saveScript();
+                    }
+                }, {
+                    xtype: 'menuseparator'
+                }, {
+                    itemId: 'saveAsCurrent',
+                    text: 'Save changes in current version',
+                    handler: function (button) {
+                        form.saveScript(button.version);
+                    }
+                }]
+            }, {
+                xtype: 'button',
+                itemId: 'fork',
+                text: 'Fork',
+                handler: function () {
+                    form.forkScript();
+                }
+            }, {
+                xtype: 'button',
+                text: 'Cancel',
+                handler: function () {
+                    grid.clearSelectedRecord();
+                    grid.down('#add').toggle(false, true);
+                }
+            }, {
+                xtype: 'button',
+                itemId: 'delete',
+                cls: 'x-btn-red',
+                text: 'Delete',
+                handler: function () {
+                    grid.deleteSelectedScript();
+                }
+            }]
+        }]
+    });
+
+    return Ext.create('Ext.panel.Panel', {
+
+        stateful: true,
+        stateId: 'grid-scripts-view',
+
+        layout: {
+            type: 'hbox',
+            align: 'stretch'
+        },
+
+        scalrOptions: {
+            reload: false,
+            maximize: 'all',
+            menuTitle: 'Scripts',
+            menuHref: '#' + Scalr.utils.getUrlPrefix() +  '/scripts',
+            menuFavorite: true
+        },
+
+        items: [ grid, {
+            xtype: 'container',
+            itemId: 'rightcol',
+            flex: 1,
+            minWidth: 600,
+            layout: 'fit',
+            items: [ form ]
+        }]
+    });
 });

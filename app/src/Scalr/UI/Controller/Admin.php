@@ -2,8 +2,28 @@
 
 class Scalr_UI_Controller_Admin extends Scalr_UI_Controller
 {
-	public function hasAccess()
-	{
-		return $this->user && ($this->user->getType() == Scalr_Account_User::TYPE_SCALR_ADMIN);
-	}
+    public function hasAccess()
+    {
+        return $this->user->isAdmin();
+    }
+
+    public function dashboardAction()
+    {
+        self::loadController('Dashboard')->defaultAction();
+    }
+
+    public function scriptsAction()
+    {
+        self::loadController('Scripts')->defaultAction();
+    }
+
+    public function aboutAction()
+    {
+        self::loadController('Core')->aboutAction();
+    }
+
+    public function eventsAction()
+    {
+        self::loadController('Events', 'Scalr_UI_Controller_Scripts')->defaultAction();
+    }
 }

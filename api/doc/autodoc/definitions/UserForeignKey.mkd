@@ -1,0 +1,36 @@
+# `UserForeignKey` #
+
+
+
+
+
+
+
+## Properties ##
+
+### `id` (required) ###
+
+Identifier of the User.
+
+
+Property of type: `integer`.
+
+
+
+
+
+
+
+## Swagger Definition ##
+
+    {
+      "properties": {
+        "id": {
+          "description": "Identifier of the User.", 
+          "type": "integer"
+        }
+      }, 
+      "required": [
+        "id"
+      ]
+    }

@@ -1,119 +1,67 @@
-Scalr.regPage('Scalr.ui.farms.builder.tabs.gce', function (moduleTabParams) {
-	
-	var gceSettings = new Array();
-	
-	var form = Ext.create('Scalr.ui.FarmsBuilderTab', {
-		tabTitle: 'GoogleCE options',
-		cache: {},
+Ext.define('Scalr.ui.FarmRoleEditorTab.Gce', {
+    extend: 'Scalr.ui.FarmRoleEditorTab',
+    tabTitle: 'GCE settings',
+    itemId: 'gce',
+    layout: 'anchor',
+    cls: 'x-panel-column-left-with-tabs',
 
-		isEnabled: function (record) {
-			return record.get('platform') == 'gce';
-		},
+    settings: {
+        'gce.on-host-maintenance': 'MIGRATE',
+        'gce.instance_permissions': undefined
+    },
 
-		getDefaultValues: function (record) {
-			return {
-				'gce.machine-type': 'n1-standard-1',
-				'gce.network': 'default'
-			};
-		},
+    isEnabled: function (record) {
+        return this.callParent(arguments) && record.get('platform') == 'gce';
+    },
 
-		beforeShowTab: function (record, handler) {
-			Scalr.Request({
-				processBox: {
-					type: 'action'
-				},
-				url: '/platforms/gce/xGetOptions',
-				scope: this,
-				success: function (response) {
-					gceSettings = response.data;
-					handler();
-				},
-				failure: function () {
-					this.deactivateTab();
-				}
-			});
-		},
+    showTab: function (record) {
+        var settings = record.get('settings', true);
+        this.down('[name="gce.on-host-maintenance"]').setValue(settings['gce.on-host-maintenance'] || 'MIGRATE');
+        this.down('[name="gce.instance_permissions"]').setValue(settings['gce.instance_permissions']);
+    },
 
-		showTab: function (record) {
-			var settings = record.get('settings');
+    hideTab: function (record) {
+        var settings = record.get('settings'),
+            value;
+        settings['gce.on-host-maintenance'] = this.down('[name="gce.on-host-maintenance"]').getValue();
+        settings['gce.instance_permissions'] = this.down('[name="gce.instance_permissions"]').getValue();
+        record.set('settings', settings);
+    },
 
-			this.down('[name="gce.machine-type"]').store.load({ data: gceSettings['types'] });
-			this.down('[name="gce.machine-type"]').setValue(settings['gce.machine-type'] || 'n1-standard-1');
-			
-			this.down('[name="gce.network"]').store.load({ data: gceSettings['networks'] });
-			this.down('[name="gce.network"]').setValue(settings['gce.network'] || 'default');
-			
-			
-			var cLoc = this.down('[name="gce.cloud-location"]');
-			cLoc.store.load({ data: gceSettings['zones'] });
-			try {
-				var defVal = cLoc.store.getAt(0).get('name');
-			} catch (e){}
-			
-			this.down('[name="gce.cloud-location"]').setValue(settings['gce.cloud-location'] || defVal);
-		},
-
-		hideTab: function (record) {
-			var settings = record.get('settings');
-
-			settings['gce.machine-type'] = this.down('[name="gce.machine-type"]').getValue();
-			settings['gce.network'] = this.down('[name="gce.network"]').getValue();
-			settings['gce.cloud-location'] = this.down('[name="gce.cloud-location"]').getValue();
-
-			record.set('cloud_location', settings['gce.cloud-location']);
-			
-			record.set('settings', settings);
-		},
-
-		items: [{
-			xtype: 'fieldset',
-			items: [{
-				xtype: 'combo',
-				store: {
-					fields: [ 'name', 'description' ],
-					proxy: 'object'
-				},
-				valueField: 'name',
-				displayField: 'description',
-				fieldLabel: 'Cloud location',
-				editable: false,
-				queryMode: 'local',
-				name: 'gce.cloud-location',
-				width: 750,
-				listeners: {
-					change: function(field, value) {
-						this.up('[tab="tab"]').currentRole.set('cloud_location', value);
-					}
-				}
-			}, {
-				xtype: 'combo',
-				store: {
-					fields: [ 'name', 'description' ],
-					proxy: 'object'
-				},
-				valueField: 'name',
-				displayField: 'description',
-				fieldLabel: 'Machine type',
-				editable: false,
-				queryMode: 'local',
-				name: 'gce.machine-type',
-				width: 750
-			}, {
-				xtype: 'combo',
-				store: {
-					fields: [ 'name', 'description' ],
-					proxy: 'object'
-				},
-				valueField: 'name',
-				displayField: 'description',
-				fieldLabel: 'Network',
-				editable: false,
-				queryMode: 'local',
-				name: 'gce.network',
-				width: 750
-			}]
-		}]
-	});
-	
-	return form;
+    __items: [{
+        xtype:'container',
+        cls: 'x-container-fieldset x-fieldset-separator-bottom',
+        items: [{
+            xtype: 'combo',
+            store: [['TERMINATE', 'TERMINATE'], ['MIGRATE', 'MIGRATE']],
+            valueField: 'name',
+            displayField: 'description',
+            fieldLabel: 'Maintenance behavior',
+            editable: false,
+            queryMode: 'local',
+            name: 'gce.on-host-maintenance',
+            labelWidth: 170,
+            margin: 0,
+            maxWidth: 400
+        }]
+    }, {
+        xtype: 'fieldset',
+        title: 'Service account permissions',
+        cls: 'x-fieldset-separator-none',
+        items: [{
+            xtype: 'valuelistfield',
+            name: 'gce.instance_permissions',
+            itemName: 'permission',
+            hideHeaders: true,
+            maxWidth: 600,
+            isValueValid: function(value) {
+                return Ext.form.field.VTypes.url(value) || 'Invalid URL';
+            },
+            forcedItems: [
+                'https://www.googleapis.com/auth/userinfo.email',
+                'https://www.googleapis.com/auth/compute',
+                'https://www.googleapis.com/auth/devstorage.full_control'
+            ]
+        }]
+    }]
 });

@@ -1,354 +1,597 @@
 Scalr.regPage('Scalr.ui.core.settings', function (loadParams, moduleParams) {
-	if (!moduleParams['dashboard_enabled'])
-		moduleParams['dashboard_enabled'] = 0;
-	return Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
-		width: 700,
-		title: 'System settings',
-		items: [{
-			xtype: 'fieldset',
-			title: 'RSS feed settings',
-			items: [{
-				xtype: 'displayfield',
-				fieldCls: 'x-form-field-info',
-				value: 'Each farm has an events and notifications page. You can get these events outside of Scalr on an RSS reader with the below credentials.'
-			}, {
-				xtype: 'textfield',
-				name: 'rss_login',
-				width: 305,
-				fieldLabel: 'Login',
-				value: moduleParams['rss_login'] ? moduleParams['rss_login'] : ''
-			}, {
-				xtype: 'fieldcontainer',
-				fieldLabel: 'Password',
-				layout: 'hbox',
-				items: [{
-					xtype: 'textfield',
-					name: 'rss_pass',
-					width: 200,
-					hideLabel: true,
-					itemId: 'rss_pass',
-					value: moduleParams['rss_pass'] ? moduleParams['rss_pass'] : '' 
-				}, {
-					xtype: 'button',
-					text: 'Generate',
-					margin: '0 0 0 10',
-					handler: function() {
-						function getRandomNum() {
-							var rndNum = Math.random();
-							rndNum = parseInt(rndNum * 1000);
-							rndNum = (rndNum % 94) + 33;
-							return rndNum;
-						};
+    var form = Ext.create('Ext.form.Panel', {
+        scrollable: true,
+        //minWidth: 1060,
+        scalrOptions: {
+            maximize: 'all',
+            menuTitle: 'Settings',
+            menuHref: '#/core/settings'
+        },
+        fieldDefaults: {
+            labelWidth: 80
+        },
+        items: [{
+            xtype: 'container',
+            cls: 'x-fieldset-separator-bottom',
+            layout: 'hbox',
+            defaults: {
+                minWidth: 300,
+                maxWidth: 460,
+                minHeight: 150,
+                flex:1
+            },
+            items: [{
+                xtype: 'fieldset',
+                cls: 'x-fieldset-separator-none',
+                title: 'Profile information',
+                items: [{
+                    xtype: 'displayfield',
+                    name: 'userEmail',
+                    fieldLabel: 'Email',
+                    readOnly: true
+                },{
+                    xtype: 'textfield',
+                    name: 'userFullname',
+                    fieldLabel: 'Full name',
+                    anchor: '100%'
+                }]
+            },{
+                xtype: 'fieldset',
+                title: 'Avatar settings',
+                cls: 'x-fieldset-separator-left',
+                items: [{
+                    xtype: 'image',
+                    style: 'position:absolute;right:24px;top:16px;border-radius:0',
+                    width: 46,
+                    height: 46,
+                    src: Scalr.utils.getGravatarUrl(moduleParams['gravatarHash'], 'large')
+                }, {
+                    xtype: 'displayfield',
+                    value: '<a href="http://gravatar.com/" target="blank">Change your avatar at Gravatar.com</a>'
+                }, {
+                    xtype: 'textfield',
+                    name: 'gravatar.email',
+                    fieldLabel: 'Gravatar email',
+                    vtype: 'email',
+                    labelWidth: 110,
+                    anchor: '100%'
+                }]
+            },{
+                xtype: 'fieldset',
+                title: 'User interface',
+                cls: 'x-fieldset-separator-left',
+                defaults: {
+                    labelWidth: 160,
+                    anchor: '100%'
+                },
+                items: [{
+                    xtype: 'buttongroupfield',
+                    fieldLabel: 'Dashboard columns',
+                    name: 'dashboardColumns',
+                    defaults: {
+                        flex: 1
+                    },
+                    layout: 'hbox',
+                    items: [{
+                        text: '1',
+                        value: '1'
+                    }, {
+                        text: '2',
+                        value: '2'
+                    }, {
+                        text: '3',
+                        value: '3'
+                    }, {
+                        text: '4',
+                        value: '4'
+                    }, {
+                        text: '5',
+                        value: '5'
+                    }]
+                }, {
+                    xtype: 'buttongroupfield',
+                    fieldLabel: 'SSH key format',
+                    name: 'sshkeyFormat',
+                    submitValue: false,
+                    value: Scalr.localStorage.get('system-preferred-sshkey-format', ''),
+                    defaults: {
+                        flex: 1
+                    },
+                    layout: 'hbox',
+                    items: [{
+                        value: '',
+                        text: 'Auto'
+                    }, {
+                        value: 'pem',
+                        text: 'PEM'
+                    }, {
+                        value: 'ppk',
+                        text: 'PPK'
+                    }],
+                    plugins: [{
+                        ptype: 'fieldicons',
+                        align: 'left',
+                        position: 'outer',
+                        icons: {
+                            id: 'info',
+                            tooltip: Ext.String.htmlEncode('Select preferred format for server SSH keys you download. Auto means downloading based on your operating system' +
+                                ' (ppk if you\'re using Windows and pem if you\'re using Linux/OSX).')
+                        }
+                    }]
+                }, {
+                    xtype: 'combo',
+                    fieldLabel: 'Timezone',
+                    store: moduleParams['timezonesList'],
+                    allowBlank: false,
+                    forceSelection: true,
+                    editable: true,
+                    selectOnFocus: true,
+                    name: 'ui.timezone',
+                    queryMode: 'local',
+                    anyMatch: true,
+                    style: 'margin-bottom: 18px' // temp solution, ExtJS layout issue with bottom margin in v5.1.0
+                }]
+            }]
+        }, {
+            xtype: 'fieldset',
+            title: 'Bookmarks bar&nbsp;&nbsp;<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-info" data-qtip="Drag and drop Bookmarks to reorder them, or click X to remove a Bookmark." />',
+            items: [{
+                xtype: 'dataview',
+                itemId: 'bookmarks',
+                cls: 'x-dataview-list',
+                plugins: [{
+                    ptype: 'scalrviewdragdrop',
+                    pluginId: 'scalrviewdragdrop'
+                }],
+                store: {
+                    proxy: 'object',
+                    fields: ['stateId', 'text', 'ordering'],
+                    sorters: [{
+                        property: 'ordering'
+                    }],
+                    data: Ext.Array.map(Scalr.utils.getFavorites(Scalr.scope), function(item, index){
+                        return {
+                            stateId: item.stateId,
+                            text: item.text,
+                            ordering: index
+                        }
+                    }),
+                    listeners: {
+                        remove: function() {
+                            this.resetOrdering();
+                        }
+                    },
+                    updateOrdering: function(record, ordering) {
+                        var currentOrdering = record.get('ordering');
+                        this.suspendEvents(true);
+                        this.getUnfiltered().each(function(rec) {
+                            var recOrdering = rec.get('ordering');
+                            if (recOrdering >= ordering) {
+                                rec.set('ordering', recOrdering + 1);
+                            }
+                        });
+                        record.set('ordering', ordering);
 
-						function checkPunc(num) {
-							if ((num >=33) && (num <=47)) { return true; }
-							if ((num >=58) && (num <=64)) { return true; }
-							if ((num >=91) && (num <=96)) { return true; }
-							if ((num >=123) && (num <=126)) { return true; }
-							return false;
-						};
+                        this.getUnfiltered().each(function(rec) {
+                            var recOrdering = rec.get('ordering');
+                            if (recOrdering > currentOrdering) {
+                                rec.set('ordering', recOrdering - 1);
+                            }
+                        });
+                        //this.sort(farmRolesSorters);
+                        this.resumeEvents();
+                    },
+                    resetOrdering: function() {
+                        var data = this.queryBy(function(){return true;}),
+                            index = 0;
+                        data.sort([{property:'ordering'}]);
+                        data.each(function(record) {
+                            record.set('ordering', index++);
+                        });
+                        //this.sort(farmRolesSorters);
+                    },
 
-						var length=16;
-						var sPassword = "";
+                },
+                itemSelector: '.x-item',
+                tpl  : new Ext.XTemplate(
+                    '<tpl for=".">',
+                        '<div class="x-item x-tagfield-item" style="padding-left:12px!important;margin: 0 12px 12px 0;background:#D7E4F2">' +
+                            '<tpl if="stateId!=\'panel-admin-dashboard\' && stateId!=\'panel-account-dashboard\' && stateId!=\'panel-dashboard\'">'+
+                                '<div class="x-tagfield-item-text" style="text-transform:uppercase;font:13px/28px OpenSansBold;">{text}</div>' +
+                                '<div class="x-delete x-tagfield-item-close" style="top:10px"></div>'+
+                            '<tpl else>'+
+                                '<div class="x-tagfield-item-text" style="text-transform:uppercase;font:13px/28px OpenSansBold;padding-right:12px">{text}</div>' +
+                            '</tpl>'+
+                        '</div>',
+                    '</tpl>'),
+                listeners: {
+                    beforeitemclick: function (view, record, item, index, e) {
+                        if (e.getTarget('.x-delete', 10, true)) {
+                            view.store.remove(record);
+                            view.refresh();
+                            return false;
+                        }
+                    },
+                    drop: function(node, data, record, position) {//console.log(record.getData());return;
+                        if (data.records[0]) {
+                            var newIndex = record.get('ordering') + (position=='after' ? 1 : 0);
+                            data.records[0].store.updateOrdering(data.records[0], newIndex);
+                            this.refresh();
+                        }
+                    },
 
-						for (var i=0; i < length; i++) {
-							var numI = getRandomNum();
-							while (checkPunc(numI)) { numI = getRandomNum(); }
-							sPassword = sPassword + String.fromCharCode(numI);
-						}
+                }
+            },{
+                xtype: 'checkbox',
+                submitValue: false,
+                name: 'donNotShowFavoritesAddMessage',
+                value: Scalr.localStorage.get('system-favorites-suppress-add-message', false),
+                boxLabel: 'Do not show message after adding new link to Bookmarks bar',
+                margin: 0
+            }]
+        },{
+            xtype: 'fieldset',
+            title: 'SSH Launcher settings&nbsp;&nbsp;<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-globalvars" data-qtip="All text fields in SSH applet settings support Global Variable Interpolation" />',
+            collapsed: loadParams['ssh'] === undefined,
+            collapsible: true,
+            layout: 'hbox',
+            items: [{
+                xtype: 'container',
+                flex: 2/3,
+                maxWidth: 870,
+                minWidth: 600,
+                layout: 'anchor',
+                defaults: {
+                    anchor: '100%',
+                    labelWidth: 140,
+                    emptyText: 'Use default'
+                },
+                items: [{
+                    xtype: 'textfield',
+                    name: 'ssh.console.username',
+                    fieldLabel: 'User name',
+                    emptyText: 'root (scalr on GCE)'
+                },{
+                    xtype: 'combo',
+                    name: 'ssh.console.ip',
+                    fieldLabel: 'IP address',
+                    editable: false,
+                    emptyText: 'System default',
+                    store: [['auto', 'System default'], ['public', 'Public'], ['private', 'Private']]
+                },{
+                    xtype: 'textfield',
+                    name: 'ssh.console.port',
+                    fieldLabel: 'Port',
+                    emptyText: '22'
+                },{
+                    xtype: 'buttongroupfield',
+                    hidden: !Scalr.isAllowed('SECURITY_SSH_KEYS'),
+                    name: 'ssh.console.disable_key_auth',
+                    fieldLabel: 'SSH Key Auth',
+                    value: '0',
+                    defaults: {
+                        width: 110
+                    },
+                    items: [{
+                        text: 'Disabled',
+                        value: '1'
+                    },{
+                        text: 'Enabled',
+                        value: '0'
+                    }]
+                },{
+                    xtype: 'textfield',
+                    name: 'ssh.console.key_name',
+                    flex: 1,
+                    fieldLabel: 'SSH key name',
+                    emptyText: 'FARM-{SCALR_FARM_ID}-{SCALR_CLOUD_LOCATION}-' + moduleParams['scalrId'],
+                    hidden: !Scalr.isAllowed('SECURITY_SSH_KEYS'),
+                    plugins: [{
+                        ptype: 'fieldicons',
+                        align: 'right',
+                        position: 'outer',
+                        icons: {
+                            id: 'info',
+                            tooltip: 'Scalr will automatically provide the SSH keys it generates to use with your hosts to the SSH Launcher Applet. '+
+                            'If you\'re using Scalr keys, we suggest keeping this default unchanged. <br/>However, if you\'d like to use a custom SSH Key '+
+                            '(perhaps because you have configured SSH Key Governance), then you can simply add the key in ~/.ssh/scalr-ssh-keys. ' +
+                            'Scalr will not override it. <br/>View <a href="http://scalr-wiki.atlassian.net" target="_blank">this Wiki page for important information</a>.'
+                        }
+                    }]
+                },{
+                    xtype: 'buttongroupfield',
+                    name: 'ssh.console.enable_agent_forwarding',
+                    fieldLabel: 'Agent Forwarding',
+                    value: '0',
+                    defaults: {
+                        width: 110
+                    },
+                    items: [{
+                        text: 'Disabled',
+                        value: '0'
+                    },{
+                        text: 'Enabled',
+                        value: '1'
+                    }]
+                },{
+                    xtype: 'combobox',
+                    flex: 1,
+                    store: [
+                        ['', 'Auto detect'],
+                        ['com.scalr.ssh.provider.mac.', 'Mac AppleScript + OpenSSH'],
+                        ['com.scalr.ssh.provider.linux.LinuxGnomeTerminalSSHProvider', 'Linux + Gnome Terminal + OpenSSH'],
+                        ['com.scalr.ssh.provider.linux.LinuxXTermSSHProvider', 'Linux + XTerm + OpenSSH'],
+                        ['com.scalr.ssh.provider.mac.MacAppleScriptSSHProvider', 'Mac OS + AppleScript + OpenSSH'],
+                        ['com.scalr.ssh.provider.mac.MacNativeSSHProvider', 'Mac OS + Terminal Configuration + OpenSSH'],
+                        ['com.scalr.ssh.provider.mac.MacSSHProvider', 'Mac OS + Terminal bash Script + OpenSSH'],
+                        ['com.scalr.ssh.provider.windows.WindowsPuTTYProvider', 'Windows + PuTTY'],
+                        ['com.scalr.ssh.provider.windows.WindowsOpenSSHProvider', 'Windows + OpenSSH']
+                    ],
+                    emptyText: 'Auto detect',
+                    name: 'ssh.console.preferred_provider',
+                    editable: false,
+                    fieldLabel: 'Preferred provider',
+                    plugins: [{
+                        ptype: 'fieldicons',
+                        align: 'right',
+                        position: 'outer',
+                        icons: {
+                            id: 'info',
+                            tooltip: Ext.String.htmlEncode('The applet automatically tries all providers available for your '+
+                            'platform, you should not have to override this parameter. Only change this ' +
+                            'parameter if you understand precisely what you are doing.')
+                        }
+                    }]
+                },{
+                    xtype: 'combobox',
+                    store: ['ALL', 'SEVERE', 'WARNING', 'INFO', 'CONFIG', 'FINE', 'FINER', 'FINEST', 'OFF'],
+                    emptyText: 'CONFIG',
+                    name: 'ssh.console.log_level',
+                    editable: false,
+                    fieldLabel: 'Log level'
+                }]
+            },{
+                xtype: 'component',
+                flex: 1/3
+            }]
+        }],
 
-						this.up('form').query('#rss_pass')[0].setValue(sPassword);
-					}
-				}]
-			}]
-		}, {
-			xtype: 'container',
-			layout: {
-				type: 'hbox',
-				//align: 'stretch'
-			},
-			items: [{
-				xtype: 'fieldset',
-				title: 'Dashboard',
-				flex: 1,
-				items: [{
-					xtype: 'container',
-					layout: 'hbox',
-					items: [{
-						xtype: 'hidden',
-						name: 'dashboard_columns',
-						value: moduleParams['dashboard_columns']
-					}, {
-						xtype: 'displayfield',
-						fieldLabel: 'Columns',
-						//margin: '0 0 0 20',
-						width: 60
-					}, {
-						xtype: 'container',
-						itemId: 'buttonGroup',
-						layout: 'hbox',
-						defaults: {
-							margin: '0 7 0 0',
-							xtype: 'button',
-							padding: 3,
-							toggleGroup: 'scalr-dashboard-columns-button',
-							enableToggle: true,
-							handler: function () {
-								this.up().prev('hidden').setValue(this.value);
-							}
-						},
-						items: [{
-							text: '1',
-							value: 1,
-							allowDepress: false,
-							pressed: (moduleParams['dashboard_columns'] == 1)
-						}, {
-							text: '2',
-							value: 2,
-							allowDepress: false,
-							pressed: (moduleParams['dashboard_columns'] == 2)
-						}, {
-							text: '3',
-							value: 3,
-							allowDepress: false,
-							pressed: (moduleParams['dashboard_columns'] == 3)
-						}, {
-							text: '4',
-							value: 4,
-							allowDepress: false,
-							pressed: (moduleParams['dashboard_columns'] == 4)
-						}, {
-							text: '5',
-							value: 5,
-							allowDepress: false,
-							pressed: (moduleParams['dashboard_columns'] == 5)
-						}]
-					}]
-				}]
-			}, {
-				xtype: 'fieldset',
-				title: 'UI settings',
-				flex: 1,
-				margin: '0 0 0 8',
-				items: [{
-					xtype: 'button',
-					text: 'Reset UI settings to defaults',
-					handler: function () {
-						localStorage.clear();
-						Scalr.message.Success('Settings successfully reset');
-					}
-				}]
-			}]
-		}, {
-			xtype: 'fieldset',
-			title: 'Grid settings',
-			items: [{
-				xtype: 'combo',
-				store: ['auto', 10, 15, 25, 50, 100],
-				valueField: 'id',
-				displayField: 'name',
-				value: Ext.state.Manager.get('grid-ui-page-size', 'auto'),
-				fieldLabel: 'Items per page',
-				queryMode: 'local',
-				editable: false,
-				width: 400,
-				name: 'items_per_page',
-				submitValue: false,
-				listeners: {
-					change: function(component, newValue) {
-						Ext.state.Manager.set('grid-ui-page-size', newValue);
-					}
-				}
-			}]
-		}, {
-			xtype: 'fieldset',
-			title: 'Environment settings',
-			items: [{
-				xtype: 'combo',
-				store: {
-					fields: [ 'id', 'name' ],
-					proxy: 'object',
-					data: moduleParams['default_environment_list']
-				},
-				valueField: 'id',
-				displayField: 'name',
-				value: moduleParams['default_environment'],
-				fieldLabel: 'Default',
-				queryMode: 'local',
-				editable: false,
-				width: 400,
-				name: 'default_environment'
-			}]
-		}, {
-			xtype: 'fieldset',
-			hidden: !moduleParams['settings']['security_2fa'],
-			title: 'Two-factor authentication based on <a href="http://code.google.com/p/google-authenticator/" target="_blank">google authenticator</a>',
-			items: [{
-				xtype: 'fieldcontainer',
-				layout: 'hbox',
-				itemId: 'enabled',
-				hidden: moduleParams['settings']['security_2fa_ggl'] == '1' ? false : true,
-				items: [{
-					xtype: 'displayfield',
-					value: '<span style="color: green">Enabled</span>'
-				}, {
-					xtype: 'button',
-					margin: '0 0 0 7',
-					text: '<span style="color: red">Disable</span>',
-					handler: function () {
-						Scalr.Request({
-							processBox: {
-								type: 'action'
-							},
-							confirmBox: {
-								type: 'action',
-								msg: 'Are you sure to want to disable two-factor authentication?'
-							},
-							url: '/core/xSettingsDisable2FaGgl/',
-							success: function () {
-								this.up().hide().next().show();
-							},
-							scope: this
-						});
-					}
-				}]
-			}, {
-				xtype: 'fieldcontainer',
-				layout: 'hbox',
-				itemId: 'disabled',
-				hidden: moduleParams['settings']['security_2fa_ggl'] == '1' ? true : false,
-				items: [{
-					xtype: 'displayfield',
-					value: '<span style="color: red">Disabled</span>'
-				}, {
-					xtype: 'button',
-					margin: '0 0 0 7',
-					text: '<span style="color: green">Enable</span>',
-					handler: function () {
-						var b32 = ('234567QWERTYUIOPASDFGHJKLZXCVBNM').split(''), barcode = '';
+        dockedItems: [{
+            xtype: 'container',
+            dock: 'bottom',
+            cls: 'x-docked-buttons-mini',
+            layout: {
+                type: 'hbox',
+                pack: 'center'
+            },
+            items: [{
+                xtype: 'button',
+                text: 'Save',
+                handler: function() {
+                    if (form.getForm().isValid()) {
+                        var currentFavorites = Scalr.utils.getFavorites(Scalr.scope),
+                            newFavorites = [], uniqIds = {};
+                        form.down('#bookmarks').store.getUnfiltered().each(function(rec){
+                            var stateId = rec.get('stateId');
+                            Ext.each(currentFavorites, function(bookmark){
+                                if (bookmark.stateId == stateId && uniqIds[stateId] === undefined) {
+                                    uniqIds[stateId] = true;
+                                    newFavorites.push(bookmark);
+                                }
+                            });
+                        });
+                        Scalr.localStorage.set('system-favorites-suppress-add-message', form.getForm().findField('donNotShowFavoritesAddMessage').getValue());
+                        Scalr.Request({
+                            processBox: {
+                                type: 'save'
+                            },
+                            url: '/core/xSaveSettings/',
+                            form: this.up('form').getForm(),
+                            scope: this,
+                            success: function (data, response, options) {
+                                if (data.dashboard) {
+                                    Scalr.event.fireEvent('update', '/dashboard', data.dashboard);
+                                }
 
-						for (var i = 0; i < 16; i++)
-							barcode = barcode + b32[Math.floor(Math.random() * (b32.length))];
+                                Scalr.localStorage.set('system-preferred-sshkey-format', form.down('[name="sshkeyFormat"]').getValue());
+                                Scalr.localStorage.set('system-favorites-' + Scalr.scope, newFavorites);
+                                Scalr.application.updateContext(function(){
+                                    Scalr.event.fireEvent('update', '/account/user/gravatar', data['gravatarHash'] ||'');
+                                    Scalr.event.fireEvent('close');
+                                }, true);
+                            }
+                        });
+                    }
+                }
+            }, {
+                xtype: 'button',
+                text: 'Cancel',
+                handler: function() {
+                    Scalr.event.fireEvent('close');
+                }
+            }]
+        }]
+    });
 
-						this.up().next('[name="security_2fa_ggl_key"]').show().setValue(barcode);
-						this.up().next('[name="security_2fa_ggl_qr"]').show().setValue(
-							'<img src="http://chart.apis.google.com/chart?cht=qr&chs=200x200&chld=H|0&chl=otpauth://totp/scalr:' +
-							moduleParams['user_email']  +
-							'?secret=' + barcode + '">'
-						);
-						this.up().next('[name="security_2fa_ggl_code"]').show();
-					}
-				}]
-			}, {
-				xtype: 'textfield',
-				readOnly: true,
-				name: 'security_2fa_ggl_key',
-				fieldLabel: 'Key',
-				width: 400,
-				hidden: true
-			}, {
-				xtype: 'displayfield',
-				hideLabel: true,
-				padding: '0 0 0 105',
-				hidden: true,
-				name: 'security_2fa_ggl_qr',
-				height: 200
-			}, {
-				xtype: 'fieldcontainer',
-				name: 'security_2fa_ggl_code',
-				hidden: true,
-				anchor: '100%',
-				fieldLabel: 'Validate code',
-				layout: {
-					type: 'hbox'
-				},
-				items: [{
-					xtype: 'textfield',
-					width: 60,
-					allowBlank: false
-				}, {
-					xtype: 'button',
-					margin: '0 0 0 5',
-					width: 150,
-					text: 'Validate and enable',
-					handler: function () {
-						if (this.prev().isValid())
-							Scalr.Request({
-								processBox: {
-									type: 'action'
-								},
-								url: '/core/xSettingsEnable2FaGgl/',
-								params: {
-									qr: this.up().prev('[name="security_2fa_ggl_key"]').getValue(),
-									code: this.prev().getValue()
-								},
-								success: function () {
-									this.up().prev('[name="security_2fa_ggl_key"]').hide();
-									this.up().prev('[name="security_2fa_ggl_qr"]').hide();
-									this.up().hide();
+    moduleParams['ssh.console.disable_key_auth'] = moduleParams['ssh.console.disable_key_auth'] || '0';
+    moduleParams['ssh.console.enable_agent_forwarding'] = moduleParams['ssh.console.enable_agent_forwarding'] || '0';
+    form.getForm().setValues(moduleParams);
+    return form;
+});
 
-									this.up().up().child('#disabled').hide();
-									this.up().up().child('#enabled').show();
-								},
-								scope: this
-							});
-					}
-				}]
-			}]
-		}, {
-			xtype: 'fieldset',
-			title: 'IP access whitelist',
-			items: [{
-				xtype: 'displayfield',
-				value: 'Example: 67.45.3.7, 67.46.*, 91.*' // TODO: Add to descriptiom "Leave blank for disable"
-			}, {
-				xtype:'textarea',
-				hideLabel: true,
-				name:'security_ip_whitelist',
-				grow: true,
-				growMax: 200,
-				anchor: '100%',
-				value: moduleParams['security_ip_whitelist'] || ''
-			}]
-		}],
+Ext.define('Scalr.ui.ScalrDataViewDragZone', {
+    extend: 'Ext.view.DragZone',
+    onInitDrag: function(x, y) {
+        var me = this,
+            data = me.dragData,
+            view = data.view,
+            selectionModel = view.getSelectionModel(),
+            record = view.getRecord(data.item);
+        // Update the selection to match what would have been selected if the user had
+        // done a full click on the target node rather than starting a drag from it
+        /* Changed */
+        /*if (!selectionModel.isSelected(record)) {
+            selectionModel.selectWithEvent(record, me.DDMInstance.mousedownEvent);
+        }*/
+        data.records = [record];//selectionModel.getSelection();
+        /* End */
+        Ext.fly(me.ddel).setHtml('Move <b>'+record.get('text')+'</b> to the new position');
+        me.proxy.update(me.ddel);
+        me.onStartDrag(x, y);
+        return true;
+    },
+    afterRepair: function() {
+        this.dragging = false;
+    }
+});
 
-		dockedItems: [{
-			xtype: 'container',
-			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
-			layout: {
-				type: 'hbox',
-				pack: 'center'
-			},
-			items: [{
-				xtype: 'button',
-				text: 'Save',
-				itemId: 'buttonSubmit',
-				handler: function() {
-					Scalr.Request({
-						processBox: {
-							type: 'save'
-						},
-						url: '/core/xSaveSettings/',
-						form: this.up('form').getForm(),
-						scope: this,
-						success: function (data, response, options) {
-							if (this.up('form').down('[name="dashboard_columns"]') != moduleParams['dashboard_columns']) {
-								Scalr.event.fireEvent('update', '/dashboard', data.panel);
-							}
-							Scalr.event.fireEvent('close');
-						}
-					});
-				}
-			}, {
-				xtype: 'button',
-				margin: '0 0 0 5',
-				text: 'Cancel',
-				handler: function() {
-					Scalr.event.fireEvent('close');
-				}
-			}]
-		}]
-	});
+Ext.define('Scalr.ui.ScalrDataViewDropZone', {
+    extend: 'Ext.view.DropZone',
+
+    handleNodeDrop : function() {
+        this.getIndicator().hide();
+    },
+
+    getIndicator: function() {
+        var me = this;
+
+        if (me.indicator && me.indicator.el && me.indicator.el.isDestroyed) {
+            Ext.destroy(me.indicator);
+            delete me.indicator;
+        }
+        if (!me.indicator) {
+            me.indicator = new Ext.Component({
+                ariaRole: 'presentation',
+                html: me.indicatorHtml,
+                cls: me.indicatorCls,
+                renderTo: me.view.el,
+                autoRender: true,
+                //floating: true,
+                shadow: false
+            });
+        }
+        return me.indicator;
+    },
+
+    positionIndicator: function(node, data, e) {
+        var me = this,
+            view = me.view,
+            pos = me.getPosition(e, node),
+            overRecord = view.getRecord(node),
+            draggingRecords = data.records,
+            indicatorY;
+
+        if (node && !Ext.Array.contains(draggingRecords, overRecord) && (
+            pos === 'before' ||// && !me.containsRecordAtOffset(draggingRecords, overRecord, -1)
+            pos === 'after'// && !me.containsRecordAtOffset(draggingRecords, overRecord, 1)
+        )) {
+            me.valid = true;
+            me.getIndicator().el['insert' + Ext.String.capitalize(pos)](node);
+            if (me.overRecord !== overRecord || me.currentPosition !== pos) {
+                me.overRecord = overRecord;
+                me.currentPosition = pos;
+            }
+            me.getIndicator().show();
+        } else {
+            //me.invalidateDrop();
+        }
+    },
+
+    getPosition: function(e, node) {
+        var x      = e.getXY()[0],
+            y      = e.getXY()[1],
+            region = Ext.fly(node).getRegion(),
+            pos;
+
+        if ((region.right - x) >= (region.right - region.left) / 2) {
+            pos = "before";
+        } else {
+            pos = "after";
+        }
+        return pos;
+    },
+
+
+    getTargetFromEvent : function(e) {
+        var node = e.getTarget(this.view.getItemSelector()),
+            mouseY, nodeList, testNode, i, len, box;
+
+        if (!node) {
+            if (this.overRecord) {
+                return this.view.getNode(this.overRecord)
+            }
+        }
+        return node;
+    },
+
+    invalidateDrop: Ext.emptyFn
+
+});
+
+Ext.define('Scalr.ui.ScalrDataViewDragDrop', {
+    extend: 'Ext.AbstractPlugin',
+    alias: 'plugin.scalrviewdragdrop',
+
+    uses: [
+        'Ext.view.ScalrDataViewDragZone',
+        'Ext.view.ScalrDataViewDropZone'
+    ],
+
+    dragText : 'move item to the new position',
+    ddGroup : "ViewDD",
+    enableDrop: true,
+
+    enableDrag: true,
+    offsetY: 0,
+    handleNodeDrop: Ext.emptyFn,
+
+    init : function(view) {
+        view.on('render', this.onViewRender, this, {single: true});
+    },
+
+    destroy: function() {
+        Ext.destroy(this.dragZone, this.dropZone);
+    },
+
+    enable: function() {
+        var me = this;
+        if (me.dragZone) {
+            me.dragZone.unlock();
+        }
+        if (me.dropZone) {
+            me.dropZone.unlock();
+        }
+        me.callParent();
+    },
+
+    disable: function() {
+        var me = this;
+        if (me.dragZone) {
+            me.dragZone.lock();
+        }
+        if (me.dropZone) {
+            me.dropZone.lock();
+        }
+        me.callParent();
+    },
+
+    onViewRender : function(view) {
+        var me = this;
+
+        if (me.enableDrag) {
+            me.dragZone = new Scalr.ui.ScalrDataViewDragZone({
+                view: view,
+                ddGroup: me.dragGroup || me.ddGroup,
+                dragText: me.dragText
+            });
+        }
+
+        if (me.enableDrop) {
+            me.dropZone = new Scalr.ui.ScalrDataViewDropZone({
+                view: view,
+                ddGroup: me.dropGroup || me.ddGroup,
+                offsetY: me.offsetY
+            });
+        }
+    }
 });

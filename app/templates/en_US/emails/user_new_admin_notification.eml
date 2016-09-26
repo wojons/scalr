@@ -1,0 +1,8 @@
+[subject][Scalr] {{subject}}[/subject]
+
+Hi {{fullname}},
+
+You have been added as {{user_type}} for the Scalr Cloud Management Platform.  Please follow this link to log into Scalr and get started {{link}}
+
+Thank you,
+The Scalr Team

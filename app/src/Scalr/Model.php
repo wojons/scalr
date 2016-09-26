@@ -1,265 +1,300 @@
 <?php
 
-	abstract class Scalr_Model
-	{
-		public $id;
-		protected $db;
+use Scalr\Util\CryptoTool;
 
-		const ENVIRONMENT				= 'Scalr_Environment';
-		const SERVICE_CONFIGURATION 	= 'Scalr_ServiceConfiguration';
-		const SCALING_METRIC			= 'Scalr_Scaling_Metric';
-		const SCALING_FARM_ROLE_METRIC	= 'Scalr_Scaling_FarmRoleMetric';
-		const SSH_KEY					= 'Scalr_SshKey';
+abstract class Scalr_Model
+{
+    public $id;
 
-		const STORAGE_SNAPSHOT			= 'Scalr_Storage_Snapshot';
-		const STORAGE_VOLUME			= 'Scalr_Storage_Volume';
+    /**
+     * @var \ADODB_mysqli
+     */
+    protected $db;
 
-		const DM_APPLICATION			= 'Scalr_Dm_Application';
-		const DM_SOURCE					= 'Scalr_Dm_Source';
-		const DM_DEPLOYMENT_TASK		= 'Scalr_Dm_DeploymentTask';
+    const ENVIRONMENT               = 'Scalr_Environment';
+    const SCALING_FARM_ROLE_METRIC  = 'Scalr_Scaling_FarmRoleMetric';
 
-		const APACHE_VHOST				= 'Scalr_Service_Apache_Vhost';
+    const STORAGE_SNAPSHOT          = 'Scalr_Storage_Snapshot';
+    const STORAGE_VOLUME            = 'Scalr_Storage_Volume';
 
-		/**
-		 * 'dbkey' => 'classkey'
-		 * 'dbkey' => array('property' => 'classkey', 'type' => 'string' (default) or 'bool' or 'datetime' (unixstamp) or serialize (by php), 'is_filter' => true or false, 'update' => true or false, 'updateSql', 'createSql')
-		 */
+    const APACHE_VHOST              = 'Scalr_Service_Apache_Vhost';
 
-		protected $dbTableName = null;
-		protected $dbPrimaryKey = "id";
-		protected $dbPropertyMap = array();
-		protected $dbMessageKeyNotFound = "Key#%s not found in database";
+    /**
+     * 'dbkey' => 'classkey'
+     * 'dbkey' => array('property' => 'classkey', 'type' => 'string' (default) or 'bool' or 'datetime' (unixstamp) or serialize (by php), 'is_filter' => true or false, 'update' => true or false, 'updateSql', 'createSql')
+     */
 
-		protected $crypto, $cryptoKey;
+    protected $dbTableName = null;
+    protected $dbPrimaryKey = "id";
+    protected $dbPropertyMap = array();
+    protected $dbMessageKeyNotFound = "Key#%s not found in database";
 
-		public function __construct($id = null)
-		{
-			$this->id = $id;
-			$this->db = Core::GetDBInstance();
-			$this->dbMessageKeyNotFound = get_class($this) . " " . $this->dbMessageKeyNotFound;
-		}
+    /**
+     * @var CryptoTool
+     */
+    protected $crypto;
 
-		/**
-		 * @return Scalr_Util_CryptoTool
-		 */
-		protected function getCrypto()
-		{
-			if (! $this->crypto) {
-				$this->crypto = new Scalr_Util_CryptoTool(MCRYPT_TRIPLEDES, MCRYPT_MODE_CFB, 24, 8);
-				$this->cryptoKey = @file_get_contents(dirname(__FILE__)."/../../etc/.cryptokey");
-			}
+    /**
+     * DI Container
+     *
+     * @var \Scalr\DependencyInjection\Container
+     */
+    private $container;
 
-			return $this->crypto;
-		}
+    public function __construct($id = null)
+    {
+        $this->id = $id;
+        $this->container = \Scalr::getContainer();
+        $this->db = \Scalr::getDb();
+        $this->dbMessageKeyNotFound = get_class($this) . " " . $this->dbMessageKeyNotFound;
+    }
 
-		public function __call($name, $arguments)
-		{
-			if (!strncmp($name, "loadBy", 6) && count($arguments) > 0) {
-				$name = lcfirst(substr($name, 6));
-				$property = $this->findDbKeyByProperty($name);
-				$value = $arguments[0];
-				$loadFlag = !isset($arguments[1]) || isset($arguments[1]) && $arguments[1];
+    /**
+     * Gets DI Container
+     *
+     * @return \Scalr\DependencyInjection\Container
+     */
+    public function getContainer()
+    {
+        return $this->container;
+    }
 
-				if ($property && is_array($this->dbPropertyMap[$property]) && isset($this->dbPropertyMap[$property]['is_filter']) && $this->dbPropertyMap[$property]['is_filter']) {
-					if ($loadFlag) {
-						$info = $this->db->getRow("SELECT * FROM {$this->dbTableName} WHERE {$property} = ?", array($value));
-						if (! $info)
-							throw new Exception(sprintf(_($this->dbMessageKeyNotFound), $value));
+    /**
+     * @return CryptoTool
+     */
+    protected function getCrypto()
+    {
+        if (!$this->crypto) {
+            $this->crypto = \Scalr::getContainer()->crypto;
+        }
 
-						return $this->loadBy($info);
-					} else {
-						return $this->db->getAll("SELECT * FROM {$this->dbTableName} WHERE {$property} = ?", array($value));
-					}
-				}
-			}
+        return $this->crypto;
+    }
 
-			throw new Exception(_("Method '{$name}' of class '".get_called_class()."' not found"));
-		}
+    public function __call($name, $arguments)
+    {
+        if (!strncmp($name, "loadBy", 6) && count($arguments) > 0) {
+            $name = lcfirst(substr($name, 6));
+            $property = $this->findDbKeyByProperty($name);
+            $value = $arguments[0];
+            $loadFlag = !isset($arguments[1]) || isset($arguments[1]) && $arguments[1];
 
-		/**
-		 *
-		 * @param string $className
-		 * @return Scalr_Model
-		 *
-		 */
-		public static function init($className=null)
-		{
-			//TODO: Validate class
-			if (!$className)
-				$className = get_called_class();
+            if ($property && is_array($this->dbPropertyMap[$property]) && isset($this->dbPropertyMap[$property]['is_filter']) && $this->dbPropertyMap[$property]['is_filter']) {
+                if ($loadFlag) {
+                    $info = $this->db->getRow("SELECT * FROM {$this->dbTableName} WHERE {$property} = ? LIMIT 1", array($value));
+                    if (!$info)
+                        throw new Exception(sprintf(_($this->dbMessageKeyNotFound), $value));
 
-			return new $className();
-		}
+                    return $this->loadBy($info);
+                } else {
+                    return $this->db->getAll("SELECT * FROM {$this->dbTableName} WHERE {$property} = ?", array($value));
+                }
+            }
+        }
 
-		private function findDbKeyByProperty($property)
-		{
-			foreach ($this->dbPropertyMap as $key => $value) {
-				if (is_array($value) && $value['property'] == $property)
-					return $key;
-				elseif(is_string($value) && $value == $property)
-					return $key;
-			}
-			return null;
-		}
+        throw new Exception(_("Method '{$name}' of class '" . get_called_class() . "' not found"));
+    }
 
-		public function loadBy($info)
-		{
-			foreach($this->dbPropertyMap as $key => $value) {
-				$property = is_array($value) ? $value['property'] : $value;
+    /**
+     * Init
+     *
+     * @param   string $className
+     * @return  Scalr_Model
+     */
+    public static function init($className = null)
+    {
+        //TODO: Validate class
+        if (!$className)
+            $className = get_called_class();
 
-				if (isset($info[$key])) {
-					$val = $info[$key];
-					if (is_array($value) && $value['type']) {
-						switch ($value['type']) {
-							case 'bool':
-								$val = $val ? true : false;
-								break;
-							case 'datetime':
-								$val = strtotime($val);
-								break;
-							case 'serialize':
-								$val = unserialize($val);
-								break;
-						}
-					}
+        return new $className();
+    }
 
-					$this->{$property} = $val;
-				}
-			}
+    private function findDbKeyByProperty($property)
+    {
+        foreach ($this->dbPropertyMap as $key => $value) {
+            if (is_array($value) && $value['property'] == $property)
+                return $key;
+            elseif (is_string($value) && $value == $property)
+                return $key;
+        }
+        return null;
+    }
 
-			return $this;
-		}
+    public function loadBy($info)
+    {
+        foreach ($this->dbPropertyMap as $key => $value) {
+            $property = is_array($value) ? $value['property'] : $value;
 
-		/**
-		 *
-		 * @param integer $id
-		 */
-		public function loadById($id)
-		{
-			$info = $this->db->GetRow("SELECT * FROM {$this->dbTableName} WHERE {$this->dbPrimaryKey}=?", array($id));
-			if (! $info)
-				throw new Exception(sprintf(_($this->dbMessageKeyNotFound), $id));
+            if (isset($info[$key])) {
+                $val = $info[$key];
+                if (is_array($value) && !empty($value['type'])) {
+                    switch ($value['type']) {
+                        case 'bool':
+                            $val = $val ? true : false;
+                            break;
+                        case 'datetime':
+                            $val = strtotime($val);
+                            break;
+                        case 'serialize':
+                            $val = unserialize($val);
+                            break;
+                        case 'encrypted':
+                            if ($val)
+                                $val = $this->getCrypto()->decrypt($val);
+                            break;
+                    }
+                }
 
-			return $this->loadBy($info);
-		}
+                $this->{$property} = $val;
+            }
+        }
 
-		public function loadByFilter($filterArgs = array(), $ufilterArgs = array())
-		{
-			$sql = array();
-			$args = array();
+        return $this;
+    }
 
-			foreach ($filterArgs as $key => $value) {
-				if (($property = $this->findDbKeyByProperty($key))) {
-					if (is_array($value)) {
-						if (count($value)) {
-							foreach ($value as $vvalue)
-								$args[] = $this->db->quote($vvalue);
-							$sql[] = "`{$property}` IN (" . implode(",", array_fill(0, count($value), "?")) . ")";
-						}
-					} else {
-						$sql[] = "`{$property}` = ?";
-						$args[] = $value;
-					}
-				}
-			}
+    /**
+     *
+     * @param integer $id
+     */
+    public function loadById($id)
+    {
+        $info = $this->db->GetRow("SELECT * FROM {$this->dbTableName} WHERE {$this->dbPrimaryKey}=?", array($id));
+        if (!$info)
+            throw new Exception(sprintf(_($this->dbMessageKeyNotFound), $id));
 
-			foreach ($ufilterArgs as $key => $value) {
-				if (($property = $this->findDbKeyByProperty($key))) {
-					if (is_array($value)) {
-						if (count($value)) {
-							foreach ($value as $vvalue)
-								$args[] = $this->db->quote($vvalue);
-							$sql[] = "`{$key}` NOT IN (" . implode(",", array_fill(0, count($value), "?")) . ")";
-						}
-					} else {
-						$sql[] = "`{$key}` != ?";
-						$args[] = $value;
-					}
-				}
-			}
+        return $this->loadBy($info);
+    }
 
-			$sqlString = "SELECT * FROM {$this->dbTableName}";
-			if (count($sql))
-				$sqlString .= " WHERE " . implode(" AND ", $sql);
+    public function loadByFilter($filterArgs = array(), $ufilterArgs = array())
+    {
+        $sql = array();
+        $args = array();
 
-			//TODO: Return array of objects
-			//die("TODO");
+        foreach ($filterArgs as $key => $value) {
+            if (($property = $this->findDbKeyByProperty($key))) {
+                if (is_array($value)) {
+                    if (count($value)) {
+                        foreach ($value as $vvalue)
+                            $args[] = $this->db->quote($vvalue);
+                        $sql[] = "`{$property}` IN (" . implode(",", array_fill(0, count($value), "?")) . ")";
+                    }
+                } else {
+                    $sql[] = "`{$property}` = ?";
+                    $args[] = $value;
+                }
+            }
+        }
 
-			return $this->db->GetAll($sqlString, $args);
-		}
+        foreach ($ufilterArgs as $key => $value) {
+            if (($property = $this->findDbKeyByProperty($key))) {
+                if (is_array($value)) {
+                    if (count($value)) {
+                        foreach ($value as $vvalue)
+                            $args[] = $this->db->quote($vvalue);
+                        $sql[] = "`{$key}` NOT IN (" . implode(",", array_fill(0, count($value), "?")) . ")";
+                    }
+                } else {
+                    $sql[] = "`{$key}` != ?";
+                    $args[] = $value;
+                }
+            }
+        }
 
-		public function save($forceInsert = false)
-		{
-			$set = array();
-			$bind = array();
+        $sqlString = "SELECT * FROM {$this->dbTableName}";
+        if (count($sql))
+            $sqlString .= " WHERE " . implode(" AND ", $sql);
 
-			foreach ($this->dbPropertyMap as $field => $value) {
-				$isArrayValue = is_array($value);
+        //TODO: Return array of objects
+        //die("TODO");
 
-				if ($field == $this->dbPrimaryKey && !$forceInsert)
-					continue;
+        return $this->db->GetAll($sqlString, $args);
+    }
 
-				if ($isArrayValue && isset($value['createSql']) && (!$this->id || $forceInsert)) {
-					$set[] = "`{$field}` = {$value['createSql']}";
-					continue;
-				}
+    /**
+     * Save current object to database
+     *
+     * @param   bool $forceInsert   optional Force insert. (false by default)
+     * @return  Scalr_Model         Return current object
+     *
+     * @throws  Exception
+     */
+    public function save($forceInsert = false)
+    {
+        $set = array();
+        $bind = array();
 
-				if ($isArrayValue && isset($value['updateSql']) && $this->id && !$forceInsert) {
-					$set[] = "`{$field}` = {$value['updateSql']}";
-					continue;
-				}
+        foreach ($this->dbPropertyMap as $field => $value) {
+            $isArrayValue = is_array($value);
 
-				if ($isArrayValue && isset($value['update']) && $value['update'] == false)
-					continue;
+            if ($field == $this->dbPrimaryKey && !$forceInsert)
+                continue;
 
-				$property = $isArrayValue ? $value['property'] : $value;
-				$val = $this->{$property};
+            if ($isArrayValue && isset($value['createSql']) && (!$this->id || $forceInsert)) {
+                $set[] = "`{$field}` = {$value['createSql']}";
+                continue;
+            }
 
-				if ($isArrayValue && isset($value['type'])) {
-					switch ($value['type']) {
-						case 'bool':
-							$val = $val ? 1 : 0;
-							break;
-						case 'datetime':
-							$val = is_null($val) ? $val : date("Y-m-d H:m:s", $val);
-							break;
-						case 'serialize':
-							$val = serialize($val);
-							break;
-					}
-				}
+            if ($isArrayValue && isset($value['updateSql']) && $this->id && !$forceInsert) {
+                $set[] = "`{$field}` = {$value['updateSql']}";
+                continue;
+            }
 
-				$set[] = "`{$field}` = ?";
-				$bind[] = $val;
-			}
-			$set = implode(', ', $set);
+            if ($isArrayValue && isset($value['update']) && $value['update'] == false)
+                continue;
 
-			try {
-				if ($this->id && !$forceInsert) {
-					// Perform Update
-					$bind[] = $this->id;
-					$this->db->Execute("UPDATE {$this->dbTableName} SET {$set} WHERE id = ?", $bind);
-				} else {
-					// Perform Insert
-					$this->db->Execute("INSERT INTO {$this->dbTableName} SET {$set}", $bind);
+            $property = $isArrayValue ? $value['property'] : $value;
+            $val = $this->{$property};
 
-					if (!$this->id)
-						$this->id = $this->db->Insert_ID();
-				}
-			} catch (Exception $e) {
-				throw new Exception (sprintf(_("Cannot save record. Error: %s"), $e->getMessage()), $e->getCode());
-			}
+            if ($isArrayValue && isset($value['type'])) {
+                switch ($value['type']) {
+                    case 'bool':
+                        $val = $val ? 1 : 0;
+                        break;
+                    case 'datetime':
+                        $val = is_null($val) ? $val : date("Y-m-d H:i:s", $val);
+                        break;
+                    case 'serialize':
+                        $val = serialize($val);
+                        break;
+                    case 'encrypted':
+                        if ($val)
+                            $val = $this->getCrypto()->encrypt($val);
+                        break;
+                }
+            }
 
-			return $this;
-		}
+            $set[] = "`{$field}` = ?";
+            $bind[] = $val;
+        }
+        $set = implode(', ', $set);
 
-		public function delete($id = null)
-		{
-			$id = !is_null($id) ? $id : $this->id;
-			try {
-				$this->db->Execute("DELETE FROM {$this->dbTableName} WHERE id=?", array($id));
-			} catch (Exception $e) {
-				throw new Exception (sprintf(_("Cannot delete record. Error: %s"), $e->getMessage()), $e->getCode());
-			}
-		}
-	}
+        try {
+            if ($this->id && !$forceInsert) {
+                // Perform Update
+                $bind[] = $this->id;
+                $this->db->Execute("UPDATE {$this->dbTableName} SET {$set} WHERE id = ?", $bind);
+            } else {
+                // Perform Insert
+                $this->db->Execute("INSERT INTO {$this->dbTableName} SET {$set}", $bind);
+
+                if (!$this->id)
+                    $this->id = $this->db->Insert_ID();
+            }
+        } catch (Exception $e) {
+            throw new Exception (sprintf(_("Cannot save record. Error: %s"), $e->getMessage()), $e->getCode());
+        }
+
+        return $this;
+    }
+
+    public function delete($id = null)
+    {
+        $id = !is_null($id) ? $id : $this->id;
+        try {
+            $this->db->Execute("DELETE FROM {$this->dbTableName} WHERE id=?", array($id));
+        } catch (Exception $e) {
+            throw new Exception (sprintf(_("Cannot delete record. Error: %s"), $e->getMessage()), $e->getCode());
+        }
+    }
+}

@@ -1,0 +1,670 @@
+.x-costanalytics-admin-dashboard .x-mode-btn{
+    right: 0!important;
+    left: auto!important;
+}
+
+.x-costanalytics-admin-dashboard .x-mode-btn .x-btn{
+    padding: 0;
+    min-width: 35px;
+}
+
+.x-costanalytics-admin-dashboard .x-mode-btn .x-btn-button{
+    height: 20px;
+}
+
+.x-costanalytics-admin-dashboard .x-mode-btn .x-btn-inner-default-small{
+    line-height: 20px;
+}
+
+/*cost analisys box*/
+.x-costanalytics .x-link-warning{
+    text-decoration:underline;
+    color: #b06235;
+    line-height: 20px;
+}
+
+.x-costanalytics .x-link-warning:hover{
+    color: #df6d2c;
+}
+
+.x-costanalytics .x-dataview-tab-archived{
+    opacity: .6;
+}
+
+.x-costanalytics .x-filterfield-btn{
+    width: 32px;
+}
+
+.x-costanalytics .x-filterfield-btn .x-filterfield-btn-inner{
+    margin-left: 2px;
+}
+
+.x-costanalytics .x-docked-summary-bottom{
+    border: 0;
+}
+
+.x-costanalytics .x-docked-summary-bottom .x-grid-cell{
+    border-top: 1px solid #f7f7f7;
+}
+
+
+.x-costanalytics .x-docked-summary-bottom .x-grid-cell-inner{
+    font-family: OpenSansSemiBold;
+
+}
+
+.x-costanalytics .bar-wrapper{
+    background: #d6dbe7;
+    border-radius: 0;
+    overflow: hidden;
+}
+
+.x-costanalytics .bar-inner{
+    //font: bold 12px/18px arial, helvetica, sans-serif;
+    font-family: OpenSansSemiBold;
+    color: #fff;
+    background: #89afda;
+    text-align: right;
+    border-radius: 1px;
+    min-width: 3px;
+    text-shadow: #2e6eaf 0.1em 0.1em 0.1em;
+}
+
+.x-costanalytics .bar-wrapper .bar-inner{
+    border-radius: 0;
+    text-shadow: none;
+}
+
+.x-costanalytics .bar-inner span{
+    padding: 0 4px;
+}
+
+.x-costanalytics-red{
+    color: #de1810;
+}
+.x-costanalytics-green{
+    color: #319608;
+}
+
+.x-costanalytics-orange{
+    color: #ffae39;
+}
+
+.x-costanalytics-bg-red{
+    background-color: #D81911!important;
+}
+.x-costanalytics-bg-green{
+    background-color: #499E28!important;
+}
+
+.x-costanalytics-bg-orange{
+    background-color: #F5AD14!important;
+}
+
+/*cost distribution*/
+.x-costanalytics-bg-compute{
+    background-color: #8cbd6f!important;
+}
+.x-costanalytics-bg-storage{
+    background-color: #b873e1!important;
+}
+
+.x-costanalytics-bg-bandwidth{
+    background-color: #eeb053!important;
+}
+
+.x-costanalytics-bg-other{
+    background-color: #518dca!important;
+}
+
+.x-costanalytics-compute{
+    color: #8cbd6f;
+}
+.x-costanalytics-storage{
+    color: #b873e1;
+}
+
+.x-costanalytics-bandwidth{
+    color: #eeb053;
+}
+
+.x-costanalytics-other{
+    color: #518dca;
+}
+
+.x-caheader{
+    font: normal 18px arial, helvetica, sans-serif;
+}
+
+/*caboxes*/
+.x-cabox, .x-cabox3{
+    text-align: center;
+    padding: 10px 20px 16px;
+    border: 1px solid #f1f5fa;
+    border-right: 0;
+    border-top: 0;
+    background: #e1ebf4;
+}
+
+.x-panel-column-left-with-tabs .x-cabox,
+.x-panel-column-left-with-tabs .x-cabox3{
+    border-color: #e2edf9;
+    background: #f1f5fa;
+}
+
+.x-cabox:first-child,
+.x-cabox3:first-child{
+    border-left: 0;
+    border-right: 0
+}
+
+.x-cabox:last-child,
+.x-cabox3:last-child{
+    border-right: 0
+}
+
+.x-cabox .x-cabox-title,
+.x-cabox3 .x-cabox-title{
+    font-family: OpenSansBold;
+    text-transform: uppercase;
+    height: 30px;
+    border-bottom: 1px solid #f1f5fa;
+}
+
+.x-panel-column-left-with-tabs .x-cabox .x-cabox-title,
+.x-panel-column-left-with-tabs .x-cabox3 .x-cabox-title{
+    border-bottom: 1px solid #e2edf9;
+}
+
+.x-cabox .x-cabox-title i {
+    text-transform: none;
+    font-family: OpenSansSemiBold;
+}
+
+.x-cabox .title1{
+    font-family: OpenSansBold;
+    font-size: 160%;
+}
+
+.x-cabox .title2{
+    font-family: OpenSansBold;
+    font-size: 130%;
+}
+
+.x-cabox table{
+    border-collapse:collapse;
+    width:100%;
+}
+
+.x-cabox table td{
+    padding: 0;
+}
+
+.x-cabox .x-cabox-top td{
+    text-align:left;
+    padding-top: 6px;
+}
+
+.x-cabox .x-cabox-top a{
+    color: #212b3d;
+    text-decoration: none;
+}
+
+.x-cabox .x-cabox-top a:hover .link{
+    text-decoration: underline;
+    color: #438bdc;
+}
+
+.x-cabox .x-cabox-distribution td{
+    text-align:left;
+    padding-top: 19px;
+}
+
+.x-cabox .x-cabox-distribution tr:first-child td{
+    padding-top: 6px;
+}
+
+.x-cabox-transparent{
+    background: transparent!important;
+    border: 0;
+    padding: 16px 8px;
+}
+
+.x-cabox-transparent .x-cabox-title{
+    border: 0;
+    padding-bottom: 6px;
+}
+
+.x-cabox .x-label-pct {
+    position: relative;
+    top: 3px;
+}
+
+.x-cabox .x-item{
+    text-align: left;
+    padding: 8px 10px 12px 12px;
+    border-left: 1px solid #e2e8ee;
+    border-bottom: 1px solid #e2e8ee;
+}
+
+
+.x-cabox .title3 {
+    font-family: OpenSansSemiBold;
+}
+
+.x-cabox .title4 {
+    font-family: OpenSansSemiBold;
+    font-size: 110%;
+    position: relative;
+    top: 5px;
+}
+
+
+/*dashboard cabox*/
+.x-cabox2{
+    text-align: center;
+    border-radius: 0;
+    background: #f1f5fa;
+}
+
+.x-cabox2 .x-cabox-title{
+    font-weight: bold;
+    line-height: 35px;
+    height: 35px;
+    border-radius: 0;
+    background: #d5dee6;
+    padding: 0;
+    box-shadow: 0 -1px #ced9e1 inset;
+    text-transform: uppercase;
+}
+
+.x-cabox2 .title1{
+    font: bold 22px arial, helvetica, sans-serif;
+}
+
+.x-cabox2 .title2{
+    font: bold 16px/18px arial, helvetica, sans-serif;
+}
+
+.x-cabox2 .title2 .small{
+    font-size: 80%;
+    font-weight: normal;
+}
+
+.x-cabox2 .title3{
+   font-weight:bold;
+   margin-bottom: 4px;
+   height: 18px;
+}
+
+.x-cabox2 .x-cabox-title .separator-right{
+    border-right: 1px solid #c4d3e0;
+}
+
+.x-cabox2 .separator-right{
+    border-right: 1px solid #e2e8ee;
+}
+
+.x-cabox2 .separator-bottom{
+    border-bottom: 1px solid #e2e8ee;
+}
+
+.x-cabox2 .x-quarter-box {
+    background: #fffbff;
+    border-radius: 0;
+    border-color: #eff3f7;
+}
+
+.x-cabox2 .x-quarter-box.current {
+    background: #dee7ef;
+}
+
+.x-cabox2 .x-quarter-box.current .separator-right,
+.x-cabox2 .x-quarter-box.current .separator-bottom{
+    border-color: #d6dbe7;
+}
+
+
+.x-cabox3 a{
+    color: #212b3d;
+    text-decoration: none;
+}
+
+.x-cabox3 a:hover .link{
+    text-decoration: underline;
+    color: #438bdc;
+}
+
+.x-cabox3 .x-label-pct {
+    line-height: 20px;
+}
+
+.x-costanalytics-icon-line-chart{
+    background-image: url(/ui2/images/ui/analytics/line-chart.png)!important;
+    background-repeat: no-repeat!important;
+    background-position: center -24px!important;
+}
+
+.x-costanalytics-icon-bars-chart{
+    background-image: url(/ui2/images/ui/analytics/bars-chart.png)!important;
+    background-repeat: no-repeat!important;
+    background-position: center -24px!important;
+}
+
+.x-costanalytics-icon-pie-chart{
+    background-image: url(/ui2/images/ui/analytics/pie-chart.png)!important;
+    background-repeat: no-repeat!important;
+    background-position: center -24px!important;
+}
+
+.x-costanalytics-icon-grid{
+    background-image: url(/ui2/images/ui/analytics/grid.png)!important;
+    background-repeat: no-repeat!important;
+    background-position: center -24px!important;
+}
+
+.x-costanalytics-icon-share-mode{
+    background-image: url(/ui2/images/ui/analytics/share-mode.png)!important;
+    background-repeat: no-repeat!important;
+    background-position: 0 0!important;
+    width: 22px;
+    height: 23px;
+}
+
+.x-costanalytics-icon-share-mode-0{
+    background-position: 0 0;
+}
+
+.x-costanalytics-icon-share-mode-1{
+    background-position: 0 -46px;
+}
+
+.x-costanalytics-icon-share-mode-2{
+    background-position: 0 -69px;
+}
+
+.x-costanalytics-icon-share-mode-3{
+    background-position: 0 -23px;
+}
+
+/*colored buttons*/
+/*FD8D11*/
+.x-costanalytics-FD8D11{
+    background-color: #FDD386!important;
+}
+
+.x-costanalytics-FD8D11.x-btn-over{
+    background-color: #FDDA99!important;
+}
+
+.x-costanalytics-FD8D11.x-btn-pressed{
+    background-color: #DF5900!important;
+    box-shadow: 0 1px 1px #802900 inset;
+}
+
+.x-costanalytics-FD8D11.x-btn-disabled{
+    background-color: #d6d8db!important;
+}
+
+/*D316CF*/
+.x-costanalytics-D316CF{
+    background-color: #F0B8F1!important;
+}
+
+.x-costanalytics-D316CF.x-btn-over{
+    background-color: #F2C7F3!important;
+}
+
+.x-costanalytics-D316CF.x-btn-pressed{
+    background-color: #B836BE!important;
+    box-shadow: 0 1px 1px #64025F inset;
+}
+
+.x-costanalytics-D316CF.x-btn-disabled{
+    background-color: #d6d8db!important;
+}
+/*0069D2*/
+.x-costanalytics-0069D2{
+    background-color: #91C8FF!important;
+}
+
+.x-costanalytics-0069D2.x-btn-over{
+    background-color: #A4D1FF!important;
+}
+
+.x-costanalytics-0069D2.x-btn-pressed{
+    background-color: #468CF7!important;
+    box-shadow: 0 1px 1px #00376F inset;
+}
+
+.x-costanalytics-0069D2.x-btn-disabled{
+    background-color: #d6d8db!important;
+}
+
+/*B56F04*/
+.x-costanalytics-B56F04{
+    background-color: #F0C98E!important;
+}
+
+.x-costanalytics-B56F04.x-btn-over{
+    background-color: #F2D19F!important;
+}
+
+.x-costanalytics-B56F04.x-btn-pressed{
+    background-color: #965505!important;
+    box-shadow: 0 1px 1px #5A2301 inset;
+}
+
+.x-costanalytics-B56F04.x-btn-disabled{
+    background-color: #d6d8db!important;
+}
+
+/*0C7509*/
+.x-costanalytics-0C7509{
+    background-color: #ABD7AA!important;
+}
+
+.x-costanalytics-0C7509.x-btn-over{
+    background-color: #BCDFBB!important;
+}
+
+.x-costanalytics-0C7509.x-btn-pressed{
+    background-color: #0BA616!important;
+    box-shadow: 0 1px 1px #034309 inset;
+}
+
+.x-costanalytics-0C7509.x-btn-disabled{
+    background-color: #d6d8db!important;
+}
+/*65A615*/
+.x-costanalytics-65A615{
+    background-color: #C7E2A0!important;
+}
+
+.x-costanalytics-65A615.x-btn-over{
+    background-color: #CFE7AD!important;
+}
+
+.x-costanalytics-65A615.x-btn-pressed{
+    background-color: #64A220!important;
+    box-shadow: 0 1px 1px #2D5302 inset;
+}
+
+.x-costanalytics-65A615.x-btn-disabled{
+    background-color: #d6d8db!important;
+}
+/*05A4D8*/
+.x-costanalytics-05A4D8{
+    background-color: #B4DDEB!important;
+}
+
+.x-costanalytics-05A4D8.x-btn-over{
+    background-color: #C2E4EF!important;
+}
+
+.x-costanalytics-05A4D8.x-btn-pressed{
+    background-color: #24A9D5!important;
+    box-shadow: 0 1px 1px #024D75 inset;
+}
+
+.x-costanalytics-05A4D8.x-btn-disabled{
+    background-color: #d6d8db!important;
+}
+/*DD0202*/
+.x-costanalytics-DD0202{
+    background-color: #FFC6BB!important;
+}
+
+.x-costanalytics-DD0202.x-btn-over{
+    background-color: #FFCEC6!important;
+}
+
+.x-costanalytics-DD0202.x-btn-pressed{
+    background-color: #CA2C15!important;
+    box-shadow: 0 1px 1px #771609 inset;
+}
+
+.x-costanalytics-DD0202.x-btn-disabled{
+    background-color: #d6d8db!important;
+}
+/*3691F3*/
+.x-costanalytics-3691F3{
+    background-color: #BFDCFB!important;
+}
+
+.x-costanalytics-3691F3.x-btn-over{
+    background-color: #C9E1FC!important;
+}
+
+.x-costanalytics-3691F3.x-btn-pressed{
+    background-color: #66ABF7!important;
+    box-shadow: 0 1px 1px #074283 inset;
+}
+
+.x-costanalytics-3691F3.x-btn-disabled{
+    background-color: #d6d8db!important;
+}
+/*555555*/
+.x-costanalytics-555555{
+    background-color: #AAAAAA!important;
+}
+
+.x-costanalytics-555555.x-btn-over{
+    background-color: #BBBBBB!important;
+}
+
+.x-costanalytics-555555.x-btn-pressed{
+    background-color: #666666!important;
+    box-shadow: 0 1px 1px #000000 inset;
+}
+
+.x-costanalytics-555555.x-btn-disabled{
+    background-color: #d6d8db!important;
+}
+/*6262E8*/
+.x-costanalytics-6262E8{
+    background-color: #CCCEEE!important;
+}
+
+.x-costanalytics-6262E8.x-btn-over{
+    background-color: #D5D6F0!important;
+}
+
+.x-costanalytics-6262E8.x-btn-pressed{
+    background-color: #7378DF!important;
+    box-shadow: 0 1px 1px #141478 inset;
+}
+
+.x-costanalytics-6262E8.x-btn-disabled{
+    background-color: #d6d8db!important;
+}
+/*spend details*/
+.x-costanalytics-details-header{
+    background: #fff;
+    border-radius: 0;
+    margin: 12px 0 0 0;
+    border-bottom: 1px solid #f3f5f8;
+}
+
+.x-costanalytics-details{
+    background: #fff;
+    border-radius: 0;
+}
+
+.x-costanalytics-details-header table,
+.x-costanalytics-details table{
+    border-collapse: collapse;
+    width: 100%;
+    max-width: 1100px;
+    table-layout: fixed;
+}
+
+.x-costanalytics-details-header td,
+.x-costanalytics-details td{
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    text-align: left;
+    padding: 0 0 0 20px;
+}
+
+.x-costanalytics-details .x-empty{
+    text-align: center;
+}
+
+.x-costanalytics-details-header .title td{
+    height: 34px;
+    vertical-align: bottom;
+    padding-bottom: 6px;
+}
+
+.x-costanalytics-details-header td.title{
+    vertical-align: middle;
+    font-family: OpenSansSemiBold;
+    padding-top: 8px;
+}
+
+.x-costanalytics-details-header .value td{
+    vertical-align: top;
+    font-family: OpenSansSemiBold;
+    height: 30px;
+}
+
+.x-costanalytics-details td{
+    padding: 10px 0 10px 20px;
+}
+
+.x-costanalytics-details a{
+    color: #212b3d;
+}
+
+@media only screen and (-webkit-min-device-pixel-ratio: 1.5),
+    only screen and (-o-min-device-pixel-ratio: 3/2),
+    only screen and (min--moz-device-pixel-ratio: 1.5),
+    only screen and (min-device-pixel-ratio: 1.5) {
+
+    .x-costanalytics-icon-line-chart{
+        background-size: 35px 52px;
+        background-image: url(/ui2/images/ui/analytics/line-chart.png)!important;
+    }
+
+    .x-costanalytics-icon-bars-chart{
+        background-size: 35px 52px;
+        background-image: url(/ui2/images/ui/analytics/bars-chart.png)!important;
+    }
+
+    .x-costanalytics-icon-pie-chart{
+        background-size: 35px 52px;
+        background-image: url(/ui2/images/ui/analytics/pie-chart.png)!important;
+    }
+
+    .x-costanalytics-icon-grid{
+        background-size: 35px 52px;
+        background-image: url(/ui2/images/ui/analytics/grid.png)!important;
+    }
+
+    .x-costanalytics-icon-share-mode{
+        background-size: 22px 92px;
+        background-image: url(/ui2/images/ui/analytics/share-mode-retina.png)!important;
+    }
+}

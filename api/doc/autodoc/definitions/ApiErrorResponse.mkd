@@ -1,0 +1,255 @@
+# `ApiErrorResponse` #
+
+Common envelope.
+
+
+
+
+
+## Properties ##
+
+### `warnings` (read-only) ###
+
+
+
+
+An array of 
+objects of type [`ApiMessage`](./../definitions/ApiMessage.mkd).
+
+
+### `meta` (read-only) ###
+
+
+
+
+An object of type [`ApiMetaContainer`](./../definitions/ApiMetaContainer.mkd).
+
+
+
+### `errors` (read-only) ###
+
+
+
+
+An array of 
+objects of type [`ApiMessage`](./../definitions/ApiMessage.mkd).
+
+
+
+
+## Used in ##
+
+  + [`/acl-roles/`](./../rest/api/v1beta0/account/acl-roles/)
+  + [`/cloud-credentials/`](./../rest/api/v1beta0/account/cloud-credentials/)
+  + [`/cloud-credentials/{cloudCredentialsId}/`](./../rest/api/v1beta0/account/cloud-credentials/{cloudCredentialsId}/)
+  + [`/cost-centers/`](./../rest/api/v1beta0/account/cost-centers/)
+  + [`/cost-centers/{costCenterId}/`](./../rest/api/v1beta0/account/cost-centers/{costCenterId}/)
+  + [`/environments/`](./../rest/api/v1beta0/account/environments/)
+  + [`/environments/{envId}/`](./../rest/api/v1beta0/account/environments/{envId}/)
+  + [`/environments/{envId}/clouds/`](./../rest/api/v1beta0/account/environments/{envId}/clouds/)
+  + [`/environments/{envId}/clouds/{cloud}/`](./../rest/api/v1beta0/account/environments/{envId}/clouds/{cloud}/)
+  + [`/environments/{envId}/teams/`](./../rest/api/v1beta0/account/environments/{envId}/teams/)
+  + [`/environments/{envId}/teams/{teamId}/`](./../rest/api/v1beta0/account/environments/{envId}/teams/{teamId}/)
+  + [`/events/`](./../rest/api/v1beta0/account/events/)
+  + [`/events/{eventId}/`](./../rest/api/v1beta0/account/events/{eventId}/)
+  + [`/images/`](./../rest/api/v1beta0/account/images/)
+  + [`/images/{imageId}/`](./../rest/api/v1beta0/account/images/{imageId}/)
+  + [`/images/{imageId}/actions/copy/`](./../rest/api/v1beta0/account/images/{imageId}/actions/copy/)
+  + [`/orchestration-rules/`](./../rest/api/v1beta0/account/orchestration-rules/)
+  + [`/orchestration-rules/{orchestrationRuleId}/`](./../rest/api/v1beta0/account/orchestration-rules/{orchestrationRuleId}/)
+  + [`/os/`](./../rest/api/v1beta0/account/os/)
+  + [`/os/{osId}/`](./../rest/api/v1beta0/account/os/{osId}/)
+  + [`/role-categories/`](./../rest/api/v1beta0/account/role-categories/)
+  + [`/role-categories/{roleCategoryId}/`](./../rest/api/v1beta0/account/role-categories/{roleCategoryId}/)
+  + [`/roles/`](./../rest/api/v1beta0/account/roles/)
+  + [`/roles/{roleId}/`](./../rest/api/v1beta0/account/roles/{roleId}/)
+  + [`/roles/{roleId}/global-variables/`](./../rest/api/v1beta0/account/roles/{roleId}/global-variables/)
+  + [`/roles/{roleId}/global-variables/{globalVariableName}/`](./../rest/api/v1beta0/account/roles/{roleId}/global-variables/{globalVariableName}/)
+  + [`/roles/{roleId}/images/`](./../rest/api/v1beta0/account/roles/{roleId}/images/)
+  + [`/roles/{roleId}/images/{imageId}/`](./../rest/api/v1beta0/account/roles/{roleId}/images/{imageId}/)
+  + [`/roles/{roleId}/images/{imageId}/actions/replace/`](./../rest/api/v1beta0/account/roles/{roleId}/images/{imageId}/actions/replace/)
+  + [`/roles/{roleId}/orchestration-rules/`](./../rest/api/v1beta0/account/roles/{roleId}/orchestration-rules/)
+  + [`/roles/{roleId}/orchestration-rules/{orchestrationRuleId}/`](./../rest/api/v1beta0/account/roles/{roleId}/orchestration-rules/{orchestrationRuleId}/)
+  + [`/scripts/`](./../rest/api/v1beta0/account/scripts/)
+  + [`/scripts/{scriptId}/`](./../rest/api/v1beta0/account/scripts/{scriptId}/)
+  + [`/scripts/{scriptId}/script-versions/`](./../rest/api/v1beta0/account/scripts/{scriptId}/script-versions/)
+  + [`/scripts/{scriptId}/script-versions/{scriptVersionNumber}/`](./../rest/api/v1beta0/account/scripts/{scriptId}/script-versions/{scriptVersionNumber}/)
+  + [`/teams/`](./../rest/api/v1beta0/account/teams/)
+  + [`/teams/{teamId}/`](./../rest/api/v1beta0/account/teams/{teamId}/)
+  + [`/{envId}/cloud-credentials/`](./../rest/api/v1beta0/user/{envId}/cloud-credentials/)
+  + [`/{envId}/cloud-credentials/{cloudCredentialsId}/`](./../rest/api/v1beta0/user/{envId}/cloud-credentials/{cloudCredentialsId}/)
+  + [`/{envId}/cost-centers/`](./../rest/api/v1beta0/user/{envId}/cost-centers/)
+  + [`/{envId}/cost-centers/{costCenterId}/`](./../rest/api/v1beta0/user/{envId}/cost-centers/{costCenterId}/)
+  + [`/{envId}/events/`](./../rest/api/v1beta0/user/{envId}/events/)
+  + [`/{envId}/events/{eventId}/`](./../rest/api/v1beta0/user/{envId}/events/{eventId}/)
+  + [`/{envId}/farm-roles/{farmRoleId}/`](./../rest/api/v1beta0/user/{envId}/farm-roles/{farmRoleId}/)
+  + [`/{envId}/farm-roles/{farmRoleId}/actions/import-server/`](./../rest/api/v1beta0/user/{envId}/farm-roles/{farmRoleId}/actions/import-server/)
+  + [`/{envId}/farm-roles/{farmRoleId}/global-variables/`](./../rest/api/v1beta0/user/{envId}/farm-roles/{farmRoleId}/global-variables/)
+  + [`/{envId}/farm-roles/{farmRoleId}/global-variables/{globalVariableName}/`](./../rest/api/v1beta0/user/{envId}/farm-roles/{farmRoleId}/global-variables/{globalVariableName}/)
+  + [`/{envId}/farm-roles/{farmRoleId}/instance/`](./../rest/api/v1beta0/user/{envId}/farm-roles/{farmRoleId}/instance/)
+  + [`/{envId}/farm-roles/{farmRoleId}/orchestration-rules/`](./../rest/api/v1beta0/user/{envId}/farm-roles/{farmRoleId}/orchestration-rules/)
+  + [`/{envId}/farm-roles/{farmRoleId}/orchestration-rules/{orchestrationRuleId}/`](./../rest/api/v1beta0/user/{envId}/farm-roles/{farmRoleId}/orchestration-rules/{orchestrationRuleId}/)
+  + [`/{envId}/farm-roles/{farmRoleId}/placement/`](./../rest/api/v1beta0/user/{envId}/farm-roles/{farmRoleId}/placement/)
+  + [`/{envId}/farm-roles/{farmRoleId}/scaling/`](./../rest/api/v1beta0/user/{envId}/farm-roles/{farmRoleId}/scaling/)
+  + [`/{envId}/farm-roles/{farmRoleId}/scaling/{metricName}/`](./../rest/api/v1beta0/user/{envId}/farm-roles/{farmRoleId}/scaling/{metricName}/)
+  + [`/{envId}/farm-roles/{farmRoleId}/servers/`](./../rest/api/v1beta0/user/{envId}/farm-roles/{farmRoleId}/servers/)
+  + [`/{envId}/farms/`](./../rest/api/v1beta0/user/{envId}/farms/)
+  + [`/{envId}/farms/{farmId}/`](./../rest/api/v1beta0/user/{envId}/farms/{farmId}/)
+  + [`/{envId}/farms/{farmId}/actions/clone/`](./../rest/api/v1beta0/user/{envId}/farms/{farmId}/actions/clone/)
+  + [`/{envId}/farms/{farmId}/actions/launch/`](./../rest/api/v1beta0/user/{envId}/farms/{farmId}/actions/launch/)
+  + [`/{envId}/farms/{farmId}/actions/terminate/`](./../rest/api/v1beta0/user/{envId}/farms/{farmId}/actions/terminate/)
+  + [`/{envId}/farms/{farmId}/farm-roles/`](./../rest/api/v1beta0/user/{envId}/farms/{farmId}/farm-roles/)
+  + [`/{envId}/farms/{farmId}/global-variables/`](./../rest/api/v1beta0/user/{envId}/farms/{farmId}/global-variables/)
+  + [`/{envId}/farms/{farmId}/global-variables/{globalVariableName}/`](./../rest/api/v1beta0/user/{envId}/farms/{farmId}/global-variables/{globalVariableName}/)
+  + [`/{envId}/farms/{farmId}/servers/`](./../rest/api/v1beta0/user/{envId}/farms/{farmId}/servers/)
+  + [`/{envId}/images/`](./../rest/api/v1beta0/user/{envId}/images/)
+  + [`/{envId}/images/{imageId}/`](./../rest/api/v1beta0/user/{envId}/images/{imageId}/)
+  + [`/{envId}/images/{imageId}/actions/copy/`](./../rest/api/v1beta0/user/{envId}/images/{imageId}/actions/copy/)
+  + [`/{envId}/os/`](./../rest/api/v1beta0/user/{envId}/os/)
+  + [`/{envId}/os/{osId}/`](./../rest/api/v1beta0/user/{envId}/os/{osId}/)
+  + [`/{envId}/projects/`](./../rest/api/v1beta0/user/{envId}/projects/)
+  + [`/{envId}/projects/{projectId}/`](./../rest/api/v1beta0/user/{envId}/projects/{projectId}/)
+  + [`/{envId}/role-categories/`](./../rest/api/v1beta0/user/{envId}/role-categories/)
+  + [`/{envId}/role-categories/{roleCategoryId}/`](./../rest/api/v1beta0/user/{envId}/role-categories/{roleCategoryId}/)
+  + [`/{envId}/roles/`](./../rest/api/v1beta0/user/{envId}/roles/)
+  + [`/{envId}/roles/{roleId}/`](./../rest/api/v1beta0/user/{envId}/roles/{roleId}/)
+  + [`/{envId}/roles/{roleId}/global-variables/`](./../rest/api/v1beta0/user/{envId}/roles/{roleId}/global-variables/)
+  + [`/{envId}/roles/{roleId}/global-variables/{globalVariableName}/`](./../rest/api/v1beta0/user/{envId}/roles/{roleId}/global-variables/{globalVariableName}/)
+  + [`/{envId}/roles/{roleId}/images/`](./../rest/api/v1beta0/user/{envId}/roles/{roleId}/images/)
+  + [`/{envId}/roles/{roleId}/images/{imageId}/`](./../rest/api/v1beta0/user/{envId}/roles/{roleId}/images/{imageId}/)
+  + [`/{envId}/roles/{roleId}/images/{imageId}/actions/replace/`](./../rest/api/v1beta0/user/{envId}/roles/{roleId}/images/{imageId}/actions/replace/)
+  + [`/{envId}/roles/{roleId}/orchestration-rules/`](./../rest/api/v1beta0/user/{envId}/roles/{roleId}/orchestration-rules/)
+  + [`/{envId}/roles/{roleId}/orchestration-rules/{orchestrationRuleId}/`](./../rest/api/v1beta0/user/{envId}/roles/{roleId}/orchestration-rules/{orchestrationRuleId}/)
+  + [`/{envId}/scaling-metrics/`](./../rest/api/v1beta0/user/{envId}/scaling-metrics/)
+  + [`/{envId}/scaling-metrics/{metricName}/`](./../rest/api/v1beta0/user/{envId}/scaling-metrics/{metricName}/)
+  + [`/{envId}/scripts/`](./../rest/api/v1beta0/user/{envId}/scripts/)
+  + [`/{envId}/scripts/{scriptId}/`](./../rest/api/v1beta0/user/{envId}/scripts/{scriptId}/)
+  + [`/{envId}/scripts/{scriptId}/script-versions/`](./../rest/api/v1beta0/user/{envId}/scripts/{scriptId}/script-versions/)
+  + [`/{envId}/scripts/{scriptId}/script-versions/{scriptVersionNumber}/`](./../rest/api/v1beta0/user/{envId}/scripts/{scriptId}/script-versions/{scriptVersionNumber}/)
+  + [`/{envId}/servers/`](./../rest/api/v1beta0/user/{envId}/servers/)
+  + [`/{envId}/servers/{serverId}/`](./../rest/api/v1beta0/user/{envId}/servers/{serverId}/)
+  + [`/{envId}/servers/{serverId}/actions/reboot/`](./../rest/api/v1beta0/user/{envId}/servers/{serverId}/actions/reboot/)
+  + [`/{envId}/servers/{serverId}/actions/resume/`](./../rest/api/v1beta0/user/{envId}/servers/{serverId}/actions/resume/)
+  + [`/{envId}/servers/{serverId}/actions/suspend/`](./../rest/api/v1beta0/user/{envId}/servers/{serverId}/actions/suspend/)
+  + [`/{envId}/servers/{serverId}/actions/terminate/`](./../rest/api/v1beta0/user/{envId}/servers/{serverId}/actions/terminate/)
+
+## Swagger Definition ##
+
+    {
+      "description": "Common envelope.", 
+      "properties": {
+        "errors": {
+          "items": {
+            "$ref": "#/definitions/ApiMessage"
+          }, 
+          "readOnly": true, 
+          "type": "array"
+        }, 
+        "meta": {
+          "$ref": "#/definitions/ApiMetaContainer", 
+          "readOnly": true
+        }, 
+        "warnings": {
+          "items": {
+            "$ref": "#/definitions/ApiMessage"
+          }, 
+          "readOnly": true, 
+          "type": "array"
+        }
+      }, 
+      "x-usedIn": [
+        "/acl-roles/", 
+        "/cloud-credentials/", 
+        "/cloud-credentials/{cloudCredentialsId}/", 
+        "/cost-centers/", 
+        "/cost-centers/{costCenterId}/", 
+        "/environments/", 
+        "/environments/{envId}/", 
+        "/environments/{envId}/clouds/", 
+        "/environments/{envId}/clouds/{cloud}/", 
+        "/environments/{envId}/teams/", 
+        "/environments/{envId}/teams/{teamId}/", 
+        "/events/", 
+        "/events/{eventId}/", 
+        "/images/", 
+        "/images/{imageId}/", 
+        "/images/{imageId}/actions/copy/", 
+        "/orchestration-rules/", 
+        "/orchestration-rules/{orchestrationRuleId}/", 
+        "/os/", 
+        "/os/{osId}/", 
+        "/role-categories/", 
+        "/role-categories/{roleCategoryId}/", 
+        "/roles/", 
+        "/roles/{roleId}/", 
+        "/roles/{roleId}/global-variables/", 
+        "/roles/{roleId}/global-variables/{globalVariableName}/", 
+        "/roles/{roleId}/images/", 
+        "/roles/{roleId}/images/{imageId}/", 
+        "/roles/{roleId}/images/{imageId}/actions/replace/", 
+        "/roles/{roleId}/orchestration-rules/", 
+        "/roles/{roleId}/orchestration-rules/{orchestrationRuleId}/", 
+        "/scripts/", 
+        "/scripts/{scriptId}/", 
+        "/scripts/{scriptId}/script-versions/", 
+        "/scripts/{scriptId}/script-versions/{scriptVersionNumber}/", 
+        "/teams/", 
+        "/teams/{teamId}/", 
+        "/{envId}/cloud-credentials/", 
+        "/{envId}/cloud-credentials/{cloudCredentialsId}/", 
+        "/{envId}/cost-centers/", 
+        "/{envId}/cost-centers/{costCenterId}/", 
+        "/{envId}/events/", 
+        "/{envId}/events/{eventId}/", 
+        "/{envId}/farm-roles/{farmRoleId}/", 
+        "/{envId}/farm-roles/{farmRoleId}/actions/import-server/", 
+        "/{envId}/farm-roles/{farmRoleId}/global-variables/", 
+        "/{envId}/farm-roles/{farmRoleId}/global-variables/{globalVariableName}/", 
+        "/{envId}/farm-roles/{farmRoleId}/instance/", 
+        "/{envId}/farm-roles/{farmRoleId}/orchestration-rules/", 
+        "/{envId}/farm-roles/{farmRoleId}/orchestration-rules/{orchestrationRuleId}/", 
+        "/{envId}/farm-roles/{farmRoleId}/placement/", 
+        "/{envId}/farm-roles/{farmRoleId}/scaling/", 
+        "/{envId}/farm-roles/{farmRoleId}/scaling/{metricName}/", 
+        "/{envId}/farm-roles/{farmRoleId}/servers/", 
+        "/{envId}/farms/", 
+        "/{envId}/farms/{farmId}/", 
+        "/{envId}/farms/{farmId}/actions/clone/", 
+        "/{envId}/farms/{farmId}/actions/launch/", 
+        "/{envId}/farms/{farmId}/actions/terminate/", 
+        "/{envId}/farms/{farmId}/farm-roles/", 
+        "/{envId}/farms/{farmId}/global-variables/", 
+        "/{envId}/farms/{farmId}/global-variables/{globalVariableName}/", 
+        "/{envId}/farms/{farmId}/servers/", 
+        "/{envId}/images/", 
+        "/{envId}/images/{imageId}/", 
+        "/{envId}/images/{imageId}/actions/copy/", 
+        "/{envId}/os/", 
+        "/{envId}/os/{osId}/", 
+        "/{envId}/projects/", 
+        "/{envId}/projects/{projectId}/", 
+        "/{envId}/role-categories/", 
+        "/{envId}/role-categories/{roleCategoryId}/", 
+        "/{envId}/roles/", 
+        "/{envId}/roles/{roleId}/", 
+        "/{envId}/roles/{roleId}/global-variables/", 
+        "/{envId}/roles/{roleId}/global-variables/{globalVariableName}/", 
+        "/{envId}/roles/{roleId}/images/", 
+        "/{envId}/roles/{roleId}/images/{imageId}/", 
+        "/{envId}/roles/{roleId}/images/{imageId}/actions/replace/", 
+        "/{envId}/roles/{roleId}/orchestration-rules/", 
+        "/{envId}/roles/{roleId}/orchestration-rules/{orchestrationRuleId}/", 
+        "/{envId}/scaling-metrics/", 
+        "/{envId}/scaling-metrics/{metricName}/", 
+        "/{envId}/scripts/", 
+        "/{envId}/scripts/{scriptId}/", 
+        "/{envId}/scripts/{scriptId}/script-versions/", 
+        "/{envId}/scripts/{scriptId}/script-versions/{scriptVersionNumber}/", 
+        "/{envId}/servers/", 
+        "/{envId}/servers/{serverId}/", 
+        "/{envId}/servers/{serverId}/actions/reboot/", 
+        "/{envId}/servers/{serverId}/actions/resume/", 
+        "/{envId}/servers/{serverId}/actions/suspend/", 
+        "/{envId}/servers/{serverId}/actions/terminate/"
+      ]
+    }

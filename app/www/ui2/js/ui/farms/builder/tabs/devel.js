@@ -1,50 +1,124 @@
-Scalr.regPage('Scalr.ui.farms.builder.tabs.devel', function () {
-	return Ext.create('Scalr.ui.FarmsBuilderTab', {
-		tabTitle: 'Development options',
-		cache: {},
+Ext.define('Scalr.ui.FarmRoleEditorTab.Devel', {
+    extend: 'Scalr.ui.FarmRoleEditorTab',
+    tabTitle: 'Development',
+    itemId: 'devel',
 
-		isEnabled: function (record) {
-			
-			var pageParameters = Ext.urlDecode(window.location.search.substring(1));
-			return (pageParameters['devel'] == 1);
-		},
+    cls: 'x-panel-column-left-with-tabs',
 
-		getDefaultValues: function (record) {
-			return {
-				'user-data.scm_branch': 'trunk',
-				'user-data.szr_version': ''
-			};
-		},
+    settings: {
+        'user-data.scm_branch': '',
+        'user-data.szr_version': '',
+        'base.custom_user_data': '',
+        'base.devel_repository': '',
+        'openstack.boot_from_volume': 0,
+        'openstack.keep_fip_on_suspend': 0,
+        'scalr-labs.fatmouse_update': 0
+    },
 
-		showTab: function (record) {
-			var settings = record.get('settings');
+    isEnabled: function (record) {
+        return this.callParent(arguments) && Scalr.flags['betaMode'];
+    },
 
-			this.down('[name="user-data.scm_branch"]').setValue(settings['user-data.scm_branch'] || 'trunk');
-			this.down('[name="user-data.szr_version"]').setValue(settings['user-data.szr_version'] || '');
-		},
+    showTab: function (record) {
+        var settings = record.get('settings'),
+            tabParams = this.up('#farmDesigner').moduleParams.tabParams;
 
-		hideTab: function (record) {
-			var settings = record.get('settings');
-			settings['user-data.scm_branch'] = this.down('[name="user-data.scm_branch"]').getValue();
-			settings['user-data.szr_version'] = this.down('[name="user-data.szr_version"]').getValue();
-			record.set('settings', settings);
-		},
+        this.down('[name="base.devel_repository"]').store.loadData(Ext.Array.map(tabParams['scalr.scalarizr_update.devel_repos']||[], function(item){return [item, item]}));
 
-		items: [{
-			xtype: 'fieldset',
-			items: [{
-				xtype: 'textfield',
-				anchor: '100%',
-				labelWidth: 200,
-				fieldLabel: 'SCM Branch',
-				name: 'user-data.scm_branch'
-			}, {
-				xtype: 'textfield',
-				anchor: '100%',
-				labelWidth: 200,
-				fieldLabel: 'Scalarizr version',
-				name: 'user-data.szr_version'
-			}]
-		}]
-	});
+        this.down('[name="user-data.scm_branch"]').setValue(settings['user-data.scm_branch'] || 'master');
+        this.down('[name="user-data.szr_version"]').setValue(settings['user-data.szr_version'] || '');
+        this.down('[name="base.custom_user_data"]').setValue(settings['base.custom_user_data'] || '');
+        this.down('[name="base.devel_repository"]').setValue(settings['base.devel_repository'] || '');
+        this.down('[name="openstack.boot_from_volume"]').setValue(settings['openstack.boot_from_volume'] || 0);
+        
+        this.down('[name="scalr-labs.fatmouse_update"]').setValue(settings['scalr-labs.fatmouse_update'] || 0);
+        
+        this.down('[name="openstack.keep_fip_on_suspend"]').setValue(settings['openstack.keep_fip_on_suspend'] || 0);
+
+        this.down('[name="base.union_script_executor"]').setValue(settings['base.union_script_executor'] || 1);
+
+        this.down('[name="user-data.enabled"]')[settings['user-data.scm_branch'] || settings['user-data.szr_version'] ? 'expand' : 'collapse']();
+    },
+
+    hideTab: function (record) {
+        var settings = record.get('settings'),
+            userDataEnabled = !this.down('[name="user-data.enabled"]').collapsed;
+
+        settings['user-data.scm_branch'] = userDataEnabled ? Ext.String.trim(this.down('[name="user-data.scm_branch"]').getValue()) : '';
+        settings['user-data.szr_version'] = userDataEnabled ? this.down('[name="user-data.szr_version"]').getValue() : '';
+        settings['base.devel_repository'] = userDataEnabled ? this.down('[name="base.devel_repository"]').getValue() : '';
+
+        settings['base.custom_user_data'] = this.down('[name="base.custom_user_data"]').getValue();
+        settings['openstack.boot_from_volume'] = this.down('[name="openstack.boot_from_volume"]').getValue();
+        settings['openstack.keep_fip_on_suspend'] = this.down('[name="openstack.keep_fip_on_suspend"]').getValue();
+        settings['base.union_script_executor'] = this.down('[name="base.union_script_executor"]').getValue() ? 1 : 0;
+        settings['scalr-labs.fatmouse_update'] = this.down('[name="scalr-labs.fatmouse_update"]').getValue() ? 1 : 0;
+
+        record.set('settings', settings);
+    },
+
+    __items: [{
+        xtype: 'fieldset',
+        title: ' Scalarizr branch & version',
+        name: 'user-data.enabled',
+        checkboxToggle: true,
+        collapsible: true,
+        toggleOnTitleClick: true,
+        defaults: {
+            maxWidth: 600,
+            anchor: '100%',
+            labelWidth: 130
+        },
+        items: [{
+            xtype: 'textfield',
+            fieldLabel: 'SCM Branch',
+            name: 'user-data.scm_branch'
+        }, {
+            xtype: 'textfield',
+            fieldLabel: 'Scalarizr version',
+            name: 'user-data.szr_version'
+        }, {
+            xtype: 'combo',
+            queryMode: 'local',
+            valueField: 'value',
+            displayField: 'text',
+            store: Ext.create('Ext.data.ArrayStore', {fields: ['value', 'text']}),
+            editable: false,
+            fieldLabel: 'Devel repository',
+            name: 'base.devel_repository'
+        }]
+    }, {
+        xtype: 'fieldset',
+        itemId: 'additionaltags',
+        title: 'Custom user-data&nbsp;&nbsp;<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-globalvars" data-qtip="Custom user-data supports Global Variable Interpolation" />',
+        collapsible: true,
+        collapsed: true,
+        toggleOnTitleClick: true,
+        items: [{
+            xtype: 'textarea',
+            width: 600,
+            height: 200,
+            name: 'base.custom_user_data'
+        }]
+    },{
+        xtype: 'fieldset',
+        cls: 'x-fieldset-separator-none',
+        items: [{
+            xtype: 'checkbox',
+            name: 'openstack.boot_from_volume',
+            boxLabel: 'Use cinder volume as root device'
+        }, {
+            xtype: 'checkbox',
+            name: 'openstack.keep_fip_on_suspend',
+            boxLabel: 'Keep floating IP on server suspend'
+        }, {
+            xtype: 'checkbox',
+            name: 'base.union_script_executor',
+            boxLabel: 'Union script executor'
+        }, {
+            xtype: 'checkbox',
+            name: 'scalr-labs.fatmouse_update',
+            boxLabel: 'Fatmouse managed agent update'
+        }]
+    }]
 });

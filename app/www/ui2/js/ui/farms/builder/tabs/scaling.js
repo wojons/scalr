@@ -1,986 +1,1822 @@
-Scalr.regPage('Scalr.ui.farms.builder.tabs.scaling', function (moduleTabParams) {
-	return Ext.create('Scalr.ui.FarmsBuilderTab', {
-		tabTitle: 'Scaling options',
-		itemId: 'scaling',
-		cache: {},
+Ext.define('Scalr.ui.FarmRoleEditorTab.Scaling', {
+    extend: 'Scalr.ui.FarmRoleEditorTab',
+    tabTitle: 'Scaling',
+    itemId: 'scaling',
 
-		addAlgoTab: function (metric, values, activate) {
-			var tabpanel = this.down('#algos'), p = null, alias = metric.get('alias'), field = 'scaling.' + metric.get('id') + '.';
-			if (alias == 'bw') {
-				p = tabpanel.add({
-					title: metric.get('name'),
-					alias: metric.get('alias'),
-					metricId: metric.get('id'),
-					field: field,
-					getValues: function (comp) {
-						return {
-							type: this.down('[name="'+ comp.field + 'type"]').getValue(),
-							min: this.down('[name="' + comp.field + 'min"]').getValue(),
-							max: this.down('[name="' + comp.field + 'max"]').getValue()
-						};
-					},
-					items: [{
-						xtype: 'fieldcontainer',
-						layout: 'hbox',
-						hideLabel: true,
-						items: [{
-							xtype: 'displayfield',
-							value: 'Use'
-						}, {
-							xtype: 'combo',
-							hideLabel: true,
-							store: [ 'inbound', 'outbound' ],
-							allowBlank: false,
-							editable: false,
-							name: field + 'type',
-							queryMode: 'local',
-							margin: '0 0 0 3',
-							width: 100
-						}, {
-							xtype: 'displayfield',
-							value: ' bandwidth usage value for scaling',
-							margin: '0 0 0 3'
-						}]
-					}, {
-						xtype: 'fieldcontainer',
-						layout: 'hbox',
-						hideLabel: true,
-						items: [{
-							xtype: 'displayfield',
-							value: 'Scale in (release instances) when average bandwidth usage on role is less than'
-						}, {
-							xtype: 'textfield',
-							name: field + 'min',
-							margin: '0 0 0 3',
-							width: 40
-						}, {
-							xtype: 'displayfield',
-							value: 'Mbit/s',
-							margin: '0 0 0 3'
-						}]
-					}, {
-						xtype: 'fieldcontainer',
-						layout: 'hbox',
-						hideLabel: true,
-						items: [{
-							xtype: 'displayfield',
-							value: 'Scale out (add more instances) when average bandwidth usage on role is more than'
-						}, {
-							xtype: 'textfield',
-							name: field + 'max',
-							margin: '0 0 0 3',
-							width: 40
-						}, {
-							xtype: 'displayfield',
-							value: 'Mbit/s',
-							margin: '0 0 0 3'
-						}]
-					}]
-				});
+    layout: {
+        type: 'hbox',
+        align: 'stretch'
+    },
 
-				this.down('[name="' + field + 'min"]').setValue(values['min'] || '10');
-				this.down('[name="' + field + 'max"]').setValue(values['max'] || '40');
-				this.down('[name="' + field + 'type"]').setValue(values['type'] || 'outbound');
+    settings: {
+        'scaling': undefined,
+        'scaling.min_instances': 1,
+        'scaling.max_instances': 2,
+        'scaling.polling_interval': 1,
+        'scaling.keep_oldest': 0,
+        'scaling.ignore_full_hour': 0,
+        'scaling.safe_shutdown': 0,
+        'scaling.exclude_dbmsr_master': 0,
+        'scaling.one_by_one': 0,
+        'scaling.enabled': function(record) {
+            return record.hasBehavior('rabbitmq') ? 0 : Scalr.getDefaultValue('AUTO_SCALING');
+        } ,
+        'scaling.upscale.timeout_enabled': undefined,
+        'scaling.upscale.timeout': undefined,
+        'scaling.downscale.timeout_enabled': undefined,
+        'scaling.downscale.timeout': undefined,
+        'scaling.downscale_only_if_all_metrics_true': undefined,
+        'base.resume_strategy': undefined,
+        'base.terminate_strategy': undefined
+    },
 
-			} else if (alias == 'la') {
-				p = tabpanel.add({
-					title: metric.get('name'),
-					alias: metric.get('alias'),
-					metricId: metric.get('id'),
-					field: field,
-					getValues: function (comp) {
-						return {
-							period: this.down('[name="' + comp.field + 'period"]').getValue(),
-							min: this.down('[name="' + comp.field + 'min"]').getValue(),
-							max: this.down('[name="' + comp.field + 'max"]').getValue()
-						};
-					},
-					items: [{
-						xtype: 'fieldcontainer',
-						layout: 'hbox',
-						hideLabel: true,
-						items: [{
-							xtype: 'displayfield',
-							value: 'Use'
-						}, {
-							xtype: 'combo',
-							hideLabel: true,
-							store: ['1','5','15'],
-							allowBlank: false,
-							editable: false,
-							name: field + 'period',
-							queryMode: 'local',
-							margin: '0 0 0 3',
-							width: 80
-						}, {
-							xtype: 'displayfield',
-							value: 'minute(s) load averages for scaling',
-							margin: '0 0 0 3'
-						}]
-					}, {
-						xtype: 'fieldcontainer',
-						layout: 'hbox',
-						hideLabel: true,
-						items: [{
-							xtype: 'displayfield',
-							value: 'Scale in (release instances) when LA goes under'
-						}, {
-							xtype: 'textfield',
-							name: field + 'min',
-							margin: '0 0 0 3',
-							width: 40
-						}]
-					}, {
-						xtype: 'fieldcontainer',
-						layout: 'hbox',
-						hideLabel: true,
-						items: [{
-							xtype: 'displayfield',
-							value: 'Scale out (add more instances) when LA goes over'
-						}, {
-							xtype: 'textfield',
-							name: field + 'max',
-							margin: '0 0 0 3',
-							width: 40
-						}]
-					}]
-				});
+    isEnabled: function (record) {
+        return this.callParent(arguments) && !record.get('behaviors').match('mongodb');
+    },
 
-				this.down('[name="' + field + 'min"]').setValue(values['min'] || '2');
-				this.down('[name="' + field + 'max"]').setValue(values['max'] || '5');
-				this.down('[name="' + field + 'period"]').setValue(values['period'] || '15');
+    onRoleUpdate: function(record, name, value, oldValue) {
+        if (this.suspendOnRoleUpdate > 0 || !this.isVisible()) {
+            return;
+        }
 
-			} else if (alias == 'sqs') {
-				p = tabpanel.add({
-					title: metric.get('name'),
-					alias: metric.get('alias'),
-					metricId: metric.get('id'),
-					field: field,
-					getValues: function (comp) {
-						return {
-							queue_name: this.down('[name="' + comp.field + 'queue_name"]').getValue(),
-							min: this.down('[name="' + comp.field + 'min"]').getValue(),
-							max: this.down('[name="' + comp.field + 'max"]').getValue()
-						};
-					},
-					items: [{
-						fieldLabel: 'Queue name',
-						xtype: 'textfield',
-						name: field + 'queue_name',
-						labelWidth: 80,
-						width: 300
-					}, {
-						xtype: 'fieldcontainer',
-						layout: 'hbox',
-						hideLabel: true,
-						items: [{
-							xtype: 'displayfield',
-							value: 'Scale out (add more instances) when queue size goes over'
-						}, {
-							xtype: 'textfield',
-							name: field + 'max',
-							margin:'0 0 0 3',
-							width: 40
-						}, {
-							xtype: 'displayfield',
-							value: 'items',
-							margin: '0 0 0 3'
-						}]
-					}, {
-						xtype: 'fieldcontainer',
-						layout: 'hbox',
-						hideLabel: true,
-						items: [{
-							xtype: 'displayfield',
-							value: 'Scale in (release instances) when queue size goes under'
-						}, {
-							xtype: 'textfield',
-							name: field + 'min',
-							margin: '0 0 0 3',
-							width: 40
-						}, {
-							xtype: 'displayfield',
-							value: 'items',
-							margin: '0 0 0 3'
-						}]
-					}]
-				});
+        var fullname = name.join('.'),
+            comp;
+        if (fullname === 'settings.scaling.min_instances') {
+            comp = this.down('[name="scaling.min_instances"]');
+            this.down('#scalinggrid').refreshEmptyText(value);
+        } else if (fullname === 'settings.scaling.max_instances') {
+            comp = this.down('[name="scaling.max_instances"]');
+        }
 
-				this.down('[name="' + field + 'min"]').setValue(values['min'] || '');
-				this.down('[name="' + field + 'max"]').setValue(values['max'] || '');
-				this.down('[name="' + field + 'queue_name"]').setValue(values['queue_name'] || '');
+        if (comp) {
+            comp.suspendEvents(false);
+            comp.setValue(value);
+            comp.resumeEvents();
+        }
+    },
 
-			} else if (alias == 'custom') {
-				p = tabpanel.add({
-					title: metric.get('name'),
-					field: field,
-					alias: metric.get('alias'),
-					metricId: metric.get('id'),
-					getValues: function (comp) {
-						return {
-							min: this.down('[name="' + comp.field + 'min"]').getValue(),
-							max: this.down('[name="' + comp.field + 'max"]').getValue()
-						};
-					},
-					items: [{
-						xtype: 'fieldcontainer',
-						layout: 'hbox',
-						hideLabel: true,
-						items: [{
-							xtype: 'displayfield',
-							value: 'Scale out (add more instances) when metric value goes over'
-						}, {
-							xtype: 'textfield',
-							name: field + 'max',
-							margin: '0 0 0 3',
-							width: 40
-						}]
-					}, {
-						xtype: 'fieldcontainer',
-						layout: 'hbox',
-						hideLabel: true,
-						items: [{
-							xtype: 'displayfield',
-							value: 'Scale in (release instances) when metric value goes under'
-						}, {
-							xtype: 'textfield',
-							name: field + 'min',
-							margin: '0 0 0 3',
-							width: 40
-						}]
-					}]
-				});
+    isTabReadonly: function(record) {
+        var behaviors = record.get('behaviors').split(','),
+            isCfRole = Ext.Array.contains(behaviors, 'cf_cloud_controller') || Ext.Array.contains(behaviors, 'cf_health_manager'),
+            isRabbitMqRole = Ext.Array.contains(behaviors, 'rabbitmq');
 
-				this.down('[name="' + field + 'min"]').setValue(values['min'] || '');
-				this.down('[name="' + field + 'max"]').setValue(values['max'] || '');
+        return isCfRole || isRabbitMqRole;
+    },
+    showTab: function (record) {
+        var me = this,
+            settings = record.get('settings'),
+            scaling = record.get('scaling'),
+            metrics = me.up('#farmDesigner').moduleParams.tabParams['metrics'],
+            readonly = me.isTabReadonly(record),
+            platform = record.get('platform'),
+            errors = record.get('errors', true) || {},
+            grid,
+            field, disableStrategy,
+            isScalarized = record.get('isScalarized') == 1;
 
-			} else if (alias == 'ram') {
-				p = tabpanel.add({
-					title: metric.get('name'),
-					alias: metric.get('alias'),
-					metricId: metric.get('id'),
-					field: field,
-					getValues: function (comp) {
-						return {
-							use_cached: this.down('[name="' + comp.field + 'use_cached"]').getValue(),
-							min: this.down('[name="' + comp.field + 'min"]').getValue(),
-							max: this.down('[name="' + comp.field + 'max"]').getValue()
-						};
-					},
-					items: [{
-						xtype: 'fieldcontainer',
-						layout: 'hbox',
-						hideLabel: true,
-						items: [{
-							xtype: 'displayfield',
-							value: 'Scale out (add more instances) when free RAM goes under'
-						}, {
-							xtype: 'textfield',
-							name: field + 'min',
-							margin: '0 0 0 3',
-							width: 40
-						}, {
-							xtype: 'displayfield',
-							value: 'MB',
-							margin: '0 0 0 3'
-						}]
-					}, {
-						xtype: 'fieldcontainer',
-						layout: 'hbox',
-						hideLabel: true,
-						items: [{
-							xtype: 'displayfield',
-							value: 'Scale in (release instances) when free RAM goes over'
-						}, {
-							xtype: 'textfield',
-							name: field + 'max',
-							margin: '0 0 0 3',
-							width: 40
-						}, {
-							xtype: 'displayfield',
-							value: 'MB',
-							margin: '0 0 0 3'
-						}]
-					}, {
-						xtype: 'checkbox',
-						boxLabel: 'Use free+cached ram as scaling metric',
-						name: field + 'use_cached',
-						inputValue: '1'
-					}]
-				});
+        me.suspendLayouts();
 
-				this.down('[name="' + field + 'use_cached"]').setValue(values['use_cached'] || false);
-				this.down('[name="' + field + 'min"]').setValue(values['min'] || '');
-				this.down('[name="' + field + 'max"]').setValue(values['max'] || '');
+        if (record.get('behaviors').match("rabbitmq")) {
+            settings['scaling.enabled'] = 0;
+        }
+        me.down('[name="scaling.enabled"]').setValue(settings['scaling.enabled'] == 1 ? '1' : '0').setReadOnly(readonly);
+        me.down('#scalinggrid').setReadOnly(readonly);
 
-			} else if (alias == 'http') {
-				p = tabpanel.add({
-					title: metric.get('name'),
-					alias: metric.get('alias'),
-					metricId: metric.get('id'),
-					field: field,
-					getValues: function (comp) {
-						return {
-							url: this.down('[name="' + comp.field + 'url"]').getValue(),
-							min: this.down('[name="' + comp.field + 'min"]').getValue(),
-							max: this.down('[name="' + comp.field + 'max"]').getValue()
-						};
-					},
-					items: [{
-						xtype: 'fieldcontainer',
-						layout: 'hbox',
-						hideLabel: true,
-						items: [{
-							xtype: 'displayfield',
-							value: 'Scale out (add more instances) when URL response time more than'
-						}, {
-							xtype: 'textfield',
-							name: field + 'max',
-							margin: '0 0 0 3',
-							width: 40
-						}, {
-							xtype: 'displayfield',
-							value: 'seconds',
-							margin: '0 0 0 3'
-						}]
-					}, {
-						xtype: 'fieldcontainer',
-						layout: 'hbox',
-						hideLabel: true,
-						items: [{
-							xtype: 'displayfield',
-							value: 'Scale in (release instances) when URL response time less than'
-						}, {
-							xtype: 'textfield',
-							name: field + 'min',
-							margin: '0 0 0 3',
-							width: 40
-						}, {
-							xtype: 'displayfield',
-							value: 'seconds',
-							margin: '0 0 0 3'
-						}]
-					}, {
-						xtype: 'textfield',
-						fieldLabel: 'URL (with http(s)://)',
-						name: field + 'url',
-						labelWidth: 120,
-						anchor: '100%'
-					}]
-				});
+        var isCfRole = (record.get('behaviors').match("cf_cloud_controller") || record.get('behaviors').match("cf_health_manager"));
+        Ext.each(me.query('field'), function(item){
+            item.setDisabled(readonly && (item.name != 'scaling.min_instances' || isCfRole || !record.get('new')));
+        });
 
-				this.down('[name="' + field + 'min"]').setValue(values['min'] || '1');
-				this.down('[name="' + field + 'max"]').setValue(values['max'] || '5');
-				this.down('[name="' + field + 'url"]').setValue(values['url'] || '');
+        me.down('[name="scaling.ignore_full_hour"]').setVisible(platform === 'ec2');
 
-			} else if (alias == 'time') {
-				var store = Ext.create('Ext.data.Store', {
-					fields: [ 'start_time', 'end_time', 'week_days', 'instances_count', 'id' ],
-					proxy: 'object'
-				});
+        disableStrategy = platform !== 'ec2' && platform !== 'gce' && platform !== 'cloudstack'  && !Scalr.isOpenstack(platform);
+        field = me.down('[name="base.terminate_strategy"]');
+        field.reset();
+        field.setValue(disableStrategy ? 'terminate' : settings['base.terminate_strategy'] || 'terminate');
+        field.updateIconTooltip('question', 'This setting is not supported by ' + Scalr.utils.getPlatformName(platform)+ ' cloud');
+        field.setDisabled(disableStrategy);
 
-				var currentTimeZone = 'Current time zone is: <span style="font-weight: bold;">' + moduleTabParams['currentTimeZone'] +
-					'</span> (' + moduleTabParams['currentTime'] + '). <a target="_blank" href="#/environments/' + moduleTabParams['currentEnvId'] +
-					'/edit">Click here</a> if you want to change it.';
+        field = me.down('[name="base.consider_suspended"]');
+        field.setValue(disableStrategy ? 'terminated' : settings['base.consider_suspended'] || 'running');
+        field.updateIconTooltip('question', 'This setting is not supported by ' + Scalr.utils.getPlatformName(platform)+ ' cloud');
+        field.toggleIcon('question', disableStrategy);
+        if (disableStrategy) {
+            field.setDisabled(disableStrategy);
+        }
 
-				p = tabpanel.add({
-					title: metric.get('name'),
-					alias: metric.get('alias'),
-					metricId: metric.get('id'),
-					field: field,
-					store: store,
-					bodyPadding: 0,
-					getValues: function (comp) {
-						var data = [], records = comp.store.getRange();
-						for (var i = 0; i < records.length; i++)
-							data[data.length] = records[i].data;
+        //set values
+        me.setFieldValues({
+            'scaling.min_instances': settings['scaling.min_instances'] || '',
+            'scaling.max_instances': settings['scaling.max_instances'] || '',
+            'scaling.polling_interval': settings['scaling.polling_interval'] || '',
+            'scaling.keep_oldest': settings['scaling.keep_oldest'] == 1,
+            'scaling.ignore_full_hour': settings['scaling.ignore_full_hour'] == 1,
+            'scaling.safe_shutdown': settings['scaling.safe_shutdown'] == 1,
+            'scaling.exclude_dbmsr_master': settings['scaling.exclude_dbmsr_master'],
+            'scaling.one_by_one': settings['scaling.one_by_one'] == 1,
+            'scaling.upscale.timeout_enabled': settings['scaling.upscale.timeout_enabled'] == 1,
+            'scaling.upscale.timeout': Ext.isEmpty(settings['scaling.upscale.timeout'], true) ? 10 : settings['scaling.upscale.timeout'],
+            'scaling.downscale.timeout_enabled': settings['scaling.downscale.timeout_enabled'] == 1,
+            'scaling.downscale.timeout': Ext.isEmpty(settings['scaling.downscale.timeout'], true) ? 10 : settings['scaling.downscale.timeout'],
+            'scaling.downscale_only_if_all_metrics_true': settings['scaling.downscale_only_if_all_metrics_true'] == 1
+        });
+        me.down('[name="scaling.upscale.timeout"]').setDisabled(settings['scaling.upscale.timeout_enabled'] != 1);
+        me.down('[name="scaling.downscale.timeout"]').setDisabled(settings['scaling.downscale.timeout_enabled'] != 1);
 
-						return data;
-					},
-					dockedItems: [{
-						dock: 'top',
-						xtype: 'toolbar',
-						items: [{
-							xtype: 'tbtext',
-							text: currentTimeZone,
-							style: 'font-size: 12px'
-						}, ' ', {
-							ui: 'paging',
-							iconCls: 'x-tbar-add',
-							handler: function() {
-								Scalr.Confirm({
-									form: [{
-										xtype: 'timefield',
-										fieldLabel: 'Start time',
-										name: 'ts_s_time',
-										anchor: '100%',
-										minValue: '0:00am',
-										maxValue: '23:55pm',
-										allowBlank: false
-									}, {
-										xtype: 'timefield',
-										fieldLabel: 'End time',
-										name: 'ts_e_time',
-										anchor: '100%',
-										minValue: '0:00am',
-										maxValue: '23:55pm',
-										allowBlank: false
-									}, {
-										xtype: 'checkboxgroup',
-										fieldLabel: 'Days of week',
-										columns: 3,
-										items: [
-											{ boxLabel: 'Sun', name: 'ts_dw_Sun', width: 50 },
-											{ boxLabel: 'Mon', name: 'ts_dw_Mon' },
-											{ boxLabel: 'Tue', name: 'ts_dw_Tue' },
-											{ boxLabel: 'Wed', name: 'ts_dw_Wed' },
-											{ boxLabel: 'Thu', name: 'ts_dw_Thu' },
-											{ boxLabel: 'Fri', name: 'ts_dw_Fri' },
-											{ boxLabel: 'Sat', name: 'ts_dw_Sat' }
-										]
-									}, {
-										xtype: 'numberfield',
-										fieldLabel: 'Instances count',
-										name: 'ts_instances_count',
-										anchor: '100%',
-										allowDecimals: false,
-										minValue: 0,
-										allowBlank: false
-									}],
-									ok: 'Add',
-									title: 'Add new time scaling period',
-									formValidate: true,
-									closeOnSuccess: true,
-									scope: this,
-									success: function (formValues) {
-										var week_days_list = '';
-										var i = 0;
+        me.down('[name="scaling.exclude_dbmsr_master"]').setVisible(record.isDbMsr(true));
 
-										for (k in formValues) {
-											if (k.indexOf('ts_dw_') != -1 && formValues[k] == 'on') {
-												week_days_list += k.replace('ts_dw_','')+', ';
-												i++;
-											}
-										}
+        field = me.down('[name="scaling_algo"]');
+        field.store.load({ data: metrics });
+        field.setReadOnly(!isScalarized);
 
-										if (i == 0) {
-											Scalr.message.Error('You should select at least one week day');
-											return false;
-										}
-										else
-											week_days_list = week_days_list.substr(0, week_days_list.length-2);
+        me.down('[name="scaling.safe_shutdown"]').setReadOnly(!isScalarized);
 
-										var int_s_time = parseInt(formValues.ts_s_time.replace(/\D/g,''));
-										var int_e_time = parseInt(formValues.ts_e_time.replace(/\D/g,''));
 
-										if (formValues.ts_s_time.indexOf('AM') && int_s_time >= 1200)
-											int_s_time = int_s_time-1200;
+        //load grid, select invalid record if any
+        var dataToLoad = [], failedId = false, dateTimeMetricIsUsed = false;
+        errors = errors['scaling'] || {};
+        Ext.Object.each(scaling, function(id, settings){
+            var metric = metrics[id],
+                error = errors[id] || null;
 
-										if (formValues.ts_e_time.indexOf('AM') && int_e_time >= 1200)
-											int_e_time = int_e_time-1200;
+            if (error && !failedId) {
+                failedId = id;
+            }
 
-										if (formValues.ts_s_time.indexOf('PM') != -1)
-											int_s_time = int_s_time+1200;
+            dateTimeMetricIsUsed = dateTimeMetricIsUsed || id == 5;//DateTime metric
 
-										if (formValues.ts_e_time.indexOf('PM') != -1)
-											int_e_time = int_e_time+1200;
+            dataToLoad.push({
+                id: id,
+                settings: settings,
+                name: metric.name,
+                alias: metric.alias,
+                isInvert: metric.isInvert,
+                validationErrors: error
+            });
+        });
+        grid = me.down('grid');
+        grid.store.loadData(dataToLoad);
 
-										if (int_e_time <= int_s_time) {
-											Scalr.message.Error('End time value must be greater than Start time value');
-											return false;
-										}
+        if (platform === 'ec2') {
+            this.refreshIgnoreFullHour(dateTimeMetricIsUsed);
+        }
+        if (failedId) {
+            grid.setSelectedRecord(grid.store.findRecord('id', failedId, 0, false, true, true));
+        }
 
-										var record_id = int_s_time+':'+int_e_time+':'+week_days_list+':'+formValues.ts_instances_count;
+        me.down('#timezone').setText('Time zone: <span style="color:#666">' + me.up('#farmDesigner').down('#farmSettings #timezone').getValue() +
+            '</span> <a href="#">Change</a>', false);
 
-										var recordData = {
-											start_time: formValues.ts_s_time,
-											end_time: formValues.ts_e_time,
-											instances_count: formValues.ts_instances_count,
-											week_days: week_days_list,
-											id: record_id
-										};
+        me.resumeLayouts(true);
+    },
 
-										var list_exists = false;
-										var list_exists_overlap = false;
-										var week_days_list_array = week_days_list.split(", ");
+    onScalingUpdate: function() {
+        var record = this.currentRole,
+            store = this.down('grid').getStore(),
+            scaling = {};
+        store.getUnfiltered().each(function(item){
+            scaling[item.get('id')] = item.get('settings');
+        });
+        this.suspendOnRoleUpdate++;
+        record.set('scaling', scaling);
+        this.suspendOnRoleUpdate--;
+        if (record.get('platform') === 'ec2') {
+            this.refreshIgnoreFullHour(scaling[5]!==undefined);//DateTime metric
+        }
+    },
 
-										store.each(function (item, index, length) {
-											if (item.data.id == recordData.id) {
-												Scalr.message.Error('Such record already exists');
-												list_exists = true;
-												return false;
-											}
+    refreshIgnoreFullHour: function(dateTimeMetricIsUsed) {
+        var field = this.down('[name="scaling.ignore_full_hour"]');
+        if (dateTimeMetricIsUsed) {
+            if (!field.readOnly) {
+                field.setValue(true);
+                field.setReadOnly(true);
+            }
+        } else {
+            field.setReadOnly(false);
+        }
+    },
+    hideTab: function (record) {
+        var settings = record.get('settings'),
+            scaling = {},
+            grid = this.down('grid'),
+            store = grid.getStore(),
+            customCleaned = 0,
+            needToClean = function (alias, errors) {
+                return errors && 'time' !== alias && (!customCleaned || 'custom' !== alias);
+            },
+            toCleanSelectors = [];
 
-											var chunks = item.data.id.split(':');
-											var s_time = chunks[0];
-											var e_time = chunks[1];
-											if (
-												(int_s_time >= s_time && int_s_time <= e_time) ||
-													(int_e_time >= s_time && int_e_time <= e_time)
-												)
-											{
-												var week_days_list_array_item = (chunks[2]).split(", ");
-												for (var ii = 0; ii < week_days_list_array_item.length; ii++)
-												{
-													for (var kk = 0; kk < week_days_list_array.length; kk++)
-													{
-														if (week_days_list_array[kk] == week_days_list_array_item[ii] && week_days_list_array[kk] != '')
-														{
-															list_exists_overlap = "Period "+week_days_list+" "+formValues.ts_s_time+" - "+formValues.ts_e_time+" overlaps with period "+chunks[2]+" "+item.data.start_time+" - "+item.data.end_time;
-															return true;
-														}
-													}
-												}
-											}
-										}, this);
+        grid.clearSelectedRecord();
+        store.getUnfiltered().each(function(item){
+            var alias = item.get('alias'),
+                errors = item.get('validationErrors');
 
-										if (!list_exists && !list_exists_overlap) {
-											store.add(recordData);
-											return true;
-										} else {
-											Scalr.message.Error((!list_exists_overlap) ? 'Such record already exists' : list_exists_overlap);
-											return false;
-										}
-									}
-								});
-							}
-						}]
-					}],
-					items: {
-						xtype: 'grid',
-						border: false,
-						store: store,
-						forceFit: true,
-						plugins: {
-							ptype: 'gridstore'
-						},
-						viewConfig: {
-							emptyText: 'No periods defined',
-							deferEmptyText: false
-						},
-						columns: [
-							{ header: "Start time", width: 100, sortable: true, dataIndex: 'start_time' },
-							{ header: "End time", width: 100, sortable: true, dataIndex: 'end_time' },
-							{ header: "Week days", width: 150, sortable: true, dataIndex: 'week_days' },
-							{ header: "Instances count", width: 180, sortable: true, dataIndex: 'instances_count', align: 'center' },
-							{ header: "&nbsp;", width: 20, sortable: false, dataIndex: 'id', align:'center', xtype: 'templatecolumn',
-								tpl: '<img class="delete" src="/ui2/images/icons/delete_icon_16x16.png">'
-							}
-						],
-						listeners: {
-							itemclick: function (view, record, item, index, e) {
-								if (e.getTarget('img.delete'))
-									view.store.remove(record);
-							}
-						}
-					}
-				});
+            if (needToClean(alias, errors)) {
+                if ('custom' === alias) {
+                    customCleaned++;
+                }
+                alias = '#' + alias + ' [name=';
+                toCleanSelectors.push(alias + Ext.Object.getKeys(errors).join('],' + alias) + ']');
+            }
 
-				p.on('removed', function () {
-					var el = this.down('[name="scaling.max_instances"]');
-					if (el)
-						el.enable();
-				}, this);
+            scaling[item.get('id')] = item.get('settings');
+        });
 
-				this.down('[name="scaling.max_instances"]').disable();
+        settings['scaling.enabled'] = this.down('[name="scaling.enabled"]').getValue();
 
-				store.loadData(values);
-			}
+        settings['base.terminate_strategy'] = this.down('[name="base.terminate_strategy"]').getValue();
+        settings['base.consider_suspended'] = this.down('[name="base.consider_suspended"]').getValue();
 
-			if (p) {
-				p.on('removed', function () {
-					var el = this.down('#algos');
-					if (el) {
-						if (this.down('#algos').items.length == 0) {
-							this.down('#algos').hide();
-							this.down('#algos_disabled').show();
-						}
-					}
-				}, this);
+        settings['scaling.min_instances'] = this.down('[name="scaling.min_instances"]').getValue();
+        settings['scaling.max_instances'] = this.down('[name="scaling.max_instances"]').getValue();
+        settings['scaling.polling_interval'] = this.down('[name="scaling.polling_interval"]').getValue();
+        settings['scaling.keep_oldest'] = this.down('[name="scaling.keep_oldest"]').getValue() == true ? 1 : 0;
+        settings['scaling.ignore_full_hour'] = this.down('[name="scaling.ignore_full_hour"]').getValue() == true ? 1 : 0;
+        settings['scaling.safe_shutdown'] = this.down('[name="scaling.safe_shutdown"]').getValue() == true ? 1 : 0;
+        settings['scaling.exclude_dbmsr_master'] = this.down('[name="scaling.exclude_dbmsr_master"]').getValue() == true ? 1 : 0;
+        settings['scaling.one_by_one'] = this.down('[name="scaling.one_by_one"]').getValue() == true ? 1 : 0;
+        settings['scaling.downscale_only_if_all_metrics_true'] = this.down('[name="scaling.downscale_only_if_all_metrics_true"]').getValue() == true ? 1 : 0;
 
-				this.down('#algos_disabled').hide();
-				this.down('#algos').show();
+        if (this.down('[name="scaling.upscale.timeout_enabled"]').getValue()) {
+            settings['scaling.upscale.timeout_enabled'] = 1;
+            settings['scaling.upscale.timeout'] = this.down('[name="scaling.upscale.timeout"]').getValue();
+        } else {
+            settings['scaling.upscale.timeout_enabled'] = 0;
+            delete settings['scaling.upscale.timeout'];
+        }
 
-				if (activate)
-					tabpanel.setActiveTab(p);
-			}
-		},
+        if (this.down('[name="scaling.downscale.timeout_enabled"]').getValue()) {
+            settings['scaling.downscale.timeout_enabled'] = 1;
+            settings['scaling.downscale.timeout'] = this.down('[name="scaling.downscale.timeout"]').getValue();
+        } else {
+            settings['scaling.downscale.timeout_enabled'] = 0;
+            delete settings['scaling.downscale.timeout'];
+        }
+        this.down('[name="scaling.enabled"]').reset();
+        record.set({
+            settings: settings,
+            scaling: scaling
+        });
 
-		isEnabled: function (record) {
-			var retval = record.get('platform') != 'rds' && !record.get('behaviors').match('mongodb');
-			return retval;
-		},
+        if (toCleanSelectors.length) {
+            this.suspendEvents(false);
+            Ext.Array.forEach(this.down('#scalingform').query(toCleanSelectors.join(',')), function(field) {
+                field.isFormField && field.clearInvalid();
+            });
+            this.resumeEvents(true);
+        }
+    },
 
-		getDefaultValues: function (record) {
-			return {
-				'scaling.min_instances': 1,
-				'scaling.max_instances': 2,
-				'scaling.polling_interval': 1,
-				'scaling.keep_oldest': 0,
-				'scaling.ignore_full_hour' : 0,
-				'scaling.safe_shutdown': 0,
-				'scaling.exclude_dbmsr_master' : 0,
-				'scaling.one_by_one' : 0,
-				'scaling.enabled' : 1
-			};
-		},
+    //<staged 2016-02-05 &lt;s.honcharov@scalr.com&gt; for future refactoring>
+    //clearErrors: function (settingName, metricId, fieldName) {
+    //    var me = this, errors;
+    //
+    //    if (!me.currentRole || !(errors = me.currentRole.get('errors', true))) {
+    //        return;
+    //    }
+    //
+    //    var tabSettings = me.getSettingsList();
+    //    if (tabSettings !== undefined) {
+    //        Ext.Object.each(errors, function(name, error){
+    //            if (!(name in tabSettings) || (settingName && settingName != name)) {
+    //                return;
+    //            }
+    //
+    //            if (name === 'scaling') {
+    //                if (metricId && error[metricId]) {
+    //                    if (fieldName) {
+    //                        delete error[metricId][fieldName];
+    //                        if (Ext.Object.isEmpty(error[metricId])) {
+    //                            delete error[metricId];
+    //                        }
+    //                    } else {
+    //                        delete error[metricId];
+    //                    }
+    //
+    //                    if (Ext.Object.getSize(error) === 1) { // field `message`
+    //                        delete errors[name];
+    //                    }
+    //                }
+    //            } else {
+    //                delete errors[name];
+    //            }
+    //        });
+    //    }
+    //    if (Ext.Object.getSize(errors) === 0) {
+    //        me.currentRole.set('errors', null);
+    //    }
+    //},
+    //</staged>
 
-		beforeShowTab: function (record, handler) {
-			if (this.cacheExist('metrics'))
-				handler();
-			else
-				Scalr.Request({
-					processBox: {
-						type: 'action'
-					},
-					url: '/scaling/metrics/xGetList',
-					scope: this,
-					success: function (data) {
-						this.cacheSet(data.metrics, 'metrics');
-						handler();
-					}
-				});
-		},
+    getErrorTipConfig: function (metric, error) {
+        if (error) {
+            var size = Ext.Object.getSize(error);
 
-		showTab: function (record) {
-			var settings = record.get('settings'), scaling = record.get('scaling');
+            return {
+                title: '<img src="' + Ext.BLANK_IMAGE_URL + '" class="x-icon-error"> '+ size +' validation error'+ (size > 1 ? 's' : '') +' in <em>'+ metric.name + '</em> metric:',
+                msg: '- ' + Ext.Object.getValues(error).join('<br />- ') + '<br />'
+            }
+        }
 
-			var isCfRole = (record.get('behaviors').match("cf_cloud_controller") || record.get('behaviors').match("cf_health_manager"));
+        return null;
+    },
 
-			if (record.get('behaviors').match('rabbitmq') || isCfRole)
-				Ext.each(this.query('field'), function(item){
-					if (item.name != 'scaling.min_instances' || isCfRole || !record.get('new'))
-						item.disable();
-				});
-			else
-				Ext.each(this.query('field'), function(item){
-					item.enable();
-				});
+    __items: [{
+        xtype: 'container',
+        maxWidth: 640,
+        minWidth: 550,
+        cls: 'x-panel-column-left-with-tabs',
+        flex: .7,
+        layout: {
+            type: 'vbox',
+            align: 'stretch'
+        },
+        items: [{
+            xtype: 'toolbar',
+            ui: 'simple',
+            items: [{
+                xtype: 'buttongroupfield',
+                name: 'scaling.enabled',
+                width: 210,
+                defaults: {
+                    width: 105
+                },
+                items: [{
+                    text: 'Manual',
+                    value: '0'
+                },{
+                    text: 'Automatic',
+                    value: '1'
+                }],
+                listeners: {
+                    change: function(comp, value) {
+                        var tab = comp.up('#scaling'),
+                            record = tab.currentRole,
+                            settings = record.get('settings');
 
-			this.down('[name="enable_scaling"]').store.load({ data: this.cacheGet('metrics') });
+                        var leftcol = tab.down('#leftcol');
+                        leftcol.down('grid').clearSelectedRecord();
+                        leftcol.setVisible(value === '1');
+                        tab.down('[name="scaling.min_instances"]').setVisible(value === '1');
+                        tab.down('[name="scaling.max_instances"]').setVisible(value === '1');
+                        tab.down('#scalingform').hide();
+                        tab.down('#rightcol')[value === '1' ? 'removeCls' : 'addCls']('x-panel-column-left-with-tabs');
 
-			if (record.get('generation') == 2)
-				this.down('#scaling_safe_shutdown_compositefield').show();
-			else
-				this.down('#scaling_safe_shutdown_compositefield').hide();
+                        if (settings[comp.name] != value) {
+                            settings[comp.name] = value;
+                            tab.suspendOnRoleUpdate++;
+                            record.set('settings', settings);
+                            tab.suspendOnRoleUpdate--;
+                        }
 
-			if (settings['scaling.enabled'] == 1)
-				this.down('[name="scaling.enabled"]').expand();
-			else
-				this.down('[name="scaling.enabled"]').collapse();
+                    }
+                }
+            },{
+                xtype: 'tbfill'
+            },{
+                xtype: 'textfield',
+                fieldLabel: 'Min instances',
+                labelWidth: 105,
+                name: 'scaling.min_instances',
+                width: 142,
+                margin: 0,
+                vtype: 'num',
+                listeners: {
+                    change: function(comp, value) {
+                        var tab = comp.up('#scaling'),
+                            record = tab.currentRole,
+                            settings = record.get('settings');
+                        settings[comp.name] = value;
+                        tab.suspendOnRoleUpdate++;
+                        record.set('settings', settings);
+                        tab.suspendOnRoleUpdate--;
+                        tab.down('#scalinggrid').refreshEmptyText(value);
+                    }
+                }
+            },{
+                xtype: 'textfield',
+                fieldLabel: 'Max instances',
+                labelWidth: 105,
+                name: 'scaling.max_instances',
+                width: 142,
+                margin: '0 0 0 12',
+                vtype: 'num',
+                listeners: {
+                    change: function(comp, value) {
+                        var tab = comp.up('#scaling'),
+                            record = tab.currentRole,
+                            settings = record.get('settings');
+                        settings[comp.name] = value;
+                        tab.suspendOnRoleUpdate++;
+                        record.set('settings', settings);
+                        tab.suspendOnRoleUpdate--;
+                    }
+                }
+            }]
+        },{
+            xtype: 'container',
+            itemId: 'leftcol',
+            layout: {
+                type: 'vbox',
+                align: 'stretch'
+            },
+            flex: 1,
+            items: [{
+                xtype: 'grid',
+                itemId: 'scalinggrid',
+                cls: 'x-fieldset-separator-bottom',
+                multiSelect: true,
+                enableColumnResize: false,
+                padding: '0 12 12',
+                features: {
+                    ftype: 'addbutton',
+                    text: 'Add scaling rule',
+                    handler: function(view) {
+                        var grid = view.up();
+                        grid.clearSelectedRecord();
+                        grid.form.loadRecord(grid.getStore().createModel({}));
+                    }
+                },
+                plugins: [{
+                    ptype: 'focusedrowpointer',
+                    thresholdOffset: 26,
+                    addOffset: 5
+                },{
+                    ptype: 'selectedrecord',
+                    getForm: function() {
+                        return this.grid.up('#scaling').down('form');
+                    }
+                },{
+                    ptype: 'rowtooltip',
+                    pluginId: 'rowtooltip',
+                    cls: 'x-tip-form-invalid',
+                    anchor: 'top',
+                    minWidth: 330,
+                    beforeShow: function (tooltip) {
+                        var record = tooltip.owner.view.getRecord(tooltip.triggerElement), errors, cfg;
 
-			this.down('[name="scaling.min_instances"]').setValue(settings['scaling.min_instances'] || 1);
-			this.down('[name="scaling.max_instances"]').setValue(settings['scaling.max_instances'] || 2);
-			this.down('[name="scaling.polling_interval"]').setValue(settings['scaling.polling_interval'] || 1);
-			this.down('[name="scaling.keep_oldest"]').setValue(settings['scaling.keep_oldest'] == 1 ? true : false);
-			this.down('[name="scaling.ignore_full_hour"]').setValue(settings['scaling.ignore_full_hour'] == 1 ? true : false);
-			this.down('[name="scaling.safe_shutdown"]').setValue(settings['scaling.safe_shutdown'] == 1 ? true : false);
-			this.down('[name="scaling.exclude_dbmsr_master"]').setValue(settings['scaling.exclude_dbmsr_master'] == 1 ? true : false);
-			this.down('[name="scaling.one_by_one"]').setValue(settings['scaling.one_by_one'] == 1 ? true : false);
+                        if (record && (errors = record.get('validationErrors'))) {
+                            cfg = tooltip.owner.up('#scaling').getErrorTipConfig({name: record.get('name')}, errors);
+                            tooltip.setTitle(cfg.title);
+                            tooltip.update(cfg.msg);
 
-			if (settings['scaling.upscale.timeout_enabled'] == 1) {
-				this.down('[name="scaling.upscale.timeout_enabled"]').setValue(true);
-				this.down('[name="scaling.upscale.timeout"]').enable();
-			} else {
-				this.down('[name="scaling.upscale.timeout_enabled"]').setValue(false);
-				this.down('[name="scaling.upscale.timeout"]').disable();
-			}
-			this.down('[name="scaling.upscale.timeout"]').setValue(settings['scaling.upscale.timeout'] || 10);
+                            return true;
+                        }
 
-			if (settings['scaling.downscale.timeout_enabled'] == 1) {
-				this.down('[name="scaling.downscale.timeout_enabled"]').setValue(true);
-				this.down('[name="scaling.downscale.timeout"]').enable();
-			} else {
-				this.down('[name="scaling.downscale.timeout_enabled"]').setValue(false);
-				this.down('[name="scaling.downscale.timeout"]').disable();
-			}
-			this.down('[name="scaling.downscale.timeout"]').setValue(settings['scaling.downscale.timeout'] || 10);
-			this.down('[name="enable_scaling"]').reset();
+                        return false;
+                    }
+                }],
+                store: {
+                    model: Scalr.getModel({fields: [{name: 'id', type: 'int'}, 'name', 'alias', 'min', 'max', 'settings', 'isInvert', 'validationErrors']})
+                },
+                columns: [{
+                    text: 'Scale based on',
+                    sortable: false,
+                    dataIndex: 'name',
+                    flex: 1.6
+                },{
+                    text: 'Scale up',
+                    sortable: false,
+                    dataIndex: 'max',
+                    flex: 1,
+                    xtype: 'templatecolumn',
+                    tpl: [
+                        '<tpl if="isInvert">',
+                            '<tpl if="!(settings.min == null || settings.min === \'\')">',
+                                '< {settings.min:htmlEncode}',
+                            '</tpl>',
+                        '<tpl elseif="!(settings.max == null || settings.max === \'\')">',
+                            '> {settings.max:htmlEncode}',
+                        '</tpl>'
+                    ]
+                },{
+                    text: 'Scale down',
+                    sortable: false,
+                    dataIndex: 'min',
+                    flex: 1,
+                    xtype: 'templatecolumn',
+                    tpl: [
+                        '<tpl if="isInvert">',
+                            '<tpl if="!(settings.max == null || settings.max === \'\')">',
+                                '> {settings.max:htmlEncode}',
+                            '</tpl>',
+                        '<tpl elseif="!(settings.min == null || settings.min === \'\')">',
+                            '< {settings.min:htmlEncode}',
+                        '</tpl>'
+                    ]
+                }, {
+                    xtype: 'templatecolumn',
+                    tpl: '<img class="x-grid-icon x-grid-icon-delete" title="Delete scaling rule" src="'+Ext.BLANK_IMAGE_URL+'"/>',
+                    width: 42,
+                    sortable: false,
+                    dataIndex: 'id',
+                    align:'left'
+                }],
+                viewConfig: {
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    getRowClass: function (record) {
+                        return record.get('validationErrors') ? 'x-grid-row-color-red' : '';
+                    }
+                },
+                refreshEmptyText: function(minInstances) {
+                    var view = this.getView();
+                    minInstances = Ext.isEmpty(minInstances) || !Ext.isNumeric(minInstances) ? '?' : minInstances;
+                    view.emptyText = '<div class="' + this.emptyCls + '">No auto-scaling rules defined. Scalr will maintain ' + minInstances + ' running instance(s).</div>';
+                    if (this.store.getCount() === 0) {
+                        view.refresh();
+                    }
+                },
+                listeners: {
+                    viewready: function() {
+                        var me = this,
+                            tab = me.up('#scaling');
+                        me.form = me.up('panel').up('container').down('form');
+                        me.store.on({
+                            add: {fn: tab.onScalingUpdate, scope: tab},
+                            update: {fn: tab.onScalingUpdate, scope: tab},
+                            remove: {fn: tab.onScalingUpdate, scope: tab}
+                        });
 
-			// algos
-			this.down('#algos').removeAll();
-			var store = this.down('[name="enable_scaling"]').store;
+                        me.store.on({
+                            refresh: me.refreshAddButton,
+                            update: me.refreshAddButton,
+                            add: me.refreshAddButton,
+                            remove: me.refreshAddButton,
+                            scope: me
+                        });
+                        me.refreshAddButton();
+                        me.refreshEmptyText(tab.currentRole.get('settings', true)['scaling.min_instances']);
+                    },
+                    itemclick: function (view, record, item, index, e) {
+                        if (e.getTarget('img.x-grid-icon-delete')) {
+                            view.store.remove(record);
+                            return false;
+                        }
+                    }
+                },
+                refreshAddButton: function() {
+                    var disableAddButton = false;
+                    this.store.getUnfiltered().each(function(record){
+                        disableAddButton = record.get('alias') === 'time';
+                    });
+                    this.view.findFeature('addbutton').setDisabled(disableAddButton, disableAddButton ? 'DateAndTime metric cannot be used with others' : '');
+                },
+                setReadOnly: function(readonly) {
+                    this.getView().findFeature('addbutton').setDisabled(!!readonly);
+                },
 
-			if (Ext.isObject(scaling)) {
-				for (var i in scaling) {
-					this.addAlgoTab(store.getById(i), scaling[i], false);
-				}
-			}
+                clearFailed: function (id, name) {
+                    var record;
 
-			if (this.down('#algos').items.length) {
-				this.down('#algos').show();
-				this.down('#algos_disabled').hide();
-				this.down('#algos').setActiveTab(this.down('#algos').items.get(0));
-			} else {
-				this.down('#algos').hide();
-				this.down('#algos_disabled').show();
-			}
-		},
+                    if (id) {
+                        record = this.store.findRecord('id', id, 0, false, true, true);
+                        if (!record) {
+                            return;
+                        }
 
-		hideTab: function (record) {
-			var settings = record.get('settings');
-			var scaling = {};
+                        //<staged 2016-02-05 &lt;s.honcharov@scalr.com&gt; for future refactoring>
+                        //var tab = this.up('#scaling');
+                        //tab.clearErrors.call(tab, 'scaling', id, name);
+                        //</staged>
+                    }
 
-			if (! this.down('[name="scaling.enabled"]').collapsed) {
-				settings['scaling.enabled'] = '1';
-			} else {
-				settings['scaling.enabled'] = '0';
-			}
+                    function clearRecordError(record, name){
+                        var errors = null;
+                        if (name && (errors = record.get('validationErrors'))) {
+                            delete errors[name];
+                            if (Ext.Object.isEmpty(errors)) {
+                                errors = null;
+                            }
+                        }
+                        record.set('validationErrors', errors);
+                    }
 
-			settings['scaling.min_instances'] = this.down('[name="scaling.min_instances"]').getValue();
-			settings['scaling.max_instances'] = this.down('[name="scaling.max_instances"]').getValue();
-			settings['scaling.polling_interval'] = this.down('[name="scaling.polling_interval"]').getValue();
-			settings['scaling.keep_oldest'] = this.down('[name="scaling.keep_oldest"]').getValue() == true ? 1 : 0;
-			settings['scaling.ignore_full_hour'] = this.down('[name="scaling.ignore_full_hour"]').getValue() == true ? 1 : 0;
-			settings['scaling.safe_shutdown'] = this.down('[name="scaling.safe_shutdown"]').getValue() == true ? 1 : 0;
-			settings['scaling.exclude_dbmsr_master'] = this.down('[name="scaling.exclude_dbmsr_master"]').getValue() == true ? 1 : 0;
-			settings['scaling.one_by_one'] = this.down('[name="scaling.one_by_one"]').getValue() == true ? 1 : 0;
+                    this.suspendLayouts();
+                    if (record) {
+                        clearRecordError(record, name);
+                    } else {
+                        this.store.getUnfiltered().each(function(record){
+                            clearRecordError(record, name);
+                        });
+                    }
+                    this.resumeLayouts();
+                }
+            }, {
+                xtype: 'container',
+                itemId: 'scalingsettings',
+                flex: 1,
+                overflowY: 'auto',
+                preserveScrollPosition: true,
+                items: [{
+                    xtype: 'fieldset',
+                    title: 'Scaling decision settings',
+                    defaults: {
+                        xtype: 'fieldcontainer',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        }
+                    },
+                    items: [{
+                        items: [{
+                            xtype: 'label',
+                            text: 'Make scaling decisions every'
+                        }, {
+                            xtype: 'textfield',
+                            name: 'scaling.polling_interval',
+                            margin: '0 8',
+                            vtype: 'num',
+                            width: 40
+                        }, {
+                            xtype: 'label',
+                            text: 'minute(s)'
+                        }]
+                    }, {
+                        items: [{
+                            xtype: 'checkbox',
+                            boxLabel: 'Limit scale up decisions to one per',
+                            name: 'scaling.upscale.timeout_enabled',
+                            handler: function (checkbox, checked) {
+                                if (checked)
+                                    this.next('[name="scaling.upscale.timeout"]').enable();
+                                else
+                                    this.next('[name="scaling.upscale.timeout"]').disable();
+                            }
+                        }, {
+                            xtype: 'textfield',
+                            name: 'scaling.upscale.timeout',
+                            vtype: 'num',
+                            margin: '0 8',
+                            width: 40
+                        }, {
+                            xtype: 'label',
+                            text: 'minute(s)'
+                        }]
+                    }, {
+                        items: [{
+                            xtype: 'checkbox',
+                            boxLabel: 'Limit scale down decisions to one per',
+                            name: 'scaling.downscale.timeout_enabled',
+                            handler: function (checkbox, checked) {
+                                if (checked)
+                                    this.next('[name="scaling.downscale.timeout"]').enable();
+                                else
+                                    this.next('[name="scaling.downscale.timeout"]').disable();
+                            }
+                        }, {
+                            xtype: 'textfield',
+                            name: 'scaling.downscale.timeout',
+                            vtype: 'num',
+                            margin: '0 8',
+                            width: 40
+                        }, {
+                            xtype: 'label',
+                            text: 'minute(s)'
+                        }]
+                    }, {
+                        xtype: 'checkbox',
+                        name: 'scaling.one_by_one',
+                        boxLabel: 'Wait until running state is reached before next decision to scale up'
+                    }, {
+                        xtype: 'checkbox',
+                        name: 'scaling.exclude_dbmsr_master',
+                        boxLabel: 'Exclude database master from scaling metric calculations'
+                    },{
+                        xtype: 'checkbox',
+                        name: 'scaling.downscale_only_if_all_metrics_true',
+                        boxLabel: 'Scale down only if all metrics return true'
+                    }]
+                },{
+                    xtype: 'fieldset',
+                    title: 'Termination preferences',
+                    cls: 'x-fieldset-separator-none',
+                    items: [{
+                        xtype: 'combo',
+                        store: [['terminate', 'Launch / Terminate'], ['suspend', 'Resume / Suspend']],
+                        valueField: 'name',
+                        displayField: 'description',
+                        fieldLabel: 'Scaling behavior',
+                        editable: false,
+                        labelWidth: 210,
+                        width: 390,
+                        queryMode: 'local',
+                        name: 'base.terminate_strategy',
+                        plugins: {
+                            ptype: 'fieldicons',
+                            align: 'right',
+                            position: 'outer',
+                            icons: ['question']
+                        },
+                        listeners: {
+                            disable: function() {
+                                this.toggleIcon('question', true);
+                            },
+                            enable: function() {
+                                this.toggleIcon('question', false);
+                            },
+                            change: function(comp, value) {
+                                var comp2 = comp.next('[name="base.consider_suspended"]');
+                                if (value === 'suspend') {
+                                    comp2.setValue('terminated');
+                                    comp2.setDisabled(true);
+                                } else {
+                                    comp2.setDisabled(false);
+                                }
+                            }
+                        }
+                    }, {
+                        xtype: 'combo',
+                        store: [['running', 'Running'], ['terminated', 'Terminated']],
+                        valueField: 'name',
+                        displayField: 'description',
+                        fieldLabel: 'Consider suspended servers',
+                        labelWidth: 210,
+                        width: 390,
+                        editable: false,
+                        queryMode: 'local',
+                        name: 'base.consider_suspended',
+                        plugins: {
+                            ptype: 'fieldicons',
+                            align: 'right',
+                            position: 'outer',
+                            icons: ['question']
+                        }
+                    }, {
+                        xtype: 'checkbox',
+                        name: 'scaling.keep_oldest',
+                        boxLabel: 'Scale down by shutting down newest servers first'
+                    },{
+                        xtype: 'checkbox',
+                        name: 'scaling.ignore_full_hour',
+                        boxLabel: 'Skip waiting full billing period when scaling down',
+                        plugins: [{
+                            ptype: 'fieldicons',
+                            position: 'outer',
+                            icons: [{id: 'question', tooltip: 'This setting is forced with DateTime scaling metric'}]
+                        }],
+                        listeners: {
+                            writeablechange: function(comp, readOnly) {
+                                this.toggleIcon('question', readOnly);
+                            }
+                        }
+                    },{
+                        xtype: 'checkbox',
+                        name: 'scaling.safe_shutdown',
+                        boxLabel: 'Enable safe shutdown when scaling down',
+                        plugins: {
+                            ptype: 'fieldicons',
+                            icons: [{
+                                id: 'info',
+                                tooltip: 'Scalr will terminate an instance ONLY IF the script &#39;/usr/local/scalarizr/hooks/auth-shutdown&#39; returns 1. ' +
+                                         'If this script is not found or returns any other value, Scalr WILL NOT terminate that server.'
+                            }, {
+                                id: 'question',
+                                hidden: true,
+                                tooltip: 'Safe shutdown is not available for agentless roles'
+                            }]
+                        },
+                        listeners: {
+                            writeablechange: function(comp, readOnly) {
+                                this.toggleIcon('question', readOnly);
+                                this.toggleIcon('info', !readOnly);
+                            }
+                        }
+                    }]
+                }]
+            }]
+        }]
+    },{
+        xtype: 'container',
+        itemId: 'rightcol',
+        flex: 1,
+        layout: 'fit',
+        items: {
+            xtype: 'form',
+            itemId: 'scalingform',
+            hidden: true,
+            overflowY: 'auto',
+            items: [{
+                xtype: 'fieldset',
+                title: 'Scaling metric',
+                items: [{
+                    xtype: 'combo',
+                    name: 'scaling_algo',
+                    anchor: '100%',
+                    maxWidth: 600,
+                    editable: false,
+                    emptyText: 'Please select scaling metric',
+                    queryMode: 'local',
+                    store: {
+                        fields: [ {name: 'id', type: 'int'}, 'name', 'alias', 'scope', 'isInvert' ],
+                        proxy: 'object'
+                    },
+                    valueField: 'id',
+                    displayField: 'name',
+                    plugins: [{
+                        ptype: 'fieldicons',
+                        align: 'right',
+                        icons: [{id: 'question', tooltip: 'Scalarizr automation is required to use other Scaling metrics'}]
+                    }],
+                    listConfig: {
+                        getInnerTpl: function () {
+                            return '<img src="' + Ext.BLANK_IMAGE_URL +
+                                '" class="scalr-scope-{scope}" /><span style="padding-left: 6px; height: 26px">{name}</span>';
+                        }
+                    },
+                    listeners: {
+                        change: function(comp, value, oldValue) {
+                            var formPanel = this.up('form'),
+                                record = formPanel.getRecord(),
+                                algos = formPanel.down('#algos'),
+                                error, store;
 
-			if (this.down('[name="scaling.upscale.timeout_enabled"]').getValue()) {
-				settings['scaling.upscale.timeout_enabled'] = 1;
-				settings['scaling.upscale.timeout'] = this.down('[name="scaling.upscale.timeout"]').getValue();
-			} else {
-				settings['scaling.upscale.timeout_enabled'] = 0;
-				delete settings['scaling.upscale.timeout'];
-			}
+                            if (value) {
+                                var fieldRecord = comp.findRecordByValue(value),
+                                    alias = fieldRecord.get('alias'),
+                                    isInverted = fieldRecord.get('isInvert');
 
-			if (this.down('[name="scaling.downscale.timeout_enabled"]').getValue()) {
-				settings['scaling.downscale.timeout_enabled'] = 1;
-				settings['scaling.downscale.timeout'] = this.down('[name="scaling.downscale.timeout"]').getValue();
-			} else {
-				settings['scaling.downscale.timeout_enabled'] = 0;
-				delete settings['scaling.downscale.timeout'];
-			}
+                                if (!formPanel.isRecordLoading && formPanel.grid) {
+                                    store = formPanel.grid.store;
+                                    error = false;
 
-			// algos
-			this.down('#algos').items.each(function (it) {
-				scaling[it.metricId.toString()] = it.getValues.call(this, it);
-			}, this);
+                                    if (store.findExact('id', value) !== -1) {
+                                        error = 'This scaling metric already added.';
+                                    } else if (
+                                        !record.store && (store.findExact('alias', 'time') !== -1 || alias === 'time' && store.getCount() > 0) ||
+                                            record.store && alias === 'time' && store.getCount() > 1
+                                        ){
+                                        error = 'DateAndTime metric cannot be used with others.';
+                                    }
 
-			record.set('settings', settings);
-			record.set('scaling', scaling);
-		},
+                                    if (error) {
+                                        Scalr.message.InfoTip(error, comp.getEl());
+                                        this.suspendEvents(false);
+                                        this.setValue(oldValue);
+                                        this.resumeEvents(false);
 
-		items: [{
-			xtype: 'fieldset',
-			title: 'Enable scaling',
-			name: 'scaling.enabled',
-			checkboxToggle: true,
-			items: [{
-				xtype: 'fieldset',
-				title: 'General',
-				defaults: {
-					labelWidth: 120
-				},
-				items: [{
-					xtype: 'fieldcontainer',
-					layout: 'hbox',
-					fieldLabel: 'Minimum instances',
-					labelWidth: 130,
-					items: [{
-						xtype: 'textfield',
-						name: 'scaling.min_instances',
-						width: 40
-					}, {
-						xtype: 'displayinfofield',
-						margin: '0 0 0 5',
-						info: 'Always keep at least this many running instances.'
-					}]
-				}, {
-					xtype: 'fieldcontainer',
-					layout: 'hbox',
-					fieldLabel: 'Maximum instances',
-					labelWidth: 130,
-					items: [{
-						xtype: 'textfield',
-						name: 'scaling.max_instances',
-						width: 40
-					}, {
-						xtype: 'displayinfofield',
-						margin: '0 0 0 5',
-						info: 'Maximum number of instances that can be launched.'
-					}]
-				}, {
-					xtype: 'fieldcontainer',
-					layout: 'hbox',
-					hideLabel: true,
-					items: [{
-						xtype: 'displayfield',
-						value: 'Polling interval (every)'
-					}, {
-						xtype: 'textfield',
-						name: 'scaling.polling_interval',
-						margin: '0 0 0 10',
-						width: 40
-					}, {
-						xtype: 'displayfield',
-						margin: '0 0 0 3',
-						value: 'minute(s)'
-					}]
-				}, {
-					xtype: 'checkbox',
-					name: 'scaling.one_by_one',
-					boxLabel: 'Do not up-scale role if there is at least one pending instance'
-				}, {
-					xtype: 'checkbox',
-					name: 'scaling.exclude_dbmsr_master',
-					boxLabel: 'Exclude database master from scaling metrics calculations'
-				}, {
-					xtype: 'checkbox',
-					name: 'scaling.keep_oldest',
-					boxLabel: 'Keep oldest instance running after scale down'
-				}, {
-					xtype: 'checkbox',
-					name: 'scaling.ignore_full_hour',
-					boxLabel: 'Do not wait for full hour during downscaling'
-				}, {
-					xtype: 'fieldcontainer',
-					layout: 'hbox',
-					itemId: 'scaling_safe_shutdown_compositefield',
-					hideLabel: true,
-					items: [{
-						xtype: 'checkbox',
-						name: 'scaling.safe_shutdown',
-						width: 260,
-						boxLabel: 'Enable safe shutdown during downscaling'
-					}, {
-						xtype: 'displayinfofield',
-						margin: '0 0 0 5',
-						info:   'Scalr will terminate instance ONLY if script \'/usr/local/scalarizr/hooks/auth-shutdown\' return 1. ' +
-								'If script not found or return any other value Scalr WON\'T terminate this server.'
-					}]
-				}]
-			}, {
-				xtype: 'fieldset',
-				title: 'Delays',
-				labelWidth: 120,
-				items: [{
-					xtype: 'fieldcontainer',
-					layout: 'hbox',
-					hideLabel: true,
-					items: [{
-						xtype: 'checkbox',
-						boxLabel: 'Wait',
-						name: 'scaling.upscale.timeout_enabled',
-						handler: function (checkbox, checked) {
-							if (checked)
-								this.next('[name="scaling.upscale.timeout"]').enable();
-							else
-								this.next('[name="scaling.upscale.timeout"]').disable();
-						}
-					}, {
-						xtype: 'textfield',
-						name: 'scaling.upscale.timeout',
-						margin: '0 0 0 3',
-						width: 40
-					}, {
-						xtype: 'displayfield',
-						margin: '0 0 0 3',
-						value: 'minute(s) after a new instance have been started before the next up-scale'
-					}]
-				}, {
-					xtype: 'fieldcontainer',
-					layout: 'hbox',
-					hideLabel: true,
-					items: [{
-						xtype: 'checkbox',
-						hideLabel: true,
-						boxLabel: 'Wait',
-						name: 'scaling.downscale.timeout_enabled',
-						handler: function (checkbox, checked) {
-							if (checked)
-								this.next('[name="scaling.downscale.timeout"]').enable();
-							else
-								this.next('[name="scaling.downscale.timeout"]').disable();
-						}
-					}, {
-						xtype: 'textfield',
-						name: 'scaling.downscale.timeout',
-						margin: '0 0 0 3',
-						width: 40
-					}, {
-						xtype: 'displayfield',
-						margin: '0 0 0 3',
-						value: 'minute(s) after a shutdown before shutting down another instance'
-					}]
-				}]
-			}, {
-				xtype: 'fieldcontainer',
-				layout: 'hbox',
-				fieldLabel: 'Enable scaling based on',
-				labelWidth: 150,
-				items: [{
-					xtype: 'combo',
-					store: {
-						fields: [ 'id', 'name', 'alias' ],
-						proxy: 'object'
-					},
-					valueField: 'id',
-					displayField: 'name',
-					editable: false,
-					queryMode: 'local',
-					name: 'enable_scaling',
-					width: 200
-				}, {
-					xtype: 'displayfield',
-					value: '<img src="/ui2/images/icons/add_icon_16x16.png">',
-					margin: '0 0 0 5',
-					name: 'enable_scaling_add',
-					listeners: {
-						afterrender: function () {
-							this.el.down('img').on('click', function () {
-								var combo = this.prev('[name="enable_scaling"]'), value = combo.store.findRecord('id', combo.getValue()), tab = this.up('#scaling');
-								if (value) {
-									var items = tab.down('#algos').items.items;
+                                        return;
+                                    }
+                                }
 
-									for (var i = 0; i < items.length; i++) {
-										if (items[i].alias == value.get('alias')) {
-											Scalr.message.Error('This algoritm already added');
-											return;
-										}
-									}
+                                if (alias === 'custom') {
+                                    algos.down('#custom').swapFields(isInverted);
+                                }
 
-									if (value.get('alias') == 'time' && items.length) {
-										Scalr.message.Error('This algoritm cannot be used with others');
-										return;
-									} else if (value.get('alias') != 'time' && items.length) {
-										for (var i = 0; i < items.length; i++) {
-											if (items[i].alias == 'time') {
-												Scalr.message.Error("This algoritm cannot be used with 'Time and Day of week'");
-												return;
-											}
-										}
-									}
+                                formPanel.updateRecordSuspended++;
+                                algos.layout.setActiveItem(alias);
+                                formPanel.showStat(alias);
+                                formPanel.updateRecordSuspended--;
+                                formPanel.updateRecord(null, null, isInverted);
+                            } else if (algos.layout.activeItem) {
+                                algos.layout.setActiveItem('blank');
+                                formPanel.hideStat();
+                            }
+                        }
+                    }
+                }]
+            },{
+                xtype: 'container',
+                layout: 'card',
+                itemId: 'algos',
+                activeItem: 'blank',
 
-									tab.addAlgoTab(value, {}, true);
-									combo.reset();
-									Scalr.message.Flush();
-								} else {
-									Scalr.message.Error('Please select scaling algoritm');
-								}
-							}, this);
-						}
-					}
-				}]
-			}, {
-				itemId: 'algos_disabled',
-				bodyPadding: 10,
-				style: 'font-size:12px;',
-				html: 'Scaling disabled for this role',
-				margin: '0 0 10 0'
-			}, {
-				xtype: 'tabpanel',
-				itemId: 'algos',
-				enableTabScroll: true,
-				deferredRender: false, // TODO: check in 4.1
-				defaults: {
-					layout: 'anchor',
-					closable: true,
-					border: false,
-					bodyCls: 'x-panel-body-frame'
-				},
-				margin: '0 0 10 0'
-			}]
-		}]
-	});
+                validateHelper: {
+                        max: {pair: '[name=min]', isMax: true},
+                        min: {pair: '[name=max]'},
+                        msgTpl: 'Scale up value must be {0} than Scale down value'
+                },
+                validateBounds: function(field) {
+                    var helper = this.validateHelper,
+                        hlp = helper[field.name],
+                        isMax = !!hlp['isMax'],
+                        pairField = field.up('fieldset').down(hlp['pair']),
+                        value = field.isValid() && +field.getValue(),
+                        pairValue = pairField.isValid() && +pairField.getValue();
+
+                    if (value !== false && pairValue !== false) {
+                        var record = this.up('form').getRecord(),
+                            inverted = !!record.get('isInvert'),
+                            err = record.get('validationErrors') || {},
+                            msg;
+
+                        if (value == pairValue || isMax == (value < pairValue)) {
+                            msg = Ext.String.format(helper.msgTpl, inverted ? 'less' : 'greater');
+                            err[inverted ? 'min' : 'max'] = msg;
+                            (isMax !== inverted ? field : pairField).markInvalid(msg);
+
+                        } else {
+                            delete err[inverted ? 'min' : 'max'];
+                            if (Ext.Object.isEmpty(err)) {
+                                err = null;
+                            }
+                            (isMax !== inverted ? field : pairField).clearInvalid();
+                        }
+                        record.set('validationErrors', err);
+                    }
+                },
+                defaults: {
+                    listeners: {
+                        beforeactivate: function() {
+                            var me = this;
+                            //default field values
+                            if (me.defaultValues) {
+                                Ext.Object.each(me.defaultValues, function(name, value){
+                                    var field = me.down('[name="' + name + '"]'),
+                                        fieldValue = field.getValue();
+                                    if (Ext.isEmpty(fieldValue) || !fieldValue) {
+                                        field.setValue(value);
+                                    }
+                                });
+                            }
+                        },
+                        afterrender: function() {
+                            var me = this;
+                            if (me.defaultValues) {
+                                var helper = me.up().validateHelper,
+                                    onFieldChange = function(comp, value){
+                                        me.up('form').updateRecord(comp.name, value);
+                                    },
+                                    onFieldBlur = me.up().validateBounds;
+
+                                Ext.Object.each(me.defaultValues, function(name){
+                                    var field = me.down('[name="' + name + '"]'),
+                                        hlp;
+                                    field.on('change', onFieldChange, field);
+
+                                    if (!me.bypassBoundsValidation && (hlp = helper[name]) && hlp['pair']) {
+                                        field.on('blur', onFieldBlur, me.up());
+                                    }
+                                });
+                            }
+
+                        }
+                    }
+                },
+                items: [{
+                    xtype: 'component',
+                    itemId: 'blank'
+                },{
+                    xtype: 'fieldset',
+                    itemId: 'la',
+                    title: 'Downscaling and upscaling thresholds',
+                    defaultValues: {
+                        period: '15',
+                        min: '2',
+                        max: '5'
+                    },
+                    defaults: {
+                        maxWidth: 330
+                    },
+                    items: [{
+                        xtype: 'fieldcontainer',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            text: 'Use'
+                        }, {
+                            xtype: 'combo',
+                            hideLabel: true,
+                            store: ['1','5','15'],
+                            allowBlank: false,
+                            editable: false,
+                            name: 'period',
+                            queryMode: 'local',
+                            margin: '0 8',
+                            width: 60
+                        }, {
+                            xtype: 'label',
+                            text: 'minute(s) load averages for scaling',
+                            flex: 1
+                        }]
+                    }, {
+                        xtype: 'fieldcontainer',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            flex: 1,
+                            text: 'Scale up when LA goes over'
+                        }, {
+                            xtype: 'textfield',
+                            name: 'max',
+                            vtype: 'float',
+                            allowBlank: false,
+                            margin: '0 0 0 8',
+                            width: 60
+                        }]
+                    }, {
+                        xtype: 'fieldcontainer',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            flex: 1,
+                            text: 'Scale down when LA goes under'
+                        }, {
+                            xtype: 'textfield',
+                            name: 'min',
+                            vtype: 'float',
+                            allowBlank: false,
+                            margin: '0 0 0 8',
+                            width: 60
+                        }]
+                    }]
+                },{
+                    xtype: 'fieldset',
+                    itemId: 'ram',
+                    title: 'Downscaling and upscaling thresholds',
+                    defaultValues: {
+                        use_cached: false,
+                        min: '',
+                        max: ''
+                    },
+                    defaults: {
+                        maxWidth: 380
+                    },
+                    items: [{
+                        xtype: 'fieldcontainer',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            flex: 1,
+                            text: 'Scale up when free RAM goes below'
+                        }, {
+                            xtype: 'textfield',
+                            name: 'min',
+                            vtype: 'float',
+                            allowBlank: false,
+                            margin: '0 8',
+                            width: 60
+                        }, {
+                            xtype: 'label',
+                            text: 'MB'
+                        }]
+                    }, {
+                        xtype: 'fieldcontainer',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            flex: 1,
+                            text: 'Scale down when free RAM goes above'
+                        }, {
+                            xtype: 'textfield',
+                            name: 'max',
+                            vtype: 'float',
+                            allowBlank: false,
+                            margin: '0 8',
+                            width: 60
+                        }, {
+                            xtype: 'label',
+                            text: 'MB'
+                        }]
+                    }, {
+                        xtype: 'checkbox',
+                        boxLabel: 'Use free+cached ram as scaling metric',
+                        name: 'use_cached',
+                        inputValue: '1'
+                    }]
+                },{
+                    xtype: 'fieldset',
+                    itemId: 'bw',
+                    title: 'Downscaling and upscaling thresholds',
+                    defaultValues: {
+                        type: 'outbound',
+                        min: '10',
+                        max: '40'
+                    },
+                    defaults: {
+                        maxWidth: 540
+                    },
+                    items: [{
+                        xtype: 'fieldcontainer',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            text: 'Use'
+                        }, {
+                            xtype: 'combo',
+                            hideLabel: true,
+                            store: [ 'inbound', 'outbound' ],
+                            allowBlank: false,
+                            editable: false,
+                            name: 'type',
+                            queryMode: 'local',
+                            margin: '0 8',
+                            width: 120
+                        }, {
+                            xtype: 'label',
+                            text: ' bandwidth usage value for scaling',
+                            flex: 1
+                        }]
+                    }, {
+                        xtype: 'fieldcontainer',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            flex: 1,
+                            text: 'Scale up when average bandwidth usage on role is more than'
+                        }, {
+                            xtype: 'textfield',
+                            name: 'max',
+                            vtype: 'float',
+                            allowBlank: false,
+                            margin: '0 8',
+                            width: 40
+                        }, {
+                            xtype: 'label',
+                            text: 'Mbit/s'
+                        }]
+                    }, {
+                        xtype: 'fieldcontainer',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            flex: 1,
+                            text: 'Scale down when average bandwidth usage on role is less than'
+                        }, {
+                            xtype: 'textfield',
+                            name: 'min',
+                            vtype: 'float',
+                            allowBlank: false,
+                            margin: '0 8',
+                            width: 40
+                        }, {
+                            xtype: 'label',
+                            text: 'Mbit/s'
+                        }]
+                    }]
+                },{
+                    xtype: 'fieldset',
+                    itemId: 'sqs',
+                    title: 'Downscaling and upscaling thresholds',
+                    bypassBoundsValidation: true,
+                    defaultValues: {
+                        queue_name: '',
+                        min: '',
+                        max: ''
+                    },
+                    defaults: {
+                        maxWidth: 380,
+                        anchor: '100%'
+                    },
+                    items: [{
+                        fieldLabel: 'Queue name',
+                        xtype: 'textfield',
+                        name: 'queue_name',
+                        allowBlank: false,
+                        labelWidth: 100
+                    }, {
+                        xtype: 'fieldcontainer',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            flex: 1,
+                            text: 'Scale up when queue size goes over'
+                        }, {
+                            xtype: 'textfield',
+                            name: 'max',
+                            vtype: 'num',
+                            allowBlank: false,
+                            margin:'0 8',
+                            width: 40
+                        }, {
+                            xtype: 'label',
+                            text: 'items'
+                        }]
+                    }, {
+                        xtype: 'container',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            flex: 1,
+                            text: 'Scale down when queue size goes under'
+                        }, {
+                            xtype: 'textfield',
+                            name: 'min',
+                            vtype: 'num',
+                            allowBlank: false,
+                            margin: '0 8',
+                            width: 40
+                        }, {
+                            xtype: 'label',
+                            text: 'items'
+                        }]
+                    }]
+                },{
+                    xtype: 'fieldset',
+                    itemId: 'http',
+                    title: 'Downscaling and upscaling thresholds',
+                    defaultValues: {
+                        url: '',
+                        min: '1',
+                        max: '5'
+                    },
+                    defaults: {
+                        maxWidth: 430,
+                        anchor: '100%'
+                    },
+                    items: [{
+                        xtype: 'fieldcontainer',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            flex: 1,
+                            text: 'Scale up when URL response time more than'
+                        }, {
+                            xtype: 'textfield',
+                            name: 'max',
+                            vtype: 'num',
+                            allowBlank: false,
+                            margin: '0 8',
+                            width: 40
+                        }, {
+                            xtype: 'label',
+                            text: 'seconds'
+                        }]
+                    }, {
+                        xtype: 'fieldcontainer',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            flex: 1,
+                            text: 'Scale down when URL response time less than'
+                        }, {
+                            xtype: 'textfield',
+                            name: 'min',
+                            vtype: 'num',
+                            allowBlank: false,
+                            margin: '0 8',
+                            width: 40
+                        }, {
+                            xtype: 'label',
+                            text: 'seconds'
+                        }]
+                    }, {
+                        xtype: 'textfield',
+                        fieldLabel: 'URL (with http(s)://)',
+                        name: 'url',
+                        maxWidth: 600,
+                        labelWidth: 140,
+                        vtype: 'url',
+                        allowBlank: false
+                    }]
+                },{
+                    xtype: 'fieldset',
+                    itemId: 'custom',
+                    title: 'Downscaling and upscaling thresholds',
+                    defaultValues: {
+                        min: '',
+                        max: ''
+                    },
+                    defaults: {
+                        maxWidth: 340
+                    },
+
+                    /**
+                     * Current container's state
+                     * false: `max` field is upper, label: `scale up when metric goes over`
+                     *        `min` field is lower, label: `scale down when metric goes under`
+                     * true:  `min` field is upper, label: `scale up when metric goes under`
+                     *        `max` field is lower, label: `scale down when metric goes over`
+                     */
+                    inverted: false,
+                    swapHelper: {
+                        labelX: {0: 'over', 1: 'under'},
+                        nameS: {min: 'max', max: 'min'}
+                    },
+
+                    /**
+                     * Swap names between `max` and `min` fields, change their labels
+                     * when custom metric is loading into form
+                     *
+                     * @param inverted {bool} loading metric is inverted
+                     */
+                    swapFields: function (inverted) {
+                        if (inverted != this.inverted) {
+                            var helper = this.swapHelper,
+                                form = this.up('form');
+
+                            form.suspendLayouts();
+                            Ext.Array.forEach(this.query('#scaleUp, #scaleDown'), function (fieldset) {
+                                var label = fieldset.down('label'),
+                                    labelId = label.itemId,
+                                    text = fieldset.down('textfield'),
+                                    name = text.name;
+
+                                label.setData({x: helper.labelX[ (labelId == 'maxLabel') == inverted ? 1 : 0 ]});
+                                text.name = helper.nameS[name];
+                            });
+                            form.updateLayout();
+
+                            this.inverted = inverted;
+                        }
+
+                        return this;
+                    },
+
+                    items: [{
+                        xtype: 'fieldcontainer',
+                        itemId: 'scaleUp',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            itemId: 'maxLabel',
+                            flex: 1,
+                            tpl: 'Scale up when metric value goes {x}',
+                            data: {x: 'over'}
+                        }, {
+                            xtype: 'textfield',
+                            name: 'max',
+                            maskRe: /[0-9.]/,
+                            margin: '0 0 0 8',
+                            width: 40
+                        }]
+                    }, {
+                        xtype: 'fieldcontainer',
+                        itemId: 'scaleDown',
+                        layout: {
+                            type: 'hbox',
+                            align: 'middle'
+                        },
+                        items: [{
+                            xtype: 'label',
+                            itemId: 'minLabel',
+                            flex: 1,
+                            tpl: 'Scale down when metric value goes {x}',
+                            data: {x: 'under'}
+                        }, {
+                            xtype: 'textfield',
+                            name: 'min',
+                            maskRe: /[0-9.]/,
+                            margin: '0 0 0 8',
+                            width: 40
+                        }]
+                    }]
+                },{
+                    xtype: 'fieldset',
+                    itemId: 'time',
+                    title: 'Schedule rules',
+                    listeners: {
+                        hide: function() {
+                            this.down('grid').store.removeAll();
+                        }
+                    },
+                    items: {
+                        xtype: 'grid',
+                        hideHeaders: true,
+                        maxWidth: 600,
+                        store: {
+                            fields: [ 'start_time', 'end_time', 'week_days', 'instances_count', 'id' ],
+                            proxy: 'object'
+                        },
+                        cls: 'x-grid-scaling-schedule-rules',
+                        disableSelection: true,
+                        trackMouseOver: false,
+                        features: [{
+                            ftype: 'addbutton',
+                            text: 'Add schedule rule',
+                            handler: function(view) {
+                                Scalr.Confirm({
+                                    form: {
+                                        xtype: 'container',
+                                        cls: 'x-container-fieldset',
+                                        layout: 'anchor',
+                                        defaults: {
+                                            labelWidth: 130
+                                        },
+                                        items: [{
+                                            xtype: 'timefield',
+                                            fieldLabel: 'Start time',
+                                            name: 'ts_s_time',
+                                            anchor: '100%',
+                                            minValue: '0:00am',
+                                            maxValue: '23:55pm',
+                                            allowBlank: false
+                                        }, {
+                                            xtype: 'timefield',
+                                            fieldLabel: 'End time',
+                                            name: 'ts_e_time',
+                                            anchor: '100%',
+                                            minValue: '0:00am',
+                                            maxValue: '23:55pm',
+                                            allowBlank: false
+                                        }, {
+                                            xtype: 'checkboxgroup',
+                                            fieldLabel: 'Days of week',
+                                            columns: 3,
+                                            items: [
+                                                { boxLabel: 'Sun', name: 'ts_dw_Sun', width: 50 },
+                                                { boxLabel: 'Mon', name: 'ts_dw_Mon' },
+                                                { boxLabel: 'Tue', name: 'ts_dw_Tue' },
+                                                { boxLabel: 'Wed', name: 'ts_dw_Wed' },
+                                                { boxLabel: 'Thu', name: 'ts_dw_Thu' },
+                                                { boxLabel: 'Fri', name: 'ts_dw_Fri' },
+                                                { boxLabel: 'Sat', name: 'ts_dw_Sat' }
+                                            ]
+                                        }, {
+                                            xtype: 'numberfield',
+                                            fieldLabel: 'Instances count',
+                                            name: 'ts_instances_count',
+                                            anchor: '100%',
+                                            allowDecimals: false,
+                                            minValue: 0,
+                                            maxValue: 1000,
+                                            allowBlank: false
+                                        }]
+                                    },
+                                    ok: 'Add',
+                                    title: 'Add schedule rule',
+                                    formValidate: true,
+                                    closeOnSuccess: true,
+                                    scope: view,
+                                    success: function (formValues) {
+                                        var store = view.up('grid').store,
+                                            week_days_list = '',
+                                            i = 0, k;
+
+                                        for (k in formValues) {
+                                            if (k.indexOf('ts_dw_') != -1 && formValues[k] == 'on') {
+                                                week_days_list += k.replace('ts_dw_','')+', ';
+                                                i++;
+                                            }
+                                        }
+
+                                        if (i == 0) {
+                                            Scalr.message.Error('You should select at least one week day');
+                                            return false;
+                                        }
+                                        else
+                                            week_days_list = week_days_list.substr(0, week_days_list.length-2);
+
+                                        var int_s_time = parseInt(formValues.ts_s_time.replace(/\D/g,''));
+                                        var int_e_time = parseInt(formValues.ts_e_time.replace(/\D/g,''));
+
+                                        if (formValues.ts_s_time.indexOf('AM') && int_s_time >= 1200)
+                                            int_s_time = int_s_time-1200;
+
+                                        if (formValues.ts_e_time.indexOf('AM') && int_e_time >= 1200)
+                                            int_e_time = int_e_time-1200;
+
+                                        if (formValues.ts_s_time.indexOf('PM') != -1)
+                                            int_s_time = int_s_time+1200;
+
+                                        if (formValues.ts_e_time.indexOf('PM') != -1)
+                                            int_e_time = int_e_time+1200;
+
+                                        if (int_e_time <= int_s_time) {
+                                            Scalr.message.Error('End time value must be greater than Start time value');
+                                            return false;
+                                        }
+
+                                        var record_id = int_s_time+':'+int_e_time+':'+week_days_list+':'+formValues.ts_instances_count;
+
+                                        var recordData = {
+                                            start_time: formValues.ts_s_time,
+                                            end_time: formValues.ts_e_time,
+                                            instances_count: formValues.ts_instances_count,
+                                            week_days: week_days_list,
+                                            id: record_id
+                                        };
+
+                                        var list_exists = false;
+                                        var list_exists_overlap = false;
+                                        var week_days_list_array = week_days_list.split(", ");
+
+                                        store.each(function (item, index, length) {
+                                            if (item.data.id == recordData.id) {
+                                                Scalr.message.Error('Same record already exists');
+                                                list_exists = true;
+                                                return false;
+                                            }
+
+                                            var chunks = item.data.id.split(':');
+                                            var s_time = chunks[0];
+                                            var e_time = chunks[1];
+                                            if (
+                                                    (int_s_time >= s_time && int_s_time <= e_time) ||
+                                                    (int_e_time >= s_time && int_e_time <= e_time) ||
+                                                    (s_time >= int_s_time && s_time <= int_e_time) ||
+                                                    (e_time >= int_s_time && e_time <= int_e_time)
+                                                )
+                                            {
+                                                var week_days_list_array_item = (chunks[2]).split(", ");
+                                                for (var ii = 0; ii < week_days_list_array_item.length; ii++)
+                                                {
+                                                    for (var kk = 0; kk < week_days_list_array.length; kk++)
+                                                    {
+                                                        if (week_days_list_array[kk] == week_days_list_array_item[ii] && week_days_list_array[kk] != '')
+                                                        {
+                                                            list_exists_overlap = "Period "+week_days_list+" "+formValues.ts_s_time+" - "+formValues.ts_e_time+" overlaps with period "+chunks[2]+" "+item.data.start_time+" - "+item.data.end_time;
+                                                            return true;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }, this);
+
+                                        if (!list_exists && !list_exists_overlap) {
+                                            store.add(recordData);
+                                            return true;
+                                        } else {
+                                            Scalr.message.Error((!list_exists_overlap) ? 'Same record already exists' : list_exists_overlap);
+                                            return false;
+                                        }
+                                    }
+                                });
+                            }
+                        },{
+                            ftype: 'rowbody',
+                            getAdditionalData: function(data, rowIndex, record, orig) {
+                                return {
+                                    rowBody: '<div style="margin-top:-6px;width:100%;overflow:hidden;text-overflow:ellipsis"><span style="font-size:90%;margin-right:10px;width:90px;text-align:center;float:left">instance(s)</span><span style="white-space:nowrap">on <span class="x-semibold" data-qtip="'+record.get('week_days')+'">'+record.get('week_days')+'</span></span></div>',
+                                    rowBodyColspan: this.view.headerCt.getColumnCount()
+                                };
+
+                            }
+                        }],
+                        viewConfig: {
+                            //emptyText: 'No schedule rules defined',
+                            //deferEmptyText: false,
+                            focusedItemCls: '',
+                            overItemCls: ''
+                        },
+                        columns: [{
+                            xtype: 'templatecolumn',
+                            flex: 1,
+                            tpl: '<span class="x-semibold" style="text-align:center;width:90px;float:left;;margin-right:10px">{instances_count}</span> <span class="x-semibold">{start_time}</span> - <span class="x-semibold">{end_time}</span>'
+                        }, {
+                            xtype: 'templatecolumn',
+                            tpl: '<img class="x-grid-icon x-grid-icon-delete" title="Delete schedule rule" src="'+Ext.BLANK_IMAGE_URL+'"/>',
+                            width: 42,
+                            sortable: false,
+                            dataIndex: 'id',
+                            align:'left'
+                        }],
+                        onDataChange: function() {
+                            var me = this,
+                                form = me.up('form'),
+                                data = [], records = me.store.getRange();
+                            for (var i = 0; i < records.length; i++)
+                                data[data.length] = records[i].data;
+                            form.updateRecord('settings', data);
+                        },
+                        listeners: {
+                            viewready: function() {
+                                var me = this;
+                                me.store.on({
+                                    add: {fn: me.onDataChange, scope: me},
+                                    update: {fn: me.onDataChange, scope: me},
+                                    remove: {fn: me.onDataChange, scope: me}
+                                });
+                            },
+                            itemclick: function (view, record, item, index, e) {
+                                if (e.getTarget('img.x-grid-icon-delete')) {
+                                    view.store.remove(record);
+                                    return false;
+                                }
+                            }
+                        },
+                        dockedItems: [{
+                            xtype: 'toolbar',
+                            ui: 'inline',
+                            padding: '0 0 8',
+                            dock: 'top',
+                            items: [{
+                                xtype: 'label',
+                                itemId: 'timezone',
+                                flex: 1,
+                                listeners: {
+                                    render: function() {
+                                        var me = this;
+                                        me.el.on('click', function(e){
+                                            var el = me.el.query('a');
+                                            if (el.length && e.within(el[0])) {
+                                                me.up('#farmDesigner').showFarmSettings('general');
+                                                e.preventDefault();
+                                            }
+                                        });
+                                    }
+                                }
+                            }]
+                        }]
+                    }
+                }]
+            }, {
+                xtype: 'fieldset',
+                itemId: 'statpanel',
+                title: 'Statistics',
+                cls: 'x-fieldset-separator-none',
+                hidden: true,
+                items: [{
+                    xtype: 'chartpreview',
+                    itemId: 'chartPreview',
+                    height: 250,
+                    width: 442
+                }]
+                /*
+                items: [{
+                    xtype: 'label',
+                    itemId: 'statstatus',
+                    style: 'color:#666'
+                },{
+                    xtype: 'image',
+                    itemId: 'stat',
+                    farm: moduleTabParams['farmId'],
+                    style: 'max-width:537px;cursor:pointer',
+                    width: '100%',
+                    listeners: {
+                        afterrender: function(){
+                            var me = this;
+                            me.on('click',
+                                function() {
+                                    this.up('form').showStatPopup(this, this.farm, this.role, this.watcher)
+                                },
+                                me,
+                                {element: 'el'}
+                            );
+                        }
+                    }
+                }]*/
+            }],
+            listeners: {
+                afterrender: function() {
+                    this.grid = this.up('#scaling').down('#leftcol grid');
+                },
+                beforeloadrecord: function(record) {
+                    this.down('#algos #time grid').store.loadData({});
+                },
+
+                loadrecord: function(record) {
+                    var form = this.getForm(),
+                        id = record.get('id'),
+                        alias = record.get('alias'),
+                        settings = record.get('settings') || {},
+                        errors = record.get('validationErrors') || {};
+
+                    form.clearInvalid();
+                    if (record.store) {
+                        form.findField('scaling_algo').setValue(id);
+                    }
+
+                    if (alias) {
+                        if (alias === 'time') {
+                            this.down('#algos #'+alias+' grid').store.loadData(settings);
+                        } else {
+                            this.down('#algos #'+alias).setFieldValues(settings);
+
+                            Ext.Object.each(errors, function (name, message) {
+                                var cmp = this.down('#'+ alias + ' [name='+ name +']');
+                                if (cmp && cmp.isFormField) {
+                                    cmp.markInvalid(message);
+
+                                    cmp.on('blur', function () {
+                                        this.grid.clearFailed(id, name);
+                                    }, this, {single: true});
+                                }
+                            }, this);
+
+                        }
+                    }
+                    if (!this.isVisible()) {
+                        this.setVisible(true);
+                        this.ownerCt.updateLayout();//recalculate form dimensions after container size was changed, while form was hidden
+                    }
+                },
+
+                afterloadrecord: function(record) {
+                    var isScalarized = this.up('#scaling').currentRole.get('isScalarized') == 1,
+                        field = this.getForm().findField('scaling_algo');
+                    if (!record.store) {
+                        if (!isScalarized) field.setValue(5);//DateTime metric
+                    }
+                    field.toggleIcon('question', !isScalarized);
+                }
+            },
+
+            updateRecordSuspended: 0,
+
+            updateRecord: function (fieldName, fieldValue, isInverted) {
+                var record = this.getRecord();
+
+                if (this.isRecordLoading || this.updateRecordSuspended || !record) {
+                    return;
+                }
+
+                var data = {
+                        settings: record.get('settings') || {}
+                    };
+
+                if (fieldName) {
+                    if (fieldName == 'settings') {
+                        data['settings'] = fieldValue;
+                    } else {
+                        data['settings'][fieldName] = fieldValue;
+                    }
+                } else {
+                    var algoId = this.getForm().findField('scaling_algo').getValue(),
+                        fieldsContainer = this.down('#algos').layout.getActiveItem(),
+                        algoData = this.up('#farmDesigner').moduleParams.tabParams['metrics'][algoId];
+
+                    data['id'] = algoId;
+                    data['name'] = algoData.name;
+                    data['alias'] = algoData.alias;
+                    data['settings'] = fieldsContainer.getFieldValues();
+                    data['isInvert'] = isInverted || false;
+                }
+                if (fieldName !== 'settings') {
+                    data.min = data['settings'].min || undefined;
+                    data.max = data['settings'].max || undefined;
+                }
+
+                this.grid.suspendLayouts();
+                record.set(data);
+                if (record.store === undefined) {
+                    this.grid.getStore().add(record);
+                    this.grid.setSelectedRecord(record);
+                }
+                this.grid.resumeLayouts(true);
+
+            },
+
+            hideStat: function() {
+                this.down('#statpanel').hide();
+            },
+
+            showStat: function(metric) {
+                //fixme extjs5
+
+                var me = this;
+                var roleRecord = me.up('#scaling').currentRole;
+                var isRoleNew = roleRecord.get('new');
+                var statPanel = me.down('#statpanel');
+
+                var isMetricCorrect = function (metric) {
+                    var metrics = ['mem', 'cpu', 'la', 'net', 'snum'];
+                    return metrics.some(function (currentMetric) {
+                        return currentMetric === metric;
+                    });
+                };
+
+                if (!isRoleNew && isMetricCorrect(metric)) {
+                    var tabParams = this.up('#farmDesigner').moduleParams.tabParams;
+                    var hostUrl = tabParams['monitoringHostUrl'];
+                    var farmId = tabParams['farmId'];
+                    var farmRoleId = roleRecord.get('farm_role_id');
+                    var farmHash = tabParams['farmHash'];
+                    var period = 'daily';
+                    var params = {farmId: farmId, farmRoleId: farmRoleId, hash: farmHash, period: period, metrics: metric};
+                    var size = {height: 250, width: 442};
+                    var chartPreview = me.down('#chartPreview');
+
+                    var callback = function () {
+                        //me.lcdDelayed = Ext.Function.defer(me.showStat, 6000, me);
+                    };
+
+                    statPanel.show();
+                    chartPreview.loadStatistics(hostUrl, params, callback, size);
+                } else {
+                    statPanel.hide();
+                }
+            }
+        }
+    }]
 });

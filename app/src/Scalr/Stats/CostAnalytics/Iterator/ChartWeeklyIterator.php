@@ -1,0 +1,93 @@
+<?php
+
+namespace Scalr\Stats\CostAnalytics\Iterator;
+
+use DateTime, DateTimeZone;
+use Scalr\Stats\CostAnalytics\ChartPointInfo;
+
+/**
+ * ChartWeeklyIterator
+ *
+ * This iterator is used to iterate over the date period
+ * according to cost analytics data retention policy.
+ *
+ * @author   Vlad Dobrovolskiy  <v.dobrovolskiy@scalr.com>
+ * @since    5.0 (03.12.2014)
+ */
+class ChartWeeklyIterator extends ChartPeriodIterator
+{
+    /**
+     * Constructor
+     *
+     * @param   string       $start     The start date of the period 'YYYY-mm-dd'
+     * @param   string       $end       optional End date
+     * @param   string       $timezone  optional Timezone
+     * @throws  \InvalidArgumentException
+     */
+    public function __construct($start, $end = null, $timezone = 'UTC')
+    {
+        $this->mode = 'week';
+        $this->timezone = new DateTimeZone($timezone);
+        $this->today = $this->getTodayDate();
+        $this->start = new DateTime(($start instanceof DateTime ? $start->format('Y-m-d 00:00:00') : $start), $this->timezone);
+        $this->end = (!empty($end) ? new DateTime(($end instanceof DateTime ? $end->format('Y-m-d 00:00:00') : $end), $this->timezone) : null);
+
+        //Week should start from sunday
+        if ($this->start->format('w') != 0) {
+            $this->start->modify('last sunday');
+        }
+
+        $this->prevInterval = new \DateInterval('P7D');
+
+        //Each point
+        $this->interval = '1 day';
+
+        $this->end = clone $this->start;
+        $this->end->add(new \DateInterval('P6D'));
+
+        $this->prevStart = clone $this->start;
+        $this->prevStart->sub($this->prevInterval);
+
+        $this->wholePeriodPerviousEnd = clone $this->start;
+        $this->wholePeriodPerviousEnd->modify('-1 day');
+
+        $this->prevEnd = clone $this->prevStart;
+        $this->prevEnd->add(new \DateInterval('P' . $this->start->diff(min($this->end, $this->today), true)->days . 'D'));
+
+        $endoftheday = new \DateInterval('PT23H59M59S');
+
+        $this->end->add($endoftheday);
+        $this->prevEnd->add($endoftheday);
+        $this->wholePeriodPerviousEnd->add($endoftheday);
+
+        if (!$this->di)
+            $this->di = \DateInterval::createFromDateString($this->interval);
+
+        $this->dt = clone $this->start;
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see Iterator::current()
+     * @return ChartPointInfo
+     */
+    public function current()
+    {
+        if (!isset($this->c[$this->i])) {
+            $chartPoint = new ChartPointInfo($this);
+            $previousPeriodDt = clone $chartPoint->dt;
+            $previousPeriodDt->sub($this->getPreviousPeriodInterval());
+
+            $chartPoint->label = $chartPoint->dt->format('l, M j');
+            $chartPoint->show = $chartPoint->dt->format('M j');
+
+            $chartPoint->key = $chartPoint->dt->format('Y-m-d');
+            $chartPoint->previousPeriodKey = $previousPeriodDt->format('Y-m-d');
+
+            $this->c[$this->i] = $chartPoint;
+        }
+
+        return $this->c[$this->i];
+    }
+
+} 

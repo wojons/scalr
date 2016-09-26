@@ -1,0 +1,78 @@
+.x-budgets-grid .x-grid-row {
+    background-color: #f7f3f7;
+}
+
+.x-budgets-grid .x-grid-tree-node-leaf{
+    background: #F9FAFB;
+}
+
+.x-budgets-grid .x-grid-item-over .x-grid-row{
+    background: #e8eaef;
+}
+
+.x-budgets-grid .x-tree-icon-parent,
+.x-budgets-grid .x-tree-icon-leaf{
+    display: none;
+}
+
+.x-budgets-grid .x-tree-expander {
+    float: left;
+    margin-bottom: 10px!important;
+}
+
+.x-budgets-grid .x-tree-elbow-empty {
+    display: none;
+}
+
+.x-budgets-grid .x-grid-cell-inner-treecolumn {
+    line-height: 20px;
+}
+
+.x-budgets-grid .x-grid-cell-inner-treecolumn span{
+    position: relative;
+    top: 2px;
+}
+
+.x-budgets-grid .x-tree-elbow-img {
+    height: 22px;
+    width: 22px!important;
+    margin: 11px 15px 10px 15px;
+    float: left;
+}
+
+.x-budgets-grid .x-tree-elbow-line {
+    display: none;
+}
+
+.x-budgets-grid .x-grid-cell-budget-warning .x-grid-cell-inner{
+    padding: 0 24px 0 0!important;
+}
+
+.x-budgets-grid .x-grid-cell{
+    border-top: 12px solid #cdddeb;
+    cursor: pointer;
+}
+
+.x-budgets-grid .x-grid-tree-node-leaf .x-grid-cell,
+.x-budgets-grid .x-grid-item:first-child .x-grid-cell{
+    border-top: 0;
+}
+
+.x-budget-date{
+    position: relative;
+}
+.x-budget-date span{
+    font-size: 13px;
+    text-align: center;
+    display: block;
+    position: absolute;
+    font-family: OpenSansSemiBold;
+    right: -23px;
+    width: 46px;
+    padding-bottom: 12px;
+    background: url(/ui2/images/ui/analytics/sort-down.png) 50% 90% no-repeat;
+}
+
+.x-quarter-box .x-form-text {
+    border: 1px solid #eee;
+}

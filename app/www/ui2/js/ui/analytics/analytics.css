@@ -1,0 +1,158 @@
+.x-draw-container .x-panel-body-default {
+    background: transparent;
+}
+
+/*currency*/
+.scalr-ui-analytics-currency .small{
+    /*font-size: 70%;*/
+}
+
+/*pct label*/
+.x-label-pct{
+    text-align: left;
+    font-family: OpenSansSemiBold;
+    line-height: 24px;
+    padding: 0 6px;
+    min-width: 50px;
+    color: #fff;
+    border-radius: 1px;
+    display: inline-block;
+    vertical-align: top;
+}
+
+.x-label-pct.fixed{
+    min-width: 70px;
+}
+
+.x-label-pct.large{
+    padding: 0 10px;
+    font-size: 13px;
+    line-height: 24px;
+}
+
+.x-label-pct.increase{
+    background-color: #f76040;
+}
+
+.x-label-pct .x-costanalytics-icon-increase{
+    width: 12px;
+    height: 12px;
+    background: url(/ui2/images/ui/analytics/increase-white.png) 0 0 no-repeat;
+    position: relative;
+    top: -1px;
+    vertical-align: middle;
+}
+
+
+.x-label-pct.decrease{
+    background-color: #2ba446;
+}
+
+.x-label-pct .x-costanalytics-icon-decrease{
+    width: 12px;
+    height: 12px;
+    background: url(/ui2/images/ui/analytics/decrease-white.png?1.1) 0 0 no-repeat;
+    position: relative;
+    top: -1px;
+    vertical-align: middle;
+}
+
+/*custom pickers*/
+.x-monthpicker .x-item-disabled a,
+.x-quarterpicker .x-item-disabled a,
+.x-yearpicker .x-item-disabled a{
+    background-color: #eee!important;
+    cursor: default;
+    color: #bbb!important;
+}
+
+.x-quarterpicker .x-monthpicker-months .x-monthpicker-item {
+    float: none;
+    margin: 5px auto 4px;
+}
+
+.x-yearpicker .x-monthpicker-months{
+    display: none;
+}
+
+.x-yearpicker .x-monthpicker-years{
+    width: auto;
+}
+
+.x-yearpicker .x-monthpicker-yearnav{
+    padding-left: 40px;
+}
+
+.x-yearpicker .x-monthpicker-years .x-monthpicker-item{
+    width: 42px;
+}
+
+.x-costanalytics-icon-event{
+    width: 16px;
+    height: 16px;
+    background-image: url(/ui2/images/ui/analytics/event-types.png);
+    background-repeat: no-repeat;
+}
+
+.x-costanalytics-icon-event-cc{
+    background-position: 0 0;
+}
+
+.x-costanalytics-icon-event-project{
+    background-position: 0 -16px;
+}
+
+.x-costanalytics-icon-event-pricing{
+    background-position: 0 -32px;
+}
+
+.x-menu-item-unchecked .x-costanalytics-sort-dir{
+    display:none;
+}
+
+.x-costanalytics-sort-dir {
+    width: 12px;
+    height: 6px;
+    background-repeat: no-repeat;
+    background-image: url(/ui2/images/ui/analytics/sort-dir.png);
+    background-size: 12px 12px;
+}
+
+.x-costanalytics-sort-dir-desc {
+    background-position: 0 0;
+}
+
+.x-costanalytics-sort-dir-asc {
+    background-position: 0 -6px;
+}
+
+.scalr-ui-analytics-link:hover {
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+
+@media only screen and (-webkit-min-device-pixel-ratio: 1.5),
+    only screen and (-o-min-device-pixel-ratio: 3/2),
+    only screen and (min--moz-device-pixel-ratio: 1.5),
+    only screen and (min-device-pixel-ratio: 1.5) {
+
+    .x-label-pct .x-costanalytics-icon-decrease{
+        background-size: 12px 12px;
+        background-image: url(/ui2/images/ui/analytics/decrease-white-retina.png?1.1);
+    }
+
+    .x-label-pct .x-costanalytics-icon-increase{
+        background-size: 12px 12px;
+        background-image: url(/ui2/images/ui/analytics/increase-white-retina.png);
+    }
+
+    .x-costanalytics-icon-event{
+        background-size: 16px 48px;
+        background-image: url(/ui2/images/ui/analytics/event-types-retina.png);
+    }
+
+    .x-costanalytics-sort-dir {
+        background-image: url(/ui2/images/ui/analytics/sort-dir-retina.png);
+    }
+}

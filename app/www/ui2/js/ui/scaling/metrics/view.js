@@ -1,110 +1,632 @@
-Scalr.regPage('Scalr.ui.scaling.metrics.view', function (loadParams, moduleParams) {
-	var store = Ext.create('store.store', {
-		fields: [ 'id','env_id','client_id','name','file_path','retrieve_method','calc_function' ],
-		proxy: {
-			type: 'scalr.paging',
-			extraParams: loadParams,
-			url: '/scaling/metrics/xListMetrics/'
-		},
-		remoteSort: true
-	});
+Scalr.regPage('Scalr.ui.scaling.metrics.view', function () {
 
-	return Ext.create('Ext.grid.Panel', {
-		title: 'Scaling &raquo; Metrics &raquo; View',
-		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
-		},
-		scalrReconfigureParams: { metricId: '' },
-		store: store,
-		stateId: 'grid-scaling-metrics-view',
-		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
+    var store = Ext.create('store.store', {
 
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'Custom scaling metrics',
-				href: '#/scaling/metrics/view'
-			}
-		}],
+        fields: [
+            'id',
+            'envId',
+            'clientId',
+            'name',
+            {name: 'filePath', sortType: 'asUCText'},
+            'retrieveMethod',
+            'calcFunction',
+            'isInvert'
+        ],
 
-		viewConfig: {
-			emptyText: "No presets defined",
-			loadingText: 'Loading presets ...'
-		},
+        proxy: {
+            type: 'ajax',
+            url: '/scaling/metrics/xListMetrics/',
+            reader: {
+                type: 'json',
+                rootProperty: 'data',
+                successProperty: 'success'
+            }
+        },
 
-		columns: [
-			{ header: "ID", width: 40, dataIndex: 'id', sortable: true },
-			{ header: "Name", flex: 1, dataIndex: 'name', sortable:true },
-			{ header: "File path", flex: 1, dataIndex: 'file_path', sortable: false },
-			{ header: "Retrieve method", flex: 1, dataIndex: 'retrieve_method', sortable: false, xtype: 'templatecolumn', tpl:
-				'<tpl if="retrieve_method == \'read\'">File-Read</tpl>' +
-				'<tpl if="retrieve_method == \'execute\'">File-Execute</tpl>'
-			},
-			{ header: "Calculation function", flex: 1, dataIndex: 'calc_function', sortable: false, xtype: 'templatecolumn', tpl:
-				'<tpl if="calc_function == \'avg\'">Average</tpl>' +
-				'<tpl if="calc_function == \'sum\'">Sum</tpl>'
-			}, {
-				xtype: 'optionscolumn',
-				optionsMenu: [{
-					text: 'Edit',
-					href: "#/scaling/metrics/{id}/edit"
-				}],
-				getVisibility: function (record) {
-					return (record.get('env_id') != 0);
-				}
-			}
-		],
+        listeners: {
+            beforeload: function () {
+                grid.down('#add').toggle(false, true);
+            },
+            filterchange: function () {
+                grid.down('#add').toggle(false, true);
+            }
+        },
 
-		multiSelect: true,
-		selModel: {
-			selType: 'selectedmodel',
-			selectedMenu: [{
-				text: 'Delete',
-				iconCls: 'x-menu-icon-delete',
-				request: {
-					confirmBox: {
-						msg: 'Remove selected metric(s): %s ?',
-						type: 'delete'
-					},
-					processBox: {
-						msg: 'Removing selected metric(s) ...',
-						type: 'delete'
-					},
-					url: '/scaling/metrics/xRemove/',
-					dataHandler: function (records) {
-						var metrics = [];
-						this.confirmBox.objects = [];
-						for (var i = 0, len = records.length; i < len; i++) {
-							metrics.push(records[i].get('id'));
-							this.confirmBox.objects.push(records[i].get('name'))
-						}
+        removeByMetricId: function (ids) {
+            var me = this;
 
-						return { metrics: Ext.encode(metrics) };
-					}
-				}
-			}],
-			getVisibility: function (record) {
-				return (record.get('env_id') != 0);
-			}
-		},
+            me.remove(Ext.Array.map(
+                ids, function (id) {
+                    return me.getById(id);
+                }
+            ));
 
-		dockedItems: [{
-			xtype: 'scalrpagingtoolbar',
-			store: store,
-			dock: 'top',
-			afterItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
-				handler: function() {
-					Scalr.event.fireEvent('redirect', '#/scaling/metrics/create');
-				}
-			}]
-		}]
-	});
+            if (me.getCount() === 0) {
+                grid.getView().refresh();
+            }
+
+            return me;
+        }
+    });
+
+    var grid = Ext.create('Ext.grid.Panel', {
+        cls: 'x-panel-column-left',
+        flex: 1,
+        scrollable: true,
+
+        store: store,
+
+        plugins: [ 'applyparams', 'focusedrowpointer', {
+            ptype: 'selectedrecord',
+            disableSelection: false,
+            clearOnRefresh: true,
+            selectSingleRecord: true
+        }],
+
+        viewConfig: {
+            preserveScrollOnRefresh: true,
+            markDirty: false,
+            plugins: {
+                ptype: 'dynemptytext',
+                emptyText: 'No metrics found.',
+                emptyTextNoItems: 'You have no metrics added yet.'
+            },
+            loadingText: 'Loading metrics ...',
+            deferEmptyText: false
+        },
+
+        selModel:
+            Scalr.isAllowed('GENERAL_CUSTOM_SCALING_METRICS', 'manage') ?
+            {
+                selType: 'selectedmodel',
+                getVisibility: function (record) {
+                    var envId = record.get('envId');
+                    return envId !== null;
+                }
+            } : null,
+
+        listeners: {
+            selectionchange: function(selModel, selections) {
+                this.down('toolbar').down('#delete').setDisabled(!selections.length);
+            }
+        },
+
+        applyMetric: function (metric) {
+            var me = this;
+
+            var record = me.getSelectedRecord();
+            var store = me.getStore();
+
+            if (Ext.isEmpty(record)) {
+                record = store.add(metric)[0];
+            } else {
+                record.set(metric);
+                me.clearSelectedRecord();
+            }
+
+            me.setSelectedRecord(record);
+
+            return me;
+        },
+
+        deleteMetric: function (id, name) {
+            var isDeleteMultiple = Ext.typeOf(id) === 'array';
+
+            Scalr.Request({
+                confirmBox: {
+                    type: 'delete',
+                    msg: !isDeleteMultiple
+                        ? 'Delete metric <b>' + name + '</b> ?'
+                        : 'Delete selected metric(s): %s ?',
+                    objects: isDeleteMultiple ? name : null
+                },
+                processBox: {
+                    type: 'delete',
+                    msg: !isDeleteMultiple
+                        ? 'Deleting <b>' + name + '</b> ...'
+                        : 'Deleting selected metric(s) ...'
+                },
+                url: '/scaling/metrics/xRemove/',
+                params: {
+                    metrics: Ext.encode(
+                        !isDeleteMultiple ? [id] : id
+                    )
+                },
+                success: function (response) {
+                    var deletedMetricsIds = response.processed;
+
+                    if (!Ext.isEmpty(deletedMetricsIds)) {
+                        store.removeByMetricId(deletedMetricsIds);
+                    }
+                }
+            });
+        },
+
+        deleteSelectedMetric: function () {
+            var me = this;
+
+            var record = me.getSelectedRecord();
+
+            me.deleteMetric(
+                record.get('id'),
+                record.get('name')
+            );
+
+            return me;
+        },
+
+        deleteSelectedMetrics: function () {
+            var me = this;
+
+            var ids = [];
+            var names = [];
+
+            Ext.Array.each(
+                me.getSelectionModel().getSelection(),
+
+                function (record) {
+                    ids.push(record.get('id'));
+                    names.push(record.get('name'));
+                }
+            );
+
+            me.deleteMetric(ids, names);
+
+            return me;
+        },
+
+        columns: [{
+            text: 'ID',
+            width: 60,
+            dataIndex: 'id',
+            sortable: true
+        }, {
+            text: 'Metric',
+            flex: 1,
+            dataIndex: 'name',
+            sortable: true,
+            xtype: 'templatecolumn',
+            tpl: new Ext.XTemplate('{[this.getScope(values.envId)]}&nbsp;&nbsp;{name}', {
+                getScope: function(envId) {
+                    var scope = envId !== null ? 'environment' : 'scalr';
+                    return '<img src="' + Ext.BLANK_IMAGE_URL + '" class="scalr-scope-' + scope + '" data-qclass="x-tip-light" data-qtip="' + Scalr.utils.getScopeLegend('metric') + '"/>';
+                }
+            })
+        }, {
+            text: 'Retrieve method',
+            width: 138,
+            dataIndex: 'retrieveMethod',
+            sortable: false,
+            xtype: 'templatecolumn',
+            tpl: '<tpl if="retrieveMethod == \'read\'">File-Read</tpl>' +
+                 '<tpl if="retrieveMethod == \'execute\'">File-Execute</tpl>' +
+                 '<tpl if="retrieveMethod == \'url-request\'">URL-Request</tpl>'
+        }, {
+            text: 'File path / URL',
+            flex: 1,
+            dataIndex: 'filePath',
+            sortable: true
+        }, {
+            text: 'Calculation function',
+            flex: 1,
+            dataIndex: 'calcFunction',
+            sortable: false,
+            xtype: 'templatecolumn',
+            tpl: '<tpl if="calcFunction == \'avg\'">Average</tpl>' +
+                '<tpl if="calcFunction == \'sum\'">Sum</tpl>' +
+                '<tpl if="calcFunction == \'max\'">Maximum</tpl>' +
+                '<tpl if="calcFunction == \'min\'">Minimum</tpl>'
+        }, {
+            xtype: 'templatecolumn',
+            text: 'Inverted',
+            dataIndex: 'isInvert',
+            width: 98,
+            sortable: true,
+            tpl: '<tpl if="isInvert"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div><tpl else>&mdash;</tpl>'
+        }],
+
+        dockedItems: [{
+            xtype: 'toolbar',
+            store: store,
+            dock: 'top',
+            ui: 'simple',
+            defaults: {
+                margin: '0 0 0 12'
+            },
+            items: [{
+                xtype: 'filterfield',
+                store: store,
+                filterFields: ['name'],
+                margin: 0,
+                listeners: {
+                    afterfilter: function () {
+                        grid.getView().refresh();
+                    }
+                }
+            },/*
+
+            TODO: Require refactoring model according SCALRCORE-1138 to add support for scalr, account scopes.
+
+            {
+                xtype: 'cyclealt',
+                name: 'scope',
+                getItemIconCls: false,
+                width: 130,
+                changeHandler: function (me, menuItem) {
+                    store.applyProxyParams({
+                        scope: menuItem.value
+                    });
+                },
+                getItemText: function (item) {
+                    return item.value
+                        ? 'Scope: &nbsp;<img src="'
+                            + Ext.BLANK_IMAGE_URL
+                            + '" class="' + item.iconCls
+                            + '" title="' + item.text + '" />'
+                        : item.text;
+                },
+                menu: {
+                    cls: 'x-menu-light x-menu-cycle-button-filter',
+                    minWidth: 200,
+                    items: [{
+                        text: 'All scopes',
+                        value: null
+                    }, {
+                        text: 'Scalr scope',
+                        value: 'scalr',
+                        iconCls: 'scalr-scope-scalr'
+                    }, {
+                        text: 'Account scope',
+                        value: 'account',
+                        iconCls: 'scalr-scope-account'
+                    }, {
+                        text: 'Environment scope',
+                        value: 'environment',
+                        iconCls: 'scalr-scope-environment',
+                        hidden: Scalr.scope !== 'environment'
+                    }]
+                }
+            },*/{
+                xtype: 'tbfill'
+            },{
+                text: 'New metric',
+                itemId: 'add',
+                cls: 'x-btn-green',
+                enableToggle: true,
+                hidden: !Scalr.isAllowed('GENERAL_CUSTOM_SCALING_METRICS', 'manage'),
+                toggleHandler: function (button, state) {
+                    if (state) {
+                        grid.clearSelectedRecord();
+
+                        form.down('#save').setText('Create');
+                        form.down('#delete').hide();
+
+                        form
+                            .setHeader('New Metric')
+                            .hideScopeInfo()
+                            .setFieldsReadOnly(null, false)
+                            .hideInvertedField(false)
+                            .show()
+                            .down('[name=name]').focus();
+
+                        return;
+                    }
+
+                    form.hide();
+                }
+            },{
+                itemId: 'refresh',
+                iconCls: 'x-btn-icon-refresh',
+                tooltip: 'Refresh',
+                handler: function () {
+                    store.load();
+                }
+            },{
+                itemId: 'delete',
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
+                disabled: true,
+                tooltip: 'Select one or more metrics to delete them',
+                hidden: !Scalr.isAllowed('GENERAL_CUSTOM_SCALING_METRICS', 'manage'),
+                handler: function () {
+                    grid.deleteSelectedMetrics();
+                }
+            }]
+        }]
+    });
+
+    var form = Ext.create('Ext.form.Panel', {
+        hidden: true,
+        autoScroll: true,
+
+        fieldDefaults: {
+            anchor: '100%'
+        },
+
+        scope: Scalr.scope,
+
+        getScope: function () {
+            return this.scope;
+        },
+
+        envIdToScope: function (envId) {
+            return envId === null
+                ? 'scalr'
+                : 'environment';
+        },
+
+        setFieldsReadOnly: function (record, readOnly, scope) {
+            var me = this,
+                isCalcFunctionAvailable = !record || record.get('calcFunction');
+
+            me.down('[name="calcFunction"]').setDisabled(!isCalcFunctionAvailable).setVisible(isCalcFunctionAvailable);
+
+            me.getForm().getFields().each(function (field) {
+                field.setReadOnly(readOnly);
+            });
+
+            Ext.Array.each(
+                me.getDockedComponent('buttons').query('#save, #delete'),
+                function (button) {
+                    button
+                        .setTooltip(readOnly ? Scalr.utils.getForbiddenActionTip('metric', scope) : '')
+                        .setDisabled(readOnly);
+                }
+            );
+
+            return me;
+        },
+
+        saveMetric: function () {
+            var me = this;
+
+            var baseForm = me.getForm();
+            var record = me.getRecord();
+
+            if (baseForm.isValid()) {
+                Scalr.Request({
+                    processBox: {
+                        type: 'save'
+                    },
+                    url: '/scaling/metrics/xSave',
+                    form: baseForm,
+                    params: record ? {
+                        metricId: record.get('id')
+                    } : null,
+                    success: function (response) {
+
+                        var metric = response.metric;
+
+                        if (!Ext.isEmpty(metric)) {
+                            grid.applyMetric(metric);
+                            return true;
+                        }
+
+                        store.load();
+                        grid.down('#add').toggle(false, true);
+                    }
+                });
+            }
+
+            return me;
+        },
+
+        setHeader: function (header) {
+            var me = this;
+
+            me.down('fieldset').setTitle(header);
+
+            return me;
+        },
+
+        hideScopeInfo: function () {
+            var me = this;
+
+            me.down('#scopeInfo').hide();
+
+            return me;
+        },
+
+        toggleScopeInfo: function (metricId, metricScope) {
+            var me = this;
+
+            var scopeInfoField = me.down('#scopeInfo');
+
+            if (metricScope !== me.getScope()) {
+                scopeInfoField.setValue(
+                    Scalr.utils.getScopeInfo('metric', metricScope, metricId)
+                );
+                scopeInfoField.show();
+                return me;
+            }
+
+            scopeInfoField.hide();
+            return me;
+        },
+
+        hideInvertedField: function (hidden) {
+            var me = this;
+
+            me.down('[name=isInvert]')
+                .setVisible(!hidden)
+                .setDisabled(hidden);
+
+            return me;
+        },
+
+        listeners: {
+            afterloadrecord: function (record) {
+                var me = this;
+
+                var scope = me.envIdToScope(record.get('envId'));
+                var readOnly = scope !== me.getScope() || !Scalr.isAllowed('GENERAL_CUSTOM_SCALING_METRICS', 'manage');
+
+                grid.down('#add').toggle(false, true);
+
+                me.down('#save').setText('Save');
+                me.down('#delete').show();
+
+                me
+                    .setHeader((Scalr.isAllowed('GENERAL_CUSTOM_SCALING_METRICS', 'manage') ? 'Edit' : 'View') + ' Metric')
+                    .toggleScopeInfo(
+                        record.get('id'),
+                        scope
+                    )
+                    .setFieldsReadOnly(record, readOnly, scope)
+                    .hideInvertedField(
+                        Ext.isEmpty(record.get('envId'))
+                    );
+            }
+        },
+
+        items: [{
+            xtype: 'displayfield',
+            itemId: 'scopeInfo',
+            cls: 'x-form-field-info x-form-field-info-fit',
+            anchor: '100%',
+            hidden: true
+        }, {
+            xtype: 'fieldset',
+            cls: 'x-fieldset-separator-none',
+            title: 'Metric details',
+            labelWidth: 120,
+            defaults: {
+                labelAlign: 'top'
+            },
+            items:[{
+                xtype: 'textfield',
+                name: 'name',
+                fieldLabel: 'Name',
+                vtype: 'alphanum',
+                minLength: 5,
+                allowBlank: false
+            }, {
+                xtype: 'combo',
+                name: 'retrieveMethod',
+                fieldLabel: 'Retrieve method',
+                editable: false,
+                value: 'read',
+                queryMode: 'local',
+                store: [
+                    ['read','File-Read'],
+                    ['execute','File-Execute'],
+                    ['url-request','URL-Request (GET)']
+                ],
+                listeners: {
+                    change: function(comp, value) {
+                        var filePathField = comp.next('[name="filePath"]'),
+                            isUrlRequest = value === 'url-request';
+
+                        filePathField.setFieldLabel(isUrlRequest ? 'URL' : 'File path');
+                        filePathField.toggleIcon('globalvars', isUrlRequest);
+                        filePathField.allowBlank = !isUrlRequest;
+                        if (isUrlRequest) {
+                            filePathField.vtype = 'url';
+                        } else {
+                            delete filePathField.vtype;
+                        }
+                        comp.next('[name="calcFunction"]').setDisabled(isUrlRequest).setVisible(!isUrlRequest);
+
+                        filePathField.validate();
+                    }
+                }
+            }, {
+                xtype: 'textfield',
+                name: 'filePath',
+                fieldLabel: 'File path',
+                plugins: [{
+                    ptype: 'fieldicons',
+                    position: 'label',
+                    icons: [{id: 'globalvars', hidden: true, tooltip: 'Global Variable Interpolation is supported in query params.'}]
+                }]
+            }, {
+                xtype: 'combo',
+                name: 'calcFunction',
+                fieldLabel: 'Calculation function',
+                editable: false,
+                value: 'avg',
+                queryMode: 'local',
+                store: [
+                    ['avg','Average'],
+                    ['sum','Sum'],
+                    ['max','Maximum'],
+                    ['min','Minimum']
+                ]
+            }, {
+                xtype: 'checkboxfield',
+                name: 'isInvert',
+                fieldLabel: 'Inverted',
+                labelAlign: 'left',
+                labelWidth: 70
+            }]
+        }],
+
+        dockedItems: [{
+            xtype: 'container',
+            itemId: 'buttons',
+            dock: 'bottom',
+            cls: 'x-docked-buttons',
+            hidden: !Scalr.isAllowed('GENERAL_CUSTOM_SCALING_METRICS', 'manage'),
+            layout: {
+                type: 'hbox',
+                pack: 'center'
+            },
+            maxWidth: 1000,
+            defaults: {
+                flex: 1,
+                maxWidth: 140
+            },
+            items: [{
+                xtype: 'button',
+                itemId: 'save',
+                text: 'Save',
+                handler: function () {
+                    form.saveMetric();
+                }
+            }, {
+                xtype: 'button',
+                text: 'Cancel',
+                handler: function() {
+                    grid.clearSelectedRecord();
+                    grid.down('#add').toggle(false, true);
+                }
+            }, {
+                xtype: 'button',
+                itemId: 'delete',
+                cls: 'x-btn-red',
+                text: 'Delete',
+                handler: function() {
+                    grid.deleteSelectedMetric();
+                }
+            }]
+        }]
+    });
+
+    return Ext.create('Ext.panel.Panel', {
+        stateful: true,
+        stateId: 'grid-scaling-metrics-view',
+
+        layout: {
+            type: 'hbox',
+            align: 'stretch'
+        },
+
+        scalrOptions: {
+            reload: false,
+            maximize: 'all',
+            menuTitle: 'Custom scaling metrics',
+            menuHref: '#/scaling/metrics',
+            menuFavorite: true
+        },
+
+        items: [ grid, {
+            xtype: 'container',
+            itemId: 'rightcol',
+            flex: .6,
+            maxWidth: 800,
+            minWidth: 400,
+            layout: 'fit',
+            items: [ form ]
+        }]
+    });
 });

@@ -1,0 +1,101 @@
+# `RoleCategory` #
+
+
+
+
+
+
+
+## Properties ##
+
+### `name` (required, filterable) ###
+
+
+
+
+Property of type: `string`.
+
+
+To filter on this field, use: `name=...`.
+
+
+### `scope` (read-only, filterable) ###
+
+
+
+
+Property of type: `string`.
+
+ 
+The following are valid values for the `scope` property:
+  + `scalr`
+  + `account`
+  + `environment`
+  + `farm`
+  + `farmrole`
+  + `role`
+  + `server`
+
+To filter on this field, use: `scope=...`.
+
+
+### `id` (read-only, filterable) ###
+
+
+
+
+Property of type: `integer`.
+
+
+To filter on this field, use: `id=...`.
+
+
+
+
+## Used in ##
+
+  + [`/role-categories/`](./../rest/api/v1beta0/account/role-categories/)
+  + [`/role-categories/{roleCategoryId}/`](./../rest/api/v1beta0/account/role-categories/{roleCategoryId}/)
+  + [`/{envId}/role-categories/`](./../rest/api/v1beta0/user/{envId}/role-categories/)
+  + [`/{envId}/role-categories/{roleCategoryId}/`](./../rest/api/v1beta0/user/{envId}/role-categories/{roleCategoryId}/)
+
+## Swagger Definition ##
+
+    {
+      "properties": {
+        "id": {
+          "readOnly": true, 
+          "type": "integer"
+        }, 
+        "name": {
+          "type": "string"
+        }, 
+        "scope": {
+          "enum": [
+            "scalr", 
+            "account", 
+            "environment", 
+            "farm", 
+            "farmrole", 
+            "role", 
+            "server"
+          ], 
+          "readOnly": true, 
+          "type": "string"
+        }
+      }, 
+      "required": [
+        "name"
+      ], 
+      "x-filterable": [
+        "id", 
+        "name", 
+        "scope"
+      ], 
+      "x-usedIn": [
+        "/role-categories/", 
+        "/role-categories/{roleCategoryId}/", 
+        "/{envId}/role-categories/", 
+        "/{envId}/role-categories/{roleCategoryId}/"
+      ]
+    }

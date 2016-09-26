@@ -1,0 +1,17 @@
+.scalr-ui-core-governance-icon-general {
+    width: 80px;
+    height: 65px;
+    background: url('/ui2/images/ui/governance/general.png?1.1') 0px 0px;
+}
+
+@media only screen and (-webkit-min-device-pixel-ratio: 1.5),
+    only screen and (-o-min-device-pixel-ratio: 3/2),
+    only screen and (min--moz-device-pixel-ratio: 1.5),
+    only screen and (min-device-pixel-ratio: 1.5) {
+
+    .scalr-ui-core-governance-icon-general {
+        background-size: 80px 65px;
+        background-image: url('/ui2/images/ui/governance/general-retina.png');
+    }
+}
+

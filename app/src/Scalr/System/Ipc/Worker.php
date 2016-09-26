@@ -1,44 +1,52 @@
 <?php
 
-interface Scalr_System_Ipc_Worker {
-	
-	/**
-	 * Called in parent
-	 * @param Scalr_Util_Queue $workQueue 
-	 * @return Scalr_Util_Queue
-	 */
-	function startForking ($workQueue);
-	
-	/**
-	 * Called in parent
-	 * @param $pid
-	 * @return unknown_type
-	 */
-	function childForked ($pid);
+interface Scalr_System_Ipc_Worker
+{
 
-	/**
-	 * Called in parent
-	 * @return 
-	 */
-	function endForking ();
+    /**
+     * Gets DI Container
+     *
+     * @return \Scalr\DependencyInjection\Container
+     */
+    public function getContainer();
 
-	/**
-	 * Called in child
-	 */
-	function startChild ();
+    /**
+     * Called in parent
+     * @param Scalr_Util_Queue $workQueue
+     * @return Scalr_Util_Queue
+     */
+    public function startForking($workQueue);
 
-	/**
-	 * Called in child
-	 */
-	function handleWork ($message);
+    /**
+     * Called in parent
+     * @param $pid
+     * @return unknown_type
+     */
+    public function childForked($pid);
 
-	/**
-	 * Called in child
-	 */
-	function endChild ();
-	
-	/**
-	 * Called in child when SIGTERM received
-	 */
-	function terminate ();
+    /**
+     * Called in parent
+     * @return
+     */
+    public function endForking();
+
+    /**
+     * Called in child
+     */
+    public function startChild();
+
+    /**
+     * Called in child
+     */
+    public function handleWork($message);
+
+    /**
+     * Called in child
+     */
+    public function endChild();
+
+    /**
+     * Called in child when SIGTERM received
+     */
+    public function terminate();
 }

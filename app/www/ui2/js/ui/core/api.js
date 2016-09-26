@@ -2,17 +2,29 @@ Scalr.regPage('Scalr.ui.core.api', function (loadParams, moduleParams) {
 	var params = moduleParams;
 	
 	return Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 700,
-		title: 'API access details & settings',
+		title: 'API settings',
+		fieldDefaults: {
+			labelWidth: 110
+		},
 		items: [{
 			xtype: 'fieldset',
-			title: 'Enable API for current environment',
+			title: 'Enable API access for &laquo;' + Scalr.user['userName'] + '&raquo;',
 			checkboxToggle:  true,
+            toggleOnTitleClick: true,
+            collapsible: true,
 			collapsed: !params['api.enabled'],
 			checkboxName: 'api.enabled',
+            cls: 'x-fieldset-separator-none',
 			inputValue: 1,
+            defaults: {
+                anchor: '100%'
+            },
 			items: [{
+                xtype: 'displayfield',
+                fieldLabel: 'API Endpoint',
+                value: params['api.endpoint']
+            },{
 				xtype: 'fieldcontainer',
 				layout: 'hbox',
 				fieldLabel: 'API Key ID',
@@ -24,10 +36,16 @@ Scalr.regPage('Scalr.ui.core.api', function (loadParams, moduleParams) {
 					value: params['api.access_key']
 				}, {
 					xtype: 'button',
-					margin: '0 0 0 5',
+					margin: '0 0 0 8',
 					text: 'Regenerate',
+                    width: 110,
+					hidden: !params['api.enabled'],
 					handler: function () {
 						Scalr.Request({
+							confirmBox: {
+								type: 'action',
+								msg: 'Are you sure want to regenerate API keys ? This action will immediately replace your current keys.'
+							},
 							processBox: {
 								type: 'action'
 							},
@@ -48,26 +66,22 @@ Scalr.regPage('Scalr.ui.core.api', function (loadParams, moduleParams) {
 				fieldLabel: 'API Access Key',
 				readOnly: true,
 				height: 100,
-				anchor: '100%',
 				value: params['api.secret_key']
 			}, {
-				xtype:'displayfield',
-				value:'<br />API access whitelist (by IP address)<br />Example: 67.45.3.7, 67.46.*.*, 91.*.*.*'
-			}, {
 				xtype:'textarea',
-				hideLabel: true,
+				fieldLabel: 'API access whitelist (by IP address). Example: 67.45.3.7, 67.46.*.*, 91.*.*.*',
+				labelAlign: 'top',
 				name:'api.ip.whitelist',
 				grow: true,
 				growMax: 200,
-				anchor: '100%',
 				value: params['api.ip.whitelist']
 			}]
-		}],
+        }],
 
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -89,7 +103,6 @@ Scalr.regPage('Scalr.ui.core.api', function (loadParams, moduleParams) {
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

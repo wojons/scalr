@@ -5,7 +5,6 @@ Scalr.regPage('Scalr.ui.farms.roles.extendedinfo', function (loadParams, moduleP
 			'modal': true
 		},
 		width: 900,
-		bodyCls: 'x-panel-body-frame',
 		tools: [{
 			type: 'refresh',
 			handler: function () {

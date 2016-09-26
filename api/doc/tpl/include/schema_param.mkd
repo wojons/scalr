@@ -1,0 +1,40 @@
+{% if "$ref" in parameter["schema"] %}
+An object of type: {{ parameter["schema"]|link_to_ref }}.
+{% else %}
+### {{ parameter.get("name", "")|str_upper_first }} properties ###
+
+{% for prop in prioritized_properties(parameter["schema"]) %}
+{% set prop_name, prop_def = prop %}
+### `{{ prop_name }}` ({{ ", ".join(property_attributes(parameter["schema"], prop)) }}) ###
+
+{{ prop_def.get("description", "") }}
+
+{% if "$ref" in prop_def %}
+
+An object of type {{ prop_def|link_to_ref }}.
+
+{% elif prop_def["type"] == "array" %}
+
+An array of 
+{% if "$ref" in prop_def["items"] %}
+objects of type {{ prop_def["items"]|link_to_ref }}.
+{% else %}
+`{{ prop_def["items"]["type"] }}` objects.
+{% endif %}
+
+{% else %}
+
+Property of type: `{{ prop_def["type"] }}`.
+
+{% if "enum" in prop_def %} 
+The following are valid values for the `{{ prop_name }}` property:
+{% for value in prop_def["enum"] %}
+  + `{{ value }}`
+{% endfor %}
+{% endif %}
+
+{% endif %}
+
+{% endfor %}
+
+{% endif %}

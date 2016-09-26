@@ -7,7 +7,7 @@ use Scalr\Service\Aws\AbstractHandler;
 /**
  * AbstractElbHandler
  *
- * @author    Vitaliy Demidov   <zend@i.ua>
+ * @author    Vitaliy Demidov   <vitaliy@scalr.com>
  * @since     05.10.2012
  * @property  \Scalr\Service\Aws\Elb   $elb            An Amazon ELB instance
  * @method    \Scalr\Service\Aws\Elb   getElb()        getElb()                                   Gets an Amazon ELB instance.
@@ -17,12 +17,12 @@ use Scalr\Service\Aws\AbstractHandler;
 abstract class AbstractElbHandler extends AbstractHandler
 {
 
-	/**
-	 * {@inheritdoc}
-	 * @see Scalr\Service\Aws.AbstractDataType::getServiceNames()
-	 */
-	public function getServiceNames()
-	{
-		return array(Aws::SERVICE_INTERFACE_ELB);
-	}
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws.AbstractDataType::getServiceNames()
+     */
+    public function getServiceNames()
+    {
+        return array(Aws::SERVICE_INTERFACE_ELB);
+    }
 }

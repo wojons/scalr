@@ -1,9 +1,9 @@
 <?php
 
-	class Scalr_Api
-	{
-		public function __construct()
-		{
-			
-		}
-	}
+    class Scalr_Api
+    {
+        public function __construct()
+        {
+
+        }
+    }

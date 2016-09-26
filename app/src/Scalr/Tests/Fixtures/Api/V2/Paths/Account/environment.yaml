@@ -1,0 +1,126 @@
+paths:
+  - uri: /environments/
+    acl: readOnly
+    userType: TeamUser
+    operations:
+     - {method: get, response:  403} #readOnly Acl can not describe enviroment#
+     - {method: post, response: 403, body: '&EnvironmentData'} # TeamUser can not create enviroment
+
+  - uri: /environments/
+    acl: fullAccess
+    userType: TeamUser
+    operations:
+     - {method: get, response:  200} #fullAccess Acl can describe enviroment
+     - {method: post, response: 403, body: '&EnvironmentData'} # TeamUser can not create enviroment
+
+  - uri: /environments/
+    userType: AccountAdmin
+    operations:
+     - {method: post, response: 403, body: '&EnvironmentData'} # AccountAdmin can not create enviroment
+
+  - uri: /environments/
+    userType: AccountSuperAdmin
+    operations:
+     - {method: post, response: 201, body: '&EnvironmentData'} # Test create enviroment
+
+  - uri: /environments/{envId}/
+    acl: readOnly
+    userType: TeamUser
+    operations:
+     - {method: get, response: 403, params: '&{1}EnvironmentData'} #TeamUser with readOnly access Acl can not fetch environment
+
+  - uri: /environments/{envId}/
+    acl: fullAccess
+    userType: TeamUser
+    operations:
+     - {method: get,    response: 200, params: '&{1}EnvironmentData'} #TeamUser with full access Acl can only fetch environment
+     - {method: get,    response: 404, params: '&{2}EnvironmentData'} #Environment do not corresponds to any team
+     - {method: patch,  response: 403, params: '&{1}EnvironmentData', body: '&{2}EnvironmentData'} #TeamUser can not modify enviroment
+     - {method: delete, response: 403, params: '&{1}EnvironmentData'} #TeamUser can not delete enviroment
+
+  - uri: /environments/{envId}/
+    userType: AccountAdmin
+    operations:
+     - {method: get,    response: 200, params: '&{1}EnvironmentData'} #test fetch environment
+     - {method: get,    response: 200, params: '&{2}EnvironmentData'} #environment do not corresponds to any team
+     - {method: patch,  response: 200, params: '&{1}EnvironmentData', body: '&{3}EnvironmentData'} #AccountAdmin can only modify enviroment
+     - {method: patch,  response: 200, params: '&{1}EnvironmentData', body: '&{4}EnvironmentData'} #Test modify status
+     - {method: delete, response: 403, params: '&{1}EnvironmentData'} #AccountAdmin can not delete enviroment
+
+  - uri: /environments/{envId}/
+    userType: AccountSuperAdmin
+    operations:
+     - {method: get,    response: 200, params: '&{1}EnvironmentData'} #test fetch environment
+     - {method: get,    response: 200, params: '&{2}EnvironmentData'} #Environment do not corresponds to any team
+     - {method: patch,  response: 200, params: '&{1}EnvironmentData', body: '&{3}EnvironmentData'}
+     - {method: delete, response: 200, params: '&{1}EnvironmentData'} # test delete enviroment
+     - {method: delete, response: 409, params: '&{5}EnvironmentData'} # test used delete enviroment
+
+  - uri: /environments/{envId}/teams/
+    acl: fullAccess
+    userType: TeamUser
+    adapter: environmentTeam
+    operations:
+     - {method: get,  response: 403, params: '&{2}EnvironmentData'} #test describe environment teams
+     - {method: post, response: 403, params: '&{2}EnvironmentData', body: '&{8}EnvironmentData'} #test Attach teams
+
+  - uri: /environments/{envId}/teams/
+    userType: AccountAdmin
+    adapter: environmentTeam
+    operations:
+     - {method: get,  response: 200, params: '&{2}EnvironmentData'} #test describe environment teams
+     - {method: post, response: 400, params: '&{2}EnvironmentData', body: '&{6}EnvironmentData'} #test describe not valid Team Env
+     - {method: post, response: 501, params: '&{2}EnvironmentData', body: '&{7}EnvironmentData'} #trying to set default Acl role to Team Env
+     - {method: post, response: 201, params: '&{2}EnvironmentData', body: '&{8}EnvironmentData'} #test Attach teams
+     - {method: post, response: 409, params: '&{2}EnvironmentData', body: '&{8}EnvironmentData'} #test Attach teams exist teams
+
+  - uri: /environments/{envId}/teams/{teamId}/
+    userType: AccountAdmin
+    adapter: environmentTeam
+    operations:
+     - {method: delete, response: 200, params: '&{9}EnvironmentData'} #test deny access for team
+     - {method: delete, response: 404, params: '&{9}EnvironmentData'} #
+
+
+
+EnvironmentData:
+ - {name: 'test-api-environment', costCenter: '&{0}CostCenter.id'}       #0#################
+ - {envId: '&{0}Environment.id'}                                         #1
+ - {envId: '&{1}Environment.id'}                                         #2
+ - {name: 'test-patch-name'}                                             #3 SCALRCORE-3212
+ - {status: 'Inactive'}                                                  #4
+ - {envId: '&{2}Environment.id'}                                         #5#################
+ - {teamId: '&{1}AccountTeam.id'}                                        #6#################
+ - {team: '&{1}AccountTeam.id', defaultAclRole: 'test-default-acl-role'} #7 SCALRCORE-3362
+ - {team: '&{1}AccountTeam.id'}                                          #8
+ - {envId: '&{1}Environment.id', teamId: '&{1}AccountTeam.id'}           #9#################
+
+Environment:
+ - {name: 'test-delete-environment',  properties: '&{0}EnvironmentProperty',  status: Active} #enviroment for delete
+ - {name: 'test-account-environment', properties: '&{0}EnvironmentProperty',  status: Active} #enviroment for testing fetch
+ - {name: 'test-used-environment',    properties: '&{0}EnvironmentProperty',  status: Active} #enviroment for testing delete used
+
+EnvironmentProperty:
+- {cc_id: '&CostCenter.id'}
+
+CostCenter:
+ - {name: testApiAccount CC,  properties: '&CostCenterProperties'}
+
+CostCenterProperties:
+  - {billingCode: CC-account}
+
+AccountCostCenter:
+ - {ccId: '&CostCenter.id'}
+
+AccountTeam:
+  - {name: testAccountTeam}
+  - {name: testAccountTeamForAttachToEnv}
+
+AccountTeamEnv:
+  - {teamId: '&AccountTeam.id' , envId: '&Environment.id'}
+
+AccountTeamUsers:
+  - {teamId: '&AccountTeam.id'}
+
+Farm:
+ - {name: testFarmForUsedEnvironment, comments: test-description, envId: '&{2}Environment.id' }

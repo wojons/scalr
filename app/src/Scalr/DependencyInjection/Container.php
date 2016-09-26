@@ -3,27 +3,165 @@
 namespace Scalr\DependencyInjection;
 
 /**
- * DependencyInjection container.
- * Inspired by Fabien Potencier.
+ * Main DependencyInjection container.
  *
- * @author   Vitaliy Demidov    <zend@i.ua>
+ * @author   Vitaliy Demidov    <vitaliy@scalr.com>
  * @since    19.10.2012
  *
- * @property string                               $awsRegion            An Aws region derived from user's environment.
- * @property string                               $awsSecretAccessKey   An Aws sercret access key taken from user's environment.
- * @property string                               $awsAccessKeyId       An Aws access key id taken from user's environment.
- * @property string                               $awsAccountNumber     An Aws account number.
- * @property \Scalr_Session                       $session              An Scalr Session isntance.
- * @property \Scalr\Service\Cloudyn               $cloudyn              An Cloudyn instance for the current user
- * @property \Scalr_Environment                   $environment          Recent Scalr_Environment instance.
- * @property \Scalr\Service\Aws                   $aws                  An Aws instance for the last instantiated user's environment.
- * @property \Scalr_UI_Request                    $request              A Scalr_UI_Request instance.
- * @property \Scalr_Account_User                  $user                 A Scalr_Account_User instance which is property for the request.
- * @property \Scalr\Logger\AuditLog               $auditLog             An AuditLog.
- * @property \Scalr\Logger\LoggerStorageInterface $auditLogStorage An AuditLogStorage
- * @method   \Scalr\Service\Aws    aws() aws(string|\DBServer $awsRegion = null, $awsAccessKeyId = null, $awsSecretAccessKey = null) Gets an Aws instance.
+ * @property string $awsSecretAccessKey
+ *           The AWS sercret access key taken from user's environment.
+ *
+ * @property string $awsAccessKeyId
+ *           The Aws access key id taken from user's environment.
+ *
+ * @property string $awsAccountNumber
+ *           The Aws account number.
+ *
+ * @property \Scalr_Session $session
+ *           The Scalr Session isntance.
+ *
+ * @property \Scalr\Service\Cloudyn $cloudyn
+ *           The Cloudyn instance for the current user
+ *
+ * @property \Scalr_Environment $environment
+ *           Recently loaded Scalr_Environment instance.
+ *
+ * @property \Scalr\Service\Aws $aws
+ *           The Aws instance for the last instantiated user's environment.
+ *
+ * @property \Scalr\Service\CloudStack\CloudStack $cloudstack
+ *           The Cloudstack instance for the last instantiated user's environment.
+ *
+ * @property \Scalr\Service\Azure $azure
+ *           The Azure instance for the last instantiated user's environment.
+ *
+ * @property \Scalr_UI_Request $request
+ *           The Scalr_UI_Request instance.
+ *
+ * @property \Scalr_Account_User $user
+ *           The Scalr_Account_User instance which is property for the request.
+ *
+ * @property \Scalr\SimpleMailer $mailer
+ *           Returns the new instance of the SimpleMailer class.
+ *           This is not a singletone.
+ *
+ * @property \ADODB_mysqli $adodb
+ *           Gets an ADODB mysqli Connection object
+ *
+ * @property \ADODB_mysqli $dnsdb
+ *           Gets an ADODB mysqli Connection to PDNS Database
+ *
+ * @property \ADODB_mysqli $cadb
+ *           Gets an ADODB mysqli Connection to Cost Analytics database
+ *
+ * @property \Scalr\System\Config\Yaml $config
+ *           Gets configuration
+ *
+ * @property \Scalr\Acl\Acl $acl
+ *           Gets an ACL shared service
+ *
+ * @property \Scalr\DependencyInjection\AnalyticsContainer $analytics
+ *           Gets Cost Analytics sub container
+ *
+ * @property \Scalr\DependencyInjection\ApiContainer $api
+ *           Gets REST API sub container
+ *
+ * @property \Scalr\Logger $logger
+ *           Gets logger service
+ *
+ * @property \Scalr\Util\CryptoTool $crypto
+ *           Gets cryptotool
+ *
+ * @property \Scalr\Util\CryptoTool $srzcrypto
+ *           Gets Scalarizr cryptotool
+ *
+ * @property \Scalr\System\Http\Client $http
+ *           Gets PECL http 2.x client
+ *
+ * @property \Scalr\System\Http\Client $srzhttp
+ *           Gets PECL http 2.x client configured for scalarizr
+ *
+ * @property array $version
+ *           Gets information about Scalr version
+ *
+ * @property \OneLogin_Saml2_Auth $saml
+ *           Gets SAML 2.0 Auth
+ *
+ * @property \Scalr\LogCollector\AuditLogger $auditlogger
+ *           Gets AuditLogger instance
+ *
+ * @property \Scalr\LogCollector\UserLogger $userlogger
+ *           Gets UserLogger instance
+ *
+ * @property \Scalr\LogCollector\ApiLogger $apilogger
+ *           Gets ApiLogger instance
+ *
+ * @method   mixed config()
+ *           config(string $name)
+ *           Gets config value for the dot notation access key
+ *
+ * @method   \Scalr\Service\Aws aws()
+ *           aws(string|\DBServer|\DBFarmRole|\DBEBSVolume $awsRegion = null,
+ *               string|\Scalr_Environment $awsAccessKeyId = null,
+ *               string $awsSecretAccessKey = null,
+ *               string $certificate = null,
+ *               string $privateKey = null)
+ *           Gets an Aws instance.
+ *
+ * @method   \Scalr\Service\CloudStack\CloudStack cloudstack()
+ *           cloudstack(string $platform = null,
+ *                      string|\Scalr_Environment $apiUrl = null,
+ *                      string $apiKey = null,
+ *                      string $secretKey = null)
+ *           Gets an CloudStack instance.
+ *
+ * @method   \Scalr\Service\Azure azure()
+ *           azure()
+ *           Gets an Azure instance.
+ *
+ * @method   \Scalr\Service\OpenStack\OpenStack openstack()
+ *           openstack(string|\Scalr\Service\OpenStack\OpenStackConfig $platform, string $region, \Scalr_Environment $env = null)
+ *           Gets an Openstack instance for the current environment
+ *
+ * @method   \ADODB_mysqli adodb()
+ *           adodb()
+ *           Gets an ADODB mysqli Connection object
+ *
+ * @method   \Scalr\Net\Ldap\LdapClient ldap()
+ *           ldap($user, $password)
+ *           Gets a new instance of LdapClient for specified user
+ *
+ * @method   \Scalr\Logger logger()
+ *           logger(string $name = null)
+ *           Gets logger for specified category or class
+ *
+ * @method   \Scalr\DependencyInjection\Container warmup()
+ *           warmup()
+ *           Releases static cache from the dependency injection service
+ *
+ * @method   \Scalr\Util\CryptoTool crypto(string $algo = MCRYPT_RIJNDAEL_256, string $method = MCRYPT_MODE_CFB, mixed $cryptoKey = null, int $keySize = null, int $blockSize = null)
+ *           crypto(string $algo = MCRYPT_RIJNDAEL_256, string $method = MCRYPT_MODE_CFB, string|resource|SplFileObject|array $cryptoKey = null, int $keySize = null, int $blockSize = null)
+ *           Gets cryptographic tool with a given algorithm
+ *
+ * @method   \Scalr\Util\CryptoTool srzcrypto(mixed $cryptoKey = null)
+ *           srzcrypto(string|resource|SplFileObject|array $cryptoKey = null)
+ *           Gets Scalarizr cryptographic tool
+ *
+ * @method   \Scalr\System\Http\Client http()
+ *           Gets PECL http 2.x client
+ *
+ * @method   \Scalr\System\Http\Client srzhttp()
+ *           Gets PECL http 2.x client configured for scalarizr
+ *
+ * @method   array version()
+ *           version(string $part = 'full')
+ *           Gets information about Scalr version
+ *
+ * @method   \Scalr\Model\Entity\CloudCredentials keychain(string $cloud, int $envId = null)
+ *           keychain(string $cloud, int $envId = null)
+ *           Gets specified cloud credentials for specified environment
  */
-class Container
+class Container extends BaseContainer
 {
     /**
      * @var Container
@@ -31,25 +169,14 @@ class Container
     static private $instance;
 
     /**
-     * Container of services
-     *
-     * @var array
-     */
-    protected $values = array();
-
-    protected function __construct() {}
-
-    private final function __clone() {}
-
-    /**
      * Gets singleton instance of the Container
      *
      * @return Container
      */
-    static public function getInstance ()
+    public static function getInstance()
     {
         if (is_null(self::$instance)) {
-            self::$instance = new Container ();
+            self::$instance = new Container();
         }
         return self::$instance;
     }
@@ -59,101 +186,8 @@ class Container
      *
      * It can be used for phpunit testing purposes.
      */
-    static public function reset ()
+    public static function reset()
     {
         self::$instance = null;
-    }
-
-    /**
-     * @param   string           $id
-     * @throws  RuntimeException
-     * @return  mixed
-     */
-    public function __get ($id)
-    {
-        return $this->get($id);
-    }
-
-    /**
-     * @param   string     $id
-     * @param   mixed      $value
-     */
-    public function __set ($id, $value)
-    {
-        $this->set($id, $value);
-    }
-
-    /**
-     * Sets parameter
-     *
-     * @param   string     $id     Service id
-     * @param   mixed      $value  Value
-     * @return  Container
-     */
-    public function set ($id, $value)
-    {
-        $this->values[$id] = $value;
-
-        return $this;
-    }
-
-    /**
-     * Gets parameter
-     *
-     * @param   string $id Service Id
-     * @throws  \RuntimeException
-     * @return  mixed
-     */
-    public function get ($id)
-    {
-        if (!isset($this->values[$id])) {
-            throw new \RuntimeException(
-                sprintf('Could not find the service "%s"' , $id)
-            );
-        }
-        return is_callable($this->values[$id]) ? $this->values[$id]($this) : $this->values[$id];
-    }
-
-    /**
-     * @param   string     $id
-     * @param   array      $arguments
-     * @throws  \RuntimeException
-     */
-    public function __call ($id, $arguments)
-    {
-        if (!is_callable($this->values[$id])) {
-            throw new \RuntimeException(sprintf(
-                '%s() is not callable or does not exist.', $id
-            ));
-        }
-        return $this->values[$id]($this, $arguments);
-    }
-
-    /**
-     * Creates lambda function for making single instance of services.
-     *
-     * @param   callback   $callable
-     */
-    public function asShared ($callable)
-    {
-        return function (Container $container) use ($callable) {
-            static $object;
-            if (is_null($object)) {
-                $object = $callable ($container);
-            }
-            return $object;
-        };
-    }
-
-    /**
-     * Checks, whether service with required id is initialized.
-     *
-     * @param   string   $id        Service id
-     * @param   bool     $callable  optional If true it will check whether service is callable.
-     * @return  bool     Returns true if required service is initialized or false otherwise.
-     */
-    public function initialized ($id, $callable = false)
-    {
-        return isset($this->values[$id]) && (!$callable || is_callable($this->values[$id]));
     }
 }

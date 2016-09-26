@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.tools.aws.rds.pg.edit', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel',{
-		bodyCls: 'x-panel-body-frame',
 		title: 'Tools &raquo; Amazon Web Services &raquo; Amazon RDS &raquo; Parameter groups &raquo; ' + loadParams['name'] + ' &raquo; Edit',
 		width: 900,
 		items: [{
@@ -14,17 +13,17 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.edit', function (loadParams, modulePara
 			items: [{
 				fieldLabel: 'Parameter Group Name',
 				name: 'DBParameterGroupName',
-				value: moduleParams.group['DBParameterGroupName']
+				value: moduleParams.group['dBParameterGroupName']
 			},
 			{
-				fieldLabel: 'Engine',
+				fieldLabel: 'Parameter Group Family',
 				name: 'Engine',
-				value: moduleParams.group['Engine']
+				value: moduleParams.group['dBParameterGroupFamily']
 			},
 			{
 				fieldLabel: 'Description',
 				name: 'Description',
-				value: moduleParams.group['Description']
+				value: moduleParams.group['description']
 			}]
 		},{
 			xtype: 'fieldset',
@@ -34,18 +33,29 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.edit', function (loadParams, modulePara
 		},{
 			xtype: 'fieldset',
 			title: 'Engine default parameters',
-			itemId: 'engine-default',
-			items: moduleParams.params['engine-default']
+			itemId: 'engineDefault',
+			items: moduleParams.params['engineDefault']
 		},{
 			xtype: 'fieldset',
 			title: 'User parameters',
 			itemId: 'user',
-			items: moduleParams.params['user']
+			items: moduleParams.params['user'],
+            defaults: {
+                defaults: {
+                    allowBlank: false
+                }
+            }
 		}],
+        getFirstInvalidField: function () {
+            return this.down('field{isValid()===false}');
+        },
+        scrollToField: function (field) {
+            field.inputEl.scrollIntoView(this.body.el, false, false);
+        },
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -54,21 +64,29 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.edit', function (loadParams, modulePara
 				xtype: 'button',
 				text: 'Save',
 				handler: function() {
-					Scalr.Request({
-						processBox: {
-							type: 'save'
-						},
-						form: form.getForm(),
-						url: '/tools/aws/rds/pg/xSave',
-						params: loadParams,
-						success: function (data) {
-							Scalr.event.fireEvent('close');
-						}
-					});
+                    if (form.isValid()) {
+                        Scalr.Request({
+                            processBox: {
+                                type: 'save'
+                            },
+                            form: form.getForm(),
+                            url: '/tools/aws/rds/pg/xSave',
+                            params: loadParams,
+                            success: function (data) {
+                                Scalr.event.fireEvent('close');
+                            }
+                        });
+                    } else {
+                        var invalidField = form.getFirstInvalidField();
+
+                        if (!Ext.isEmpty(invalidField)) {
+                            form.scrollToField(invalidField);
+                            invalidField.focus();
+                        }
+                    }
 				}
 			},{
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');
@@ -76,7 +94,6 @@ Scalr.regPage('Scalr.ui.tools.aws.rds.pg.edit', function (loadParams, modulePara
 			},{
 				xtype: 'button',
 				text: 'Reset to defaults',
-				margin: '0 0 0 15',
 				handler: function() {
 					Scalr.Request({
 						confirmBox: {

@@ -1,26 +1,31 @@
 <?php
+
+use Scalr\Acl\Acl;
+use Scalr\Model\Entity;
+
 class Scalr_UI_Controller_Dashboard_Widget_Monitoring extends Scalr_UI_Controller_Dashboard_Widget
 {
-	public function getDefinition()
-	{
-		return array(
-			'type' => 'local'
-		);
-	}
+    public function getDefinition()
+    {
+        return array(
+            'type' => 'nonlocal'
+        );
+    }
 
-	public function getContent($params = array())
-	{
-		$STATS_URL = 'http://monitoring.scalr.net';
-		
-		$content = @file_get_contents("{$STATS_URL}/server/statistics.php?".http_build_query(array(
-			'version'=> 2,
-			'task'=>'get_stats_image_url',
-			'farmid'=> $params['farmid'],
-			'watchername'=> $params['watchername'],
-			'graph_type'=> $params['graph_type'],
-			'role' => $params['role']
-		)));
-		
-		return json_decode($content);
-	}
+    /**
+     * {@inheritdoc}
+     * @see     Scalr_UI_Controller_Dashboard_Widget::hasWidgetAccess
+     */
+    public function hasWidgetAccess($params)
+    {
+        if (!empty($params['farmId'])) {
+            $farm = Entity\Farm::findPk($params['farmId']);
+            if (empty($farm)) {
+                throw new Exception('Farm not found');
+            }
+            $this->request->checkPermissions($farm, Acl::PERM_FARMS_STATISTICS);
+        } else {
+            throw new Scalr_Exception_Core('Farm ID could not be empty');
+        }
+    }
 }

@@ -1,352 +1,403 @@
-Ext.define('Scalr.ui.db.backup.DayCalendar', {
-	extend: 'Ext.container.Container',
-	alias: 'widget.db.backup.daycalendar',
+Ext.define('Scalr.ui.db.backup.Calendar', {
+    extend: 'Ext.Component',
+    alias: 'widget.db.backup.calendar',
 
-	currentDate: new Date(),
-	defaultType: 'container',
-	items: [{
-		layout: 'hbox',
-		defaults: {
-			width: '100%',
-			height: 26,
-			cls: 'scalr-ui-dbbackups-cell-title scalr-ui-dbbackups-cell-title-day'
-		}
-	}, {
-		width: '100%'
-	}],
-	initComponent: function () {
-		this.callParent();
-		this.fillTheCalendar();
-	},
+    cachedBackups: {},
+    backups: {},
 
-	fillTheCalendar: function() {
-		this.items.getAt(0).add({
-			xtype: 'container',
-			width: 60
-		}, {
-			xtype: 'container',
-			itemId: 'currentDayName',
-			html: Ext.Date.format(this.currentDate, 'j F Y')
-		});
-		this.fillByHours();
-	},
+    initEvents: function () {
+        var me = this;
 
-	updateTheCalendar: function() {
-		this.down('#currentDayName').el.setHTML(Ext.Date.format(this.currentDate, 'j F Y'));
-		this.updateContent();
-	},
+        me.callParent();
 
-	updateContent: function () {
-		var calendarContainer = this.items.getAt(1);
-		var i = 0;
-		var j = 0;
-		while ( i < 24 ) {
-			var rowToFill = calendarContainer.items.getAt(i);
-			rowToFill.items.getAt(1).el.setHTML(this.fillByStoreData(i));
-			i++;
-		}
-	},
+        me.on({
+            update: me.initExtendedBackups,
+            scope: me
+        });
+    },
 
-	fillByHours: function () {
-		var calendarContainer = this.items.getAt(1);
-		var i = 0;
-		var j = 0;
-		while ( i < 24 ) {
-			calendarContainer.add({
-				xtype: 'container',
-				layout: 'hbox',
-				items: {
-					xtype: 'container',
-					width: 60,
-					height: 40,
-					html: this.getHour(i),
-					cls: 'scalr-ui-dbbackups-cell-time'
-				}
-			});
-			calendarContainer.items.getAt(i).add({
-				xtype: 'container',
-				height: 40,
-				width: '100%',
-				html: this.fillByStoreData(i),
-				cls: 'scalr-ui-dbbackups-cell-details'
-			});
-			i++;
-		}
-	},
+    getCell: function (calendarData) {
+        var me = this,
+            cell = {'date': null, 'backups': null, 'status': 'scalr-ui-dbbackups-not-this-month'};
 
-	fillByStoreData: function (hour) {
-		var data = '';
-		var i = 0;
-		var backupsTime = Ext.Object.getKeys(this.dataStore).sort();
+        calendarData.cellCounter++;
 
-		while ( i < backupsTime.length ) {
-			if ( backupsTime[i].substr(0, 2) == hour ) {
-				var itemData = this.dataStore[backupsTime[i]];
-				data += '<div style="float: left;" class="scalr-ui-dbbackups-cell-content" backupId=' + itemData[ 'backup_id' ] + '>'
-						+ itemData['date']
-						+ itemData['farm']
-						+ ' (' + itemData['role'] + ')'
-					+ '</div>';
-			}
+        if (calendarData.cellCounter > calendarData.firstDayOfMonth && calendarData.cellCounter <= calendarData.lastDayOfMonthCell) {
+            calendarData.daysCounter++;
+            cell.status = 'scalr-ui-dbbackups-this-month';
+            cell.date = calendarData.daysCounter + Ext.Date.format(calendarData.currentDate, " M");
+            if (cell.date in me.backups) {
+                cell.backups = me.backups[cell.date];
+            }
+            cell.backupsNumber = cell.backups ? cell.backups.length : 0;
+        }
+        return cell;
+    },
 
-			i++;
-		}
-		return data;
-	},
+    prepareTplData: function (date) {
+        var me = this,
+            calendarData = {
+                currentDate: date || new Date(),
+                cellCounter: 0,
+                daysCounter: 0
+            };
+        calendarData.today = parseInt(Ext.Date.format(calendarData.currentDate, "d"));
+        calendarData.firstDayOfMonth = Ext.Date.getFirstDayOfMonth(calendarData.currentDate);
+        calendarData.todayCellNumber = calendarData.today + calendarData.firstDayOfMonth;
+        calendarData.todayRowNumber = Math.ceil(calendarData.todayCellNumber / 7);
+        calendarData.todayCellPosition = 7 - (calendarData.todayRowNumber * 7 - calendarData.todayCellNumber);
+        calendarData.daysInMonth = Ext.Date.getDaysInMonth(calendarData.currentDate);
+        calendarData.rowsNumber = Math.ceil((calendarData.firstDayOfMonth + calendarData.daysInMonth) / 7);
+        calendarData.cellsNumber = calendarData.rowsNumber * 7;
+        calendarData.lastDayOfMonthCell = calendarData.cellsNumber - (calendarData.cellsNumber - (calendarData.firstDayOfMonth + calendarData.daysInMonth));
+        calendarData.formattedCurrentDate = Ext.Date.format(calendarData.currentDate, 'M Y');
 
-	getHour: function (hour) {
-		return Ext.Date.format(Ext.Date.add(new Date('06/06/2012'), Ext.Date.HOUR, hour), 'g a');
-	},
+        me.cachedBackups[calendarData.formattedCurrentDate] = me.backups;
+        me.data = [];
 
-	setCurrentDate: function (newDate) {
-		this.currentDate = newDate;
-	},
+        for (var i = 0; i < calendarData.rowsNumber; i++) {
+            var row = [];
+            for (var j = 0; j <= 6; j++) {
+                row[j] = me.getCell(calendarData);
+            }
+            me.data[i] = row;
+        }
+        if (calendarData.formattedCurrentDate === Ext.Date.format(new Date(), 'M Y')) {
+            me.data[calendarData.todayRowNumber - 1][calendarData.todayCellPosition - 1].status = 'scalr-ui-dbbackups-today';
+        }
+    },
 
-	getCurrentDate: function () {
-		return this.currentDate;
-	},
+    tpl: [
+        '<div class="scalr-ui-dbbackups-calendar">',
+            '<div class="scalr-ui-dbbackups-title">',
+                '<div class="scalr-ui-dbbackups-cell">Sunday</div>',
+                '<div class="scalr-ui-dbbackups-cell">Monday</div>',
+                '<div class="scalr-ui-dbbackups-cell">Tuesday</div>',
+                '<div class="scalr-ui-dbbackups-cell">Wednesday</div>',
+                '<div class="scalr-ui-dbbackups-cell">Thursday</div>',
+                '<div class="scalr-ui-dbbackups-cell">Friday</div>',
+                '<div class="scalr-ui-dbbackups-cell">Saturday</div>',
+            '</div>',
+            '<tpl for=".">',
+                '<div class="scalr-ui-dbbackups-row">',
+                    '<tpl for=".">',
+                        '<div class="scalr-ui-dbbackups-cell {status}">',
+                            '<div class="scalr-ui-dbbackups-date">{date}</div>',
+                            '<tpl if="backupsNumber">',
+                                '<div class="scalr-ui-dbbackups-backups">',
+                                    '<tpl for="backups">',
+                                        '<tpl if="!this.farmId || farmId === this.farmId">',
+                                            '<div><a class="scalr-ui-dbbackups-backups-link" href="#/db/backups/details?backupId={backupId}"><span><span>{time}</span> {farmName} ({serviceName})</span></a></div>',
+                                        '</tpl>',
+                                    '</tpl>',
+                                '</div>',
+                                '<div class="scalr-ui-dbbackups-show-more">',
+                                    '<span class="scalr-ui-dbbackups-show-more-wrap"></span>',
+                                    '<a class="scalr-ui-dbbackups-show-more-link"></a>',
+                                '</div>',
+                            '</tpl>',
+                        '</div>',
+                    '</tpl>',
+                '</div>',
+            '</tpl>',
+            '<div class="x-tip scalr-ui-dbbackups-show-all-backups-container"></div>',
+            '<div class="scalr-ui-dbbackups-anchor-left"></div>',
+            '<div class="scalr-ui-dbbackups-anchor-right"></div>',
+        '</div>'
+    ],
 
-	setStoreData: function (data) {
-		this.dataStore = data;
-		this.updateTheCalendar();
-	}
-});
+    setRowHeight: function () {
+        var me = this;
+        me.calendarHeight = me.getSize().height;
+        me.titleHeight = 30;
+        var minCellHeight = 85,
+            rowsEls = me.el.query('.scalr-ui-dbbackups-row'),
+            rowsNumber = rowsEls.length,
+            rowHeight = (me.calendarHeight - me.titleHeight) / rowsNumber,
+            title = me.el.down('.scalr-ui-dbbackups-title');
 
-Ext.define('Scalr.ui.db.backup.MonthCalendar', {
-	extend: 'Ext.container.Container',
-	alias: 'widget.db.backup.monthcalendar',
+        title.setHeight(me.titleHeight);
 
-	currentDate: new Date(),
-	dataStore: {},
-	defaultType: 'container',
-	items: [{
-		layout: 'hbox',
-		defaults: {
-			width: ( 100/7.01 ) + '%',
-			height: 26,
-			cls: 'scalr-ui-dbbackups-cell-title'
-		}
-	}, {
-		itemId: 'calendarInners'
-	}],
+        if (me.calendarHeight > minCellHeight * rowsNumber + me.titleHeight) {
+            Ext.each(rowsEls, function (row) {
+                me.rowHeight = rowHeight;
+                Ext.get(row).setHeight(me.rowHeight);
+            });
+        } else {
+            Ext.each(rowsEls, function (row) {
+                me.rowHeight = minCellHeight;
+                Ext.get(row).setHeight(me.rowHeight);
+            });
+        }
+    },
 
-	/*listeners: {
-		resize: function () {
-		//	this.resizeCells(this.up().up().height);
-			//console.log('resize');
-		}
-	},*/
-	fillTheCalendar: function() {
-		this.fillByDayNames();
-	},
+    setCellWidth: function () {
+        var me = this,
+            cells = me.el.query('.scalr-ui-dbbackups-cell');
 
-	updateTheCalendar: function() {
-		if(!this.items.getAt(0).items.length)
-			this.fillTheCalendar();
-		if (this.items.getAt(1))
-			this.items.getAt(1).removeAll();
-		this.fillByDays();
-	},
+        Ext.each(cells, function (cell) {
+            Ext.get(cell).setWidth(100 / 7 + '%');
+        });
+    },
 
-	fillByDayNames: function() {
-		var dayNames = Ext.Date.dayNames;
-		var i = 0;
-		while ( i < dayNames.length ) {
-			this.items.getAt(0).add({
-				xtype: 'container',
-				html: dayNames[i]
-			});
-			i++;
-		}
-	},
+    displayBackups: function () {
+        var me = this,
+            backupsContainers = me.el.query('.scalr-ui-dbbackups-backups'),
+            showMoreContainers = me.el.query('.scalr-ui-dbbackups-show-more'),
+            rowHeight = me.rowHeight,
+            dateHeight = 27,
+            backupRecordHeight = 27,
+            showMoreContainerHeight = 27,
+            displayedBackupRecordsNumber = Math.floor((rowHeight - dateHeight - showMoreContainerHeight) / backupRecordHeight),
+            backupContainerHeight = displayedBackupRecordsNumber * backupRecordHeight,
+            newShowMoreContainerHeight = rowHeight - backupContainerHeight - dateHeight;
 
-	fillByDays: function () {
-		var calendarContainer = this.items.getAt(1);
-		var nextDay = this.getCurrentDate();
-		if( this.formatDate(this.getCurrentDate(), 'j') != 1 )
-			nextDay = Ext.Date.add( this.getCurrentDate(), Ext.Date.DAY, -this.formatDate(this.getCurrentDate(), 'j' ) + 1);
-		var daysInMonth = Ext.Date.getDaysInMonth(nextDay);
-		var countOfWeeks = this.getCountOfWeeks(this.formatDate(nextDay, 'w'), daysInMonth);
-		var i = 0;
-		while (i < countOfWeeks) {
-			var containerForWeek = calendarContainer.add({
-				xtype: 'container',
-				layout: 'hbox',
-				minHeight: 70,
-				height: 140
-			});
-			var j = 0;
-			while ( j < Ext.Date.dayNames.length) {
-				containerForWeek.add({
-					xtype: 'container',
-					width: (100/7.01) + '%',
-					height: '100%',
-					html: this.setHtml(nextDay, j),
-					cls: this.setCls(nextDay, j)
-				});
+        Ext.each(backupsContainers, function (backupContainerEl, i) {
+            var backupRecordsNumber = backupContainerEl.childElementCount,
+                backupContainer = Ext.get(backupContainerEl),
+                showMoreContainer = Ext.get(showMoreContainers[i]);
 
-				if ( this.isEqualWeekdays(nextDay, j) && this.formatDate(nextDay, 'j') < daysInMonth)
-					nextDay = Ext.Date.add(nextDay, Ext.Date.DAY, 1);
+            if (backupRecordsNumber === displayedBackupRecordsNumber + 1) {
+                backupContainer.setHeight(backupContainerHeight + backupRecordHeight);
+                showMoreContainer.hide();
+            } else if (displayedBackupRecordsNumber < backupRecordsNumber) {
+                backupContainer.setHeight(backupContainerHeight);
+                showMoreContainer.show();
+                showMoreContainer.setHeight(newShowMoreContainerHeight);
+            } else {
+                backupContainer.setHeight(backupRecordsNumber * backupRecordHeight);
+                showMoreContainer.hide();
+            }
+        });
+    },
 
-				j++;
-			}
-			i++;
-		}
-	},
+    showAllBackupsRecords: function (showMoreContainer, tooltip) {
+        var me = this;
+        me.hideTooltip();
+        var cell = showMoreContainer.parent(),
+            date = cell.down('.scalr-ui-dbbackups-date', true).innerHTML,
+            backups = me.backups[date],
+            records = backups.map(function (backup) {
+                return '<div><a class="scalr-ui-dbbackups-backups-link" href="#/db/backups/details?backupId=' + backup.backupId + '"><span><span>' +
+                    backup.time + '</span> ' + backup.farmName + ' (' + backup.serviceName + ')</span></a></div>';
+            }),
+            tooltipContent = '<div class="scalr-ui-dbbackups-show-all-backups-container-content">' + records.join('') + '</div>';
 
-	/*resizeCells: function (parentHeight) {
-		var calendarContainer = this.items.getAt(1);
-		var height = parentHeight / calendarContainer.items.length;
-	///	console.log(height);
-		Ext.each(calendarContainer.items.getRange(), function (item){
-			item.setHeight(height);
-		});
-	},*/
+        tooltip.setHeight('auto');
+        tooltip.setHtml(tooltipContent);
 
-	getInfo: function (farm, role) {
-		var info = farm + ' (' + role + ')';
-		info = '<span title="' + info + '">' + info + '</span>';
+        var tooltipContentEl = tooltip.child('.scalr-ui-dbbackups-show-all-backups-container-content'),
+            tooltipContentWidth = tooltipContentEl.getWidth(),
+            tooltipContentMaxWidth = 300,
+            tooltipContentPaddingLeft = 50;
 
-		/*if(( farm + ' (' + role + ')' ).length >= 23) {
-			if(farm.length > 18)
-				info = '<span title= "' + farm + '">' + farm.substr(0, 15) + '...</span>' + '<span title="' + role + '"> (...)</span>';
-			else
-				info = farm + '<span title="' + role + '"> (...)</span>';
-		} else
-			info = farm + ' (' + role + ')';*/
-		return info;
-	},
+        if (tooltipContentWidth + tooltipContentPaddingLeft > tooltipContentMaxWidth) {
+            tooltipContentEl.setWidth(tooltipContentMaxWidth);
+        } else {
+            tooltipContentEl.setWidth(tooltipContentWidth + tooltipContentPaddingLeft);
+        }
 
-	fillByStoreData: function ( day ) {
-		if (this.dataStore && this.dataStore[this.formatDate(day, 'j F o')]) {
-			var dataToShow = this.dataStore[this.formatDate( day, 'j F o')];
-			var data = '';
-			var i = 0;
-			var allBacksByTime = Ext.Object.getKeys(dataToShow).sort();
+        var tooltipWidth = tooltip.getWidth(),
+            tooltipHeight = tooltip.getHeight(),
+            tooltipMargin = 7,
+            bodyHeight = Ext.getBody().getSize().height,
+            deltaY = bodyHeight - me.calendarHeight,
+            cellHeight = me.rowHeight,
+            cellWidth = cell.getWidth(),
+            cellX = cell.getX(),
+            cellY = cell.getY(),
+            centralX = me.getSize().width / 2,
+            showMoreContainerHeight = showMoreContainer.getHeight(),
+            showMoreContainerY = showMoreContainer.getY();
 
-			while ( i < allBacksByTime.length ) {
-				var itemData = dataToShow[allBacksByTime[i]];
-			//	console.log(this.formatDate(itemData['date'], 'h:ia'));
-				data += '<div class="scalr-ui-dbbackups-cell-content" backupId=' + itemData[ 'backup_id' ] + '><a>'
-					+ itemData['date']
-					+ this.getInfo(itemData['farm'], itemData['role'])
-					+ '</a></div>';
-				i++;
-			}
-			return data;
-		}
-		else return '';
-	},
+        var getXPosition = function () {
+            var tooltipX;
+            if (cellX < centralX) {
+                tooltipX = cellX + cellWidth + tooltipMargin;
+            } else {
+                tooltipX = cellX - tooltipWidth - tooltipMargin;
+            }
+            return tooltipX;
+        };
 
-	setHtml: function (dateToSet, currentWeekday) {
-		if( this.formatDate(dateToSet, 'w') == currentWeekday)
-			return '<div day="'+ this.formatDate(dateToSet, 'j') +'">'
-						+ '<span class="day">' + this.formatDate(dateToSet, 'j M') + '</span>'
-						+ '<br/>'
-						+ this.fillByStoreData(dateToSet)
-					+ '</div>';
-		else return '';
-	},
+        var getYPosition = function () {
+            var tooltipY;
+            if (tooltipHeight >= me.calendarHeight) {
+                tooltip.setHeight(me.calendarHeight - me.titleHeight - tooltipMargin * 2);
+                tooltipY = deltaY;
+            } else {
+                tooltip.setHeight(tooltipHeight);
+                tooltipY = cellY - ((tooltipHeight - cellHeight) / 2);
+            }
+            return checkOverflow(tooltipY);
+        };
 
-	setCls: function (dateToSet, currentWeekday) {
-		return (this.formatDate(dateToSet, 'w') == currentWeekday) ? 'scalr-ui-dbbackups-cell-title-right' : 'scalr-ui-dbbackups-cell-empty';
-	},
+        var checkOverflow = function (tooltipY) {
+            var tooltipYmin = deltaY + me.titleHeight + tooltipMargin;
+            if (tooltipY < tooltipYmin) {
+                tooltipY = tooltipYmin;
+            } else if (tooltipY + tooltipHeight + tooltipMargin > bodyHeight) {
+                tooltipY = bodyHeight - tooltipHeight - tooltipMargin;
+            }
+            return tooltipY;
+        };
 
-	isEqualWeekdays: function (dateToSet, currentWeekday) {
-		return (this.formatDate(dateToSet, 'w') == currentWeekday);
-	},
+        var tooltipX = getXPosition();
+        tooltip.position('absolute', 100, tooltipX, getYPosition());
 
-	formatDate: function (date, toString) {
-		return Ext.Date.format(date, toString);
-	},
+        var anchorFlag = cellX > centralX ? 'right' : 'left',
+            anchorX = anchorFlag === 'left' ? tooltipX - 12 : tooltipX + tooltipWidth,
+            anchorY = showMoreContainerY + (showMoreContainerHeight / 2) - 15;
 
-	setCurrentDate: function (newDate) {
-		this.currentDate = newDate;
-	},
+        me.anchor[anchorFlag].position('absolute', 100, anchorX, anchorY);
 
-	getCurrentDate: function () {
-		return this.currentDate;
-	},
+        tooltip.show();
+        me.anchor[anchorFlag].show();
 
-	setStoreData: function (data) {
-		this.dataStore = data;
-		this.updateTheCalendar();
-	},
+        me.lastTarget = showMoreContainer.child('.scalr-ui-dbbackups-show-more-link');
+    },
 
-	getStoreData : function (date) {
-		var formatedDate = Ext.Date.format(date , 'j F o');
-		return this.dataStore && this.dataStore[formatedDate] ? this.dataStore[formatedDate] : {};
-	},
+    checkCacheThenRefreshCalendar: function (date, farmId) {
+        var me = this,
+            formattedDate = Ext.Date.format(date, 'M Y');
 
-	getCountOfWeeks: function (firstDay, daysInMonth) {
-		var days = parseInt(firstDay) + daysInMonth;
-		if(days == 28)
-			return 4;
-		if(days > 28 && days <= 35)
-			return 5;
-		if(days > 35)
-			return 6;
-	}
-});
+        if (formattedDate in me.cachedBackups) {
+            me.backups = me.cachedBackups[formattedDate];
+            me.refreshCalendar(date, farmId);
+        } else {
+            me.getBackupsThenRefreshCalendar(date, farmId);
+        }
+    },
 
-Ext.define('Ext.form.field.Month', {
-	extend:'Ext.form.field.Date',
-	alias: 'widget.monthfield',
-	requires: 'Ext.picker.Month',
+    refreshCalendar: function (date, farmId) {
+        var me = this;
+        me.tpl.farmId = farmId;
+        me.prepareTplData(date);
+        me.update(me.data);
 
-	alternateClassName: ['Ext.form.MonthField', 'Ext.form.Month'],
+        me.tooltip = me.el.down('.scalr-ui-dbbackups-show-all-backups-container');
+        me.anchor = {
+            left: me.el.down('.scalr-ui-dbbackups-anchor-left'),
+            right: me.el.down('.scalr-ui-dbbackups-anchor-right')
+        };
 
-	selectMonth: null,
-	createPicker: function() {
-		var me = this,
-			format = Ext.String.format;
-		return Ext.create('Ext.picker.Month', {
-			pickerField: me,
-			ownerCt: me.ownerCt,
-			renderTo: document.body,
-			floating: true,
-			hidden: true,
-			focusOnShow: true,
-			minDate: me.minValue,
-			maxDate: me.maxValue,
-			disabledDatesRE: me.disabledDatesRE,
-			disabledDatesText: me.disabledDatesText,
-			disabledDays: me.disabledDays,
-			disabledDaysText: me.disabledDaysText,
-			format: me.format,
-			showToday: me.showToday,
-			startDay: me.startDay,
-			minText: format(me.minText, me.formatDate(me.minValue)),
-			maxText: format(me.maxText, me.formatDate(me.maxValue)),
-			listeners: {
-				select:        { scope: me,   fn: me.onSelect     },
-				monthdblclick: { scope: me,   fn: me.onOKClick     },
-				yeardblclick:  { scope: me,   fn: me.onOKClick     },
-				OkClick:       { scope: me,   fn: me.onOKClick     },
-				CancelClick:   { scope: me,   fn: me.onCancelClick }
-			},
-			keyNavConfig: {
-				esc: function() {
-					me.collapse();
-				}
-			}
-		});
-	},
-	onCancelClick: function() {
-		var me = this;
-		me.selectMonth = null;
-		me.collapse();
-	},
-	onOKClick: function() {
-		var me = this;
-		if( me.selectMonth ) {
-			me.setValue(me.selectMonth);
-			me.fireEvent('select', me, me.selectMonth);
-		}
-		me.collapse();
-	},
-	onSelect: function(m, d) {
-		var me = this;
-		me.selectMonth = new Date(( d[0]+1 ) +'/1/'+d[1]);
-	}
+        me.setRowHeight();
+        me.setCellWidth();
+        me.displayBackups();
+        me.hideTooltip();
+
+        me.fireEvent('update');
+    },
+
+    getBackupsThenRefreshCalendar: function (date, farmId) {
+        var me = this;
+
+        me.setLoading('');
+
+        Scalr.Request({
+            url: '/db/backups/xGetListBackups',
+            params: {
+                time: date
+            },
+            success: function (data) {
+                if (data && data['backups'] && !me.isDestroyed) {
+                    me.backups = data['backups'];
+                    me.refreshCalendar(date, farmId);
+                }
+                me.setLoading(false);
+            },
+            failure: function () {
+                me.setLoading(false);
+            }
+        });
+    },
+
+    beforeRender: function () {
+        var me = this;
+        me.callParent();
+        me.prepareTplData();
+        me.update(me.data);
+    },
+
+    onBoxReady: function () {
+        var me = this;
+
+        me.callParent();
+
+        me.initExtendedBackups();
+    },
+
+    afterRender: function () {
+        var me = this;
+        me.callParent();
+        me.tooltip = me.el.down('.scalr-ui-dbbackups-show-all-backups-container');
+        me.anchor = {
+            left: me.el.down('.scalr-ui-dbbackups-anchor-left'),
+            right: me.el.down('.scalr-ui-dbbackups-anchor-right')
+        };
+
+        me.hideTooltip = function () {
+            me.anchor.left.hide();
+            me.anchor.right.hide();
+            me.tooltip.hide();
+        };
+
+        /*
+        me.el.on('click', function (e, target) {
+            console.log(e.getTarget('.scalr-ui-dbbackups-show-more-link'));
+            target = Ext.get(target);
+
+            if (target && target !== me.lastTarget && !me.tooltip.isVisible()) {
+                me.showAllBackupsRecords(target.parent(), me.tooltip);
+            } else {
+                me.hideTooltip();
+            }
+        });
+        */
+
+        me.el.on('click', function (e, target) {
+            target = Ext.get(target);
+
+            var isTooltipVisible = me.tooltip.isVisible();
+
+            if (e.getTarget('.scalr-ui-dbbackups-show-more-link') &&
+                (target !== me.lastTarget || !isTooltipVisible)) {
+                me.showAllBackupsRecords(target.parent(), me.tooltip);
+                return;
+            }
+
+            if (isTooltipVisible) {
+                me.hideTooltip();
+            }
+        });
+
+        me.setCellWidth();
+    },
+
+    initExtendedBackups: function () {
+        return;
+        var me = this;
+
+        Ext.Array.each(me.el.query('.scalr-ui-dbbackups-show-more-link'), function (element) {
+            element = Ext.get(element);
+
+            element.on('mouseenter', function () {
+                me.showAllBackupsRecords(element.parent(), me.tooltip);
+            });
+
+            element.on('mouseleave', function (e, target) {
+                console.log(e.getRelatedTarget());
+            }, me, {
+                buffer: 1000
+            });
+        });
+    },
+
+    onResize: function () {
+        var me = this;
+        me.callParent();
+        me.setRowHeight();
+        me.displayBackups();
+        me.hideTooltip();
+    }
 });

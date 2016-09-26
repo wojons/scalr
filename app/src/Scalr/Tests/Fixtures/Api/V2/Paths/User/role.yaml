@@ -1,0 +1,83 @@
+paths:
+  - uri: /{envId}/roles/
+    acl: fullAccess
+    operations:
+     - {method: post, response: 409, body: '&{4}RoleData'}
+     - {method: post, response: 409, body: '&{5}RoleData'}
+     - {method: post, response: 409, body: '&{6}RoleData'}
+     - {method: post, response: 409, body: '&{7}RoleData'}
+     - {method: post, response: 409, body: '&{8}RoleData'}
+     - {method: post, response: 409, body: '&{9}RoleData'}
+     - {method: post, response: 409, body: '&{10}RoleData'}
+     - {method: post, response: 400, body: '&{11}RoleData'}
+     - {method: post, response: 400, body: '&{12}RoleData'}
+     - {method: post, response: 400, body: '&{13}RoleData'}
+     - {method: post, response: 201, body: '&{14}RoleData'}
+     - {method: post, response: 201, body: '&{15}RoleData'}
+     - {method: post, response: 409, body: '&{16}RoleData'}
+     - {method: post, response: 201, body: '&{17}RoleData'}
+     - {method: post, response: 400, body: '&{18}RoleData'}
+     - {method: post, response: 400, body: '&{19}RoleData'}
+     - {method: post, response: 400, body: '&{20}RoleData'}
+     - {method: post, response: 201, body: '&{21}RoleData'}
+     - {method: post, response: 201, body: '&{22}RoleData'}
+     - {method: post, response: 409, body: '&{23}RoleData'}
+     - {method: post, response: 201, body: '&{24}RoleData'}
+     - {method: get, response:  200, filterable: '&{25}RoleData'}
+     - {method: get, response:  200, filterable: '&{26}RoleData'}
+  - uri: /{envId}/roles/{roleId}/
+    acl: readOnly
+    operations:
+      - {method: get,    response: 200, params: '&{0}RoleData'}
+      - {method: patch,  response: 403, params: '&{0}RoleData', body: '&{1}RoleData'}
+      - {method: delete, response: 403, params: '&{0}RoleData'}
+  - uri: /{envId}/roles/{roleId}/
+    acl: noAccess
+    operations:
+      - {method: get,    response: 403, params: '&{0}RoleData'}
+      - {method: patch,  response: 403, params: '&{0}RoleData', body: '&{1}RoleData'}
+      - {method: delete, response: 403, params: '&{0}RoleData'}
+  - uri: /{envId}/roles/{roleId}/
+    acl: fullAccess
+    operations:
+      - {method: get,    response: 200, params: '&{0}RoleData'}
+      - {method: patch,  response: 200, params: '&{0}RoleData', body: '&{1}RoleData'}
+      - {method: patch,  response: 200, params: '&{0}RoleData', body: '&{2}RoleData'}
+      - {method: get,    response: 200, params: '&{0}RoleData', filterable: '&{2}RoleData'}
+      - {method: delete, response: 200, params: '&{0}RoleData'}
+      - {method: delete, response: 404, params: '&{0}RoleData'}
+
+RoleData:
+  - {roleId: '&Role.id'}
+  - {name: 'testRolePatchName'}
+  - {category: '&{0}RoleCategory.id'}
+  - {id: '&{0}Role.id'}
+  - {name: testbuiltinAutomation, category: 1, os: centos-5-x, builtinAutomation: ['base', 'mongodb']}            #4
+  - {name: testbuiltinAutomation, category: 1, os: centos-5-x, builtinAutomation: ['base', 'mysql']}              #5
+  - {name: testbuiltinAutomation, category: 1, os: centos-5-x, builtinAutomation: ['base', 'memcached']}          #6
+  - {name: testbuiltinAutomation, category: 1, os: centos-5-x, builtinAutomation: ['mongodb', 'mysql']}           #7
+  - {name: testbuiltinAutomation, category: 1, os: centos-5-x, builtinAutomation: ['apache', 'nginx']}            #9
+  - {name: testbuiltinAutomation, category: 1, os: centos-5-x, builtinAutomation: ['haproxy', 'nginx']}           #9
+  - {name: testbuiltinAutomation, category: 1, os: centos-5-x, builtinAutomation: ['tomcat', 'apache']}           #10
+  - {name: testbuiltinAutomation, category: 1, os: centos-5-x, builtinAutomation: ['cf_cloud_controller']}        #11
+  - {name: testbuiltinAutomation, category: 1, os: centos-5-x, builtinAutomation: 'tomcat'}                       #12
+  - {name: testbuiltinAutomation, category: 1, os: centos-5-x, builtinAutomation: ['base'], useScalrAgent: false} #13
+  - {name: ScalrAgent,   category: 1, os: centos-5-x, builtinAutomation: ['base']}                                #14
+  - {name: NoScalrAgent, category: 1, os: centos-5-x, useScalrAgent: false}                                       #15
+  - {name: NoScalrAgent, category: 1, os: centos-5-x, useScalrAgent: false}                                       #16
+  - {name: postNoScalarizerEmptyBuiltinAutomation,   category: 1, os: centos-5-x,  useScalrAgent: false}          #17
+  - {name: postUseScalarizerEmptyBuiltinAutomation,  category: 1, os: centos-5-x,  useScalrAgent: true }          #18
+  - {name: postUseScalarizerEmptyBuiltinAutomation2, category: 1, os: centos-5-x}                                 #19
+  - {name: postNoScalarizerNotEmptyBuiltinAutomation,   category: 1, os: centos-5-x,  useScalrAgent: false, builtinAutomation: ['base', 'chef']}  #20
+  - {name: postUseScalarizerNotEmptyBuiltinAutomation,  category: 1, os: centos-5-x,  useScalrAgent: true,  builtinAutomation: ['base', 'chef']}  #21
+  - {name: postUseScalarizerNotEmptyBuiltinAutomation2, category: 1, os: centos-5-x,  builtinAutomation: ['base', 'chef']}                        #22
+  - {name: testbuiltinAutomation,  category: 1, os: centos-5-x, builtinAutomation: ['postgresql', 'mysql']}  #23
+  - {name: testbuiltinAutomation2, category: 1, os: centos-5-x, builtinAutomation: ['postgresql', 'chef']}  #24
+  - {name: '&{0}Role.name'}                             # check filters
+  - {name: '&{0}Role.name', category: '&{0}Role.catId'} # SCALRCORE-3212
+
+Role:
+  - {name: testRole, catId: 1, osId: centos-5-x, behaviors: 'base', accountId: ,envId: }
+
+RoleCategory:
+ - {name: testCategory}

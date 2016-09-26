@@ -1,269 +1,301 @@
 Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.view', function (loadParams, moduleParams) {
-	var store = Ext.create('store.store', {
-		fields: [
-			'farmId', 'farmRoleId', 'farmName', 'roleName', 'mysql_master_volume', 'mountStatus', 'serverIndex', 'serverId',
-			'volumeId', 'size', 'snapshotId', 'availZone', 'status', 'attachmentStatus', 'device', 'instanceId', 'autoSnaps', 'autoAttach', 'type'
-		],
-		proxy: {
-			type: 'scalr.paging',
-			extraParams: loadParams,
-			url: '/tools/aws/ec2/ebs/volumes/xListVolumes/'
-		},
-		remoteSort: true
-	});
+    var store = Ext.create('store.store', {
+        fields: [
+            {name: 'farmId', defaultValue: null}, 'farmRoleId', 'farmName', 'roleName', 'mysql_master_volume', {name: 'mountStatus', defaultValue: null}, 'serverIndex', 'serverId',
+            'volumeId', 'size', 'snapshotId', 'availZone', 'status', 'attachmentStatus', 'device', 'instanceId', 'autoSnaps', {name: 'autoAttach', defaultValue: null}, 'type', 'encrypted', 'kmsKeyId'
+        ],
+        proxy: {
+            type: 'scalr.paging',
+            url: '/tools/aws/ec2/ebs/volumes/xListVolumes/',
+            timeout: 60000 // increase timeout up to 60 seconds according SCALRCORE-1638
+        },
+        remoteSort: true,
+        sorters: [{
+            property: 'volumeId',
+            direction: 'DESC'
+        }]
+    });
 
-	return Ext.create('Ext.grid.Panel', {
-		title: 'Tools &raquo; Amazon Web Services &raquo; EC2 &raquo; EBS &raquo; Volumes',
-		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
-		},
-		scalrReconfigureParams: { volumeId: '' },
-		store: store,
-		stateId: 'grid-tools-aws-ec2-ebs-volumes-view',
-		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'EBS Volumes',
-				href: '#/tools/aws/ec2/ebs/volumes'
-			}
-		}],
+    return Ext.create('Ext.grid.Panel', {
+        scalrOptions: {
+            reload: false,
+            maximize: 'all',
+            menuTitle: 'EBS Volumes',
+            menuHref: '#/tools/aws/ec2/ebs/volumes',
+            menuFavorite: true
+        },
+        store: store,
+        stateId: 'grid-tools-aws-ec2-ebs-volumes-view',
+        stateful: true,
+        plugins: [{
+            ptype: 'gridstore'
+        }, {
+            ptype: 'applyparams'
+        }],
 
-		viewConfig: {
-			emptyText: 'No volumes found',
-			loadingText: 'Loading volumes ...'
-		},
+        viewConfig: {
+            emptyText: 'No volumes found',
+            loadingText: 'Loading volumes ...'
+        },
 
-		columns: [
-			{ header: "Used by", flex: 1, dataIndex: 'id', sortable: true, xtype: 'templatecolumn',
-				doSort: function (state) {
-					var ds = this.up('tablepanel').store;
-						ds.sort([{
-							property: 'farmId',
-							direction: state
-						}, {
-							property: 'farmRoleId',
-							direction: state
-						}, {
-							property: 'serverIndex',
-							direction: state
-						}]);
-					}, tpl:
-				'<tpl if="farmId">' +
-					'<a href="#/farms/{farmId}/view" title="Farm {farmName}">{farmName}</a>' +
-					'<tpl if="roleName">' +
-						'&nbsp;&rarr;&nbsp;<a href="#/farms/{farmId}/roles/{farmRoleId}/view" title="Role {roleName}">' +
-						'{roleName}</a> #<a href="#/servers/{serverId}/view">{serverIndex}</a>' +
-					'</tpl>' +
-				'</tpl>' +
-				'<tpl if="!farmId"><img src="/ui2/images/icons/false.png" /></tpl>'
-			},
-			{ header: "Volume ID", width: 120, dataIndex: 'volumeId', sortable: true },
-			{ header: "Size (GB)", width: 80, dataIndex: 'size', sortable: true },
-			{ header: "Type", width: 80, dataIndex: 'type', sortable: true },
-			{ header: "Snapshot ID", width: 35, dataIndex: 'snapshotId', sortable: true, hidden: true },
-			{ header: "Placement", width: 100, dataIndex: 'availZone', sortable: true },
-			{ header: "Status", width: 250, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
-				'{status}' +
-				'<tpl if="attachmentStatus"> / {attachmentStatus}</tpl>' +
-				'<tpl if="device"> ({device})</tpl>'
-			},
-			{ header: "Mount status", width: 100, dataIndex: 'mountStatus', sortable: false, xtype: 'templatecolumn', tpl:
-				'<tpl if="mountStatus">{mountStatus}</tpl>' +
-				'<tpl if="!mountStatus"><img src="/ui2/images/icons/false.png" /></tpl>'
-			},
-			{ header: "Instance ID", width: 110, dataIndex: 'instanceId', sortable: true, xtype: 'templatecolumn', tpl:
-				'<tpl if="instanceId">{instanceId}</tpl>'
-			},
-			{ header: "Auto-snaps", width: 110, dataIndex: 'autoSnaps', sortable: false, align:'center', xtype: 'templatecolumn', tpl:
-				'<tpl if="autoSnaps"><img src="/ui2/images/icons/true.png" /></tpl>' +
-				'<tpl if="!autoSnaps"><img src="/ui2/images/icons/false.png" /></tpl>'
-			},
-			{ header: "Auto-attach", width: 130, dataIndex: 'autoAttach', sortable: false, align:'center', xtype: 'templatecolumn', tpl:
-				'<tpl if="autoAttach"><img src="/ui2/images/icons/true.png" /></tpl>' +
-				'<tpl if="!autoAttach"><img src="/ui2/images/icons/false.png" /></tpl>'
-			}, {
-				xtype: 'optionscolumn',
-				getOptionVisibility: function (item, record) {
-					if (item.itemId == 'option.attach' || item.itemId == 'option.detach' || item.itemId == 'option.attachSep') {
-						if (!record.get('mysqMasterVolume')) {
-							if (item.itemId == 'option.attachSep')
-								return true;
-							if (item.itemId == 'option.detach' && record.get('instanceId'))
-								return true;
-							if (item.itemId == 'option.attach' && !record.get('instanceId'))
-								return true;
-						}
-						return false;
-					}
-					return true;
-				},
+        columns: [
+            { header: "Used by", flex: 1, dataIndex: 'farmName', sortable: true, xtype: 'templatecolumn',
+                multiSort: function (st, direction) {
+                    st.sort([{
+                        property: 'farmName',
+                        direction: direction
+                    }, {
+                        property: 'roleName',
+                        direction: direction
+                    }, {
+                        property: 'serverIndex',
+                        direction: direction
+                    }]);
+                }, tpl:
+                    '<tpl if="farmId">' +
+                        '<a href="#/farms?farmId={farmId}" title="Farm {farmName}">{farmName}</a>' +
+                        '<tpl if="roleName">' +
+                            '&nbsp;&rarr;&nbsp;<a href="#/farms/{farmId}/roles/{farmRoleId}/view" title="Role {roleName}">' +
+                            '{roleName}</a> #<a href="#/servers?serverId={serverId}">{serverIndex}</a>' +
+                        '</tpl>' +
+                    '</tpl>' +
+                    '<tpl if="!farmId">&mdash;</tpl>'
+            },
+            { header: "Volume ID", width: 120, dataIndex: 'volumeId', sortable: true },
+            { header: "Size (GB)", width: 110, dataIndex: 'size', sortable: true },
+            { header: "Type", width: 100, dataIndex: 'type', sortable: true },
+            { header: "Snapshot ID", width: 130, dataIndex: 'snapshotId', sortable: true, hidden: true },
+            { header: "Placement", width: 110, dataIndex: 'availZone', sortable: true },
+            { header: "Status", width: 250, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
+            '{status}' +
+            '<tpl if="attachmentStatus"> / {attachmentStatus}</tpl>' +
+            '<tpl if="device"> ({device})</tpl>'
+            },
+            { header: "Mount status", width: 110, dataIndex: 'mountStatus', sortable: false, xtype: 'templatecolumn', tpl:
+            '<tpl if="mountStatus">{mountStatus}</tpl>' +
+            '<tpl if="!mountStatus">&mdash;</tpl>'
+            },
+            { header: "Instance ID", width: 120, dataIndex: 'instanceId', sortable: true, xtype: 'templatecolumn', tpl:
+                '<tpl if="instanceId">{instanceId}</tpl>'
+            },
+            { header: "Auto-snaps", width: 110, dataIndex: 'autoSnaps', sortable: false, align:'center', xtype: 'templatecolumn', tpl:
+            '<tpl if="autoSnaps"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div></tpl>' +
+            '<tpl if="!autoSnaps">&mdash;</tpl>'
+            },
+            { header: "Auto-attach", width: 130, dataIndex: 'autoAttach', sortable: false, align:'center', xtype: 'templatecolumn', tpl:
+            '<tpl if="autoAttach"><div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div></tpl>' +
+            '<tpl if="!autoAttach">&mdash;</tpl>'
+            },
+            { header: "Encrypted", width: 90, dataIndex: 'encrypted', resizeable: false, sortable: false, align:'center', xtype: 'templatecolumn', tpl:
+            '<tpl if="encrypted">'+
+            '<div class="x-grid-icon x-grid-icon-simple x-grid-icon-ok"></div>'+
+            '<tpl else>&mdash;</tpl>'
+            }, {
+                xtype: 'optionscolumn',
+                getVisibility: function (record) {
+                    return record.get('status') !== 'deleting' && record.get('status') !== 'deleted';
+                },
+                menu: [{
+                    text: 'CloudWatch statistics',
+                    iconCls: 'x-menu-icon-statsload',
+                    showAsQuickAction: true,
+                    getVisibility: function(data) {
+                        return Scalr.isAllowed('AWS_CLOUDWATCH');
+                    },
+                    menuHandler: function (data) {
+                        Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/cloudwatch/view?objectId=' + data['volumeId'] + '&object=VolumeId&namespace=AWS/EBS&region=' + store.proxy.extraParams.cloudLocation);
+                    }
+                },{
+                    iconCls: 'x-menu-icon-attach',
+                    text: 'Attach',
+                    showAsQuickAction: true,
+                    menuHandler: function(data) {
+                        Scalr.event.fireEvent('redirect', "#/tools/aws/ec2/ebs/volumes/" + data['volumeId'] + "/attach?cloudLocation=" + store.proxy.extraParams.cloudLocation);
+                    },
+                    getVisibility: function(data) {
+                        return !data['mysqMasterVolume'] && !data['instanceId'] && Scalr.isAllowed('AWS_VOLUMES', 'manage');
+                    }
+                },{
+                    iconCls: 'x-menu-icon-detach',
+                    text: 'Detach',
+                    showAsQuickAction: true,
+                    getVisibility: function(data) {
+                        return !data['mysqMasterVolume'] && data['instanceId'] && Scalr.isAllowed('AWS_VOLUMES', 'manage');
+                    },
+                    request: {
+                        confirmBox: {
+                            type: 'action',
+                            //TODO: Add form: checkbox: forceDetach
+                            msg: 'Are you sure want to detach "{volumeId}" volume?'
+                        },
+                        processBox: {
+                            type: 'action',
+                            msg: 'Detaching EBS volume ...'
+                        },
+                        url: '/tools/aws/ec2/ebs/volumes/xDetach/',
+                        dataHandler: function (data) {
+                            return { volumeId: data['volumeId'], cloudLocation: store.proxy.extraParams.cloudLocation };
+                        },
+                        success: function (data) {
+                            store.load();
+                        }
+                    }
+                },{
+                    xtype: 'menuseparator'
+                },{
+                    text: 'Auto-snapshot settings',
+                    getVisibility: function() {
+                        return  Scalr.isAllowed('AWS_SNAPSHOTS', 'manage'); //Scalr.flags['showDeprecatedFeatures'];
+                    },
+                    iconCls: 'x-menu-icon-autosnapshotsettings',
+                    menuHandler: function(data) {
+                        Scalr.event.fireEvent('redirect', '#/tools/aws/autoSnapshotSettings?type=ebs&objectId=' + data['volumeId'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
+                    }
+                }, {
+                    xtype: 'menuseparator'
+                }, {
+                    text: 'Create snapshot',
+                    showAsQuickAction: true,
+                    iconCls: 'x-menu-icon-create',
+                    getVisibility: function(data) {
+                        return Scalr.isAllowed('AWS_SNAPSHOTS', 'manage');
+                    },
+                    request: {
+                        confirmBox: {
+                            type: 'action',
+                            msg: 'Are you sure want to create snapshot for EBS volume "{volumeId}"?'
+                        },
+                        processBox: {
+                            type: 'action',
+                            msg: 'Creating EBS snapshot ...'
+                        },
+                        url: '/tools/aws/ec2/ebs/snapshots/xCreate/',
+                        dataHandler: function (data) {
+                            return { volumeId: data['volumeId'], cloudLocation: store.proxy.extraParams.cloudLocation };
+                        },
+                        success: function (data) {
+                            Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/ebs/snapshots/' + data.data.snapshotId + '/view?cloudLocation=' + store.proxy.extraParams.cloudLocation);
+                        }
+                    }
+                }, {
+                    text: 'Snapshots',
+                    showAsQuickAction: true,
+                    iconCls: 'x-menu-icon-createserversnapshot',
+                    getVisibility: function(data) {
+                        return Scalr.isAllowed('AWS_SNAPSHOTS', 'manage');
+                    },
+                    menuHandler: function(data) {
+                        Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/ebs/snapshots?volumeId=' + data['volumeId'] + '&cloudLocation=' + store.proxy.extraParams.cloudLocation);
+                    }
+                }, {
+                    xtype: 'menuseparator'
+                }, {
+                    text: 'Delete',
+                    iconCls: 'x-menu-icon-delete',
+                    getVisibility: function() {
+                        return  Scalr.isAllowed('AWS_VOLUMES', 'manage');
+                    },
+                    request: {
+                        confirmBox: {
+                            type: 'delete',
+                            msg: 'Are you sure want to delete EBS volume "{volumeId}"?'
+                        },
+                        processBox: {
+                            type: 'delete',
+                            msg: 'Deleting EBS volume ...'
+                        },
+                        url: '/tools/aws/ec2/ebs/volumes/xRemove/',
+                        dataHandler: function (data) {
+                            return { volumeId: Ext.encode([data['volumeId']]), cloudLocation: store.proxy.extraParams.cloudLocation };
+                        },
+                        success: function () {
+                            store.load();
+                        }
+                    }
+                }]
+            }
+        ],
 
-				optionsMenu: [{
-					text: 'CloudWatch statistics',
-					iconCls: 'x-menu-icon-statsload',
-					menuHandler: function (menuItem) {
-						document.location.href = '#/tools/aws/ec2/cloudwatch/view?objectId=' + menuItem.record.get('volumeId') + '&object=VolumeId&namespace=AWS/EBS&region=' + store.proxy.extraParams.cloudLocation;
-					}
-				},{
-					itemId: 'option.attach',
-					iconCls: 'x-menu-icon-attach',
-					text: 'Attach',
-					menuHandler: function(menuItem) {
-						document.location.href = "#/tools/aws/ec2/ebs/volumes/" + menuItem.record.get('volumeId') + "/attach?cloudLocation=" + store.proxy.extraParams.cloudLocation;
-					}
-				}, {
-					itemId: 'option.detach',
-					iconCls: 'x-menu-icon-detach',
-					text: 'Detach',
-					request: {
-						confirmBox: {
-							type: 'action',
-							//TODO: Add form: checkbox: forceDetach
-							msg: 'Are you sure want to detach "{volumeId}" volume?'
-						},
-						processBox: {
-							type: 'action',
-							msg: 'Detaching EBS volume ...'
-						},
-						url: '/tools/aws/ec2/ebs/volumes/xDetach/',
-						dataHandler: function (record) {
-							return { volumeId: record.get('volumeId'), cloudLocation: store.proxy.extraParams.cloudLocation };
-						},
-						success: function (data) {
-							store.load();
-						}
-					}
-				}, {
-					xtype: 'menuseparator',
-					itemId: 'option.attachSep'
-				}, {
-					itemId: 'option.autosnap',
-					text: 'Auto-snapshot settings',
-					iconCls: 'x-menu-icon-autosnapshotsettings',
-					menuHandler: function(menuItem) {
-						document.location.href = '#/tools/aws/autoSnapshotSettings?type=ebs&objectId=' + menuItem.record.get('volumeId') + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
-					}
-				}, {
-					xtype: 'menuseparator',
-					itemId: 'option.snapSep'
-				}, {
-					itemId: 'option.createSnap',
-					text: 'Create snapshot',
-					iconCls: 'x-menu-icon-create',
-					request: {
-						confirmBox: {
-							type: 'action',
-							msg: 'Are you sure want to create snapshot for EBS volume "{volumeId}"?'
-						},
-						processBox: {
-							type: 'action',
-							msg: 'Creating EBS snapshot ...'
-						},
-						url: '/tools/aws/ec2/ebs/snapshots/xCreate/',
-						dataHandler: function (record) {
-							return { volumeId: record.get('volumeId'), cloudLocation: store.proxy.extraParams.cloudLocation };
-						},
-						success: function (data) {
-							document.location.href = '#/tools/aws/ec2/ebs/snapshots/' + data.data.snapshotId + '/view?cloudLocation=' + store.proxy.extraParams.cloudLocation;
-						}
-					}
-				}, {
-					itemId: 'option.viewSnaps',
-					text: 'View snapshots',
-					iconCls: 'x-menu-icon-view',
-					menuHandler: function(menuItem) {
-						document.location.href = '#/tools/aws/ec2/ebs/snapshots/view?volumeId=' + menuItem.record.get('volumeId') + '&cloudLocation=' + store.proxy.extraParams.cloudLocation;
-					}
-				}, {
-					xtype: 'menuseparator',
-					itemId: 'option.vsnapSep'
-				}, {
-					itemId: 'option.delete',
-					text: 'Delete',
-					iconCls: 'x-menu-icon-delete',
-					request: {
-						confirmBox: {
-							type: 'delete',
-							msg: 'Are you sure want to delete EBS volume "{volumeId}"?'
-						},
-						processBox: {
-							type: 'delete',
-							msg: 'Deleting EBS volume ...'
-						},
-						url: '/tools/aws/ec2/ebs/volumes/xRemove/',
-						dataHandler: function (record) {
-							return { volumeId: Ext.encode([record.get('volumeId')]), cloudLocation: store.proxy.extraParams.cloudLocation };
-						},
-						success: function () {
-							store.load();
-						}
-					}
-				}]
-			}
-		],
+        selModel:
+            Scalr.isAllowed('AWS_VOLUMES', 'manage') ?
+            {
+                selType: 'selectedmodel',
+                getVisibility: function(record) {
+                    return record.get('status') == 'deleting' ? false : true;
+                }
+            } : null,
 
-		multiSelect: true,
-		selModel: {
-			selType: 'selectedmodel',
-			selectedMenu: [{
-				text: 'Delete',
-				iconCls: 'x-menu-icon-delete',
-				request: {
-					confirmBox: {
-						msg: 'Delete selected EBS volume(s): %s ?',
-						type: 'delete'
-					},
-					processBox: {
-						msg: 'Deleting selected EBS volume(s) ...',
-						type: 'delete'
-					},
-					url: '/tools/aws/ec2/ebs/volumes/xRemove/',
-					dataHandler: function (records) {
-						var data = [];
-						this.confirmBox.objects = [];
-						for (var i = 0, len = records.length; i < len; i++) {
-							data.push(records[i].get('volumeId'));
-							this.confirmBox.objects.push(records[i].get('volumeId'));
-						}
-						return { volumeId: Ext.encode(data), cloudLocation: store.proxy.extraParams.cloudLocation };
-					}
-				}
-			}]
-		},
+        listeners: {
+            selectionchange: function(selModel, selections) {
+                var toolbar = this.down('scalrpagingtoolbar');
+                toolbar.down('#delete').setDisabled(!selections.length);
+            }
+        },
 
-		dockedItems: [{
-			xtype: 'scalrpagingtoolbar',
-			store: store,
-			dock: 'top',
-			afterItems: [{
-				ui: 'paging',
-				iconCls: 'x-tbar-add',
-				handler: function() {
-					Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/ebs/volumes/create');
-				}
-			}],
-			items: [{
-				xtype: 'tbfilterfield',
-				store: store,
-				iconCls: 'no-icon'
-			}, ' ', {
-				xtype: 'fieldcloudlocation',
-				itemId: 'cloudLocation',
-				store: {
-					fields: [ 'id', 'name' ],
-					data: moduleParams.locations,
-					proxy: 'object'
-				},
-				gridStore: store,
-				cloudLocation: loadParams['cloudLocation'] || ''
-			}]
-		}]
-	});
+        dockedItems: [{
+            xtype: 'scalrpagingtoolbar',
+            store: store,
+            dock: 'top',
+            beforeItems: [{
+                text: 'New volume',
+                cls: 'x-btn-green',
+                hidden: !Scalr.isAllowed('AWS_VOLUMES', 'manage'),
+                handler: function() {
+                    Scalr.event.fireEvent('redirect', '#/tools/aws/ec2/ebs/volumes/create');
+                }
+            }],
+            afterItems: [{
+                itemId: 'delete',
+                disabled: true,
+                iconCls: 'x-btn-icon-delete',
+                cls: 'x-btn-red',
+                tooltip: 'Delete',
+                hidden: !Scalr.isAllowed('AWS_VOLUMES', 'manage'),
+                handler: function() {
+                    var request = {
+                        confirmBox: {
+                            type: 'delete',
+                            msg: 'Delete selected EBS volume(s): %s ?'
+                        },
+                        processBox: {
+                            type: 'delete'
+                        },
+                        url: '/tools/aws/ec2/ebs/volumes/xRemove/',
+                        success: function() {
+                            store.load();
+                        }
+                    }, records = this.up('grid').getSelectionModel().getSelection(), volumes = [];
+
+                    request.confirmBox.objects = [];
+                    for (var i = 0, len = records.length; i < len; i++) {
+                        volumes.push(records[i].get('volumeId'));
+                        request.confirmBox.objects.push(records[i].get('volumeId'))
+                    }
+                    request.params = { volumeId: Ext.encode(volumes), cloudLocation: store.proxy.extraParams.cloudLocation };
+                    Scalr.Request(request);
+                }
+            }],
+            items: [{
+                xtype: 'filterfield',
+                store: store,
+                form: {
+                    items: [{
+                        xtype: 'textfield',
+                        name: 'farmId',
+                        fieldLabel: 'Farm ID',
+                        labelAlign: 'top'
+                    },{
+                        xtype: 'textfield',
+                        name: 'farmRoleId',
+                        fieldLabel: 'Farm Role ID',
+                        labelAlign: 'top'
+                    }]
+                }
+            }, ' ', {
+                xtype: 'cloudlocationfield',
+                platforms: ['ec2'],
+                gridStore: store
+            }]
+        }]
+    });
 });

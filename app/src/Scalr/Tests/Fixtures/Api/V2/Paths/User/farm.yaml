@@ -1,0 +1,42 @@
+paths:
+  - uri: /{envId}/farms/
+    operations:
+      - {method: post, response: 201, body: '&FarmsData'}
+      - {method: post, response: 201, body: '&FarmsData'} #test post farm
+      - {method: post, response: 400, body: '&FarmsData'} #test post farm with existed name
+      - {method: post, response: 409, body: '&{1}FarmsData'}
+      - {method: get,  response: 200}
+  - uri: /{envId}/farms/{farmId}/
+    operations:
+      - {method: get,    response: 200, params: '&{4}FarmsData'}
+      - {method: patch,  response: 200, params: '&{4}FarmsData', body: '&{3}FarmsData'} #test add project
+      - {method: patch,  response: 200, params: '&{4}FarmsData', body: '&{6}FarmsData'} #test change name
+      - {method: delete, response: 404, params: '&{5}FarmsData'}
+
+  - uri: /{envId}/farms/{farmId}/actions/clone/
+    operations:
+      - {method: post, response: 200, params: '&{4}FarmsData', body: '&{7}FarmsData'} #test clone action
+      - {method: post, response: 409, params: '&{4}FarmsData', body: '&{7}FarmsData'} #test clone action
+#test data for api
+FarmsData:
+  - {name: foo bar,  project: '&{0}Projects.id'}                                                 #0
+  - {name: foo1 bar, project: '&{0}Projects.id', description: foobar, launchOrder: sequential}   #1
+  - {name: foo2 bar}                                                                             #2
+  - {project: '&{0}Projects.id'}                                                                 #3
+  - {farmId: '&{0}Farm.id'}                                                                      #4
+  - {farmId: 9981281}                                                                            #5
+  - {name: test patch}                                                                           #6
+  - {name: test clone}                                                                           #7
+
+Farm:
+ - {name: testFarmForTesting, comments: test-description, settings: '&{0}FarmSettings'}
+
+FarmSettings:
+ - {project_id: '&{0}Projects.id'}
+
+#test data Created Entities
+Projects:
+  - {name: test-farm-project, properties: '&{0}ProjectProperties', shared: 2}
+
+ProjectProperties:
+  - {billingCode: foo, leadEmail: foobar@example.com, description: foo bar}

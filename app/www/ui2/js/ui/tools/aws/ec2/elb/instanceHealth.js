@@ -6,7 +6,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.instanceHealth', function(loadParams, 
 				Scalr.event.fireEvent('close');
 			}
 		}],
-		bodyCls: 'x-panel-body-frame',
 		width: 650,
 		title: 'Instance Health',
 		items: [{
@@ -24,7 +23,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.elb.instanceHealth', function(loadParams, 
 		dockedItems:[{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'

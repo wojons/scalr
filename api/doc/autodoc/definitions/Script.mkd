@@ -1,0 +1,208 @@
+# `Script` #
+
+
+
+
+
+
+
+## Properties ##
+
+### `osType` (required, create-only, filterable) ###
+
+Type of OS this Script should execute on. This will influence Orchestration Rules, an will trigger validation on individual ScriptVersion's you upload.
+
+
+Property of type: `string`.
+
+ 
+The following are valid values for the `osType` property:
+  + `linux`
+  + `windows`
+
+To filter on this field, use: `osType=...`.
+
+
+### `name` (required, filterable) ###
+
+
+
+
+Property of type: `string`.
+
+
+To filter on this field, use: `name=...`.
+
+
+### `timeoutDefault` (optional) ###
+
+
+
+
+Property of type: `integer`.
+
+
+
+
+### `description` (optional) ###
+
+
+
+
+Property of type: `string`.
+
+
+
+
+### `blockingDefault` (optional, filterable) ###
+
+
+
+
+Property of type: `boolean`.
+
+
+To filter on this field, use: `blockingDefault=...`.
+
+
+### `scope` (read-only, filterable) ###
+
+
+
+
+Property of type: `string`.
+
+ 
+The following are valid values for the `scope` property:
+  + `scalr`
+  + `account`
+  + `environment`
+  + `farm`
+  + `farmrole`
+  + `role`
+  + `server`
+
+To filter on this field, use: `scope=...`.
+
+
+### `lastChanged` (read-only) ###
+
+
+
+
+Property of type: `string`.
+
+
+
+
+### `id` (read-only, filterable) ###
+
+
+
+
+Property of type: `integer`.
+
+
+To filter on this field, use: `id=...`.
+
+
+### `added` (read-only) ###
+
+
+
+
+Property of type: `string`.
+
+
+
+
+
+
+## Used in ##
+
+  + [`/scripts/`](./../rest/api/v1beta0/account/scripts/)
+  + [`/scripts/{scriptId}/`](./../rest/api/v1beta0/account/scripts/{scriptId}/)
+  + [`/scripts/{scriptId}/script-versions/`](./../rest/api/v1beta0/account/scripts/{scriptId}/script-versions/)
+  + [`/scripts/{scriptId}/script-versions/{scriptVersionNumber}/`](./../rest/api/v1beta0/account/scripts/{scriptId}/script-versions/{scriptVersionNumber}/)
+  + [`/{envId}/scripts/`](./../rest/api/v1beta0/user/{envId}/scripts/)
+  + [`/{envId}/scripts/{scriptId}/`](./../rest/api/v1beta0/user/{envId}/scripts/{scriptId}/)
+  + [`/{envId}/scripts/{scriptId}/script-versions/`](./../rest/api/v1beta0/user/{envId}/scripts/{scriptId}/script-versions/)
+  + [`/{envId}/scripts/{scriptId}/script-versions/{scriptVersionNumber}/`](./../rest/api/v1beta0/user/{envId}/scripts/{scriptId}/script-versions/{scriptVersionNumber}/)
+
+## Swagger Definition ##
+
+    {
+      "properties": {
+        "added": {
+          "format": "date-time", 
+          "readOnly": true, 
+          "type": "string"
+        }, 
+        "blockingDefault": {
+          "type": "boolean"
+        }, 
+        "description": {
+          "type": "string"
+        }, 
+        "id": {
+          "readOnly": true, 
+          "type": "integer"
+        }, 
+        "lastChanged": {
+          "format": "date-time", 
+          "readOnly": true, 
+          "type": "string"
+        }, 
+        "name": {
+          "type": "string"
+        }, 
+        "osType": {
+          "description": "Type of OS this Script should execute on. This will influence Orchestration Rules, an will trigger validation on individual ScriptVersion's you upload.", 
+          "enum": [
+            "linux", 
+            "windows"
+          ], 
+          "type": "string"
+        }, 
+        "scope": {
+          "enum": [
+            "scalr", 
+            "account", 
+            "environment", 
+            "farm", 
+            "farmrole", 
+            "role", 
+            "server"
+          ], 
+          "readOnly": true, 
+          "type": "string"
+        }, 
+        "timeoutDefault": {
+          "type": "integer"
+        }
+      }, 
+      "required": [
+        "name", 
+        "osType"
+      ], 
+      "x-createOnly": [
+        "osType"
+      ], 
+      "x-filterable": [
+        "blockingDefault", 
+        "id", 
+        "name", 
+        "osType", 
+        "scope"
+      ], 
+      "x-usedIn": [
+        "/scripts/", 
+        "/scripts/{scriptId}/", 
+        "/scripts/{scriptId}/script-versions/", 
+        "/scripts/{scriptId}/script-versions/{scriptVersionNumber}/", 
+        "/{envId}/scripts/", 
+        "/{envId}/scripts/{scriptId}/", 
+        "/{envId}/scripts/{scriptId}/script-versions/", 
+        "/{envId}/scripts/{scriptId}/script-versions/{scriptVersionNumber}/"
+      ]
+    }

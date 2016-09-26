@@ -1,0 +1,33 @@
+paths:
+  - uri: /{envId}/scripts/{scriptId}/script-versions/
+    acl: fullAccess
+    operations:
+      - {method: post, response: 400, params: '&{0}ScriptVersionParams', body: '&ScriptVersionData'} #SCALRCORE-3288 add body without #!
+      - {method: post, response: 201, params: '&{0}ScriptVersionParams', body: '&ScriptVersionData'} #SCALRCORE-3288 add body without #!
+      - {method: post, response: 201, params: '&{0}ScriptVersionParams', body: '&ScriptVersionData'} #SCALRCORE-3288
+
+ScriptVersionData:
+ - {script: '&{0}Scripts.id', body: 'echo "Hello world";' }
+ - {script: '&{0}Scripts.id', body: '#!/bin/sh echo "Hello world";' }
+ - script: '&{0}Scripts.id' #in this script body != strip_tags(body)
+   body: >-
+    #!/bin/bash
+
+    sed 's/Defaults\([ ]\+\)!requiretty/# Defaults   !requiretty/' -i /etc/sudoers
+    sed 's/Defaults\([ ]\+\)requiretty/# Defaults   requiretty/' -i /etc/sudoers
+
+    useradd -m -p revizor revizor
+
+    cat <<EOF > /home/revizor/local_script.sh
+    #!/bin/bash
+    echo "Local script work! User: \$USER"
+    env
+    EOF
+
+    chmod +x /home/revizor/local_script.sh
+
+ScriptVersionParams:
+ - {scriptId: '&Scripts.id'}
+
+Scripts:
+  - {name: 'test-post-script-version', description: 'test script'}

@@ -1,0 +1,40 @@
+{
+  "name" : "scalr/int-scalr",
+  "description" : "Scalr is open source cloud management platform",
+  "require" : {
+    "php" : "^5.6.13",
+    "ext-http" : "^2.5.3",
+    "ext-ssh2" : "^0.12",
+    "ext-yaml" : "^1.1.1",
+    "ext-zmq" : "^1.1.2",
+    "ext-mysqli" : "^0.1",
+    "ext-dom" : "*",
+    "ext-sockets" : "*",
+    "ext-pcntl" : "*",
+    "ext-posix" : "*",
+    "ext-sysvsem" : "*",
+    "ext-curl" : "*",
+    "ext-xml" : "*",
+    "ext-mcrypt" : "*",
+    "ext-hash" : "*",
+    "ext-openssl" : "*",
+    "google/apiclient" : "2.x-dev",
+    "onelogin/php-saml" : "2.6.1"
+  },
+  "scripts" : {
+  },
+  "keywords" : [ "aws", "ec2", "gce", "openstack", "cloudstack", "azure", "scalr" ],
+  "support" : {
+    "wiki" : "https://scalr-wiki.atlassian.net/"
+  },
+  "minimum-stability" : "stable",
+  "extra" : {
+    "branch-alias" : {
+      "dev-master" : "5.11.x-dev"
+    }
+  },
+  "autoload" : {
+  },
+  "license" : "Commercial",
+  "homepage" : "http://www.scalr.com/"
+}

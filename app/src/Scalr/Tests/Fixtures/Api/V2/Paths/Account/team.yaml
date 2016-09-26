@@ -1,0 +1,56 @@
+paths:
+- uri: /teams/
+  userType: TeamUser
+  operations:
+   - {method: post, response: 403, body: '&{3}TeamData'}
+   - {method: get,  response: 200} #test describe account teams
+
+- uri: /teams/
+  userType: AccountAdmin
+  operations:
+   - {method: post, response: 400, body: '&TeamData'} #test post without defaultAclRole
+   - {method: post, response: 400, body: '&TeamData'} #test post not valid defaultAclRole
+   - {method: post, response: 400, body: '&TeamData'} #test post empty defaultAclRole
+   - {method: post, response: 201, body: '&TeamData'} #test create Account Teams
+   - {method: post, response: 409, body: '&{3}TeamData'} #test create Account Teams with exist name
+   - {method: post, response: 404, body: '&{8}TeamData'} #test create Account Teams with exist Acl Role
+   - {method: get,  response: 200} #test describe account teams
+
+- uri: /teams/{teamId}/
+  userType: TeamUser
+  operations:
+    - {method: get,    response: 403, params: '&{4}TeamData'}                       #################
+    - {method: patch,  response: 403, params: '&{4}TeamData', body: '&{0}TeamData'} # test Acl access
+    - {method: delete, response: 403, params: '&{4}TeamData'}                       #################
+
+- uri: /teams/{teamId}/
+  userType: AccountAdmin
+  operations:
+    - {method: get,    response: 200, params: '&{4}TeamData'} # test fetch Team
+    - {method: patch,  response: 409, params: '&{4}TeamData', body: '&{0}TeamData'} # test modify exist name
+    - {method: patch,  response: 200, params: '&{4}TeamData', body: '&{5}TeamData'} # test modify default ACL Role
+    - {method: patch,  response: 400, params: '&{4}TeamData', body: '&{6}TeamData'} # test modify not valid default ACL Role
+    - {method: patch,  response: 400, params: '&{4}TeamData', body: '&{7}TeamData'} # test modify not valid description
+    - {method: delete, response: 200, params: '&{4}TeamData'} # test delete action
+    - {method: delete, response: 404, params: '&{4}TeamData'} # test delte not exist team
+
+TeamData:
+- {name: 'testPostTeam'}                                              #0######################
+- {name: 'testPostTeam', defaultAclRole: 'fakeRole'}                  #1
+- {name: 'testPostTeam', defaultAclRole: ''}                          #2
+- {name: 'testPostTeam', defaultAclRole: '&{0}AclRole.accountRoleId'} #3 SCALRCORE-3362
+- {teamId: '&{0}Team.id'}                                             #4
+- {defaultAclRole: '&{1}AclRole.accountRoleId'}                       #5
+- {defaultAclRole: '<br />'}                                          #6
+- {description: 'test <br /> description'}                            #7
+- {name: 'NotExistAclRole', defaultAclRole: '149bfdb4d574faf6c807'}   #8#######################
+
+Team:
+- {name: testModifyTeam, accountRoleId: '&AclRole.accountRoleId'}
+
+AclRole:
+- {name: testAclRoleFullAccess,     baseRoleId: 10}
+- {name: testAclRoleReadOnlyAccess, baseRoleId: 5}
+
+
+

@@ -1,0 +1,153 @@
+.scalr-ui-monitoring-main-panel {
+    background-color: #e1ebf4;
+}
+
+.scalr-ui-monitoring-left-panel {
+    background: rgb(195, 214, 230);
+}
+
+.scalr-ui-monitoring-tree-panel .x-tree-node-text {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    margin-left: 2px;
+}
+
+.scalr-ui-monitoring-checked-node {
+    background-color: #e1ebf4 !important;
+}
+
+.scalr-ui-monitoring-compare-mode .x-grid-item-selected {
+    background-color: inherit;
+}
+
+.scalr-ui-monitoring-main-container {
+    background-color: #e1ebf4;
+    padding: 15px 3px 3px 15px;
+}
+
+.scalr-ui-monitoring-loading-message {
+    background: white;
+    border-radius: 0;
+    height: 110px;
+    width: 313px;
+    text-align: center;
+    font-size:  18px;
+    box-shadow: 0 1px rgba(65,92,120,0.2),0 1px 1px rgba(65,92,120,0.3);
+    -webkit-box-shadow: 0 1px 1px rgba(65,92,120,0.4),0 1px 2px rgba(65,92,120,0.2);
+    display: none;
+}
+
+.scalr-ui-monitoring-loading-message div {
+    margin-top: 20px;
+    margin-bottom: 20px;
+}
+
+.scalr-ui-monitoring-container-for-statistics {
+    float: left;
+    margin: 0 12px 0 0;
+}
+
+.scalr-ui-monitoring-container-for-statistics div {
+    margin-bottom: 12px;
+}
+
+.scalr-ui-monitoring-title {
+    color: #224164;
+    font-size: 18px;
+    margin-bottom: 14px !important;
+}
+
+.scalr-ui-monitoring-statistics-container {
+    width: 510px;
+    position: relative;
+}
+
+.scalr-ui-monitoring-statistics-container-compare-mode-off {
+    margin: 0 12px 12px 0;
+    width: 510px;
+    position: relative;
+    display: inline-block;
+    vertical-align: top;
+}
+
+.scalr-ui-monitoring-image-container:hover + .x-tool-monitoring-addtodashboard {
+    visibility: visible;
+}
+
+.scalr-ui-monitoring-image-container-compare-mode-off:hover + .x-tool-monitoring-addtodashboard {
+    visibility: visible;
+}
+
+.scalr-ui-monitoring-image-container,
+.scalr-ui-monitoring-image-container-compare-mode-off {
+    background: white;
+    border-radius: 0;
+    color: #F04A46;
+    text-align: center;
+    height: 300px;
+    width: 510px;
+    line-height: 300px;
+    overflow: hidden;
+}
+
+.scalr-ui-monitoring-image-container .scalr-ui-monitoring-message-error,
+.scalr-ui-monitoring-image-container-compare-mode-off .scalr-ui-monitoring-message-error {
+    line-height: 20px;
+}
+
+.scalr-ui-monitoring-image-container .scalr-ui-monitoring-message-error {
+    display: inline-block;
+}
+
+.scalr-ui-monitoring-disk-name-container {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    opacity: 0.7;
+}
+
+.scalr-ui-monitoring-disk-name {
+    position: relative;
+    background: #e1ebf4;
+    border-radius: 0;
+    height: 20px;
+    width: 60px;
+    text-align: center;
+}
+
+.scalr-ui-monitoring-disk-name-container:hover + .scalr-ui-monitoring-add-to-dashboard-tool-container {
+    visibility: visible;
+}
+
+.scalr-ui-monitoring-message {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.scalr-ui-monitoring-filter-highlight {
+    background-color: #FFFF96;
+}
+
+.scalr-ui-monitoring-filter-node-background {
+    background-color: #E2E8EE !important;
+}
+
+.scalr-ui-monitoring-filter-no-matches-found-message {
+    background-color: inherit !important;
+    text-align: center;
+    color: #F04A46;
+}
+
+.scalr-ui-monitoring-tree-node-farm span:first-child,
+.scalr-ui-monitoring-tree-node-farmrole span:first-child {
+    font-weight: bold;
+}
+
+.scalr-ui-monitoring-tree-node-farm {
+    color: #039203;
+}
+
+.scalr-ui-monitoring-tree-node-farm span:first-child {
+    color: #224164;
+}

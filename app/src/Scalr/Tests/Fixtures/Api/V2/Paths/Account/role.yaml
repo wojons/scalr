@@ -1,0 +1,34 @@
+paths:
+  - uri: /roles/{roleId}/
+    acl: readOnly
+    operations:
+      - {method: get,    response: 200, params: '&{0}RoleData'}
+      - {method: patch,  response: 403, params: '&{0}RoleData', body: '&{1}RoleData'}
+      - {method: delete, response: 403, params: '&{0}RoleData'}
+  - uri: /roles/{roleId}/
+    acl: noAccess
+    operations:
+      - {method: get,    response: 403, params: '&{0}RoleData'}
+      - {method: patch,  response: 403, params: '&{0}RoleData', body: '&{1}RoleData'}
+      - {method: delete, response: 403, params: '&{0}RoleData'}
+  - uri: /roles/{roleId}/
+    acl: fullAccess
+    operations:
+      - {method: get,    response: 200, params: '&{0}RoleData'}
+      - {method: patch,  response: 200, params: '&{0}RoleData', body: '&{1}RoleData'}
+      - {method: patch,  response: 200, params: '&{0}RoleData', body: '&{2}RoleData'}
+      - {method: get,    response: 200, params: '&{0}RoleData', filterable: '&{2}RoleData'}
+      - {method: delete, response: 200, params: '&{0}RoleData'}
+      - {method: delete, response: 404, params: '&{0}RoleData'}
+
+RoleData:
+  - {roleId: '&Role.id'}
+  - {name: 'testAccRolePatchName'}
+  - {category: '&{0}RoleCategory.id'}
+  - {id: '&{0}Role.id'}
+
+Role:
+  - {name: testAccRole, catId: 1, osId: centos-5-x, behaviors: 'base', accountId: }
+
+RoleCategory:
+ - {name: testAccCategory}

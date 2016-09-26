@@ -1,0 +1,53 @@
+.scalr-ui-panel-account-teams .x-dataview-tab{
+    min-height: 90px;
+}
+
+.scalr-ui-panel-account-teams .x-dataview-tab-param-value{
+	word-wrap:break-word;
+}
+
+.scalr-ui-panel-account-teams .team-add-remove{
+	display:none;
+	cursor:pointer;
+}
+
+.scalr-ui-panel-account-teams .x-grid-item-over .team-add-remove,
+.scalr-ui-panel-account-teams .x-grid-item-selected .team-add-remove{
+	display:inline;
+}
+
+/*access control column*/
+.scalr-ui-panel-account-teams .x-grid-cell-inner{
+	position:relative;
+}
+
+.scalr-ui-panel-account-teams .x-grid-row-options{
+	display:none;
+	position:absolute;
+	top:2px;
+	right:10px;
+    height: 26px;
+    width: 48px;
+    background: #f9f9f9;
+    border-radius: 0;
+}
+
+.scalr-ui-panel-account-teams .x-grid-item-over .x-grid-row-options,
+.scalr-ui-panel-account-teams .x-grid-row-selected .x-grid-row-options{
+	display:block;
+}
+
+.scalr-ui-panel-account-teams .x-grid-row-options:hover{
+    background: #fff;
+}
+
+.scalr-ui-panel-account-teams .x-grid-row-options-icon{
+	width: 32px;
+	height: 100%;
+	background:url("/ui2/images/ui/account/manage_access.png") 0 center no-repeat;
+    margin: 0 auto;
+}
+
+.x-tip-light-no-underline a{
+    text-decoration: none!important;
+}

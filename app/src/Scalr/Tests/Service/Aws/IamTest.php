@@ -1,193 +1,190 @@
 <?php
 namespace Scalr\Tests\Service\Aws;
 
-use Scalr\Service\Cloudyn;
-use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\IamException;
 use Scalr\Service\Aws\Iam;
 use Scalr\Tests\Service\AwsTestCase;
+use Scalr\Service\Aws\Client\ClientException;
 use Scalr\Service\Aws\DataType\ErrorData;
+use Scalr\Service\Aws\Client\QueryClientException;
 
 /**
  * Amazon Iam Test
  *
- * @author    Vitaliy Demidov   <zend@i.ua>
+ * @author    Vitaliy Demidov   <vitaliy@scalr.com>
  * @since     13.11.2012
  */
 class IamTest extends AwsTestCase
 {
 
-	const CLASS_IAM = 'Scalr\\Service\\Aws\\Iam';
+    const CLASS_IAM = 'Scalr\\Service\\Aws\\Iam';
 
-	const CLASS_IAM_USER_DATA = "Scalr\\Service\\Aws\\Iam\\DataType\\UserData";
+    const CLASS_IAM_USER_DATA = 'Scalr\\Service\\Aws\\Iam\\DataType\\UserData';
 
-	const CLASS_IAM_ACCESS_KEY_DATA = "Scalr\\Service\\Aws\\Iam\\DataType\\AccessKeyData";
+    const CLASS_IAM_ACCESS_KEY_DATA = 'Scalr\\Service\\Aws\\Iam\\DataType\\AccessKeyData';
 
-	/**
-	 * @var Iam
-	 */
-	private $iam;
+    const ROLE_NAME = 'role';
 
-	/**
-	 * {@inheritdoc}
-	 * @see Scalr\Tests\Service.AwsTestCase::setUp()
-	 */
-	public function setUp()
-	{
-		parent::setUp();
-		$this->iam = $this->getContainer()->aws->iam;
-	}
+    const SERVER_CERTIFICATE_NAME = 'server_certificate';
 
-	/**
-	 * {@inheritdoc}
-	 * @see Scalr\Tests\Service.AwsTestCase::tearDown()
-	 */
-	public function tearDown()
-	{
-		unset($this->iam);
-		parent::tearDown();
-	}
+    const INSTANCE_PROFILE_NAME = 'iprofile';
 
-	/**
-	 * {@inheritdoc}
-	 * @see Scalr\Tests\Service.AwsTestCase::getFixtureFilePath()
-	 */
-	public function getFixtureFilePath($filename)
-	{
-		return $this->getFixturesDirectory() . '/' . Iam::API_VERSION_CURRENT . '/' . $filename;
-	}
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Tests\Service.AwsTestCase::getFixturesDirectory()
+     */
+    public function getFixturesDirectory()
+    {
+        return parent::getFixturesDirectory() . '/Iam';
+    }
 
-	/**
-	 * Gets Iam Mock
-	 *
-	 * @param    callback $callback
-	 * @return   Iam       Returns Iam Mock class
-	 */
-	public function getIamMock($callback = null)
-	{
-		return $this->getServiceInterfaceMock('Iam');
-	}
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Tests\Service.AwsTestCase::getFixtureFilePath()
+     */
+    public function getFixtureFilePath($filename)
+    {
+        return $this->getFixturesDirectory() . '/' . Iam::API_VERSION_CURRENT . '/' . $filename;
+    }
 
-	/**
-	 * @test
-	 */
-	public function testFunctionalIam ()
-	{
-		if ($this->isSkipFunctionalTests()) {
-			$this->markTestSkipped();
-		}
-		//This test is disabled because of it causes error with different environments
-		return;
+    /**
+     * Gets Iam Mock
+     *
+     * @param    callback $callback
+     * @return   Iam       Returns Iam Mock class
+     */
+    public function getIamMock($callback = null)
+    {
+        return $this->getServiceInterfaceMock('Iam');
+    }
 
-		$policyDocument = '{"Statement":[{"Effect":"Allow","Action":["autoscaling:Describe*","aws-portal:View*","cloudformation:DescribeStacks","cloudformation:DescribeStackEvents","cloudformation:DescribeStackResources","cloudformation:GetTemplate","cloudfront:Get*","cloudfront:List*","cloudwatch:Describe*","cloudwatch:Get*","cloudwatch:List*","dynamodb:DescribeTable","dynamodb:ListTables","ec2:Describe*","elasticache:Describe*","elasticbeanstalk:Check*","elasticbeanstalk:Describe*","elasticbeanstalk:List*","elasticbeanstalk:RequestEnvironmentInfo","elasticbeanstalk:RetrieveEnvironmentInfo","elasticloadbalancing:Describe*","elasticmapreduce:DescribeJobFlows","iam:List*","iam:Get*","route53:Get*","route53:List*","rds:Describe*","s3:List*","s3:GetBucketAcl","s3:GetBucketLocation","s3:GetBucketLogging","s3:GetBucketNotification","s3:GetBucketPolicy","s3:GetBucketRequestPayment","s3:GetBucketVersioning","s3:GetBucketWebsite","s3:GetLifecycleConfiguration","s3:GetObjectAcl","s3:GetObjectTorrent","s3:GetObjectVersion","s3:GetObjectVersionAcl","s3:GetObjectVersionTorrent","sdb:DomainMetadata","sdb:GetAttributes","sdb:ListDomains","ses:Get*","ses:List*","sns:Get*","sns:List*","sqs:Get*","sqs:List*","storagegateway:List*","storagegateway:Describe*"],"Resource":"*"}]}';
-		$testusername = 'test-iam-user';
-		$userpassword = '';
-		//It sets $userpassword value
-		eval(gzinflate(base64_decode("DcvHcqMwAADQf8nJHh+MKILMnkIJYMBgig1cdigCUYIpiihfv/vuD9GsP9VHM1R9RtApzxYE+b8lKt4lOn3kqUoyyV"
-		  . "w1J7/2vsqaieZCQBhdtMY5s3m/rdJbdzM7ziXASm34E14+C6KzkcrCHIsiFi4HYEo7xcrLoIE/aQjNSs8/MivU6tppDW3cRIXVHCMLod01lJ9ej0v7LcThsW"
-		  . "ehXMqecGz+SIRdFtqSEZok0YHr+oG1K7flq/fUzgxy2cOf45pGuWwX4EtTmULSPRUkG8bNL/SB3RH/KSDFRu+1tvGobcMxea6lvVwxnkSQP2foTPwtPp6tFe"
-		  . "+sNFdLCh6zosGJ0CX4xTUB02C/KTVRam2obSrVa1JI4/Z539g3YQaH+9mv7nSPl0q8Ft/upc1S7Fkw4tZllvs8DMckLtGWSrQWFGOVDIqgv2FHDVVg3rlJZo"
-		  . "y8GvX/m03icOCqKF6DiJkX+nE+n//8Aw=="
-		)));
-		try {
-			$user = $this->iam->user->create($testusername);
-		} catch (ClientException $e) {
-			$error = $e->getErrorData();
-			if ($error->getCode() === ErrorData::ERR_ENTITY_ALREADY_EXISTS) {
-				$user = $this->iam->user->fetch($testusername);
-			} else {
-				throw $e;
-			}
-		}
-		$this->assertInstanceOf(self::CLASS_IAM_USER_DATA, $user);
-		$this->assertInstanceOf(self::CLASS_IAM, $user->getIam());
-		$this->assertNotEmpty($user->arn);
-		try {
-			$accessKey = $this->iam->user->createAccessKey($testusername);
-			$this->assertInstanceOf(self::CLASS_IAM_ACCESS_KEY_DATA, $accessKey);
-			$this->assertInstanceOf(self::CLASS_IAM, $accessKey->getIam());
-			$this->assertNotEmpty($accessKey->accessKeyId);
+    /**
+     * @test
+     */
+    public function testFunctionalIam()
+    {
+        $this->skipIfEc2PlatformDisabled();
 
-			$res = $user->putPolicy('test-policy-name', $policyDocument);
-			$this->assertTrue($res);
+        $assumeRolePolicyDocument= '{"Version": "2008-10-17","Statement": [{"Sid": "","Effect": "Deny","Principal": {"Service": "ec2.amazonaws.com"},"Action": "sts:AssumeRole"}]}';
 
-			$policy = $user->getPolicy('test-policy-name');
-			$this->assertEquals($policyDocument, $policy);
+        $aws = $this->getEnvironment()->aws(AwsTestCase::REGION);
+        $roleName = self::getTestName(self::ROLE_NAME);
+        $instanceProfileName = self::getTestName(self::INSTANCE_PROFILE_NAME);
+        $serverCertificateName = self::getTestName(self::SERVER_CERTIFICATE_NAME);
 
-			//This need to avoid error when cloudyn can't access to amazon using generated access key.
-			//Error: Failed to validate the credentials: The security token included in the request is invalid.
-			sleep(5);
+        try {
+            //Removing previously created instance profiles
+            $instanceProfileList = $aws->iam->instanceProfile->describe();
+        } catch (QueryClientException $e) {
+            if ($e->getErrorData()->getCode() === ErrorData::ERR_ACCESS_DENIED) {
+                $this->markTestSkipped("This user is not allowed to list instance profiles");
+                return;
+            }
+            throw $e;
+        }
 
-			//Start cloudyn integration test
-// 			$cloudyn = new Cloudyn(null, null, isset(\CONFIG::$CLOUDYN_ENVIRONMENT) ? \CONFIG::$CLOUDYN_ENVIRONMENT : null);
-// 			$cyUser = $cloudyn->registerCustomer('phpunit@scalr.com', $userpassword, 'test', 'phpunit', 'scalr', \CONFIG::$CLOUDYN_MASTER_EMAIL, $userpassword);
-// 			$this->assertInstanceOf('stdClass', $cyUser);
-// 			$this->assertNotEmpty($cyUser->customerid);
+        $this->assertInstanceOf($this->getAwsClassName('Iam\\DataType\\InstanceProfileList'), $instanceProfileList);
+        foreach ($instanceProfileList as $instanceProfile) {
+            /* @var $instanceProfile \Scalr\Service\Aws\Iam\DataType\InstanceProfileData */
+            if ($instanceProfile->instanceProfileName == $instanceProfileName) {
+                foreach ($instanceProfile->getRoles() as $r) {
+                    $instanceProfile->removeRole($r->roleName);
+                }
 
-			$cy = new Cloudyn('phpunit@scalr.com', $userpassword, isset(\CONFIG::$CLOUDYN_ENVIRONMENT) ? \CONFIG::$CLOUDYN_ENVIRONMENT : null);
-			//This is necessary for removing an existing aws account from another cloydyn user.
-// 			$acc = \Scalr_Account::init()->loadById($this->getContainer()->environment->clientId);
-// 			$cy = new Cloudyn(
-// 				$acc->getSetting(\Scalr_Account::SETTING_CLOUDYN_USER_EMAIL),
-// 				$acc->getSetting(\Scalr_Account::SETTING_CLOUDYN_USER_PASSWD),
-//              \CONFIG::$CLOUDYN_ENVIRONMENT
-// 			);
+                $instanceProfile->delete();
+                break;
+            }
+        }
 
-			$cy->login();
-			$this->assertNotEmpty($cy->getToken());
+        unset($instanceProfileList);
 
-			$cyAcc = $cy->addAccount('my-account', $accessKey->accessKeyId, $accessKey->secretAccessKey, 'AWS');
-			$this->assertInstanceOf('stdClass', $cyAcc);
+        //Removing previously created role
+        $roleList = $aws->iam->role->describe();
+        $this->assertInstanceOf($this->getAwsClassName('Iam\\DataType\\RoleList'), $roleList);
+        foreach ($roleList as $role) {
+            /* @var $role \Scalr\Service\Aws\Iam\DataType\RoleData */
+            if ($role->roleName == $roleName) {
+                $res = $aws->iam->role->delete($roleName);
+                $this->assertTrue($res);
+                break;
+            }
+        }
+        unset($roleList);
 
-			$list = $cy->getAccounts();
-			$this->assertNotEmpty($list->accounts);
+        //Removing previously uploaded certificates
+        $certificatesList = $aws->iam->serverCertificate->describe();
+        $this->assertInstanceOf($this->getAwsClassName('Iam\\DataType\\ServerCertificateMetadataList'), $certificatesList);
+        foreach ($certificatesList as $certificate) {
+            /* @var $role \Scalr\Service\Aws\Iam\DataType\RoleData */
+            if ($certificate->serverCertificateName == $serverCertificateName) {
+                $res = $certificate->delete($serverCertificateName);
+                $this->assertTrue($res);
+                break;
+            }
+        }
+        unset($certificatesList);
 
-			$cy->welcome();
+        //Creating role
+        $role = $aws->iam->role->create($roleName, $assumeRolePolicyDocument);
+        $this->assertInstanceOf($this->getAwsClassName('Iam\\DataType\\RoleData'), $role);
+        $this->assertEquals($roleName, $role->roleName);
 
-			foreach ($list->accounts as $cyAccount) {
-				$res = $cy->deleteAccount($cyAccount->accountid);
-				$this->assertInstanceOf('stdClass', $res);
-			}
+        //Updating Assume Role Policy
+        $ret = $role->updateAssumePolicy($assumeRolePolicyDocument);
+        $this->assertTrue($ret);
 
-			$list = $cy->getAccounts();
-			$this->assertEmpty($list->accounts);
+        //Creating a new instance profile
+        $profile = $aws->iam->instanceProfile->create($instanceProfileName);
+        $this->assertInstanceOf($this->getAwsClassName('Iam\\DataType\\InstanceProfileData'), $profile);
+        $this->assertEquals($instanceProfileName, $profile->instanceProfileName);
+        $this->assertNotEmpty($profile->instanceProfileId);
+        $this->assertNotEmpty($profile->arn);
+        $this->assertNotEmpty($profile->createDate);
+        $this->assertNotEmpty($profile->path);
+        $this->assertEmpty($profile->getRoles()->count());
 
-			$cy->logout();
-			$this->assertNull($cy->getToken());
-			//end of cloudyn integration test
+        //Adding role to instance profile
+        $ret = $profile->addRole($role->roleName);
+        $this->assertTrue($ret);
 
-			$res = $user->deletePolicy('test-policy-name');
-			$this->assertTrue($res);
+        $profile2 = $aws->iam->instanceProfile->fetch($instanceProfileName);
+        $this->assertInstanceOf($this->getAwsClassName('Iam\\DataType\\InstanceProfileData'), $profile2);
+        $this->assertNotEmpty($profile2->getRoles()->count());
+        $this->assertEquals($role->roleName, $profile2->getRoles()->get(0)->roleName);
+        unset($profile2);
 
-			$res = $accessKey->delete();
-			$this->assertTrue($res);
+        //Uploading server certificate
+        $serverCertificate = $aws->iam->serverCertificate->upload(
+            $this->getFixtureFileContent('upload_server_certificate'),
+            $this->getFixtureFileContent('upload_server_certificate_key'),
+            $serverCertificateName,
+            null
+        );
+        $this->assertInstanceOf($this->getAwsClassName('Iam\\DataType\\ServerCertificateMetadataData'), $serverCertificate);
 
-			$res = $user->delete();
-			$this->assertTrue($res);
-			$this->assertNull($this->iam->user->get($testusername));
-		} catch (\Exception $e) {
-			try {
-				$listAccessKeys = $user->listAccessKeys();
-				foreach ($listAccessKeys as $accessKey) {
-					$this->iam->user->deleteAccessKey($accessKey->accessKeyId, $user->userName);
-				}
-			} catch (\Exception $se) {
-			}
-			try {
-				$user->deletePolicy('test-policy-name');
-			} catch (\Exception $se) {
-			}
-			$user->delete();
-			throw $e;
-		}
-		try {
-			//Verifies that user is removed.
-			$this->iam->user->fetch($testusername);
-			$this->assertTrue(false, 'Exception must be thrown here');
-		} catch (ClientException $e) {
-			if ($e->getErrorData()->getCode() !== ErrorData::ERR_NO_SUCH_ENTITY) {
-				throw $e;
-			}
-		}
-	}
+        //Removing a role from instance profile
+        $ret = $profile->removeRole($role->roleName);
+        $this->assertTrue($ret);
+
+        //Removing instance profile
+        $ret = $profile->delete();
+        $this->assertTrue($ret);
+
+        try {
+            $aws->iam->instanceProfile->fetch($profile->instanceProfileName);
+            $this->assertTrue(false, 'Instance profile is expected to have been removed above.');
+        } catch (ClientException $e) {
+            if ($e->getErrorData()->getCode() !== ErrorData::ERR_NO_SUCH_ENTITY) {
+                $this->assertTrue(false);
+            }
+            $this->assertTrue(true);
+        }
+
+        //Removing role
+        $res = $role->delete();
+        $this->assertTrue($res);
+
+        //Removing certificate
+        $res = $serverCertificate->delete($serverCertificateName);
+        $this->assertTrue($res);
+    }
 }

@@ -1,99 +1,190 @@
 <?php
-	class Scalr_Net_Scalarizr_UpdateClient
-	{
-		private $dbServer,
-			$port,
-			$cryptoTool;
-		
-		
-		public function __construct(DBServer $dbServer, $port = 8008) {
-			$this->dbServer = $dbServer;
-			$this->port = $port;
-			
-			$this->cryptoTool = Scalr_Messaging_CryptoTool::getInstance();
-		}
-		
-		public function configure($repo, $schedule)
-		{
-			$params = new stdClass();
-			$params->schedule = $schedule;
-			$params->repository = $repo;
-			
-			return $this->request("configure", $params)->result;
-		}
-		
-		public function getStatus()
-		{
-			return $this->request("status", new stdClass())->result;
-		}
-		
-		public function updateScalarizr($force = false)
-		{
-			$r = new stdClass();
-			$r->force = $force;
-			return $this->request("update", $r);
-		}
-		
-		public function restartScalarizr($force = false)
-		{
-			$r = new stdClass();
-			$r->force = $force;
-			return $this->request("restart", $r);
-		}
-		
-		private function request($method, Object $params = null)
-		{
-			$requestObj = new stdClass();
-			$requestObj->id = microtime(true);
-			$requestObj->method = $method;
-			$requestObj->params = $params;
-			
-			$jsonRequest = json_encode($requestObj);
-			
-			$timestamp = date("D d M Y H:i:s T");
-			$dt = new DateTime($timestamp, new DateTimeZone("CDT"));
-			$timestamp = Scalr_Util_DateTime::convertDateTime($dt, new DateTimeZone("UTC"), new DateTimeZone("CDT"))->format("D d M Y H:i:s");
-			$timestamp .= " UTC";
-			
-			$canonical_string = $jsonRequest . $timestamp;
-			$signature = base64_encode(hash_hmac('SHA1', $canonical_string, $this->dbServer->GetProperty(SERVER_PROPERTIES::SZR_KEY), 1));
-			
-			$request = new HttpRequest("http://{$this->dbServer->remoteIp}:{$this->port}/", HTTP_METH_POST);
-		  	$request->setOptions(array(
-		  		'timeout'	=> 5,
-		  		'connecttimeout' => 5
-		  	));
-		  	
-		  	$request->setHeaders(array(
-				"Date" =>  $timestamp, 
-				"X-Signature" => $signature,
-		  		"X-Server-Id" => $this->dbServer->serverId
-		  	));
-			$request->setRawPostData($jsonRequest);
-			
-			try {
-				// Send request
-				$request->send();
-				
-				if ($request->getResponseCode() == 200) {
-					
-					$response = $request->getResponseData();
-					$jResponse = @json_decode($response['body']);
-					
-					if ($jResponse->error)
-						throw new Exception("{$jResponse->error->message} ({$jResponse->error->code}): {$jResponse->error->data}");
-						
-					return $jResponse;
-				} else {
-					throw new Exception(sprintf("Unable to perform request to update client: %s", $request->getResponseCode()));	
-				}
-			} catch(HttpException $e) {
-				if (isset($e->innerException))
-					$msg = $e->innerException->getMessage();
-			    else
-					$msg = $e->getMessage();
-				
-				throw new Exception(sprintf("Unable to perform request to update client: %s", $msg));
-			}
-		}
-	}
+
+use Scalr\Model\Entity;
+use Scalr\System\Http\Client\Request;
+
+class Scalr_Net_Scalarizr_UpdateClient
+{
+    private $dbServer,
+        $port,
+        $timeout,
+        $cryptoTool,
+        $isVPC = false;
+
+
+    public function __construct(DBServer $dbServer, $port = 8008, $timeout = 5) 
+    {
+        $this->dbServer = $dbServer;
+        $this->port = $port;
+        $this->timeout = $timeout;
+
+        if ($this->dbServer->farmId)
+            if (DBFarm::LoadByID($this->dbServer->farmId)->GetSetting(Entity\FarmSetting::EC2_VPC_ID))
+                $this->isVPC = true;
+
+        $this->cryptoTool = \Scalr::getContainer()->srzcrypto($this->dbServer->GetKey(true));
+    }
+    
+    /**
+     * 
+     * @param integer $timeout Timeout in seconds
+     */
+    public function setTimeout($timeout)
+    {
+        $this->timeout = $timeout;
+    }
+
+    public function configure($repo, $schedule)
+    {
+        $params = new stdClass();
+        $params->schedule = $schedule;
+        $params->repository = $repo;
+
+        return $this->request("configure", $params)->result;
+    }
+
+    public function getStatus($cached = false)
+    {
+        $r = new stdClass();
+        if ($this->dbServer->IsSupported('2.7.7'))
+            $r->cached = $cached;
+
+        return $this->request("status", $r)->result;
+    }
+
+    public function updateScalarizr($force = false)
+    {
+        $r = new stdClass();
+        $r->force = $force;
+        return $this->request("update", $r);
+    }
+
+    public function restartScalarizr($force = false)
+    {
+        $r = new stdClass();
+        $r->force = $force;
+        return $this->request("restart", $r);
+    }
+
+    public function executeCmd($cmd) {
+        $r = new stdClass();
+        $r->command = $cmd;
+        return $this->request("execute", $r);
+    }
+
+    public function putFile($path, $contents)
+    {
+        $r = new stdClass();
+        $r->name = $path;
+        $r->content = base64_encode($contents);
+        $r->makedirs = true;
+        return $this->request("put_file", $r);
+    }
+
+    private function request($method, $params = null)
+    {
+        $requestObj = new stdClass();
+        $requestObj->id = microtime(true);
+        $requestObj->method = $method;
+        $requestObj->params = $params;
+
+        $jsonRequest = json_encode($requestObj);
+        $newEncryptionProtocol = false;
+        //TODO:
+        if ($this->dbServer->farmRoleId) {
+            if ($this->dbServer->IsSupported('2.7.7'))
+                $newEncryptionProtocol = true;
+        }
+
+        $dt = new DateTime('now', new DateTimeZone("UTC"));
+        $timestamp = $dt->format("D d M Y H:i:s e");
+
+        if ($newEncryptionProtocol) {
+            $jsonRequest = $this->cryptoTool->encrypt($jsonRequest, $this->dbServer->GetKey(true));
+
+            $signature = $this->cryptoTool->sign(
+                $jsonRequest,
+                $this->dbServer->GetKey(true),
+                $timestamp,
+                Scalr_Net_Scalarizr_Client::HASH_ALGO
+            );
+        } else {
+            $signature = $this->cryptoTool->sign(
+                $jsonRequest,
+                $this->dbServer->GetProperty(SERVER_PROPERTIES::SZR_KEY),
+                $timestamp,
+                Scalr_Net_Scalarizr_Client::HASH_ALGO
+            );
+        }
+
+        $request = new Request("POST");
+
+        $requestHost = $this->dbServer->getSzrHost() . ":{$this->port}";
+
+        if ($this->isVPC) {
+            $routerFarmRoleId = $this->dbServer->GetFarmRoleObject()->GetSetting(Scalr_Role_Behavior_Router::ROLE_VPC_SCALR_ROUTER_ID);
+            if ($routerFarmRoleId) {
+                $routerRole = DBFarmRole::LoadByID($routerFarmRoleId);
+            } else {
+                $routerRole = $this->dbServer->GetFarmObject()->GetFarmRoleByBehavior(ROLE_BEHAVIORS::VPC_ROUTER);
+            }
+            if ($routerRole) {
+                // No public IP need to use proxy
+                if (!$this->dbServer->remoteIp) {
+                    $requestHost = $routerRole->GetSetting(Scalr_Role_Behavior_Router::ROLE_VPC_IP) . ":80";
+                    $request->addHeaders(array(
+                        "X-Receiver-Host" =>  $this->dbServer->localIp,
+                        "X-Receiver-Port" => $this->port
+                    ));
+                    // There is public IP, can use it
+                } else {
+                    $requestHost = "{$this->dbServer->remoteIp}:{$this->port}";
+                }
+            }
+        }
+
+        $request->setRequestUrl("http://{$requestHost}");
+        $request->setOptions(array(
+            'timeout'	=> $this->timeout,
+            'connecttimeout' => $this->timeout
+        ));
+
+        $request->addHeaders(array(
+            "Date" =>  $timestamp,
+            "X-Signature" => $signature,
+            "X-Server-Id" => $this->dbServer->serverId
+        ));
+        $request->append($jsonRequest);
+
+        try {
+            // Send request
+            $response = \Scalr::getContainer()->srzhttp->sendRequest($request);
+
+            if ($response->getResponseCode() == 200) {
+
+                $body = $response->getBody()->toString();
+                if ($newEncryptionProtocol) {
+                    $this->cryptoTool->setCryptoKey($this->dbServer->GetKey(true));
+                    $body = $this->cryptoTool->decrypt($body);
+                }
+
+                $jResponse = @json_decode($body);
+
+                if (isset($jResponse->error)) {
+                    throw new Exception("{$jResponse->error->message} ({$jResponse->error->code}): {$jResponse->error->data} ({$body})");
+                }
+
+                return $jResponse;
+            } else {
+                throw new Exception(sprintf("Unable to perform request to update client (%s). Server returned error %s", $requestHost, $response->getResponseCode()));
+            }
+        } catch(\http\Exception $e) {
+            if (isset($e->innerException))
+                $msg = $e->innerException->getMessage();
+            else
+                $msg = $e->getMessage();
+
+            throw new Exception(sprintf("Unable to perform request to update client (%s): %s", $requestHost, $msg));
+        }
+    }
+}

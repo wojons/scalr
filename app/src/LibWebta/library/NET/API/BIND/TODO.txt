@@ -1,2 +1,0 @@
--- Add nslint wrapper
--- Add DNSDoctor wrapper

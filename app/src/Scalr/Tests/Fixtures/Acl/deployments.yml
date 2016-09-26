@@ -1,0 +1,8 @@
+DEPLOYMENTS_APPLICATIONS:
+- [/dm/applications, null, all]
+
+DEPLOYMENTS_SOURCES:
+- [/dm/sources, null, all]
+
+DEPLOYMENTS_TASKS:
+- [/dm/tasks, null, all]

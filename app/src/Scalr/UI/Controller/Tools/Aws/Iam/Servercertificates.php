@@ -1,65 +1,65 @@
 <?php
 
+use Scalr\Acl\Acl;
+use Scalr\Model\Entity;
+use Scalr\Service\Aws;
+
 class Scalr_UI_Controller_Tools_Aws_Iam_ServerCertificates extends Scalr_UI_Controller
 {
-	public static function getPermissionDefinitions()
-	{
-		return array();
-	}
 
-	public function createAction()
-	{
-		$this->response->page('ui/tools/aws/iam/serverCertificates/create.js');
-	}
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_IAM);
+    }
 
-	public function viewAction()
-	{
-		$this->response->page('ui/tools/aws/iam/serverCertificates/view.js');
-	}
+    public function createAction()
+    {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_IAM, Acl::PERM_AWS_IAM_MANAGE);
 
-	public function xSaveAction()
-	{
-		$this->request->defineParams(array(
-			'name' => array('type' => 'string')
-		));
+        $this->response->page('ui/tools/aws/iam/serverCertificates/create.js');
+    }
 
-		//TODO This must be refactored to new Scalr\Service\Aws\Iam class
-		$iamClient = Scalr_Service_Cloud_Aws::newIam(
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::ACCESS_KEY),
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::SECRET_KEY)
-		);
+    public function defaultAction()
+    {
+        $this->viewAction();
+    }
 
-		$iamClient->uploadServerCertificate(
-			@file_get_contents($_FILES['certificate']['tmp_name']),
-			@file_get_contents($_FILES['privateKey']['tmp_name']),
-			$this->getParam('name'),
-			($_FILES['certificateChain']['tmp_name']) ? @file_get_contents($_FILES['certificateChain']['tmp_name']) : null
-		);
+    public function viewAction()
+    {
+        $this->response->page('ui/tools/aws/iam/serverCertificates/view.js');
+    }
 
-		$this->response->success('Certificate successfully uploaded');
-	}
+    public function xSaveAction()
+    {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_IAM, Acl::PERM_AWS_IAM_MANAGE);
 
-	public function xListCertificatesAction()
-	{
-		//TODO This needs to be refactored. We have to use new Scalr\Service\Aws\Iam library.
-		$iamClient = Scalr_Service_Cloud_Aws::newIam(
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::ACCESS_KEY),
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::SECRET_KEY)
-		);
+        $this->request->defineParams(array(
+            'name' => array('type' => 'string')
+        ));
 
-		$rowz = array();
-		$certs = $iamClient->listServerCertificates();
+        $this->environment->aws(Aws::REGION_US_EAST_1)->iam->serverCertificate->upload(
+            @file_get_contents($_FILES['certificate']['tmp_name']),
+            @file_get_contents($_FILES['privateKey']['tmp_name']),
+            $this->getParam('name'),
+            (!empty($_FILES['certificateChain']['tmp_name'])) ? @file_get_contents($_FILES['certificateChain']['tmp_name']) : null
+        );
 
-		foreach ($certs->ServerCertificateMetadataList as $item) {
-			$rowz[] = array(
-				'id'			=> $item->ServerCertificateId,
-				'name'			=> $item->ServerCertificateName,
-				'path'			=> $item->Path,
-				'arn'			=> $item->Arn,
-				'upload_date'	=> $item->UploadDate
-			);
-		}
+        $this->response->success('Certificate successfully uploaded');
+    }
 
-		$this->response->data(array('data' => $rowz));
-	}
+    public function xListCertificatesAction()
+    {
+        $certificatesList = $this->environment->aws(Aws::REGION_US_EAST_1)->iam->serverCertificate->describe();
+        $rows = array();
+        foreach ($certificatesList as $item) {
+            $rows[] = array(
+                'id'            => $item->serverCertificateId,
+                'name'          => $item->serverCertificateName,
+                'path'          => $item->path,
+                'arn'           => $item->arn,
+                'upload_date'   => $item->uploadDate->format('Y-m-d\TH:i:s\Z')
+            );
+        }
+        $this->response->data($this->buildResponseFromData($rows));
+    }
 }

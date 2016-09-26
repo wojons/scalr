@@ -1,37 +1,34 @@
-<?
-    declare(ticks = 1);
-	define("NO_TEMPLATES", true);
-	define("NO_SESSIONS", true);
-	require_once(dirname(__FILE__)."/../src/prepend.inc.php");    
-	
-	Core::Load("IO/PCNTL/interface.IProcess.php");
-	Core::Load("IO/PCNTL");
-    Core::Load("System/Independent/Shell/ShellFactory");
-    Core::Load("NET/SNMP");
-        
-    $fname = basename($argv[0]);
+<?php
 
-    $JobLauncher = new JobLauncher(dirname(__FILE__));
-	
-    // DBQueueEvent - it is a daemon process so we must skepp this check
-    if ($JobLauncher->GetProcessName() != 'DBQueueEvent')
-    {
-	    $Shell = ShellFactory::GetShellInstance();
-	    // Set terminal width
-	    putenv("COLUMNS=200");
+declare(ticks = 1);
 
-	    // Execute command
-	    $parent_pid = posix_getppid();
-		$ps = $Shell->QueryRaw("ps x -o pid,command | grep -v {$parent_pid} |grep -v ".posix_getpid()." | grep -v 'ps x' | grep '".dirname(__FILE__)."' | grep '\-\-{$JobLauncher->GetProcessName()}'");
-		
-		if ($ps)
-		{
-			$Logger->info("'{$fname} --{$JobLauncher->GetProcessName()}' already running. Exiting.");
-			exit();
-		}
+define('SCALR_MULTITHREADING', true);
+define("NO_TEMPLATES", true);
+define("NO_SESSIONS", true);
+
+require_once __DIR__ . "/../src/prepend.inc.php";
+
+$Logger = \Scalr::getContainer()->logger('Application');
+
+$fname = basename($argv[0]);
+
+$JobLauncher = new \Scalr\System\Pcntl\JobLauncher(dirname(__FILE__));
+
+// DBQueueEvent - it is a daemon process so we must skeep this check
+if ($JobLauncher->GetProcessName() != 'DBQueueEvent') {
+    $Shell = new Scalr_System_Shell();
+    // Set terminal width
+    putenv("COLUMNS=200");
+
+    // Execute command
+    $parent_pid = posix_getppid();
+    $ps = $Shell->queryRaw("ps x -o pid,command | grep -v -E '^ *(" . $parent_pid . "|" . posix_getpid() . ") | ps x' | grep '".dirname(__FILE__)."' | egrep '\-\-{$JobLauncher->GetProcessName()}\$'");
+
+    if ($ps) {
+        $Logger->info("'{$fname} --{$JobLauncher->GetProcessName()}' already running. Exiting.");
+        exit();
     }
+}
 
-	$Logger->info(sprintf("Starting %s cronjob...", $JobLauncher->GetProcessName()));	
-	//$JobLauncher->Launch(CONFIG::$CRON_PROCESSES_NUMBER, 180);
-	$JobLauncher->Launch(7, 180);
-?>
+$Logger->info(sprintf("Starting %s cronjob...", $JobLauncher->GetProcessName()));
+$JobLauncher->Launch(7, 180);

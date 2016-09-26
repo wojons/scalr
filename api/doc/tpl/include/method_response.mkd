@@ -1,0 +1,18 @@
+### {{ response_code }} ###
+
+{{ response_definition.get("description", "") }}
+
+{% if "schema" in response_definition %}
+The response body is an object of type:
+{{ response_definition["schema"]|link_to_ref }}.
+{% endif %}
+
+{% if "x-errorCodes" in response_definition %}
+The following errors **may** be returned by this endpoint.
+
+{% for errorCode in response_definition["x-errorCodes"] %}
+{% if not errorCode.get("noDoc", False) %}
++ `{{ errorCode["name"] }}`: {{ errorCode["description"] }} Check the error message for more information.
+{%endif %}
+{% endfor %}
+{%endif %}

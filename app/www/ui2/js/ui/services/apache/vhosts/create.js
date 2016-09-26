@@ -1,21 +1,22 @@
 Scalr.regPage('Scalr.ui.services.apache.vhosts.create', function (loadParams, moduleParams) {
 	var form = Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
-		title: 'Services &raquo; Apache &raquo; Vhosts &raquo; Create',
+		title: moduleParams.vhost.vhostId ? 'Services &raquo; Apache &raquo; Vhosts &raquo; Edit' : 'Services &raquo; Apache &raquo; Vhosts &raquo; Create',
 		fieldDefaults: {
 			anchor: '100%'
 		},
 		width: 900,
 
 		items: [{
+			xtype: 'hidden',
+			name: 'vhostId'
+		}, {
 			xtype: 'fieldset',
 			title: 'General',
 			items: [{
 				xtype: 'textfield',
 				name: 'domainName',
 				fieldLabel: 'Domain name',
-				allowBlank: false,
-				value: moduleParams['domainName']
+				allowBlank: false
 			}]
 		}, {
 			xtype: 'farmroles',
@@ -26,27 +27,28 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.create', function (loadParams, mo
 			xtype: 'fieldset',
 			title: 'SSL',
 			checkboxToggle:  true,
-			collapsed: !moduleParams['isSslEnabled'],
+			collapsed: !moduleParams['vhost']['isSslEnabled'],
 			checkboxName: 'isSslEnabled',
 			inputValue: 1,
-			defaults: {
-				anchor: '-200'
-			},
 			items: [{
-				xtype: 'filefield',
-				name: 'certificate',
-				fieldLabel: 'Certificate',
-				value: moduleParams['sslCertName']
-			}, {
-				xtype: 'filefield',
-				name: 'privateKey',
-				fieldLabel: 'Private key',
-				value: moduleParams['sslKeyName']
-			}, {
-				xtype: 'filefield',
-				name: 'certificateChain',
-				fieldLabel: 'Certificate chain',
-				value: moduleParams['caCertName']
+				xtype: 'combo',
+				store: {
+					fields: [ 'id', 'name' ],
+					data: moduleParams['sslCertificates']
+				},
+				fieldLabel: 'SSL certificate',
+				valueField: 'id',
+				displayField: 'name',
+				forceSelection: true,
+				name: 'sslCertId',
+				allowBlank: false,
+                queryMode: 'local',
+				disabled: !moduleParams['vhost']['isSslEnabled'],
+				plugins: [{
+					ptype: 'comboaddnew',
+					url: '/services/ssl/certificates/create',
+                    disabled: !Scalr.isAllowed('SERVICES_SSL', 'manage')
+				}]
 			}],
 			listeners: {
 				boxready:function() {
@@ -56,9 +58,13 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.create', function (loadParams, mo
 						} else {
 							form.down('[name="sslTemplate"]').hide();
 						}
-						
-						form.doLayout();
 					});
+				},
+				collapse: function() {
+					this.down('[name="sslCertId"]').disable();
+				},
+				expand: function() {
+					this.down('[name="sslCertId"]').enable();
 				}
 			}
 		}, {
@@ -71,50 +77,52 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.create', function (loadParams, mo
 				xtype: 'textfield',
 				name: 'documentRoot',
 				fieldLabel: 'Document root',
-				allowBlank: false,
-				value: moduleParams['documentRoot']
+				allowBlank: false
 			}, {
 				xtype: 'textfield',
 				name: 'logsDir',
 				fieldLabel: 'Logs directory',
-				allowBlank: false,
-				value: moduleParams['logsDir']
+				allowBlank: false
 			}, {
 				xtype: 'textfield',
 				name: 'serverAdmin',
 				allowBlank: false,
 				vtype: 'email',
-				fieldLabel: 'Server admin\'s email',
-				value: moduleParams['serverAdmin']
+				fieldLabel: 'Server admin\'s email'
 			}, {
-				xtype: 'textarea',
-				grow: true,
-				growMax: 400,
+				xtype: 'textfield',
 				name: 'serverAlias',
-				fieldLabel: 'Server alias (space separated)',
-				value: moduleParams['serverAlias']
+				fieldLabel: 'Server alias (space separated)'
 			}, {
 				xtype: 'textarea',
 				name: 'nonSslTemplate',
 				fieldLabel: 'Server non-SSL template',
 				grow: true,
-				growMax: 400,
-				value: moduleParams['nonSslTemplate']
+                plugins: {
+                    ptype: 'fieldicons',
+                    position: 'outer',
+                    icons: ['globalvars']
+                },
+				growMax: 400
 			}, {
 				xtype: 'textarea',
 				name: 'sslTemplate',
-				hidden:!moduleParams['isSslEnabled'],
+                plugins: {
+                    ptype: 'fieldicons',
+                    position: 'outer',
+                    icons: ['globalvars']
+                },
+				hidden: !moduleParams['vhost']['isSslEnabled'],
 				fieldLabel: 'Server SSL template',
-				value: moduleParams['sslTemplate'],
 				grow: true,
 				growMax: 400
-			} ]
+			}]
 		}],
 
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -130,15 +138,16 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.create', function (loadParams, mo
 							},
 							form: form.getForm(),
 							url: '/services/apache/vhosts/xSave/',
-							params: { 'vhostId': moduleParams['vhostId'] },
+							params: {
+								//'vhostId': moduleParams['vhostId']
+							},
 							success: function () {
-								Scalr.event.fireEvent('close');
+								Scalr.event.fireEvent('redirect', '#/services/apache/vhosts');
 							}
 						});
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');
@@ -146,6 +155,8 @@ Scalr.regPage('Scalr.ui.services.apache.vhosts.create', function (loadParams, mo
 			}]
 		}]
 	});
+
+	form.getForm().setValues(moduleParams.vhost);
 
 	return form;
 });

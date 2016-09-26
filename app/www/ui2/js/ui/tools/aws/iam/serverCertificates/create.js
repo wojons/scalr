@@ -1,42 +1,41 @@
 Scalr.regPage('Scalr.ui.tools.aws.iam.serverCertificates.create', function (loadParams, moduleParams) {
 	return Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
-		width: 900,
+		width: 700,
 		title: 'Server Certificates &raquo; Add',
 		fieldDefaults: {
-			anchor: '100%'
+			anchor: '100%',
+            labelWidth: 130
 		},
-
 		items: [{
 			xtype: 'fieldset',
 			title: 'General information',
-			labelWidth: 140,
+            cls: 'x-fieldset-separator-none',
 			items: [{
 				xtype: 'textfield',
 				name: 'name',
-				fieldLabel: 'Name'
+				fieldLabel: 'Name',
+                allowBlank: false
 			},{
-				xtype: 'textfield',
+				xtype: 'filefield',
 				name: 'certificate',
 				fieldLabel: 'Certificate',
-				inputType: 'file'
+                allowBlank: false
 			}, {
-				xtype: 'textfield',
+				xtype: 'filefield',
 				name: 'privateKey',
 				fieldLabel: 'Private key',
-				inputType: 'file'
+                allowBlank: false
 			}, {
-				xtype: 'textfield',
+				xtype: 'filefield',
 				name: 'certificateChain',
-				fieldLabel: 'Certificate chain',
-				inputType: 'file'
+				fieldLabel: 'Certificate chain'
 			}]
 		}],
 
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -45,20 +44,21 @@ Scalr.regPage('Scalr.ui.tools.aws.iam.serverCertificates.create', function (load
 				xtype: 'button',
 				text: 'Upload',
 				handler: function() {
-					Scalr.Request({
-						processBox: {
-							type: 'save'
-						},
-						form: this.up('form').getForm(),
-						url: '/tools/aws/iam/serverCertificates/xSave',
-						success: function () {
-							Scalr.event.fireEvent('redirect', '#/tools/aws/iam/serverCertificates/view');
-						}
-					});
+                    if (this.up('form').getForm().isValid()) {
+                        Scalr.Request({
+                            processBox: {
+                                type: 'save'
+                            },
+                            form: this.up('form').getForm(),
+                            url: '/tools/aws/iam/serverCertificates/xSave',
+                            success: function () {
+                                Scalr.event.fireEvent('close');
+                            }
+                        });
+                    }
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

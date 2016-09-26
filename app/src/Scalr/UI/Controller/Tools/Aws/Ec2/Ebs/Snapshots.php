@@ -1,163 +1,237 @@
 <?php
 
+use Scalr\Acl\Acl;
+use Scalr\Service\Aws\Ec2\DataType as Ec2DataType;
+use Scalr\Modules\PlatformFactory;
+use Scalr\Model\Entity;
+
 class Scalr_UI_Controller_Tools_Aws_Ec2_Ebs_Snapshots extends Scalr_UI_Controller
 {
-	const CALL_PARAM_NAME = 'snapshotId';
+    const CALL_PARAM_NAME = 'snapshotId';
 
-	public function defaultAction()
-	{
-		$this->viewAction();
-	}
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_AWS_SNAPSHOTS);
+    }
 
-	public function viewAction()
-	{
-		$this->response->page('ui/tools/aws/ec2/ebs/snapshots/view.js', array(
-			'locations'	=> self::loadController('Platforms')->getCloudLocations(SERVER_PLATFORMS::EC2, false)
-		));
-	}
+    public function defaultAction()
+    {
+        $this->viewAction();
+    }
 
-	public function xCreateAction()
-	{
-		$this->request->defineParams(array(
-			'volumeId',
-			'cloudLocation'
-		));
+    public function viewAction()
+    {
+        $this->response->page('ui/tools/aws/ec2/ebs/snapshots/view.js', []);
+    }
 
-		$amazonEC2Client = Scalr_Service_Cloud_Aws::newEc2(
-			$this->getParam('cloudLocation'),
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::PRIVATE_KEY),
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::CERTIFICATE)
-		);
+    public function xGetMigrateDetailsAction()
+    {
+        if (!$this->request->getEnvironment()->isPlatformEnabled(SERVER_PLATFORMS::EC2)) {
+            throw new Exception('You can migrate image between regions only on EC2 cloud');
+        }
 
-		$res = $amazonEC2Client->CreateSnapshot($this->getParam('volumeId'));
+        $availableDestinations = [];
 
-		if ($res->snapshotId) {
-			$r = $amazonEC2Client->DescribeVolumes($res->volumeId);
-			$info = $r->volumeSet->item;
+        $platform = PlatformFactory::NewPlatform(SERVER_PLATFORMS::EC2);
+        $locationsList = $platform->getLocations($this->environment);
 
-			if ($info->attachmentSet->item->instanceId) {
-				try {
-					$dBServer = DBServer::LoadByPropertyValue(
-						EC2_SERVER_PROPERTIES::INSTANCE_ID,
-						(string)$info->attachmentSet->item->instanceId
-					);
+        foreach ($locationsList as $location => $name) {
+            if ($location != $this->getParam('cloudLocation'))
+                $availableDestinations[] = array('cloudLocation' => $location, 'name' => $name);
+        }
 
-					$dBFarm = $dBServer->GetFarmObject();
-				}
-				catch(Exception $e){}
+        $this->response->data(array(
+            'sourceRegion'          => $this->getParam('cloudLocation'),
+            'availableDestinations' => $availableDestinations,
+            'snapshotId'            => $this->getParam('snapshotId')
+        ));
+    }
 
-				if ($dBServer && $dBFarm) {
-					$comment = sprintf(_("Created on farm '%s', server '%s' (Instance ID: %s)"),
-						$dBFarm->Name, $dBServer->serverId, (string)$info->attachmentSet->item->instanceId
-					);
-				}
-			}
-			else
-				$comment = "";
+    public function xMigrateAction()
+    {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_SNAPSHOTS, Acl::PERM_AWS_SNAPSHOTS_MANAGE);
 
-			$this->db->Execute("INSERT INTO ebs_snaps_info SET snapid=?, comment=?, dtcreated=NOW(), region=?",
-				array($res->snapshotId, $comment, $this->getParam('cloudLocation'))
-			);
+        $aws = $this->request->getEnvironment()->aws($this->getParam('sourceRegion'));
+        $newSnapshotId = $aws->ec2->snapshot->copy(
+            $this->getParam('sourceRegion'),
+            $this->getParam('snapshotId'),
+            sprintf(_("Copy of %s from %s"), $this->getParam('snapshotId'), $this->getParam('sourceRegion')),
+            $this->getParam('destinationRegion')
+        );
 
-			$this->response->data(array('data' => array('snapshotId' => $res->snapshotId)));
-		}
-		else
-			throw new Exception("Scalr unable to create snapshot. Please try again later.");
-	}
+        $this->response->data(array('data' => array('snapshotId' => $newSnapshotId, 'cloudLocation' => $this->getParam('destinationRegion'))));
+    }
 
-	public function xRemoveAction()
-	{
-		$this->request->defineParams(array(
-			'snapshotId' => array('type' => 'json'),
-			'cloudLocation'
-		));
+    public function xCreateAction()
+    {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_SNAPSHOTS, Acl::PERM_AWS_SNAPSHOTS_MANAGE);
 
-		$amazonEC2Client = Scalr_Service_Cloud_Aws::newEc2(
-			$this->getParam('cloudLocation'),
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::PRIVATE_KEY),
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::CERTIFICATE)
-		);
+        $this->request->defineParams(array(
+            'volumeId',
+            'cloudLocation',
+            'description'
+        ));
 
-		foreach ($this->getParam('snapshotId') as $snapshotId)
-			$amazonEC2Client->DeleteSnapshot($snapshotId);
+        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
+        $snapshot = $aws->ec2->snapshot->create($this->getParam('volumeId'), $this->getParam('description'));
 
-		$this->response->success('Snapshot(s) successfully removed');
-	}
+        if (isset($snapshot->snapshotId)) {
+            /* @var $volume \Scalr\Service\Aws\Ec2\DataType\VolumeData */
+            $volume = $aws->ec2->volume->describe($snapshot->volumeId)->get(0);
 
-	public function xListSnapshotsAction()
-	{
-		$this->request->defineParams(array(
-			'sort' => array('type' => 'json', 'default' => array('property' => 'snapshotId', 'direction' => 'ASC')),
-			'showPublicSnapshots',
-			'cloudLocation', 'volumeId', 'snapshotId'
-		));
+            if (!empty($volume->tagSet) && $volume->tagSet->count()) {
+                try {
+                    //We need to do sleep due to eventual consistency on EC2
+                    sleep(2);
+                    //Set tags (copy them from the original EBS volume)
+                    $snapshot->createTags($volume->tagSet);
+                } catch (Exception $e) {
+                    //We want to hear from the cases when it cannot set tag to snapshot
+                    trigger_error(sprintf("Cound not set tag to snapshot: %s", $e->getMessage()), E_USER_WARNING);
+                }
+            }
 
-		$amazonEC2Client = Scalr_Service_Cloud_Aws::newEc2(
-			$this->getParam('cloudLocation'),
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::PRIVATE_KEY),
-			$this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::CERTIFICATE)
-		);
+            if (count($volume->attachmentSet) && !empty($volume->attachmentSet[0]->instanceId)) {
+                $instanceId = $volume->attachmentSet[0]->instanceId;
+                try {
+                    $dBServer = DBServer::LoadByPropertyValue(EC2_SERVER_PROPERTIES::INSTANCE_ID, $instanceId);
+                    $dBFarm = $dBServer->GetFarmObject();
+                } catch (Exception $e) {
+                }
 
-		if ($this->getParam('snapshotId'))
-			$filter['snapshot-id'] = $this->getParam('snapshotId');
-		
-		if ($this->getParam('volumeId'))
-			$filter['volume-id'] = $this->getParam('volumeId');
-		
-		// Rows
-		$t = microtime(true);
-		$aws_response = $amazonEC2Client->DescribeSnapshots(null, $filter);
-		
-		$requestT = microtime(true)-$t;
-		@header("X-AWS-RequestTime-1: {$requestT}");
-		
-		$rowz = $aws_response->snapshotSet->item;
-		if ($rowz instanceof stdClass) $rowz = array($rowz);
+                if (isset($dBServer) && isset($dBFarm)) {
+                    $comment = sprintf(_("Created on farm '%s', server '%s' (Instance ID: %s)"),
+                        $dBFarm->Name, $dBServer->serverId, $instanceId
+                    );
+                }
+            } else {
+                $comment = '';
+            }
 
-		$t = microtime(true);
-		$snaps = array();
-		foreach ($rowz as $pk=>$pv)
-		{
-			$item = (array)$pv;
+            $this->db->Execute("
+                INSERT INTO ebs_snaps_info
+                SET snapid = ?,
+                    comment = ?,
+                    dtcreated = NOW(),
+                    region = ?
+            ", array(
+                $snapshot->snapshotId, $comment, $this->getParam('cloudLocation')
+            ));
 
-			if ($pv->ownerId != $this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::ACCOUNT_ID)) {
-				$item['comment'] = $pv->description;
-				$item['owner'] = $pv->ownerId;
+            $this->response->data(array('data' => array('snapshotId' => $snapshot->snapshotId)));
+        } else {
+            throw new Exception("Unable to create snapshot. Please try again later.");
+        }
+    }
 
-				if (!$this->getParam('showPublicSnapshots'))
-					continue;
-			}
-			else {
-				
-				if ($pv->description) {
-					$item['comment'] = $pv->description;
-				}
+    public function xRemoveAction()
+    {
+        $this->request->restrictAccess(Acl::RESOURCE_AWS_SNAPSHOTS, Acl::PERM_AWS_SNAPSHOTS_MANAGE);
 
-				$item['owner'] = 'Me';
-			}
+        $this->request->defineParams(array(
+            'snapshotId' => array('type' => 'json'),
+            'cloudLocation'
+        ));
+        $aws = $this->getEnvironment()->aws($this->getParam('cloudLocation'));
 
-			$item['progress'] = (int)preg_replace("/[^0-9]+/", "", $item['progress']);
+        $cnt = 0;
+        $errcnt = 0;
+        $errmsg = null;
 
-			unset($item['description']);
-			$snaps[] = $item;
-		}
-		$requestT = microtime(true)-$t;
-		@header("X-AWS-RequestTime-2: {$requestT}");
+        foreach ($this->getParam('snapshotId') as $snapshotId) {
+            try {
+                $aws->ec2->snapshot->delete($snapshotId);
+                $cnt++;
+            } catch (Exception $e) {
+                $errcnt++;
+                $errmsg = $e->getMessage();
+            }
+        }
 
-		$t = microtime(true);
-		$response = $this->buildResponseFromData($snaps, array('snapshotId', 'volumeId', 'comment', 'owner'));
-		foreach ($response['data'] as &$row) {
-			$row['startTime'] = Scalr_Util_DateTime::convertTz($row['startTime']);
-			
-			if (!$row['comment']) {
-				$row['comment'] = $this->db->GetOne("SELECT comment FROM ebs_snaps_info WHERE snapid=?", array(
-						$pv->snapshotId
-				));
-			}
-		}
-		$requestT = microtime(true)-$t;
-		@header("X-AWS-RequestTime-3: {$requestT}");
+        $msg = 'Snapshot' . ($cnt > 1 ? 's have' : ' has') . ' been successfully removed.';
 
-		$this->response->data($response);
-	}
+        if ($errcnt != 0) {
+            $msg .= " {$errcnt} snapshots was not removed due to error: {$errmsg}";
+        }
+
+        $this->response->success($msg);
+    }
+
+    public function xListSnapshotsAction($cloudLocation, $snapshotId = null, $volumeId = null, $showPublicSnapshots = null)
+    {
+        $aws = $this->getEnvironment()->aws($cloudLocation);
+
+        $filter = [];
+
+        if (!empty($snapshotId)) {
+            $filter[] = array(
+                'name'  => Ec2DataType\SnapshotFilterNameType::snapshotId(),
+                'value' => $snapshotId,
+            );
+        }
+
+        if (!empty($volumeId)) {
+            $filter[] = array(
+                'name'  => Ec2DataType\SnapshotFilterNameType::volumeId(),
+                'value' => $volumeId,
+            );
+        }
+
+        $snaps = [];
+        $snapList = $nextToken = null;
+
+        do {
+            if (isset($snapList)) {
+                $nextToken = $snapList->getNextToken();
+            }
+
+            $snapList = $aws->ec2->snapshot->describe(null, null, (empty($filter) ? null : $filter), null, $nextToken);
+
+            /* @var $snapshot Ec2DataType\SnapshotData */
+            foreach ($snapList as $snapshot) {
+                $item = [
+                    'snapshotId' => $snapshot->snapshotId,
+                    'volumeId'   => $snapshot->volumeId,
+                    'volumeSize' => (int) $snapshot->volumeSize,
+                    'status'     => $snapshot->status,
+                    'startTime'  => $snapshot->startTime->format('c'),
+                    'progress'   => $snapshot->progress
+                ];
+
+                if ($snapshot->ownerId != $this->getEnvironment()->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCOUNT_ID]) {
+                    $item['comment'] = $snapshot->description;
+                    $item['owner'] = $snapshot->ownerId;
+
+                    if (!$showPublicSnapshots) {
+                        continue;
+                    }
+                } else {
+                    if ($snapshot->description) {
+                        $item['comment'] = $snapshot->description;
+                    }
+
+                    $item['owner'] = 'Me';
+                }
+
+                $item['progress'] = (int) preg_replace("/[^0-9]+/", "", $item['progress']);
+                unset($item['description']);
+                $snaps[] = $item;
+            }
+
+        } while ($snapList->getNextToken() !== null);
+
+        $response = $this->buildResponseFromData($snaps, ['snapshotId', 'volumeId', 'comment', 'owner']);
+
+        foreach ($response['data'] as &$row) {
+            $row['startTime'] = Scalr_Util_DateTime::convertTz($row['startTime']);
+
+            if (empty($row['comment'])) {
+                $row['comment'] = $this->db->GetOne("SELECT comment FROM ebs_snaps_info WHERE snapid=? LIMIT 1", [
+                    $row['snapshotId']
+                ]);
+            }
+        }
+
+        $this->response->data($response);
+    }
 }

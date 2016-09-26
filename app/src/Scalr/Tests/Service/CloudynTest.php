@@ -7,48 +7,45 @@ use Scalr\Service\Cloudyn;
 /**
  * Cloudyn api tests
  *
- * @author   Vitaliy Demidov   <zend@i.ua>
+ * @author   Vitaliy Demidov   <vitaliy@scalr.com>
  * @since    19.11.2012
  */
 class CloudynTest extends TestCase
 {
 
-	/**
-	 * {@inheritdoc}
-	 * @see SimpleTestCase::setUp()
-	 */
-	public function setUp()
-	{
-		parent::setUp();
-	}
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Tests.TestCase::setUp()
+     */
+    protected function setUp()
+    {
+        parent::setUp();
+    }
 
-	/**
-	 * {@inheritdoc}
-	 * @see SimpleTestCase::tearDown()
-	 */
-	public function tearDown()
-	{
-		parent::tearDown();
-	}
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Tests.TestCase::tearDown()
+     */
+    protected function tearDown()
+    {
+        parent::tearDown();
+    }
 
-	/**
-	 * @test
-	 */
-	public function testFunctionalServiceActions ()
-	{
-		if ($this->isSkipFunctionalTests()) {
-			$this->markTestSkipped();
-		}
+    /**
+     * @test
+     * @functional
+     */
+    public function testFunctionalServiceActions ()
+    {
+        $cy = new Cloudyn('', '', \Scalr::config('scalr.cloudyn.environment'));
 
-		$cy = new Cloudyn('', '', isset(\CONFIG::$CLOUDYN_ENVIRONMENT) ? \CONFIG::$CLOUDYN_ENVIRONMENT : null);
+        $version = $cy->getVersion();
+        $this->assertNotEmpty($version);
 
-		$version = $cy->getVersion();
-		$this->assertNotEmpty($version);
+        $res = $cy->checkStatus();
+        $this->assertTrue($res);
 
-		$res = $cy->checkStatus();
-		$this->assertTrue($res);
-
-		$countries = $cy->countries();
-		$this->assertArrayHasKey('US', $countries);
-	}
+        $countries = $cy->countries();
+        $this->assertArrayHasKey('US', $countries);
+    }
 }

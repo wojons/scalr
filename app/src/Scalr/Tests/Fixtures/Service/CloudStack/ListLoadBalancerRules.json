@@ -1,0 +1,37 @@
+{
+    "listloadbalancerrulesresponse": {
+        "count": 1,
+        "loadbalancerrule": [{
+                "id": 1,
+                "description": "test",
+                "domain": "test.com",
+                "domainid": 1,
+                "name": "jp-east-t1v",
+                "account": "testio",
+                "algorithm": "roundrobin",
+                "cidrlist": "test",
+                "networkid": 13,
+                "privateport": 42,
+                "project": "test project",
+                "projectid": 7,
+                "protocol": "http",
+                "publicip": "192.168.0.1",
+                "publicipid": 12,
+                "publicport": 80,
+                "state": "burning",
+                "zoneid": 2,
+                "tags": [{
+                    "account": "testio",
+                    "customer": "testio",
+                    "domain": "test.com",
+                    "domainid": 42,
+                    "key": "key test",
+                    "project": "Project Test",
+                    "projectid": 666,
+                    "resourceid": 11,
+                    "resourcetype": "test",
+                    "value": "testvalue"
+                }]
+            }]
+    }
+}

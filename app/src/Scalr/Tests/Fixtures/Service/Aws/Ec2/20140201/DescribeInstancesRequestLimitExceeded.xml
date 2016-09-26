@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DescribeInstancesResponse xmlns='http://ec2.amazonaws.com/doc/2012-12-01/'>
+    <Errors>
+         <Error>
+           <Code>RequestLimitExceeded</Code>
+           <Message>Request limit exceeded.</Message>
+         </Error>
+    </Errors>
+    <requestId>fdcdcab1-ae5c-489e-9c33-4637c5dda355</requestId>
+</DescribeInstancesResponse>

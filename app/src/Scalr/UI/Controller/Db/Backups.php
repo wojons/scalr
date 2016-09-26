@@ -1,150 +1,214 @@
 <?php
+
+use Scalr\Acl\Acl;
+use Scalr\Model\Entity;
+
 class Scalr_UI_Controller_Db_Backups extends Scalr_UI_Controller
 {
-	public function hasAccess()
-	{
-		return true;
-	}
+    public function hasAccess()
+    {
+        return parent::hasAccess() && $this->request->isAllowed(Acl::RESOURCE_DB_BACKUPS);
+    }
 
-	public function defaultAction()
-	{
-		$data = $this->getBackupsList();
-		$this->response->page( 'ui/db/backups/view.js', array(
-			'backups' => $data, 
-			'env' => $this->user->getEnvironments()
-		), 
-		array( 'ui/db/backups/calendarviews.js' ),
-		array( 'ui/db/backups/view.css' ) );
-	}
+    public function defaultAction()
+    {
+        $farms = self::loadController('Farms')->getList();
+        array_unshift($farms, array('id' => 0, 'name' => 'All farms'));
 
-	public function detailsAction ()
-	{
-		$this->response->page( 'ui/db/backups/details.js', array(
-			'backup' => $this->getBackupDetails( $this->getParam( 'backupId' ) )
-		), array(), array( 'ui/db/backups/view.css' ) );
-	}
+        $data = $this->getBackupsList();
+        $this->response->page('ui/db/backups/view.js', array(
+                'farms' => $farms,
+                'backups' => $data,
+                'env' => $this->user->getEnvironments()
+            ),
+            array('ui/db/backups/calendarviews.js'),
+            array('ui/db/backups/view.css')
+        );
+    }
 
-	public function xGetListBackupsAction() {
-		$this->response->data( array( 'backups' => $this->getBackupsList( $this->getParam( 'time' ) ) ) );
-	}
+    public function detailsAction()
+    {
+        $this->response->page('ui/db/backups/details.js',
+            array(
+                'backup' => $this->getBackupDetails($this->getParam('backupId'))
+            ), array(), array( 'ui/db/backups/view.css')
+        );
+    }
 
-	private function getBackupsList( $time = '' ) {
-		$data = array();
-		$time = ( $time == '' ) ? time() : strtotime($time);
+    public function xGetListBackupsAction()
+    {
+        $this->response->data(array('backups' => $this->getBackupsList($this->getParam('time'))));
+    }
 
-		$sql = 'SELECT id as backup_id, farm_id, service as role, dtcreated as date FROM services_db_backups WHERE status = ? AND env_id = ?';
+    private function getBackupsList($time = '')
+    {
+        $data = array();
+        $time = ($time == '') ? time() : strtotime($time);
 
-		if( !$this->getParam( 'query' ) && !$this->getParam( 'farmId' ) )
-			$sql.= ' AND DATE_FORMAT(dtcreated, "%Y-%m") = ?';
-		else
-			$sql.= ' AND DATE_FORMAT(dtcreated, "%Y") = ?';
+        $query = "
+            SELECT b.id AS backupId, b.farm_id AS farmId, b.service AS serviceName, b.dtcreated AS time, f.name AS farmName
+            FROM `services_db_backups` b
+            LEFT JOIN `farms` f ON b.farm_id = f.id
+            WHERE b.status = ? AND b.env_id = ?
+            AND DATE_FORMAT(CONVERT_TZ(b.dtcreated, 'SYSTEM', ?), '%Y-%m') = ?
+            AND " . $this->request->getFarmSqlQuery();
 
-		if ( $this->getParam( 'query' ) )
-			$sql.= ' AND :FILTER:';
+        $userTimezone = $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE);
+        if (empty($userTimezone)) {
+            $userTimezone = 'SYSTEM';
+        }
 
-		if ( $this->getParam( 'farmId' ) )
-			$sql.= ' AND farm_id = '.$this->db->qstr($this->getParam('farmId'));
+        $args = [Scalr_Db_Backup::STATUS_AVAILABLE, $this->getEnvironmentId(), $userTimezone, date('Y-m', $time)];
 
-		$dbBackupResult = $this->buildResponseFromSql(
-			$sql,
-			array(),
-			array( 'service' ),
-			array(
-				Scalr_Db_Backup::STATUS_AVAILABLE,
-				$this->getEnvironmentId(),
-				( $this->getParam( 'query' ) || $this->getParam( 'farmId' ) ) ? date( "Y", $time ) : date( "Y-m", $time )
-			),
-			true
-		);
-		$dbBackupResult = $dbBackupResult['data'];
+        if ($this->getParam('farmId')) {
+            $query .= ' AND b.farm_id = ?';
+            $args[] = $this->getParam('farmId');
+        }
 
-		foreach ( $dbBackupResult as $row ) {
-			$date = strtotime(Scalr_Util_DateTime::convertTz($row['date']));
-			$row['date'] = date('h:ia ',$date);
-			$row['farm'] = DBFarm::LoadByIDOnlyName($row['farm_id']);
-			$data[date('n Y', $date)][date('j F o', $date)][date('H:i', $date)] = $row;
-		}
-		
-		return $data;
-	}
+        $dbBackupResult = $this->db->GetAll($query, $args);
+        foreach ($dbBackupResult as $row) {
+            $dt = new DateTime($row['time']);
+            Scalr_Util_DateTime::convertTimeZone($dt, $this->user->getSetting(Scalr_Account_User::SETTING_UI_TIMEZONE));
 
-	private function getBackupDetails($backupId) {
-		
-		$links = array();
-		$backup = Scalr_Db_Backup::init()->loadById($backupId);
-		
-		$this->user->getPermissions()->validate($backup);
-		
-		$data = array(
-			'backup_id' => $backup->id,
-			'farm_id'	=> $backup->farmId,
-			'type'		=> ROLE_BEHAVIORS::GetName($backup->service) ? ROLE_BEHAVIORS::GetName($backup->service) : 'unknown',
-			'date'		=> Scalr_Util_DateTime::convertTz($backup->dtCreated),
-			'size'		=> $backup->size ? round($backup->size / 1024 / 1024, 2) : 0,
-			'provider'	=> $backup->provider,
-			'cloud_location' => $backup->cloudLocation,
-			'farmName'	=> DBFarm::LoadByIDOnlyName($backup->farmId)
-		);
-		$downloadParts = $backup->getParts();
+            $row['time'] = $dt->format('h:ia');
 
-		foreach ($downloadParts as $part) {
-			$part['size'] = $part['size'] ? round($part['size']/1024/1024, 2) : 0;
-			$part['link'] = $data['provider'] == 's3' ? $this->getS3SignedUrl($part['path']) : $this->getCfSignedUrl($part['path'], $data['cloud_location']);
-			$part['path'] = pathinfo($part['path']);
-			$links[$part['number']] = $part;
-		}
-		$data['links'] = $links;
-		return $data;
-	}
+            if (empty($row['farmName'])) {
+                $row['farmName'] = '*removed farm*';
+            }
 
-	public function xRemoveBackupAction () {
-		
-		$backup = Scalr_Db_Backup::init()->loadById($this->getParam('backupId'));
-		$this->user->getPermissions()->validate($backup);
-		
-		$backup->delete();
-		$this->response->success('Backup successfully queued for removal.');
-	}
+            $data[$dt->format('j M')][] = $row;
+        }
 
-	private function getS3SignedUrl($path) {
-		 $bucket = substr($path, 0, strpos($path, '/'));
-		 $resource = substr($path, strpos($path, '/') + 1, strlen($path));
-		 $expires = time() + 3600;
+        return $data;
+    }
 
-		 $AWSAccessKey = $this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::ACCESS_KEY);
-		 $AWSSecretKey = $this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Ec2::SECRET_KEY);
+    private function getBackupDetails($backupId)
+    {
+        $links = array();
+        /* @var $backup \Scalr_Db_Backup */
+        $backup = Scalr_Db_Backup::init()->loadById($backupId);
 
-		 $stringToSign = "GET\n\n\n{$expires}\n/" . str_replace(".s3.amazonaws.com", "", $bucket) . "/{$resource}";
-		 $signature = urlencode(
-			 			base64_encode(
-							hash_hmac( "sha1", utf8_encode( $stringToSign ), $AWSSecretKey, TRUE )
-						)
-		 			);
+        $this->user->getPermissions()->validate($backup);
 
-		 $authenticationParams = "AWSAccessKeyId={$AWSAccessKey}&Expires={$expires}&Signature={$signature}";
+        $data = array(
+            'backup_id'      => $backup->id,
+            'farm_id'        => $backup->farmId,
+            'behavior'       => $backup->service,
+            'type'           => ROLE_BEHAVIORS::GetName($backup->service) ? ROLE_BEHAVIORS::GetName($backup->service) : 'unknown',
+            'date'           => Scalr_Util_DateTime::convertTz($backup->dtCreated),
+            'size'           => $backup->size ? round($backup->size / 1024 / 1024, 2) : 0,
+            'provider'       => $backup->provider,
+            'cloud_location' => $backup->cloudLocation,
+            'farmName'       => DBFarm::LoadByIDOnlyName($backup->farmId)
+        );
+        $downloadParts = $backup->getParts();
 
-		 return $link = "http://{$bucket}.s3.amazonaws.com/{$resource}?{$authenticationParams}";
-	}
+        foreach ($downloadParts as $part) {
+            $part['size'] = $part['size'] ? round($part['size']/1024/1024, 2) : '';
+            if ($part['size'] == 0)
+                $part['size'] = 0.01;
 
-	private function getCfSignedUrl($path, $location) {
-		$expires = time() + 3600;
+            if ($data['provider'] == 's3') {
+                $part['link'] = $this->getS3SignedUrl($part['path']);
+            } else if ($data['provider'] == 'cf') {
+                $part['link'] = $this->getSwiftSignerUrl($part['path'], $backup->platform, $backup->cloudLocation);
+            } else if ($data['provider'] == 'gcs') {
+                $part['link'] = $this->getGcsSignedUrl($part['path']);
+            } else
+                continue;
 
-		$user = $this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Rackspace::USERNAME, true, $location);
-		$key = $this->getEnvironment()->getPlatformConfigValue(Modules_Platforms_Rackspace::API_KEY, true, $location);
+            $part['path'] = pathinfo($part['path']);
+            $links[$part['number']] = $part;
+        }
+        $data['links'] = $links;
 
-		$cs = Scalr_Service_Cloud_Rackspace::newRackspaceCS($user, $key, $location);
-		$auth = $cs->authToReturn();
+        return $data;
+    }
 
-		$stringToSign = "GET\n\n\n{$expires}\n/{$path}";
-		$signature = urlencode(
-						base64_encode(
-							hash_hmac("sha1", utf8_encode( $stringToSign ), $key, true)
-						)
-					);
+    public function xRemoveBackupAction()
+    {
+        $this->request->restrictAccess(Acl::RESOURCE_DB_BACKUPS, Acl::PERM_DB_BACKUPS_REMOVE);
 
-		$authenticationParams = "temp_url_sig={$signature}&temp_url_expires={$expires}";
+        $backup = Scalr_Db_Backup::init()->loadById($this->getParam('backupId'));
+        $this->user->getPermissions()->validate($backup);
 
-		$link = "{$auth['X-Cdn-Management-Url']}/{$path}?{$authenticationParams}";
-		return $link;
-	}
+        $backup->delete();
+        $this->response->success('Backup successfully queued for removal.');
+    }
+
+    private function getS3SignedUrl($path)
+    {
+        $bucket = substr($path, 0, strpos($path, '/'));
+        $resource = substr($path, strpos($path, '/') + 1, strlen($path));
+        $expires = time() + 3600;
+
+        $AWSAccessKey = $this->getEnvironment()->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_ACCESS_KEY];
+        $AWSSecretKey = $this->getEnvironment()->keychain(SERVER_PLATFORMS::EC2)->properties[Entity\CloudCredentialsProperty::AWS_SECRET_KEY];
+
+        $stringToSign = "GET\n\n\n{$expires}\n/" . str_replace(".s3.amazonaws.com", "", $bucket) . "/{$resource}";
+
+        $signature = urlencode(base64_encode(hash_hmac("sha1", utf8_encode($stringToSign), $AWSSecretKey, TRUE)));
+
+        $authenticationParams = "AWSAccessKeyId={$AWSAccessKey}&Expires={$expires}&Signature={$signature}";
+
+        return $link = "https://{$bucket}.s3.amazonaws.com/{$resource}?{$authenticationParams}";
+    }
+
+    public function getGcsSignedUrl($path)
+    {
+        $expires = time() + 3600;
+
+        $stringToSign = "GET\n\n\n{$expires}\n/{$path}";
+
+        $link = "http://storage.googleapis.com/{$path}";
+
+        $googleAccessId = str_replace(
+            '.apps.googleusercontent.com',
+            '@developer.gserviceaccount.com',
+            $this->environment->keychain(SERVER_PLATFORMS::GCE)->properties[Entity\CloudCredentialsProperty::GCE_CLIENT_ID]
+        );
+
+        $ccGce = $this->environment->keychain(SERVER_PLATFORMS::GCE);
+        $key = base64_decode($ccGce->properties[Entity\CloudCredentialsProperty::GCE_KEY]);
+        $signature = $certs = '';
+
+        // If it's not a json key we need to convert PKCS12 to PEM
+        if (empty($ccGce->properties[Entity\CloudCredentialsProperty::GCE_JSON_KEY])) {
+            @openssl_pkcs12_read($key, $certs, 'notasecret');
+            $key = $certs['pkey'];
+        }
+
+        openssl_sign($stringToSign, $signature, openssl_pkey_get_private($key), OPENSSL_ALGO_SHA256);
+
+        return sprintf("%s?GoogleAccessId=%s&Expires=%s&Signature=%s",
+            $link,
+            $googleAccessId,
+            $expires,
+            urlencode(base64_encode($signature))
+        );
+    }
+
+    public function getSwiftSignerUrl($path, $platform, $cloudLocation)
+    {
+        $expires = time() + 3600;
+        $method = 'GET';
+
+        $rs = $this->environment->openstack($platform, $cloudLocation);
+        $basePath = $rs->swift->getEndpointUrl();
+        $objectPath = explode("/v1/", $basePath);
+
+        $stringToSign = "{$method}\n{$expires}\n/v1/{$objectPath[1]}/{$path}";
+
+        $response = $rs->swift->describeService();
+        $key = $response->getHeader('X-Account-Meta-Temp-Url-Key');
+        if (! $key) {
+            $key = Scalr::GenerateRandomKey(32);
+            $rs->swift->updateService(array(
+                '_headers' => array('X-Account-Meta-Temp-URL-Key' => $key)
+            ));
+        }
+
+        $signature = urlencode(hash_hmac("sha1", utf8_encode($stringToSign), $key));
+        return "{$basePath}/{$path}?temp_url_sig={$signature}&temp_url_expires={$expires}";
+    }
 }

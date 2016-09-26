@@ -1,0 +1,103 @@
+# `Event` #
+
+
+
+
+
+
+
+## Properties ##
+
+### `id` (required, create-only, filterable) ###
+
+The name of this custom event.
+
+
+Property of type: `string`.
+
+
+To filter on this field, use: `id=...`.
+
+
+### `description` (optional) ###
+
+
+
+
+Property of type: `string`.
+
+
+
+
+### `scope` (read-only, filterable) ###
+
+
+
+
+Property of type: `string`.
+
+ 
+The following are valid values for the `scope` property:
+  + `scalr`
+  + `account`
+  + `environment`
+  + `farm`
+  + `farmrole`
+  + `role`
+  + `server`
+
+To filter on this field, use: `scope=...`.
+
+
+
+
+## Used in ##
+
+  + [`/events/`](./../rest/api/v1beta0/account/events/)
+  + [`/events/{eventId}/`](./../rest/api/v1beta0/account/events/{eventId}/)
+  + [`/{envId}/events/`](./../rest/api/v1beta0/user/{envId}/events/)
+  + [`/{envId}/events/{eventId}/`](./../rest/api/v1beta0/user/{envId}/events/{eventId}/)
+
+## Swagger Definition ##
+
+    {
+      "properties": {
+        "description": {
+          "type": "string"
+        }, 
+        "id": {
+          "description": "The name of this custom event.", 
+          "pattern": "[A-Za-z0-9]+", 
+          "type": "string"
+        }, 
+        "scope": {
+          "enum": [
+            "scalr", 
+            "account", 
+            "environment", 
+            "farm", 
+            "farmrole", 
+            "role", 
+            "server"
+          ], 
+          "readOnly": true, 
+          "type": "string"
+        }
+      }, 
+      "required": [
+        "id"
+      ], 
+      "x-createOnly": [
+        "id"
+      ], 
+      "x-filterable": [
+        "id", 
+        "scope"
+      ], 
+      "x-usedIn": [
+        "/events/", 
+        "/events/{eventId}/", 
+        "/{envId}/events/", 
+        "/{envId}/events/{eventId}/"
+      ]
+    }

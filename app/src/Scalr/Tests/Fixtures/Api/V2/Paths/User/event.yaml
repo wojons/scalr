@@ -1,0 +1,40 @@
+paths:
+  - uri: /{envId}/events/{eventId}/
+    acl: noAccess
+    operations:
+      - {method: get,    response: 403, params: '&{0}EventsData'}
+      - {method: delete, response: 403, params: '&{0}EventsData'}
+
+  - uri: /{envId}/events/{eventId}/
+    acl: readOnly
+    operations:
+      - {method: get,    response: 200, params: '&{0}EventsData'}
+      - {method: delete, response: 403, params: '&{0}EventsData'}
+
+  - uri: /{envId}/events/{eventId}/
+    acl: fullAccess
+    operations:
+      - {method: get,    response: 200, params: '&{0}EventsData'}
+      - {method: delete, response: 200, params: '&{0}EventsData'}
+      - {method: delete, response: 404, params: '&{0}EventsData'}
+      - {method: delete, response: 409, params: '&{1}EventsData'}
+
+EventsData:
+  - {eventId: '&{0}EventDefinitions.name'}
+  - {eventId: '&{1}EventDefinitions.name'}
+
+EventDefinitions:
+  - {name: 'testEventNotUsed', description: 'test description'}
+  - {name: 'testEventUsed',    description: 'test description'}
+
+RoleCategories:
+  - {name: 'test-rc'}
+
+Scripts:
+  - {name: 'test-script', description: 'test script'}
+
+Roles:
+- {name: 'test-role', catId: '&{0}RoleCategories.id', osId: centos-5-x}
+
+RoleScripts:
+  - {roleId: '&{0}Roles.id', eventName: '&{1}EventDefinitions.name', scriptId: '&{0}Scripts.id', scriptType: 'local'}

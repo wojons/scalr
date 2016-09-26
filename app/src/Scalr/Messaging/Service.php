@@ -1,96 +1,108 @@
 <?php
 
+use Scalr\Util\CryptoTool;
+
 class Scalr_Messaging_Service {
-	const HASH_ALGO = 'SHA1';
 
-	private $cryptoTool;
+    private $cryptoTool;
 
-	private $serializer;
+    private $serializer;
+    private $jsonSerializer;
 
-	private $handlers = array();
+    private $handlers = array();
 
-	private $logger;
+    private $logger;
 
-	function __construct () {
-		$this->cryptoTool = Scalr_Messaging_CryptoTool::getInstance();
-		$this->serializer = new Scalr_Messaging_XmlSerializer();
-		$this->logger = Logger::getLogger(__CLASS__);
-	}
+    function __construct () {
+        $this->cryptoTool = \Scalr::getContainer()->srzcrypto;
+        $this->serializer = new Scalr_Messaging_XmlSerializer();
+        $this->jsonSerializer = new Scalr_Messaging_JsonSerializer();
+        $this->logger = \Scalr::getContainer()->logger(__CLASS__);
+    }
 
-	function addQueueHandler(IScalrQueueHandler $handler) {
-		if (array_search($handler, $this->handlers) === false) {
-			$this->handlers[] = $handler;
-		}
-	}
+    function addQueueHandler(Scalr_Messaging_Service_QueueHandler $handler) {
+        if (array_search($handler, $this->handlers) === false) {
+            $this->handlers[] = $handler;
+        }
+    }
+    
+    function handle ($queue, $payload) {
 
-	function handle ($queue, $payload) {
-    	// Authenticate request
-		try {
-			$this->logger->info(sprintf("Validating server (server_id: %s)", $_SERVER["HTTP_X_SERVER_ID"]));
-			try{
-    			$DBServer = DBServer::LoadByID($_SERVER["HTTP_X_SERVER_ID"]);
-			} catch (Exception $e) {
-				throw new Exception(sprintf(_("Server '%s' is not known by Scalr"), $_SERVER["HTTP_X_SERVER_ID"]));
-			}
+        $contentType = $_SERVER['CONTENT_TYPE'];
 
-	    	$cryptoKey = $DBServer->GetKey(true);
-	    	$isOneTimeKey = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_KEY_TYPE) == SZR_KEY_TYPE::ONE_TIME;
-	    	$isOneTimeKey = false; //FIXME: [postponed] Igor should give a proposals
-	    	$keyExpired = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_ONETIME_KEY_EXPIRED);
-	    	if ($isOneTimeKey && $keyExpired) {
-	    		throw new Exception(_("One-time crypto key expired"));
-	    	}
+        // Authenticate request
+        try {
 
-			$this->logger->info(sprintf(_("Validating signature '%s'"), $_SERVER["HTTP_X_SIGNATURE"]));
-	    	$this->validateSignature($cryptoKey, $payload, $_SERVER["HTTP_X_SIGNATURE"], $_SERVER["HTTP_DATE"]);
+            $this->logger->info(sprintf("Validating server (server_id: %s)", $_SERVER["HTTP_X_SERVER_ID"]));
+            try{
+                $DBServer = DBServer::LoadByID($_SERVER["HTTP_X_SERVER_ID"]);
+            } catch (Exception $e) {
+                throw new Exception(sprintf(_("Server '%s' is not known by Scalr"), $_SERVER["HTTP_X_SERVER_ID"]));
+            }
 
-	    	if ($isOneTimeKey) {
-	    		$DBServer->SetProperty(SERVER_PROPERTIES::SZR_ONETIME_KEY_EXPIRED, 1);
-	    	}
-    	}
-    	catch (Exception $e) {
-    		return array(401, $e->getMessage());
-    	}
+            $cryptoKey = $DBServer->GetKey(true);
+            $this->cryptoTool->setCryptoKey($cryptoKey);
+//             $isOneTimeKey = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_KEY_TYPE) == SZR_KEY_TYPE::ONE_TIME;
+            $isOneTimeKey = false;
+            $keyExpired = $DBServer->GetProperty(SERVER_PROPERTIES::SZR_ONETIME_KEY_EXPIRED);
+            if ($isOneTimeKey && $keyExpired) {
+                throw new Exception(_("One-time crypto key expired"));
+            }
 
-    	// Decrypt and decode message
-		try {
-			$this->logger->info(sprintf(_("Decrypting message '%s'"), $payload));
-			$xmlString = $this->cryptoTool->decrypt($payload, $cryptoKey);
+            $this->logger->info(sprintf(_("Validating signature '%s'"), $_SERVER["HTTP_X_SIGNATURE"]));
+            $this->validateSignature($payload, $_SERVER["HTTP_X_SIGNATURE"], $_SERVER["HTTP_DATE"]);
 
-			$this->logger->info(sprintf(_("Unserializing message '%s'"), htmlspecialchars($xmlString)));
-			$message = $this->serializer->unserialize($xmlString);
+            if ($isOneTimeKey) {
+                $DBServer->SetProperty(SERVER_PROPERTIES::SZR_ONETIME_KEY_EXPIRED, 1);
+            }
+        }
+        catch (Exception $e) {
+            return array(401, $e->getMessage());
+        }
 
-			if ($isOneTimeKey && !$message instanceof Scalr_Messaging_Msg_HostInit) {
-				return array(401, _("One-time crypto key valid only for HostInit message"));
-			}
+        // Decrypt and decode message
+        try {
+            $this->logger->info(sprintf(_("Decrypting message '%s'"), $payload));
+            $string = $this->cryptoTool->decrypt($payload);
 
-		}
-		catch (Exception $e) {
-			return array(400, $e->getMessage());
-		}
+            if ($contentType == 'application/json') {
+                $message = $this->jsonSerializer->unserialize($string);
+                $type = 'json';
+            } else {
+                $message = $this->serializer->unserialize($string);
+                $type = 'xml';
+            }
 
-		// Handle message
-		$accepted = false;
-		foreach ($this->handlers as $handler) {
-			if ($handler->accept($queue)) {
-				$this->logger->info("Notify handler " . get_class($handler));
-				$handler->handle($queue, $message, $xmlString);
-				$accepted = true;
-			}
-		}
+            if ($isOneTimeKey && !$message instanceof Scalr_Messaging_Msg_HostInit) {
+                return array(401, _("One-time crypto key valid only for HostInit message"));
+            }
 
-		return $accepted ?
-				array(201, "Created") :
-				array(400, sprintf("Unknown queue '%s'", $queue));
+        }
+        catch (Exception $e) {
+            return array(400, $e->getMessage());
+        }
 
-	}
+        // Handle message
+        $accepted = false;
+        foreach ($this->handlers as $handler) {
+            if ($handler->accept($queue)) {
+                $this->logger->info("Notify handler " . get_class($handler));
+                $handler->handle($queue, $message, $string, $type);
+                $accepted = true;
+            }
+        }
 
-	private function validateSignature($key, $payload, $signature, $timestamp) {
-   		$string_to_sign = $payload . $timestamp;
+        return $accepted ?
+                array(201, "Created") :
+                array(400, sprintf("Unknown queue '%s'", $queue));
 
-    	$valid_sign = base64_encode(hash_hmac(self::HASH_ALGO, $string_to_sign, $key, 1));
-    	if ($valid_sign != $signature) {
-    		throw new Exception("Signature doesn't match");
-    	}
-	}
+    }
+
+    private function validateSignature($payload, $signature, $timestamp) {
+        $valid_sign = $this->cryptoTool->sign($payload, null, $timestamp, Scalr_Net_Scalarizr_Client::HASH_ALGO);
+
+        if ($valid_sign != $signature) {
+            throw new Exception("Signature doesn't match");
+        }
+    }
 }

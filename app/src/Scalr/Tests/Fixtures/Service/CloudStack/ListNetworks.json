@@ -1,0 +1,37 @@
+{
+    "listnetworksresponse": {
+        "count": 1,
+        "network": [{
+                "id": 1,
+                "service": [{
+                    "name": "testio",
+                    "capability": [{
+                        "canchooseservicecapability": true,
+                        "name": "testio",
+                        "value": "Scalr"
+                    }],
+                    "provider": [{
+                        "id": 7,
+                        "canenableindividualservice": true,
+                        "destinationphysicalnetworkid": 42,
+                        "name": "testio",
+                        "physicalnetworkid": 666,
+                        "servicelist": "services",
+                        "state": "OK"
+                    }]
+                }],
+                "tags": [{
+                    "account": "testio",
+                    "customer": "testio",
+                    "domain": "test.com",
+                    "domainid": 42,
+                    "key": "key test",
+                    "project": "Project Test",
+                    "projectid": 666,
+                    "resourceid": 11,
+                    "resourcetype": "test",
+                    "value": "testvalue"
+                }]
+            }]
+    }
+}

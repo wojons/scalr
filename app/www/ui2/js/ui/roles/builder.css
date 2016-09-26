@@ -1,14 +1,15 @@
-div.scalr-ui-roles-builder-btn-name {
-	width: 109px;
-	height: 22px;
-	text-align: center;
-	font: bold 13px Arial;
-	color: #333333;
+.x-rolebuilder-addons .x-btn-simple-large{
+    background: transparent;
+    box-shadow: none;
+    width: 80px;
+    height: 70px;
+    cursor: default;
 }
 
-div.scalr-ui-roles-builder-btn-icon {
-	padding-top: 10px;
-	width: 109px;
-	height: 85px;
-	text-align: center;
+.x-rolebuilder-addons .x-btn-simple-large .x-btn-inner{
+    display: none;
+}
+
+.x-rolebuilder-addons .x-btn-simple-large .x-btn-icon-el{
+    margin: 0 auto;
 }

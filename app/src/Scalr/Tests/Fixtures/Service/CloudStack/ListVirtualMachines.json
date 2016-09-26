@@ -1,0 +1,102 @@
+{
+    "listvirtualmachinesresponse": {
+        "count": 1,
+        "virtualmachine": [{
+                "id": 60975,
+                "name": "i-882-60975-VM",
+                "displayname": "c5911bcc-c0fa-4a4e-8ee6-1a5f7811e077",
+                "account": "Scalr-User1",
+                "domainid": 1105,
+                "domain": "70000001100",
+                "created": "2014-05-13T22:14:14+0900",
+                "state": "Stopped",
+                "haenable": false,
+                "groupid": 5949,
+                "group": "rabbitmq-ubuntu1204-devel",
+                "zoneid": 2,
+                "zonename": "jp-east-f2v",
+                "templateid": 4668,
+                "templatename": "mbeh1-ubuntu1204-devel-09102013",
+                "templatedisplaytext": "mbeh1-ubuntu1204-devel",
+                "passwordenabled": true,
+                "serviceofferingid": 30,
+                "serviceofferingname": "S2",
+                "cpunumber": 1,
+                "cpuspeed": 1600,
+                "memory": 2048,
+                "guestosid": 100,
+                "rootdeviceid": 0,
+                "rootdevicetype": "Not created",
+                "affinitygroup": [{
+                    "id": 1,
+                    "account": "Scalr",
+                    "description": "test",
+                    "domain": "test.com",
+                    "domainid": 42,
+                    "name": "testio",
+                    "type": "test",
+                    "virtualmachineIds": "32"
+                }],
+                "securitygroup": [{
+                    "id": 1,
+                    "account": "Scalr",
+                    "description": "test",
+                    "domain": "test.com",
+                    "domainid": 42,
+                    "name": "testio",
+                    "project": "test",
+                    "projectid": 32,
+                    "jobid": 666,
+                    "jobstatus": "pending",
+                    "egressrule": [{
+                        "account": "testio",
+                        "cidr": "testio",
+                        "endport": 80,
+                        "icmpcode": 42,
+                        "icmptype": "testing",
+                        "protocol": "http",
+                        "ruleid": 666,
+                        "securitygroupname": "testio",
+                        "startport": 81
+                    }],
+                    "ingressrule": [{
+                        "account": "testio",
+                        "cidr": "testio",
+                        "endport": 80,
+                        "icmpcode": 42,
+                        "icmptype": "testing",
+                        "protocol": "http",
+                        "ruleid": 666,
+                        "securitygroupname": "testio",
+                        "startport": 81
+                    }],
+                    "tags": [{
+                        "account": "testio",
+                        "customer": "testio",
+                        "domain": "test.com",
+                        "domainid": 42,
+                        "key": "key test",
+                        "project": "Project Test",
+                        "projectid": 666,
+                        "resourceid": 11,
+                        "resourcetype": "test",
+                        "value": "testvalue"
+                    }]
+                }],
+                "nic": [{
+                        "id": 80950,
+                        "networkid": 1527,
+                        "netmask": "255.255.252.0",
+                        "gateway": "10.2.0.1",
+                        "ipaddress": "10.2.1.196",
+                        "traffictype": "Guest",
+                        "type": "Virtual",
+                        "isdefault": true,
+                        "macaddress": "02:00:54:d1:03:0e"
+                    }],
+                "hypervisor": "VMware",
+                "tags": [],
+                "unknown" : "value"
+            }]
+    }
+}

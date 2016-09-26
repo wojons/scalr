@@ -1,0 +1,10 @@
+[subject][Scalr] Lease extension request denied for Farm: {{farm_name}}[/subject]
+
+Your non-standard lease extension request for the "{{farm_name}}" Farm was denied by {{user_name}}.
+
+{{user_name}} left the following comment: "{{comment}}".
+
+The "{{farm_name}}" Farm is still scheduled for termination on: {{date}}.
+
+Regards,
+The Scalr Team

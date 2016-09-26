@@ -1,134 +1,95 @@
 <?php
 namespace Scalr\Service\Aws;
 
-use Scalr\Service\Aws\Iam\Handler\UserHandler;
-use Scalr\Service\Aws\Client\ClientException;
-use Scalr\Service\Aws\DataType\ErrorData;
-use Scalr\Service\Aws\DataType\ListDataType;
-use Scalr\Service\Aws\Client\QueryClient;
 use Scalr\Service\Aws;
-use Scalr\Service\Aws\Iam\V20100508\IamApi;
 
 /**
- * Amazon Simple Storage Service (S3) interface
+ * Amazon IAM interface
  *
- * @author    Vitaliy Demidov   <zend@i.ua>
+ * @author    Vitaliy Demidov   <vitaliy@scalr.com>
  * @since     13.11.2012
- * @property  \Scalr\Service\Aws\Iam\Handler\UserHandler $user An user service interface handler.
- * @method    \Scalr\Service\Aws\Iam\V20100508\IamApi getApiHandler() getApiHandler() Gets an IamApi handler.
+ *
+ *
+ * @property  \Scalr\Service\Aws\Iam\Handler\RoleHandler $role
+ *            An role service interface handler.
+ *
+ * @property  \Scalr\Service\Aws\Iam\Handler\UserHandler $user
+ *            An user service interface handler.
+ *
+ * @property  \Scalr\Service\Aws\Iam\Handler\InstanceProfileHandler $instanceProfile
+ *            An instance profile service interface handler.
+ *
+ * @property \Scalr\Service\Aws\Iam\Handler\ServerCertificateHandler $serverCertificate
+ *           An server certificate interface handler
+ *
+ *
+ * @method    \Scalr\Service\Aws\Iam\V20100508\IamApi getApiHandler()
+ *            getApiHandler()
+ *            Gets an IamApi handler.
  */
 class Iam extends AbstractService implements ServiceInterface
 {
 
-	/**
-	 * API Version 20100508
-	 */
-	const API_VERSION_20100508 = '20100508';
+    /**
+     * API Version 20100508
+     */
+    const API_VERSION_20100508 = '20100508';
 
-	/**
-	 * Current version of the API
-	 */
-	const API_VERSION_CURRENT = self::API_VERSION_20100508;
+    /**
+     * Current version of the API
+     */
+    const API_VERSION_CURRENT = self::API_VERSION_20100508;
 
-	/**
-	 * {@inheritdoc}
-	 * @see Scalr\Service\Aws.ServiceInterface::getAllowedEntities()
-	 */
-	public function getAllowedEntities()
-	{
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws.ServiceInterface::getAllowedEntities()
+     */
+    public function getAllowedEntities()
+    {
+        return array('user', 'role', 'instanceProfile', 'serverCertificate');
+    }
 
-		return array('user');
-	}
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws.ServiceInterface::getAvailableApiVersions()
+     */
+    public function getAvailableApiVersions()
+    {
+        return array(self::API_VERSION_20100508);
+    }
 
-	/**
-	 * {@inheritdoc}
-	 * @see Scalr\Service\Aws.ServiceInterface::getAvailableApiVersions()
-	 */
-	public function getAvailableApiVersions()
-	{
-		return array(self::API_VERSION_20100508);
-	}
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws.ServiceInterface::getCurrentApiVersion()
+     */
+    public function getCurrentApiVersion()
+    {
+        return self::API_VERSION_CURRENT;
+    }
 
-	/**
-	 * {@inheritdoc}
-	 * @see Scalr\Service\Aws.ServiceInterface::getCurrentApiVersion()
-	 */
-	public function getCurrentApiVersion()
-	{
-		return self::API_VERSION_CURRENT;
-	}
+    /**
+     * {@inheritdoc}
+     * @see Scalr\Service\Aws.ServiceInterface::getUrl()
+     */
+    public function getUrl()
+    {
+        $region = $this->getAws()->getRegion();
 
-	/**
-	 * {@inheritdoc}
-	 * @see Scalr\Service\Aws.ServiceInterface::getUrl()
-	 */
-	public function getUrl()
-	{
-		return 'iam.amazonaws.com';
-	}
+        if ($region == Aws::REGION_US_GOV_WEST_1) {
+            return 'iam.us-gov.amazonaws.com';
+        } elseif (strpos($region, 'cn-') === 0) {
+            return 'iam.' . $region . '.amazonaws.com.cn';
+        }
+
+        return 'iam.amazonaws.com';
+    }
+
+    /**
+     * {@inheritdoc}
+     * @see \Scalr\Service\Aws\AbstractService::getName()
+     */
+    public function getName()
+    {
+        return 'iam';
+    }
 }
-
-/*
- TODO Following IAM API actions need to be implemented:
-	AddRoleToInstanceProfile
-	AddUserToGroup
-	ChangePassword
-	CreateAccountAlias
-	CreateGroup
-	CreateInstanceProfile
-	CreateLoginProfile
-	CreateRole
-	CreateVirtualMFADevice
-	DeactivateMFADevice
-	DeleteAccountAlias
-	DeleteAccountPasswordPolicy
-	DeleteGroup
-	DeleteGroupPolicy
-	DeleteInstanceProfile
-	DeleteLoginProfile
-	DeleteRole
-	DeleteRolePolicy
-	DeleteServerCertificate
-	DeleteSigningCertificate
-	DeleteVirtualMFADevice
-	EnableMFADevice
-	GetAccountPasswordPolicy
-	GetAccountSummary
-	GetGroup
-	GetGroupPolicy
-	GetInstanceProfile
-	GetLoginProfile
-	GetRole
-	GetRolePolicy
-	GetServerCertificate
-	ListAccessKeys
-	ListAccountAliases
-	ListGroupPolicies
-	ListGroups
-	ListGroupsForUser
-	ListInstanceProfiles
-	ListInstanceProfilesForRole
-	ListMFADevices
-	ListRolePolicies
-	ListRoles
-	ListServerCertificates
-	ListSigningCertificates
-	ListUserPolicies
-	ListUsers
-	ListVirtualMFADevices
-	PutGroupPolicy
-	PutRolePolicy
-	RemoveRoleFromInstanceProfile
-	RemoveUserFromGroup
-	ResyncMFADevice
-	UpdateAccessKey
-	UpdateAccountPasswordPolicy
-	UpdateAssumeRolePolicy
-	UpdateGroup
-	UpdateLoginProfile
-	UpdateServerCertificate
-	UpdateSigningCertificate
-	UpdateUser
-	UploadServerCertificate
-	UploadSigningCertificate
- */

@@ -1,74 +1,118 @@
-Scalr.regPage('Scalr.ui.farms.builder.tabs.openstack', function (moduleTabParams) {
-	return Ext.create('Scalr.ui.FarmsBuilderTab', {
-		tabTitle: 'Placement and type',
-		cache: {},
+Ext.define('Scalr.ui.FarmRoleEditorTab.Openstack', {
+    extend: 'Scalr.ui.FarmRoleEditorTab',
+    tabTitle: 'Openstack',
+    itemId: 'openstack',
+    layout: 'anchor',
+    cls: 'x-panel-column-left-with-tabs',
 
-		isEnabled: function (record) {
-			return record.get('platform') == 'openstack';
-		},
+    settings: {
+        'base.custom_tags': undefined,
+        'base.instance_name_format': undefined
+    },
 
-		getDefaultValues: function (record) {
-			return {
-				'openstack.flavor-id': 1
-			};
-		},
+    isEnabled: function (record) {
+        return this.callParent(arguments) && Scalr.utils.isOpenstack(record.get('platform'));
+    },
 
-		beforeShowTab: function (record, handler) {
-			var cloudLocation = record.get('cloud_location');
+    getTabTitle: function(record) {
+        return Scalr.utils.getPlatformName(record.get('platform'));
+    },
 
-			if (this.cacheExist(['flavorsOpenstack', cloudLocation]))
-				handler();
-			else
-				Scalr.Request({
-					processBox: {
-						type: 'action'
-					},
-					url: '/platforms/openstack/xGetFlavors',
-					params: {
-						cloudLocation: cloudLocation
-					},
-					scope: this,
-					success: function (response) {
-						this.cacheSet(response.data, ['flavorsOpenstack', cloudLocation]);
-						handler();
-					},
-					failure: function () {
-						this.deactivateTab();
-					}
-				});
-		},
+    showTab: function (record) {
+        var settings = record.get('settings', true),
+            limits = Scalr.getGovernance(record.get('platform')),
+            field;
 
-		showTab: function (record) {
-			var settings = record.get('settings');
+        var tags = {};
+        Ext.Array.each((settings['base.custom_tags']||'').replace(/(\r\n|\n|\r)/gm,'\n').split('\n'), function(tag){
+            var pos = tag.indexOf('='),
+                name = tag.substring(0, pos);
+            if (name) tags[name] = tag.substring(pos+1);
+        });
 
-			this.down('[name="openstack.flavor-id"]').store.load({ data: this.cacheGet(['flavorsOpenstack', record.get('cloud_location')]) });
-			this.down('[name="openstack.flavor-id"]').setValue(parseInt(settings['openstack.flavor-id']) || 1);
-		},
+        field = this.down('[name="base.custom_tags"]');
+        if (limits['openstack.tags'] !== undefined) {
+            if (limits['openstack.tags'].allow_additional_tags == 1) {
+                field.setReadOnly(false);
+                field.setValue(tags, limits['openstack.tags'].value);
+            } else {
+                field.setReadOnly(true);
+                field.setValue(null, limits['openstack.tags'].value);
+            }
+        } else {
+            field.setReadOnly(false);
+            field.setValue(tags);
+        }
 
-		hideTab: function (record) {
-			var settings = record.get('settings');
+        field = this.down('[name="base.instance_name_format"]');
+        if (limits['openstack.instance_name_format']) {
+            field.setValueWithGovernance(settings['base.instance_name_format'], limits['openstack.instance_name_format'].value);
+        } else {
+            field.setValue(settings['base.instance_name_format']);
+        }
+    },
 
-			settings['openstack.flavor-id'] = this.down('[name="openstack.flavor-id"]').getValue();
+    hideTab: function (record) {
+        var me = this,
+            settings = record.get('settings'),
+            field;
 
-			record.set('settings', settings);
-		},
+        field = me.down('[name="base.custom_tags"]');
+        if (!field.readOnly) {
+            var tags = [];
+            Ext.Object.each(field.getValue(), function(key, value){
+                tags.push(key + '=' + value);
+            });
+            settings['base.custom_tags'] = tags.join('\n');
+        }
 
-		items: [{
-			xtype: 'fieldset',
-			items: [{
-				xtype: 'combo',
-				store: {
-					fields: [ 'id', 'name' ],
-					proxy: 'object'
-				},
-				valueField: 'id',
-				displayField: 'name',
-				fieldLabel: 'Flavor',
-				editable: false,
-				queryMode: 'local',
-				name: 'openstack.flavor-id',
-				width: 300
-			}]
-		}]
-	});
+        field = me.down('[name="base.instance_name_format"]');
+        if (!field.readOnly) {
+            settings['base.instance_name_format'] = field.getValue();
+        }
+
+        record.set('settings', settings);
+    },
+
+    items: [{
+        xtype: 'fieldset',
+        layout: 'anchor',
+        defaults: {
+            anchor: '100%',
+            maxWidth: 820,
+            labelWidth: 160
+        },
+        items: [{
+            xtype: 'textfield',
+            name: 'base.instance_name_format',
+            fieldLabel: 'Instance name',
+            emptyText: '{SCALR_SERVER_ID}',
+            flex: 1,
+            plugins: {
+                ptype: 'fieldicons',
+                position: 'outer',
+                icons: ['globalvars', 'governance']
+            }
+        }]
+    },{
+        xtype: 'fieldset',
+        title: 'Metadata',
+        defaults: {
+            anchor: '100%',
+            maxWidth: 820,
+            labelWidth: 140
+        },
+        items: [{
+            xtype: 'displayfield',
+            cls: 'x-form-field-info',
+            value: 'Global Variable Interpolation is supported for metadata values <img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-globalvars" style="vertical-align:top;position:relative;top:2px" />'+
+                   '<br/><i>Scalr reserves some <a href="https://scalr-wiki.atlassian.net/wiki/x/MwAeAQ" target="_blank">metadata name-value pairs</a> to configure the Scalarizr agent.</i>'
+        },{
+            xtype: 'ec2tagsfield',
+            name: 'base.custom_tags',
+            tagsLimit: 0,
+            cloud: 'openstack'
+        }]
+    }]
 });
+

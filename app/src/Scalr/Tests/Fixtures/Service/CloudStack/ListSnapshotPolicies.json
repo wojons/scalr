@@ -1,0 +1,13 @@
+{
+    "listsnapshotpoliciesresponse": {
+        "count": 1,
+        "snapshotpolicy": [{
+                "id": 137516,
+                "volumeid": 75681,
+                "schedule": "2014-02-19T00:04:23+0900",
+                "intervaltype": "MANUAL",
+                "maxsnaps" : 20,
+                "timezone": "some zone"
+            }]
+    }
+}

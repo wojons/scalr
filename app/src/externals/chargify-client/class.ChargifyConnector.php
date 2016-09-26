@@ -1,4 +1,5 @@
 <?php
+use http\Client\Request;
 
 /******************************************************************************************
 
@@ -10,147 +11,33 @@
 
 class ChargifyConnector
 {
-  protected $api_key        = 'LgMqA223nCdLaER6CPy0';
-  protected $domain         = 'scalr';
-  
-  protected $test_domain    = 'ENTER THE TEST DOMAIN HERE';
-  protected $test_api_key   = 'ENTER TEST API KEY HERE';
-  
-  protected $active_api_key;
-  protected $active_domain;
-  protected $test_mode;
-  
-  public function __construct($test_mode = false)
-  {
-    $this->test_mode = $test_mode;
-    
-    if($test_mode)
-    {
-      $this->active_api_key = $this->test_api_key;
-      $this->active_domain  = $this->test_domain;
-    }
-    else
-    {
-      $this->active_api_key = $this->api_key;
-      $this->active_domain  = $this->domain;
-    }
-  }
-  
-  /*
-  public function retrieveAllCustomersXML($page_num = 1)
-  {
-    return $this->sendRequest('/customers.xml?page=' . $page_num);
-  }
-  
-  public function retrieveCustomerXMLByID($id)
-  {
-    return $this->sendRequest('/customers/' . $id . '.xml');
-  }
-  
-  public function retrieveCustomerXMLByReference($ref)
-  {
-    return $this->sendRequest('/customers/lookup.xml?reference=' . $ref);
-  }
-  
-  public function retrieveSubscriptionsXMLByCustomerID($id)
-  {
-    return $this->sendRequest('/customers/' . $id . '/subscriptions.xml');
-  }
-  
-  public function retrieveAllProductsXML()
-  {
-    return $this->sendRequest('/products.xml');
-  }
-  
-  public function createCustomerAndSubscription($post_xml)
-  {
-    $xml = $this->sendRequest('/subscriptions.xml', $post_xml);
 
-    $tree = new SimpleXMLElement($xml);
+    protected $api_key = '';
 
-    if(isset($tree->error)) { return $tree; }
-    else { $subscription = new ChargifySubscription($tree); }
-    
-    return $subscription;
-  }
-  
-  public function getAllCustomers()
-  {
-    $xml = $this->retrieveAllCustomersXML();
-    
-    $all_customers = new SimpleXMLElement($xml);
-   
-    $customer_objects = array();
-    
-    foreach($all_customers as $customer)
-    {
-      $temp_customer = new ChargifyCustomer($customer);
-      array_push($customer_objects, $temp_customer);
-    }
-    
-    return $customer_objects;
-  }
-  
+    protected $domain = '';
 
-  public function getCustomerByID($id)
-  {
-    $xml = $this->retrieveCustomerXMLByID($id);
-    
-    $customer_xml_node = new SimpleXMLElement($xml);
-    
-    $customer = new ChargifyCustomer($customer_xml_node);
-    
-    return $customer;
-  }
-  
-  public function getCustomerByReference($ref)
-  {
-    $xml = $this->retrieveCustomerXMLByReference($ref);
+    protected $test_domain = 'ENTER THE TEST DOMAIN HERE';
 
-    $customer_xml_node = new SimpleXMLElement($xml);
-    
-    $customer = new ChargifyCustomer($customer_xml_node);
-        
-    return $customer;
-  }
-  
-  public function getSubscriptionsByCustomerID($id)
-  {
-    $xml = $this->retrieveSubscriptionsXMLByCustomerID($id);
-    
-    $subscriptions = new SimpleXMLElement($xml);
-    
-    $subscription_objects = array();
-    
-    foreach($subscriptions as $subscription)
+    protected $test_api_key = 'ENTER TEST API KEY HERE';
+
+    protected $active_api_key;
+
+    protected $active_domain;
+
+    protected $test_mode;
+
+    public function __construct($test_mode = false)
     {
-      $temp_sub = new ChargifySubscription($subscription);
-      
-      array_push($subscription_objects, $temp_sub);
+        $this->test_mode = $test_mode;
+        if ($test_mode) {
+            $this->active_api_key = $this->test_api_key;
+            $this->active_domain = $this->test_domain;
+        } else {
+            $this->active_api_key = $this->api_key;
+            $this->active_domain = $this->domain;
+        }
     }
-    
-    return $subscription_objects;
-  }
-  
-  public function getAllProducts()
-  {
-    $xml = $this->retrieveAllProductsXML();
-    
-    $all_products = new SimpleXMLElement($xml);
-   
-    $product_objects = array();
-    
-    foreach($all_products as $product)
-    {
-      $temp_product = new ChargifyProduct($product);
-      array_push($product_objects, $temp_product);
-    }
-    
-    return $product_objects;
-  }
-  */
-  
-  
+
 	public function cancelSubscription($subscription_id, $reason = 'Canceling the subscription via the API. Requested by customer.')
   	{
 		$data = '<?xml version="1.0" encoding="UTF-8"?>
@@ -159,9 +46,9 @@ class ChargifyConnector
           '.$reason.'
         </cancellation_message>
       </subscription>';
-  		
+
   		$r = $this->sendRequest("/subscriptions/{$subscription_id}.xml", 'DELETE', $data);
-		
+
   		if ($r->getResponseCode() == 200)
 	  	{
 	    	return true;
@@ -174,22 +61,22 @@ class ChargifyConnector
 		  		if ($xml_node->error)
 		  			return (string)$xml_node->error;
 	  		}
-	  		
+
 	  		throw new Exception("Cannot get subscription info. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
 	  	}
   	}
-  
+
 	/**
-   * 
+   *
    * @param integer $subscription_id
    * @return ChargifySubscription
    */
   	public function getCustomerSubscriptionByCId($client_id)
   	{
   		$r = $this->sendRequest("/customers/{$client_id}/subscriptions.xml", 'GET');
-  		
+
 	  	if ($r->getResponseCode() == 200)
-	  	{	  		
+	  	{
 	  		$xml_node = new SimpleXMLElement($r->getResponseBody());
 	    	$subscription = new ChargifySubscription($xml_node);
 	    	return $subscription;
@@ -202,20 +89,20 @@ class ChargifyConnector
 		  		if ($xml_node->error)
 		  			return (string)$xml_node->error;
 	  		}
-	  		
+
 	  		throw new Exception("Cannot get subscription info. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
 	  	}
   	}
-  	
+
   /**
-   * 
+   *
    * @param integer $subscription_id
    * @return ChargifySubscription
    */
   	public function getCustomerSubscription($subscription_id)
   	{
   		$r = $this->sendRequest("/subscriptions/{$subscription_id}.xml", 'GET');
-  		
+
 	  	if ($r->getResponseCode() == 200)
 	  	{
 	    	$xml_node = new SimpleXMLElement($r->getResponseBody());
@@ -230,79 +117,15 @@ class ChargifyConnector
 		  		if ($xml_node->error)
 		  			return (string)$xml_node->error;
 	  		}
-	  		
+
 	  		throw new Exception("Cannot get subscription info. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
 	  	}
   	}
-  
-  
-/*	public function listComponents($product_family_id) {
-  	
-  	$r = $this->sendRequest("/product_families/{$product_family_id}/components.xml", false);
-  	
-  	if ($r->getResponseCode() == 200)
-  	{
-    	var_dump($r->getResponseBody());
-  		
-  		return true;
-  	}
-  	else
-  	{
-  		if ($r->getResponseCode() == 422)
-  		{
-	  		$xml_node = new SimpleXMLElement($r->getResponseBody());
-	  		if ($xml_node->error)
-	  			return (string)$xml_node->error;
-  		}
-  		
-  		var_dump($r->getResponseBody());
-  		
-  		throw new Exception("Cannot create usage. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
-  	}
-  	
-  }
-  
-  public function createMeteredUsage($subscription_id, $component_id, $quantity, $memo) {
-  	
-  	$post_xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-        <usage>
-          <quantity>{$quantity}</quantity>
-          <memo>{$memo}</memo>
-        </usage>
-  	";
-  	
-  	var_dump("/subscriptions/{$subscription_id}/components/{$component_id}/usages.xml");
-  	var_dump($post_xml);
-  	
-  	$r = $this->sendRequest("/subscriptions/{$subscription_id}/components/{$component_id}/usages.xml", $post_xml);
-  	
-  	if ($r->getResponseCode() == 200)
-  	{
-    	var_dump($r->getResponseBody());
-  		
-  		return true;
-  	}
-  	else
-  	{
-  		if ($r->getResponseCode() == 422)
-  		{
-	  		$xml_node = new SimpleXMLElement($r->getResponseBody());
-	  		if ($xml_node->error)
-	  			return (string)$xml_node->error;
-  		}
-  		
-  		var_dump($r->getResponseBody());
-  		
-  		throw new Exception("Cannot create usage. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
-  	}
-  	
-  }
-  */
-  
+
 	public function reactivateSubscription($subscription_id)
 	{
   		$r = $this->sendRequest("/subscriptions/{$subscription_id}/reactivate.xml", 'PUT');
-  		
+
 	  	if ($r->getResponseCode() == 200)
 	  	{
 	    	$xml_node = new SimpleXMLElement($r->getResponseBody());
@@ -317,19 +140,19 @@ class ChargifyConnector
 		  		if ($xml_node->error)
 		  			return (string)$xml_node->error;
 	  		}
-	  		
+
 	  		throw new Exception("Cannot get subscription info. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
 	  	}
 	}
-  	
+
   public function upgradeSubscription($subscription_id, $product_code) {
-	
+
   	$post_xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
         <product_handle>{$product_code}</product_handle>
 	";
-  	
+
   	$r = $this->sendRequest("/subscriptions/{$subscription_id}/migrations.xml", 'POST', $post_xml);
-  	
+
   	if ($r->getResponseCode() == 200)
   	{
     	$xml_node = new SimpleXMLElement($r->getResponseBody());
@@ -344,11 +167,11 @@ class ChargifyConnector
 	  		if ($xml_node->error)
 	  			return (string)$xml_node->error;
   		}
-  		
+
   		throw new Exception("Cannot add new client. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
   	}
   }
-  
+
   /**
    * @return ChargifySubscription
    * @param unknown_type $scalr_client_id
@@ -396,9 +219,9 @@ class ChargifyConnector
 	        </subscription>
 	  	";
   	}
-  	
+
   	$r = $this->sendRequest('/subscriptions.xml', 'POST', $post_xml);
-  	
+
   	if ($r->getResponseCode() == 201)
   	{
     	$xml_node = new SimpleXMLElement($r->getResponseBody());
@@ -413,16 +236,16 @@ class ChargifyConnector
 	  		if ($xml_node->error)
 	  			return (string)$xml_node->error;
   		}
-  		
+
   		throw new Exception("Cannot add new client. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
   	}
   }
-  
+
   /**
    * @return ChargifyCustomer
    */
   public function createCustomer($scalr_client_id, $email, $first_name, $last_name, $org = "") {
-    
+
   	$post_xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 	<customer>
 		<email>{$email}</email>
@@ -431,9 +254,9 @@ class ChargifyConnector
 		<organization>{$org}</organization>
 		<reference>{$scalr_client_id}</reference>
 	</customer>";
-  	
+
   	$r = $this->sendRequest('/customers.xml', 'POST', $post_xml);
-  	
+
   	if ($r->getResponseCode() == 201)
   	{
     	$xml_node = new SimpleXMLElement($r->getResponseBody());
@@ -448,38 +271,36 @@ class ChargifyConnector
 	  		if ($xml_node->error)
 	  			return (string)$xml_node->error;
   		}
-  		
+
   		throw new Exception("Cannot add new client. Response code: ".$r->getResponseCode().". Response body: ".$r->getResponseBody());
   	}
   }
 
-	protected function sendRequest($uri, $method, $data = null) 
-	{	
+	protected function sendRequest($uri, $method, $data = null)
+	{
 	  	try
 	  	{
-		  	$request = new HttpRequest("https://{$this->active_domain}.chargify.com{$uri}");
+		  	$url = new \http\Url("https://{$this->active_domain}.chargify.com{$uri}", null, \http\Url::PARSE_MBLOC | \http\Url::PARSE_MBUTF8 | \http\Url::PARSE_TOPCT);
+		  	$request = new Request($method, $url);
 		  	$request->setHeaders(array('Content-Type' => 'application/xml'));
 		  	$request->setOptions(array(
 		  		'httpauth'	=> "{$this->active_api_key}:x",
 		  		'timeout'	=> 45,
 		  		'connecttimeout' => 45
 		  	));
-		  	
-		  	$request->setMethod(constant("HTTP_METH_{$method}"));
-		  	
-		  	if ($data)
-		  		$request->setRawPostData($data);
+
+		  	if ($data) {
+                $request->getBody()->append($data);
+            }
 	  	}
 	  	catch(Exception $e)
 	  	{
 			//TODO:
 	  		throw $e;
 	  	}
-	
-	  		
-	  	$request->send();
-	  	
-	  	return $request;	
+
+        $response = (new \http\Client())->enqueue($request)->send()->getResponse($request);
+
+	  	return $response;
 	}
 }
-?>

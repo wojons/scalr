@@ -1,0 +1,81 @@
+# `ScalingConfiguration` #
+
+
+
+
+
+
+
+## Properties ##
+
+### `minInstances` (optional) ###
+
+
+
+
+Property of type: `integer`.
+
+
+
+
+### `maxInstances` (optional) ###
+
+
+
+
+Property of type: `integer`.
+
+
+
+
+### `enabled` (optional) ###
+
+
+
+
+Property of type: `boolean`.
+
+
+
+
+### `rules` (read-only) ###
+
+
+
+
+An array of 
+`string` objects.
+
+
+
+
+## Used in ##
+
+  + [`/{envId}/farm-roles/{farmRoleId}/scaling/`](./../rest/api/v1beta0/user/{envId}/farm-roles/{farmRoleId}/scaling/)
+
+## Swagger Definition ##
+
+    {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }, 
+        "maxInstances": {
+          "type": "integer"
+        }, 
+        "minInstances": {
+          "type": "integer"
+        }, 
+        "rules": {
+          "items": {
+            "description": "The list of the Scaling Metric's names.", 
+            "type": "string"
+          }, 
+          "readOnly": true, 
+          "type": "array"
+        }
+      }, 
+      "x-usedIn": [
+        "/{envId}/farm-roles/{farmRoleId}/scaling/"
+      ]
+    }

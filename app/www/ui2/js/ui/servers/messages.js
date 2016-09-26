@@ -1,30 +1,33 @@
 Scalr.regPage('Scalr.ui.servers.messages', function (loadParams, moduleParams) {
 	var store = Ext.create('store.store', {
 		fields: [
-			'messageid', 'server_id', 'status', 'handle_attempts', 'dtlasthandleattempt','message_type','type','isszr'
+			'messageid', 'server_id', 'event_server_id', 'status', 'handle_attempts', 'dtlasthandleattempt','message_type','type','isszr'
 		],
 		proxy: {
 			type: 'scalr.paging',
-			extraParams: loadParams,
 			url: '/servers/xListMessages/'
 		},
-		remoteSort: true
+		remoteSort: true,
+        sorters: {
+            property: 'dtadded',
+            direction: 'DESC'
+        }
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Servers &raquo; ' + loadParams['serverId'] + ' &raquo; Messages',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'Server messages'
 		},
-		scalrReconfigureParams: { serverId: '' },
 
 		store: store,
 		stateId: 'grid-servers-messages-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
+        plugins: [ 'gridstore', {
+        	ptype: 'applyparams',
+        	filterIgnoreParams: [ 'serverId' ]
+        }],
 
 		viewConfig: {
 			emptyText: 'No messages found'
@@ -33,29 +36,32 @@ Scalr.regPage('Scalr.ui.servers.messages', function (loadParams, moduleParams) {
 		columns:[
 			{ header: "Message ID", flex: 1, dataIndex: 'messageid', sortable: true },
 			{ header: "Message type", width: 150, dataIndex: 'message_type', xtype: 'templatecolumn', tpl:'{type} / {message_type}', sortable: false },
-			{ header: "Server ID", flex: 1, dataIndex: 'server_id', xtype: 'templatecolumn', tpl:'<a href="#/servers/{server_id}/extendedInfo">{server_id}</a>', sortable: true },
-			{ header: "Status", width: 100, dataIndex: 'status', sortable: true, xtype: 'templatecolumn', tpl:
-				'<tpl if="status == 1"><span style="color:green;">Delivered</span></tpl>'+
-				'<tpl if="status == 0"><span style="color:orange;">Delivering...</span></tpl>'+
-				'<tpl if="status == 2 || status == 3"><span style="color:red;">Failed</span></tpl>'
-			},
+			{ header: "Server ID", flex: 1, dataIndex: 'server_id', xtype: 'templatecolumn', tpl:'<a href="#/servers/{server_id}/dashboard">{server_id}</a>', sortable: false },
+			{ header: "Event server ID", flex: 1, dataIndex: 'event_server_id', xtype: 'templatecolumn', tpl:'<a href="#/servers/{event_server_id}/dashboard">{event_server_id}</a>', sortable: true },
+			{ header: "Type", align: 'center', width: 60, dataIndex: 'type', xtype: 'templatecolumn',
+                tpl: '<img src="'+Ext.BLANK_IMAGE_URL+'" class="x-icon-arrow-{[values.type==\'in\'?\'left\':\'right\']}" '+
+                      'data-anchor="right" data-qalign="r-l" data-qtip="This is a message from {[values.type==\'in\'?\'the server addressed to Scalr.\':\'Scalr addressed to the server.\']}" ' +
+                     '/>' ,
+                sortable: false
+            },
+            { header: "Status", width: 150, dataIndex: 'status', sortable: false, xtype: 'statuscolumn', statustype: 'servermessage'},
 			{ header: "Attempts", width: 100, dataIndex: 'handle_attempts', sortable: true },
 			{ header: "Last delivery attempt", width: 200, dataIndex: 'dtlasthandleattempt', sortable: true },
 			{
 				xtype: 'optionscolumn',
 				getVisibility: function (record) {
-					return (record.get('status') == 2 || record.get('status') == 3);
+					return record.get('status') == 2 || record.get('status') == 3;
 				},
-				optionsMenu: [{
+				menu: [{
 					text: 'Re-send message',
 					request: {
 						processBox: {
 							type: 'action',
 							msg: 'Re-sending message ...'
 						},
-						dataHandler: function (record) {
-							this.url = '/servers/' + record.get('server_id') + '/xResendMessage/';
-							return { messageId: record.get('messageid') };
+						dataHandler: function (data) {
+							this.url = '/servers/' + data['server_id'] + '/xResendMessage/';
+							return { messageId: data['messageid'] };
 						},
 						success: function () {
 							store.load();
@@ -65,17 +71,14 @@ Scalr.regPage('Scalr.ui.servers.messages', function (loadParams, moduleParams) {
 			}
 		],
 
-		tools: [{
-			type: 'close',
-			handler: function () {
-				Scalr.event.fireEvent('close');
-			}
-		}],
-
 		dockedItems: [{
 			xtype: 'scalrpagingtoolbar',
 			store: store,
-			dock: 'top'
+			dock: 'top',
+            items: [{
+                xtype: 'filterfield',
+                store: store
+            }]
 		}]
 	});
 });

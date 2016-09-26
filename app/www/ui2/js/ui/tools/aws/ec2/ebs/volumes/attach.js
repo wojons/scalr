@@ -1,6 +1,5 @@
 Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.attach', function (loadParams, moduleParams) {
 	return Ext.create('Ext.form.Panel', {
-		bodyCls: 'x-panel-body-frame',
 		width: 700,
 		title: 'Tools &raquo; Amazon Web Services &raquo; EBS &raquo; Volumes &raquo; ' + loadParams['volumeId'] + ' &raquo;Attach',
 		fieldDefaults: {
@@ -16,9 +15,14 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.attach', function (loadParams,
 				xtype: 'combo',
 				name:'serverId',
 				allowBlank: false,
-				editable: false,
+				editable: true,
+				forceSelection: true,
+				autoSearch: false,
+                selectOnFocus: true,
+                anyMatch: true,
+                selectSingleRecordOnPartialMatch: true,
 				store: {
-					fields: [ 'id', 'name' ],
+					fields: [ 'id', 'name', 'farmName', 'farmRoleName'],
 					data: moduleParams.servers,
 					proxy: 'object'
 				},
@@ -26,6 +30,16 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.attach', function (loadParams,
 				displayField: 'name',
 				valueField: 'id',
 				queryMode: 'local',
+                cls: 'x-boundlist-alt',
+                tpl:
+                    '<tpl for=".">' +
+                        '<div class="x-boundlist-item" style="height: auto; width: auto">' +
+                            '<div class="x-semibold">{name}</div>' +
+                            '<tpl if="farmName && farmRoleName">' +
+                                '<div <div style="line-height: 28px;">{farmName} &rarr; {farmRoleName}</div>' +
+                            '</tpl>' +
+                        '</div>' +
+                    '</tpl>',
 				listeners: {
 					added: function() {
 						this.setValue(this.store.getAt(0).get('id'));
@@ -36,6 +50,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.attach', function (loadParams,
 			xtype: 'fieldset',
 			title: 'Always attach this volume to selected server',
 			collapsed: true,
+			hidden: !Scalr.flags['showDeprecatedFeatures'],
 			checkboxName: 'attachOnBoot',
 			checkboxToggle: true,
 			labelWidth: 100,
@@ -65,7 +80,7 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.attach', function (loadParams,
 		dockedItems: [{
 			xtype: 'container',
 			dock: 'bottom',
-			cls: 'x-docked-bottom-frame',
+			cls: 'x-docked-buttons',
 			layout: {
 				type: 'hbox',
 				pack: 'center'
@@ -92,7 +107,6 @@ Scalr.regPage('Scalr.ui.tools.aws.ec2.ebs.volumes.attach', function (loadParams,
 				}
 			}, {
 				xtype: 'button',
-				margin: '0 0 0 5',
 				text: 'Cancel',
 				handler: function() {
 					Scalr.event.fireEvent('close');

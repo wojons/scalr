@@ -1,1 +1,1 @@
-var s = "Connected";
+{s:"Connected"}

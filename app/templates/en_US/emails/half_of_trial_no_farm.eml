@@ -2,7 +2,7 @@
 Create your first farm and put your servers on cruise control!
 ============================================
 
-Hi {$client.firstname},
+Hi {{firstname}},
 
 Oh no! Today marks the end of the first half of your Scalr trial, and you have yet to set up any infrastructure. 
 Scalr without servers is like Romeo without Juliet: incomplete. Perhaps I can help you with something to get going?

@@ -1,3 +1,3 @@
-<?
-	@xdebug_stop_profiling();
-?>
+<?php
+
+@xdebug_stop_profiling();

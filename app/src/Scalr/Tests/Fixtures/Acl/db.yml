@@ -1,0 +1,19 @@
+DB_BACKUPS:
+  self:
+  - [/db/backups, null, all]
+  
+  DB_BACKUPS_REMOVE:
+  - /db/backups/xRemoveBackup
+
+DB_DATABASE_STATUS:
+  self:
+  - [/db/manager, ~, all]
+  - [/services/mongodb, ~, all]
+  - [/dbmsr, ~, all]
+  
+  DB_DATABASE_STATUS_PMA:
+  - /services/mysql/pma
+  - /db/manager/xSetupPmaAccess
+
+DB_SERVICE_CONFIGURATION:
+- [/services/configurations, ~, all]

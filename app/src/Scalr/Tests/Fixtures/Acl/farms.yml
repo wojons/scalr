@@ -1,0 +1,77 @@
+FARMS:
+  self:
+  - /farms/xListFarms
+  - /farms/extendedInfo
+  - /farms/xLock
+  - /farms/xUnlock
+  - /farms/xListFarms
+  - /farms/xLock
+  FARMS_MANAGE:
+  - /farms/builder/xBuild
+  - /farms/xRemove
+  - /farms/designer
+  - /farms/xGetFarm
+  FARMS_CLONE:
+  - /farms/xClone
+  FARMS_LAUNCH_TERMINATE:
+  - /farms/xLaunch
+  - /farms/xTerminate
+  - /farms/xGetTerminationDetails
+  FARMS_NOT_OWNED_FARMS:
+  - /farms/xListFarms?showOnlyMy=0
+  - /servers/xListServers
+  - /servers/xListServersUpdate
+  - /farms/roles/xListFarmRoles?farmId=%NOT_OWNED_FARM_ID%
+
+FARMS_ROLES:
+  self:
+  - /roles/xGetInfo
+  - /roles/xGetList
+  - /roles/xListRoles
+  - [/farms/roles, {"farmId":"%OWNED_FARM_ID%"}, all]
+
+  FARMS_ROLES_CREATE:
+  - /roles/xBuild?platform=&architecture=&behaviors=&roleName=&roleImage=0&imageId=&cloudLocation=&osfamily=&hvm=&advanced=&chef=
+  - /roles/builder
+  - /servers/xServerCreateSnapshot?serverId=&replaceType=
+  - /servers/createSnapshot
+  - [/roles/import, ~, all]
+
+  FARMS_ROLES_MANAGE:
+  - /roles/xMigrate
+  - /roles/xGetMigrateDetails
+  - /roles/xRemove
+  - /roles/edit
+  - /roles/xSave
+
+  FARMS_ROLES_CLONE:
+  - /roles/xClone?roleId=0&newRoleName=
+
+  FARMS_ROLES_BUNDLETASKS:
+  - [/bundletasks, ~, all]
+
+FARMS_SERVERS:
+- /servers/xLock
+- /servers/xTroubleshoot
+- /servers/xGetStorageDetails
+- /servers/xGetHealthDetails
+- /servers/xResendMessage
+- /servers/xListMessages
+- /servers/messages
+- /servers/view
+- /servers/xServerCancelOperation
+- /servers/xListServers
+- /servers/xListServersUpdate
+- /servers/xSzrUpdate
+- /servers/xSzrRestart
+- /servers/dashboard
+- /servers/consoleOutput
+- /servers/xServerExcludeFromDns
+- /servers/xServerIncludeInDns
+- /servers/xServerCancel
+- /servers/xResumeServers
+- /servers/xSuspendServers
+- /servers/xServerRebootServers
+- /servers/xServerTerminateServers
+- /servers/xServerGetLa
+

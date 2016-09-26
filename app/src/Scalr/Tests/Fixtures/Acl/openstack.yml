@@ -1,0 +1,5 @@
+OPENSTACK_VOLUMES:
+- [/tools/openstack/volumes, ~, all]
+
+OPENSTACK_SNAPSHOTS:
+- [/tools/openstack/snapshots, ~, all]

@@ -1,0 +1,76 @@
+paths:
+  - uri: /role-categories/
+    acl: fullAccess
+    operations:
+      - {method: post, response: 201, body: '&{4}RoleCategoryData'}
+      - {method: post, response: 409, body: '&{4}RoleCategoryData'}
+      - {method: post, response: 400, body: '&{5}RoleCategoryData'}
+      - {method: post, response: 400, body: '&{6}RoleCategoryData'}
+      - {method: get,  response: 200}
+      - {method: get,  response: 400, filterable: {scope: environment}}
+  - uri: /role-categories/
+    acl: readOnly
+    operations:
+      - {method: post, response: 403, body: '&{4}RoleCategoryData'}
+      - {method: get,  response: 200}
+  - uri: /role-categories/
+    acl: noAccess
+    operations:
+      - {method: post, response: 403, body: '&{4}RoleCategoryData'}
+      - {method: get,  response: 403}
+
+  - uri: /role-categories/{roleCategoryId}/
+    acl: readOnly
+    operations:
+     - {method: get,     response: 200, params: '&RoleCategoryData'}
+     - {method: get,     response: 200, params: '&RoleCategoryData'}
+     - {method: get,     response: 200, params: '&RoleCategoryData'}
+     - {method: get,     response: 404, params: '&RoleCategoryData'}
+     - {method: patch,   response: 403, params: '&{1}RoleCategoryData', body: '&{8}RoleCategoryData'}
+     - {method: delete,  response: 403, params: '&{1}RoleCategoryData'}
+  - uri: /role-categories/{roleCategoryId}/
+    acl: noAccess
+    operations:
+     - {method: get,     response: 403, params: '&{1}RoleCategoryData'}
+     - {method: patch,   response: 403, params: '&{1}RoleCategoryData', body: '&{8}RoleCategoryData'}
+     - {method: delete,  response: 403, params: '&{1}RoleCategoryData'}
+
+  - uri: /role-categories/{roleCategoryId}/
+    acl: fullAccess
+    operations:
+     - {method: get,     response: 200, params: '&RoleCategoryData'}
+     - {method: get,     response: 200, params: '&RoleCategoryData'}
+     - {method: get,     response: 200, params: '&RoleCategoryData'}
+     - {method: get,     response: 404, params: '&RoleCategoryData'}
+     - {method: patch,   response: 403, params: '&{0}RoleCategoryData', body: '&{7}RoleCategoryData'}
+     - {method: patch,   response: 200, params: '&{1}RoleCategoryData', body: '&{8}RoleCategoryData'}
+     - {method: patch,   response: 200, params: '&{2}RoleCategoryData', body: '&{9}RoleCategoryData'}
+     - {method: patch,   response: 404, params: '&{3}RoleCategoryData', body: '&{10}RoleCategoryData'}
+     - {method: delete,  response: 403, params: '&{0}RoleCategoryData'}
+     - {method: delete,  response: 200, params: '&{1}RoleCategoryData'}
+     - {method: delete,  response: 404, params: '&{1}RoleCategoryData'}
+     - {method: delete,  response: 409, params: '&{2}RoleCategoryData'}
+     - {method: delete,  response: 404, params: '&{3}RoleCategoryData'}
+
+
+RoleCategoryData:
+  - {roleCategoryId: '&RoleCategory.id'}
+  - {roleCategoryId: '&RoleCategory.id'}
+  - {roleCategoryId: '&RoleCategory.id'}
+  - {roleCategoryId: '&RoleCategory.id'}
+  - {name: 'AccRoleCategory'}
+  - {name: ''}
+  - {name: 'LongLongLongRolecategoryName'}
+  - {name: p-scalr-scope}      #7
+  - {name: p-account-scope}    #8
+  - {name: p-u-account-scope } #9
+  - {name: p-env-scope }       #10
+
+RoleCategory:
+  - {name: ac-scalr-scope}
+  - {name: ac-account-scope, accountId: }
+  - {name: ac-used-account-scope, accountId: }
+  - {name: ac-environment-scope, accountId: , envId: }
+
+Role:
+ - {name: testPostRole, catId: '&{2}RoleCategory.id', behaviors: 'base', osId: centos-5-x}

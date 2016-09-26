@@ -1,0 +1,16 @@
+LOGS_API_LOGS:
+- /logs/api
+- /logs/xListApiLogs
+- /logs/apiLogEntryDetails
+
+LOGS_ORCHESTRATION_LOGS:
+- /logs/orchestration
+- /logs/xListOrchestrationLogs
+
+LOGS_SYSTEM_LOGS:
+- /logs/system
+- /logs/xListLogs
+
+LOGS_EVENT_LOGS:
+- /logs/events
+- /logs/xListEventLogs

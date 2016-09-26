@@ -1,0 +1,150 @@
+basePath: /api/user/v1beta0
+definitions:
+  Action:
+    discriminator: actionType
+    properties:
+      actionType:
+        enum:
+        - ScriptAction
+        type: string
+    required:
+    - actionType
+    x-concreteTypes:
+    - $ref: '#/definitions/UriAction'
+    - $ref: '#/definitions/ChefAction'
+    - $ref: '#/definitions/ScriptAction'
+  FarmTarget:
+    description: Selects all Servers of the triggering Server's Farm
+    properties:
+      targetType:
+        enum:
+        - NullTarget
+        - TriggeringServerTarget
+        - TriggeringFarmRoleTarget
+        - SelectedFarmRolesTarget
+        - FarmTarget
+        type: string
+    required:
+    x-abstractType:
+      $ref: '#/definitions/Target'
+    x-discriminator: targetType
+info:
+  description: Manage Roles, Images, Farms, Farm Roles, and Servers
+  title: Scalr User API
+  version: 1.0.0
+paths:
+  /events/:
+    get:
+      description: Retrieve a list of Events available in this Scalr Account.
+      responses:
+        200:
+          description: A list of Event objects.
+          schema:
+            $ref: '#/definitions/EventListResponse'
+        400:
+          description: A client-side error was made
+          schema:
+            $ref: '#/definitions/ApiErrorResponse'
+          x-errorCodes:
+          - description: Your request is structurally incorrect, and was not understood
+              by the API.
+            name: InvalidStructure
+          - description: Your request was understood by the API, but included data
+              that is not acceptable.
+            name: InvalidValue
+          - description: Your request wasn't understood by the API.
+            name: BadRequest
+        401:
+          description: Request was not authenticated
+          schema:
+            $ref: '#/definitions/ApiErrorResponse'
+          x-errorCodes:
+          - description: Your request authentication failed to validate.
+            name: BadAuthentication
+        403:
+          description: Insufficient permissions
+          schema:
+            $ref: '#/definitions/ApiErrorResponse'
+          x-errorCodes:
+          - description: Your request should be made in a different Scope.
+            name: ScopeViolation
+          - description: Your request requires permissions you do not have.
+            name: PermissionViolation
+        404:
+          description: Resource not found
+          schema:
+            $ref: '#/definitions/ApiErrorResponse'
+          x-errorCodes:
+          - description: The route you are trying to access does not exist
+            name: EndpointNotFound
+            noDoc: true
+          - description: The URL you are trying to access does not exist
+            name: ObjectNotFound
+        409:
+          description: Conflict with current state
+          schema:
+            $ref: '#/definitions/ApiErrorResponse'
+          x-errorCodes:
+          - description: The changes you are trying to make aren't possible while
+              this object is in use.
+            name: ObjectInUse
+          - description: The changes you are trying to make violate a unicity constraint.
+            name: UnicityViolation
+        500:
+          description: A server-side error occured
+          schema:
+            $ref: '#/definitions/ApiErrorResponse'
+    post:
+      description: Create a new Custom Event in this Account.
+      parameters:
+      - description: The JSON representation of a Event object.
+        in: body
+        name: eventObject
+        required: true
+        schema:
+          $ref: '#/definitions/Event'
+      responses:
+        201:
+          description: The JSON representation of a Event object.
+          schema:
+            $ref: '#/definitions/EventDetailResponse'
+        401:
+          description: Request was not authenticated
+          schema:
+            $ref: '#/definitions/ApiErrorResponse'
+          x-errorCodes:
+          - description: Your request authentication failed to validate.
+            name: BadAuthentication
+        403:
+          description: Insufficient permissions
+          schema:
+            $ref: '#/definitions/ApiErrorResponse'
+          x-errorCodes:
+          - description: Your request should be made in a different Scope.
+            name: ScopeViolation
+          - description: Your request requires permissions you do not have.
+            name: PermissionViolation
+        404:
+          description: Resource not found
+          schema:
+            $ref: '#/definitions/ApiErrorResponse'
+          x-errorCodes:
+          - description: The route you are trying to access does not exist
+            name: EndpointNotFound
+            noDoc: true
+          - description: The URL you are trying to access does not exist
+            name: ObjectNotFound
+        409:
+          description: Conflict with current state
+          schema:
+            $ref: '#/definitions/ApiErrorResponse'
+          x-errorCodes:
+          - description: The changes you are trying to make aren't possible while
+              this object is in use.
+            name: ObjectInUse
+          - description: The changes you are trying to make violate a unicity constraint.
+            name: UnicityViolation
+        500:
+          description: A server-side error occured
+          schema:
+            $ref: '#/definitions/ApiErrorResponse'

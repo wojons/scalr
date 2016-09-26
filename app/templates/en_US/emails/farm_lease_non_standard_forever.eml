@@ -1,0 +1,8 @@
+[subject][Scalr] Lease management disabled for Farm: {{farm_name}}[/subject]
+
+Your request to disable lease management for the "{{farm_name}}" Farm was approved by {{user_name}}.
+
+{{user_name}} left the following comment: "{{comment}}".
+
+Regards,
+The Scalr Team

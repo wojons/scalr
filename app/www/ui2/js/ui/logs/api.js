@@ -9,31 +9,21 @@ Scalr.regPage('Scalr.ui.logs.api', function (loadParams, moduleParams) {
 	});
 
 	return Ext.create('Ext.grid.Panel', {
-		title: 'Logs &raquo; API',
 		scalrOptions: {
-			'reload': false,
-			'maximize': 'all'
+			reload: false,
+			maximize: 'all',
+            menuTitle: 'API Log',
+            menuHref: '#/logs/api',
+            menuFavorite: true
 		},
 		store: store,
 		stateId: 'grid-logs-api-view',
 		stateful: true,
-		plugins: {
-			ptype: 'gridstore'
-		},
-
-		tools: [{
-			xtype: 'gridcolumnstool'
-		}, {
-			xtype: 'favoritetool',
-			favorite: {
-				text: 'API Log',
-				href: '#/logs/api'
-			}
-		}],
+        plugins: [ 'gridstore', 'applyparams' ],
 
 		viewConfig: {
-			emptyText: 'No logs found',
-			loadingText: 'Loading logs ...'
+			emptyText: 'Nothing found',
+			loadingText: 'Loading...'
 		},
 
 		columns: [
@@ -43,9 +33,12 @@ Scalr.regPage('Scalr.ui.logs.api', function (loadParams, moduleParams) {
 			{ header: 'IP address', flex: 1, dataIndex: 'ipaddress', sortable: true },
 			{
 				xtype: 'optionscolumn',
-				optionsMenu: [
-					{ text:'Details', href: "#/logs/apiLogEntryDetails?transactionId={transaction_id}" }
-				]
+				menu: [{
+                    text:'Details',
+                    iconCls: 'x-menu-icon-information',
+                    showAsQuickAction: true,
+                    href: "#/logs/apiLogEntryDetails?transactionId={transaction_id}"
+                }]
 			}
 		],
 
@@ -54,8 +47,49 @@ Scalr.regPage('Scalr.ui.logs.api', function (loadParams, moduleParams) {
 			store: store,
 			dock: 'top',
 			items: [{
-				xtype: 'tbfilterfield',
-				store: store
+				xtype: 'filterfield',
+				store: store,
+                width: 300,
+                form: {
+                    items: [{
+                        xtype: 'datefield',
+                        fieldLabel: 'By date',
+                        labelAlign: 'top',
+                        name: 'byDate',
+                        format: 'Y-m-d',
+                        maxValue: new Date(),
+                        listeners: {
+                            change: function (field, value) {
+                                this.next().down('[name="fromTime"]')[ value ? 'enable' : 'disable' ]();
+                                this.next().down('[name="toTime"]')[ value ? 'enable' : 'disable' ]();
+                            }
+                        }
+                    }, {
+                        xtype: 'fieldcontainer',
+                        layout: 'hbox',
+                        fieldLabel: 'Period of time',
+                        labelAlign: 'top',
+                        items: [{
+                            xtype: 'timefield',
+                            flex: 1,
+                            name: 'fromTime',
+                            format: 'H:i',
+                            disabled: true,
+                            listeners: {
+                                change: function(field, value) {
+                                    this.next().setMinValue(value);
+                                }
+                            }
+                        }, {
+                            xtype: 'timefield',
+                            flex: 1,
+                            margin: '0 0 0 10',
+                            name: 'toTime',
+                            format: 'H:i',
+                            disabled: true
+                        }]
+                    }]
+                }
 			}]
 		}]
 	});

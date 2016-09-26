@@ -1,0 +1,102 @@
+.scalr-ui-panel-account-env .x-dataview-tab{
+    min-height:125px;
+}
+
+.scalr-ui-panel-account-env .x-fieldset-subheader{
+	max-width: 380px;
+	word-wrap: break-word;
+}
+
+.scalr-ui-panel-account-env .x-dataview-tab .x-icon-platform-small{
+	float:left;
+    margin: 3px 0 3px 7px;
+}
+
+.scalr-ui-panel-account-env .x-fieldset-clouds {
+    padding-bottom: 10px;
+}
+
+.scalr-ui-panel-account-env .x-fieldset-clouds .x-fieldset-body{
+    padding-right: 10px;
+}
+
+.scalr-ui-panel-account-env .x-fieldset-clouds .x-btn-simple-large {
+    margin: 0 10px 10px 0;
+}
+
+.scalr-ui-panel-account-env .scalr-add-credentials-wrap {
+    position: absolute;
+    z-index: 101;
+    width: 100%;
+    height: 100%;
+    text-align: center;
+    top: 0;
+    left: 0;
+}
+
+.scalr-ui-panel-account-env .scalr-add-credentials-wrap .inner {
+    text-align: center;
+    max-width: 800px;
+    margin: 0;
+}
+
+.scalr-ui-panel-account-env .scalr-add-credentials-info {
+    background: #fefde0;
+    padding: 15px;
+    text-align: left;
+}
+
+.scalr-ui-panel-account-env .scalr-add-credentials-button {
+    display: block;
+    margin: 32px auto 0;
+    background-image: url(/ui2/images/ui/account/key.png);
+    background-repeat: no-repeat;
+    background-position: 50% 74%;
+    border-radius: 0;
+    text-transform: uppercase;
+    font-family: OpenSansSemiBold;
+    color: #fff;
+    padding: 12px 0 48px;
+    width: 240px;
+    cursor: pointer!important;
+    text-decoration: none;
+}
+
+.scalr-ui-panel-account-env .scalr-add-credentials-button:hover {
+    background-color: #81b669;
+}
+
+.x-container-platform .x-mask {
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+.x-container-platform.x-masked {
+    border:0;
+}
+
+.scalr-ui-environment-cloud-suspended {
+    background: #FFDDBB url(/ui2/images/ui/account/warning-small.png) 5px 5px no-repeat;
+}
+
+.scalr-ui-environment-cloud-suspended.x-btn-over,
+.scalr-ui-environment-cloud-suspended.x-btn-pressed{
+    background: #F9CC9E url(/ui2/images/ui/account/warning-small.png) 5px 5px no-repeat;
+}
+
+@media only screen and (-webkit-min-device-pixel-ratio: 1.5),
+    only screen and (-o-min-device-pixel-ratio: 3/2),
+    only screen and (min--moz-device-pixel-ratio: 1.5),
+    only screen and (min-device-pixel-ratio: 1.5) {
+
+    .scalr-ui-panel-account-env .scalr-add-credentials-button {
+        background-size: 24px 24px;
+        background-image: url(/ui2/images/ui/account/key-retina.png);
+    }
+
+    .scalr-ui-environment-cloud-suspended,
+    .scalr-ui-environment-cloud-suspended.x-btn-over,
+    .scalr-ui-environment-cloud-suspended.x-btn-pressed{
+        background-size: 16px 16px;
+        background-image: url(/ui2/images/ui/account/warning-small-retina.png);
+    }
+}

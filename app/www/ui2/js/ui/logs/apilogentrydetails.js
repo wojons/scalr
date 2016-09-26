@@ -4,7 +4,6 @@ Scalr.regPage('Scalr.ui.logs.apilogentrydetails', function (loadParams, modulePa
 		scalrOptions: {
 			'modal': true
 		},
-		bodyCls: 'x-panel-body-frame',
 		tools: [{
 			type: 'close',
 			handler: function () {

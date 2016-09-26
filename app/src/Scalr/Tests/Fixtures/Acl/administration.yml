@@ -1,0 +1,33 @@
+BILLING_ACCOUNT:
+# all action methods of billing controller
+- [/account2/billing, ~, all]
+
+GLOBAL_VARIABLES_ACCOUNT:
+- /account/variables
+- /account/variables/xSaveVariables?variables=
+
+ORCHESTRATION_ACCOUNT:
+- /account/orchestration
+- /account/orchestration/xSave?orchestrationRules=
+
+SCRIPTS_ACCOUNT:
+  self:
+  - /scripts/default
+  - /scripts/view
+  - /scripts/xGetContent?scriptId=&version=
+  - /scripts/xList
+  - [/scripts/shortcuts, ~, all]
+
+  SCRIPTS_ACCOUNT_MANAGE:
+  - /scripts/xRemove?scriptId=
+  - /scripts/xSave?id=&name=&description=&isSync=&envId=&timeout=&version=&content=&tags=
+  - /scripts/edit?scriptId=
+  - /scripts/create
+
+  SCRIPTS_ACCOUNT_EXECUTE:
+  - /scripts/execute
+  - /scripts/xExecute?farmId=&farmRoleId=&serverId=&scriptId=&scriptIsSync=&scriptTimeout=&scriptVersion=
+
+  SCRIPTS_ACCOUNT_FORK:
+  - /scripts/xFork?scriptId=&name=
+
